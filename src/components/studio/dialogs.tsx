@@ -95,7 +95,7 @@ function SettingsBody({
         </Row>
         <Row
           title="Backup model"
-          hint="If the model you chose is down, let another compatible model answer (possibly from a different AI provider). Only works when the site allows it; you'll always be told."
+          hint="If your model is down, a compatible one may answer, possibly from another provider. You'll always be told."
         >
           <Switch label="Backup model" checked={!!settings.allowFallback} onChange={(v) => onSettings({ allowFallback: v })} />
         </Row>
@@ -148,8 +148,8 @@ function SettingsBody({
 
 function Row({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-1">
-      <div className="min-w-0">
+    <div className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-1 sm:flex-nowrap">
+      <div className="min-w-0 sm:max-w-[68%]">
         <div className="text-[13.5px] font-medium">{title}</div>
         {hint && <div className="mt-0.5 text-[12.5px] text-s-ink-3">{hint}</div>}
       </div>

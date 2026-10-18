@@ -4,17 +4,14 @@ import { cn } from "@/lib/utils";
 export function Logo({ collapsed, className }: { collapsed?: boolean; className?: string }) {
   return (
     <span className={cn("flex items-center gap-2.5 select-none", className)}>
-      <span
-        aria-hidden
-        className="relative grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-accent to-accent-2 text-[13px] font-bold text-white shadow-[0_6px_20px_-8px_var(--accent)]"
-      >
-        N
-        <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-white/90" />
-      </span>
+      {/* Same mark as the chat studio: a pearl tile, the N cut out, the brand dot. */}
+      <svg viewBox="0 0 32 32" className="h-7 w-7 shrink-0 text-fg" aria-hidden="true">
+        <rect x="1" y="1" width="30" height="30" rx="9" fill="currentColor" />
+        <path d="M10.5 22.5V10l11 12.5V9.5" fill="none" stroke="var(--bg)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="26.5" cy="5.5" r="2.6" fill="var(--accent-2)" />
+      </svg>
       {!collapsed && (
-        <span className="text-[15px] font-semibold tracking-[0.18em]">
-          NOVA<span className="ml-1 font-normal tracking-normal text-muted">AI</span>
-        </span>
+        <span className="text-[15px] font-semibold tracking-[0.22em]">NOVA</span>
       )}
     </span>
   );
