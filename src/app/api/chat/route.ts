@@ -41,6 +41,9 @@ export async function POST(req: Request) {
     if (auth.mode === "authenticated") {
       if (body.conversationId) {
         const { conversation, messages } = await getConversation(auth.supabase, auth.user.id, body.conversationId);
+        if (conversation.agent_id || conversation.builtin_agent) {
+          throw new ApiError("bad_request", "This conversation belongs to an agent. Continue it from the Agents workspace.");
+        }
         conversationId = conversation.id;
         history = messages
           .filter((m) => m.role !== "system")

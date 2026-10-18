@@ -10,17 +10,21 @@ function demoText(params: GenerateParams): string {
     last.match(/Question:\s*(.+)/)?.[1]?.slice(0, 200) ??
     last.replace(/<document[\s\S]*?<\/document>/g, "").split("\n").find((l) => l.trim())?.trim().slice(0, 200) ??
     "your request";
+  const quoted = question.replace(/[.!?…]+$/, "");
   const hasSources = params.messages.some((m) => m.content.includes("<source "));
   const system = params.messages.find((m) => m.role === "system")?.content ?? "";
+  const agent = system.match(/^Agent name: (.+)\.$/m)?.[1];
   const mode = (system.match(/Mode: (\w+)\./)?.[1] ?? "Research") as keyof typeof MODE_STEPS;
   const steps = MODE_STEPS[mode] ?? MODE_STEPS.Research;
+  const intro = agent
+    ? agentSection(agent, system)
+    : [`### What a connected model would do (${mode} mode)`, ...steps.map((s, i) => `${i + 1}. ${s}`)];
   return [
     DEMO_NOTICE,
     "",
-    `You asked: “${question}”.`,
+    agent ? `You asked **${agent}**: “${quoted}”.` : `You asked: “${quoted}”.`,
     "",
-    `### What a connected model would do (${mode} mode)`,
-    ...steps.map((s, i) => `${i + 1}. ${s}`),
+    ...intro,
     "",
     "> Demo replies come from a fixed template on the server. They show how NOVA lays out an answer and contain no analysis of your question.",
     "",
@@ -36,6 +40,20 @@ function demoText(params: GenerateParams): string {
     "HUGGINGFACE_API_KEY=your-key-here",
     "```",
   ].join("\n");
+}
+
+/** Shows what the selected agent is configured to do, read back from its system prompt. */
+function agentSection(agent: string, system: string): string[] {
+  const tools = system.match(/^Enabled tools: (.+)\.$/m)?.[1] ?? "none";
+  const role = system.match(/<agent_instructions>\n([^\n]+)/)?.[1]?.trim();
+  const computed = system.includes('<tool_result tool="data_analysis"');
+  return [
+    `### How ${agent} would handle this`,
+    ...(role ? [`- **Role:** ${role}`] : []),
+    `- **Tools enabled:** ${tools}.`,
+    ...(computed ? ["- **Data analysis ran for real:** the server computed the column statistics shown above this reply. A connected model would interpret them."] : []),
+    "- A connected model would follow the agent's full instructions and reply here.",
+  ];
 }
 
 const MODE_STEPS = {

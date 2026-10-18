@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import {
   Bookmark,
+  Bot,
   Ellipsis,
   FolderKanban,
   LayoutGrid,
@@ -33,6 +34,8 @@ export interface SidebarProps {
   onToggleCollapsed: () => void;
   mobileOpen: boolean;
   onCloseMobile: () => void;
+  /** Which workspace is open, for the nav's active state. */
+  section: "chats" | "agents";
   conversations: ConvSummary[] | null;
   listError: string | null;
   activeId: string | null;
@@ -154,7 +157,8 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
 
         <nav aria-label="Main" className={cn("shrink-0 px-3 pb-2", rail && "md:px-0")}>
           <ul className={cn("flex flex-col gap-0.5", rail && "md:items-center")}>
-            <NavItem rail={rail} icon={<MessagesSquare />} label="Chats" active onClick={p.onCloseMobile} />
+            <NavItem rail={rail} icon={<MessagesSquare />} label="Chats" href="/chat" active={p.section === "chats"} onClick={p.onCloseMobile} />
+            <NavItem rail={rail} icon={<Bot />} label="Agents" href="/agents" active={p.section === "agents"} onClick={p.onCloseMobile} />
             <NavItem rail={rail} icon={<FolderKanban />} label="Projects" href="/projects" />
             <NavItem rail={rail} icon={<Bookmark />} label="Saved prompts" onClick={p.onOpenPrompts} />
             <NavItem rail={rail} icon={<Settings2 />} label="Settings" onClick={p.onOpenSettings} />
@@ -209,8 +213,8 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
 
 function NavItem({ rail, icon, label, href, onClick, active }: { rail: boolean; icon: ReactNode; label: string; href?: string; onClick?: () => void; active?: boolean }) {
   const cls = cn(
-    "flex h-9 items-center gap-3 rounded-xl px-3 text-[13.5px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink [&_svg]:h-[17px] [&_svg]:w-[17px] [&_svg]:shrink-0",
-    active && "text-s-ink",
+    "flex h-9 items-center gap-3 rounded-xl px-3 text-[13.5px] text-s-ink-2 transition duration-200 hover:bg-s-hover hover:text-s-ink active:scale-[0.98] [&_svg]:h-[17px] [&_svg]:w-[17px] [&_svg]:shrink-0",
+    active && "bg-s-hover font-medium text-s-ink",
     rail && "md:w-9 md:justify-center md:px-0",
   );
   const body = (
@@ -222,7 +226,7 @@ function NavItem({ rail, icon, label, href, onClick, active }: { rail: boolean; 
   return (
     <li>
       {href ? (
-        <Link href={href} className={cls} title={rail ? label : undefined}>
+        <Link href={href} onClick={onClick} className={cls} aria-current={active ? "page" : undefined} title={rail ? label : undefined}>
           {body}
         </Link>
       ) : (

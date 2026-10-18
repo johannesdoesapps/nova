@@ -3,21 +3,33 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatMode } from "@/lib/ai/modes";
 import { CHAT_MODES } from "@/lib/ai/modes";
-import { streamChat, type ChatAttachment } from "./chat-client";
+import { streamChat, type ChatAttachment, type ChatTransport } from "./chat-client";
 import { titleFrom, type HistoryStore, type Msg } from "./history";
 
 export type LoadState = { status: "idle" } | { status: "loading" } | { status: "error"; message: string };
 
+const chatTransport: ChatTransport = (req, signal) =>
+  streamChat({ ...req, useWeb: req.mode === "research" && req.useWeb }, signal);
+
+/**
+ * Conversation state for one chat surface: the general chat (default) or an
+ * agent workspace (`basePath` + agent `transport`). Handles streaming, stop,
+ * retry, URL sync (?c=, ?new) and guest history in the browser.
+ */
 export function useStudioChat({
   store,
   defaultMode,
   modelId,
   onHistoryChanged,
+  basePath = "/chat",
+  transport = chatTransport,
 }: {
   store: HistoryStore;
   defaultMode: ChatMode;
   modelId: string | undefined;
   onHistoryChanged: () => void;
+  basePath?: string;
+  transport?: ChatTransport;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -57,7 +69,7 @@ export function useStudioChat({
   useEffect(() => {
     if (newParam) {
       reset();
-      router.replace("/chat", { scroll: false });
+      router.replace(basePath, { scroll: false });
       return;
     }
     if (!cParam) {
@@ -116,7 +128,7 @@ export function useStudioChat({
         convId = crypto.randomUUID();
         setId(convId);
         setTitle(titleFrom(content));
-        router.replace(`/chat?c=${convId}`, { scroll: false });
+        router.replace(`${basePath}?c=${convId}`, { scroll: false });
       }
       dirty.current = local;
       if (local && convId && store.save) {
@@ -136,13 +148,13 @@ export function useStudioChat({
         : undefined;
 
       try {
-        for await (const ev of streamChat(
+        for await (const ev of transport(
           {
             conversationId: local ? null : convId,
             message: content,
             mode: turnMode,
             modelId,
-            useWeb: turnMode === "research" && useWeb,
+            useWeb,
             history,
             attachments: files,
           },
@@ -154,9 +166,10 @@ export function useStudioChat({
               convId = ev.conversationId;
               setId(convId);
               setTitle(titleFrom(content));
-              router.replace(`/chat?c=${convId}`, { scroll: false });
+              router.replace(`${basePath}?c=${convId}`, { scroll: false });
             }
-          } else if (ev.type === "sources") patch((m) => ({ ...m, sources: ev.sources }));
+          } else if (ev.type === "tool") patch((m) => ({ ...m, tools: [...(m.tools ?? []), ev.tool] }));
+          else if (ev.type === "sources") patch((m) => ({ ...m, sources: ev.sources }));
           else if (ev.type === "notice") patch((m) => ({ ...m, notices: [...(m.notices ?? []), ev.message] }));
           else if (ev.type === "delta") patch((m) => ({ ...m, content: m.content + ev.text }));
           else if (ev.type === "done")
@@ -178,7 +191,7 @@ export function useStudioChat({
       }
       return true;
     },
-    [busy, mode, messages, store, conversationId, title, router, modelId, useWeb, onHistoryChanged, setId],
+    [busy, mode, messages, store, conversationId, title, router, modelId, useWeb, onHistoryChanged, setId, basePath, transport],
   );
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
@@ -194,8 +207,8 @@ export function useStudioChat({
 
   const newChat = useCallback(() => {
     reset();
-    router.replace("/chat", { scroll: false });
-  }, [reset, router]);
+    router.replace(basePath, { scroll: false });
+  }, [reset, router, basePath]);
 
   return { messages, conversationId, title, setTitle, mode, setMode, useWeb, setUseWeb, load, busy, send, stop, retry, newChat };
 }

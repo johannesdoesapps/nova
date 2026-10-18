@@ -7,6 +7,7 @@
 import { jsonFetch } from "@/hooks/use-ndjson";
 import type { ChatMode } from "@/lib/ai/modes";
 import type { SearchSource } from "@/lib/search/types";
+import type { ToolRecord } from "./chat-client";
 
 export interface ConvSummary {
   id: string;
@@ -24,6 +25,7 @@ export interface Msg {
   error?: string;
   simulated?: boolean;
   sources?: SearchSource[];
+  tools?: ToolRecord[];
   notices?: string[];
   attachments?: string[];
   cost?: number | null;
@@ -50,8 +52,13 @@ type ServerMessage = {
   role: string;
   content: string;
   model_id: string | null;
-  usage_metadata: { sources?: SearchSource[]; attachments?: string[] } | null;
+  usage_metadata: { sources?: SearchSource[]; attachments?: string[]; tools?: ToolRecord[] } | null;
 };
+
+/** Signed-in history. `listUrl` selects ordinary chats or one agent's conversations. */
+export function makeServerHistory(listUrl: string): HistoryStore {
+  return { ...serverHistory, list: async () => (await jsonFetch<{ conversations: ConvSummary[] }>(listUrl)).conversations };
+}
 
 export const serverHistory: HistoryStore = {
   kind: "server",
@@ -72,6 +79,7 @@ export const serverHistory: HistoryStore = {
           modelName: m.model_id ?? undefined,
           simulated: m.model_id?.startsWith("demo:"),
           sources: m.usage_metadata?.sources,
+          tools: m.usage_metadata?.tools,
           attachments: m.usage_metadata?.attachments,
         })),
     };
@@ -84,13 +92,12 @@ export const serverHistory: HistoryStore = {
   },
 };
 
-const KEY = "nova:studio:chats";
 const MAX_CONVERSATIONS = 40;
 const MAX_STORED_CHARS = 1_500_000;
 
 type LocalConv = ConvSummary & { messages: Msg[] };
 
-function readLocal(): LocalConv[] {
+function readLocal(KEY: string): LocalConv[] {
   try {
     const raw = localStorage.getItem(KEY);
     const v = raw ? (JSON.parse(raw) as unknown) : [];
@@ -100,7 +107,7 @@ function readLocal(): LocalConv[] {
   }
 }
 
-function writeLocal(convs: LocalConv[]) {
+function writeLocal(KEY: string, convs: LocalConv[]) {
   let list = convs.slice(0, MAX_CONVERSATIONS);
   // Drop the oldest conversations until the payload fits comfortably in storage.
   while (list.length > 1 && JSON.stringify(list).length > MAX_STORED_CHARS) list = list.slice(0, -1);
@@ -111,40 +118,45 @@ function writeLocal(convs: LocalConv[]) {
   }
 }
 
-export const localHistory: HistoryStore = {
-  kind: "local",
-  async list() {
-    return readLocal()
-      .map(({ id, title, mode, updated_at }) => ({ id, title, mode, updated_at }))
-      .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-  },
-  async load(id) {
-    const c = readLocal().find((x) => x.id === id);
-    if (!c) throw new Error("This conversation is no longer stored on this device.");
-    const { messages, ...conversation } = c;
-    return { conversation, messages };
-  },
-  async rename(id, title) {
-    writeLocal(readLocal().map((c) => (c.id === id ? { ...c, title } : c)));
-  },
-  async remove(id) {
-    writeLocal(readLocal().filter((c) => c.id !== id));
-  },
-  save(conv, messages) {
-    const done = messages
-      .filter((m) => m.status !== "streaming")
-      .map((m) => ({ ...m, content: m.content.slice(0, 40_000) }));
-    const rest = readLocal().filter((c) => c.id !== conv.id);
-    writeLocal([{ ...conv, messages: done }, ...rest]);
-  },
-  clear() {
-    try {
-      localStorage.removeItem(KEY);
-    } catch {
-      /* ignore */
-    }
-  },
-};
+/** Guest history in this browser, under its own storage key. */
+export function makeLocalHistory(KEY: string): HistoryStore {
+  return {
+    kind: "local",
+    async list() {
+      return readLocal(KEY)
+        .map(({ id, title, mode, updated_at }) => ({ id, title, mode, updated_at }))
+        .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+    },
+    async load(id) {
+      const c = readLocal(KEY).find((x) => x.id === id);
+      if (!c) throw new Error("This conversation is no longer stored on this device.");
+      const { messages, ...conversation } = c;
+      return { conversation, messages };
+    },
+    async rename(id, title) {
+      writeLocal(KEY, readLocal(KEY).map((c) => (c.id === id ? { ...c, title } : c)));
+    },
+    async remove(id) {
+      writeLocal(KEY, readLocal(KEY).filter((c) => c.id !== id));
+    },
+    save(conv, messages) {
+      const done = messages
+        .filter((m) => m.status !== "streaming")
+        .map((m) => ({ ...m, content: m.content.slice(0, 40_000) }));
+      const rest = readLocal(KEY).filter((c) => c.id !== conv.id);
+      writeLocal(KEY, [{ ...conv, messages: done }, ...rest]);
+    },
+    clear() {
+      try {
+        localStorage.removeItem(KEY);
+      } catch {
+        /* ignore */
+      }
+    },
+  };
+}
+
+export const localHistory = makeLocalHistory("nova:studio:chats");
 
 export function titleFrom(message: string): string {
   const t = message.replace(/\s+/g, " ").trim();

@@ -30,10 +30,17 @@ export interface ComposerProps {
   modelId: string | undefined;
   onModel: (id: string) => void;
   mode: ChatMode;
-  onMode: (m: ChatMode) => void;
+  /** Omit to hide the mode menu (agents define their own behaviour). */
+  onMode?: (m: ChatMode) => void;
   useWeb: boolean;
   onUseWeb: (v: boolean) => void;
   webAvailable: boolean;
+  /** Whether web search may be used here; defaults to "in Research mode". */
+  webAllowed?: boolean;
+  webBlockedHint?: string;
+  /** Whether files may be attached here (agents need File analysis). */
+  filesAllowed?: boolean;
+  placeholder?: string;
   enterToSend: boolean;
   variant: "hero" | "dock";
 }
@@ -54,9 +61,16 @@ export function Composer(p: ComposerProps) {
     el.style.height = `${Math.min(el.scrollHeight, p.variant === "hero" ? 260 : 220)}px`;
   }, [p.value, p.variant]);
 
+  const webAllowed = p.webAllowed ?? p.mode === "research";
+  const filesAllowed = p.filesAllowed ?? true;
+
   const addFiles = async (list: FileList | File[] | null) => {
     setFileError(null);
     if (!list) return;
+    if (!filesAllowed) {
+      setFileError("This agent can't read files. Turn on File analysis in its settings.");
+      return;
+    }
     const next = [...p.attachments];
     for (const f of Array.from(list)) {
       if (next.length >= MAX_FILES) {
@@ -161,7 +175,7 @@ export function Composer(p: ComposerProps) {
           }}
           rows={1}
           maxLength={12000}
-          placeholder={speech.listening ? "Listening…" : p.variant === "hero" ? "Ask anything…" : `Message NOVA`}
+          placeholder={speech.listening ? "Listening…" : (p.placeholder ?? (p.variant === "hero" ? "Ask anything…" : "Message NOVA"))}
           className={cn(
             "s-scroll block w-full resize-none bg-transparent px-3 text-s-ink outline-none placeholder:text-s-ink-3 focus-visible:outline-none",
             p.variant === "hero" ? "min-h-[64px] pb-2 pt-3 text-[16.5px] leading-relaxed" : "min-h-[44px] pb-1.5 pt-2.5 text-[16px] leading-relaxed",
@@ -177,60 +191,67 @@ export function Composer(p: ComposerProps) {
             buttonClassName={cn(iconButtonClass(), "rounded-full")}
             button={<Plus />}
           >
-                <MenuItem
-                  icon={<Paperclip />}
-                  hint="Text, Markdown, CSV or JSON · up to 3 files"
-                  onClick={() => fileRef.current?.click()}
-                >
-                  Upload files
-                </MenuItem>
-                <MenuItem icon={<ImagePlus />} hint="The connected models accept text only for now" disabled>
-                  Add images
-                </MenuItem>
-                <MenuSeparator />
-                <div className="flex items-start gap-3 rounded-xl px-2.5 py-2">
-                  <Globe className="mt-px h-4 w-4 shrink-0 text-s-ink-2" />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13.5px]">Search the web</div>
-                    <div className="mt-0.5 text-[12px] leading-snug text-s-ink-3">
-                      {!p.webAvailable ? "Needs SEARCH_API_KEY on the server" : p.mode !== "research" ? "Available in Research mode" : "Cite live sources in replies"}
-                    </div>
-                  </div>
-                  <Switch label="Search the web" checked={p.useWeb && p.mode === "research"} onChange={p.onUseWeb} disabled={!p.webAvailable || p.mode !== "research"} />
+            <MenuItem
+              icon={<Paperclip />}
+              hint={filesAllowed ? "Text, Markdown, CSV or JSON · up to 3 files" : "Not enabled for this agent"}
+              disabled={!filesAllowed}
+              onClick={() => fileRef.current?.click()}
+            >
+              Upload files
+            </MenuItem>
+            <MenuItem icon={<ImagePlus />} hint="The connected models accept text only for now" disabled>
+              Add images
+            </MenuItem>
+            <MenuSeparator />
+            <div className="flex items-start gap-3 rounded-xl px-2.5 py-2">
+              <Globe className="mt-px h-4 w-4 shrink-0 text-s-ink-2" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[13.5px]">Search the web</div>
+                <div className="mt-0.5 text-[12px] leading-snug text-s-ink-3">
+                  {!webAllowed
+                    ? (p.webBlockedHint ?? "Available in Research mode")
+                    : !p.webAvailable
+                      ? "Needs SEARCH_API_KEY on the server"
+                      : "Cite live sources in replies"}
                 </div>
+              </div>
+              <Switch label="Search the web" checked={p.useWeb && webAllowed} onChange={p.onUseWeb} disabled={!p.webAvailable || !webAllowed} />
+            </div>
           </Menu>
 
-          <Menu
-            label="Assistant mode"
-            side="auto"
-            width={300}
-            buttonLabel={`Mode: ${MODE_LABELS[p.mode].label}`}
-            buttonTitle="Assistant mode"
-            buttonClassName="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink [&_svg]:h-4 [&_svg]:w-4"
-            button={
-              <>
-                {MODE_ICONS[p.mode]}
-                <span className="hidden sm:inline">{MODE_LABELS[p.mode].label}</span>
-              </>
-            }
-          >
-                <MenuLabel>Mode</MenuLabel>
-                {CHAT_MODES.map((m) => (
-                  <MenuItem
-                    key={m}
-                    role="menuitemradio"
-                    checked={p.mode === m}
-                    icon={MODE_ICONS[m]}
-                    hint={MODE_LABELS[m].blurb}
-                    right={p.mode === m ? <Check /> : null}
-                    onClick={() => p.onMode(m)}
-                  >
-                    {MODE_LABELS[m].label}
-                  </MenuItem>
-                ))}
-          </Menu>
+          {p.onMode && (
+            <Menu
+              label="Assistant mode"
+              side="auto"
+              width={300}
+              buttonLabel={`Mode: ${MODE_LABELS[p.mode].label}`}
+              buttonTitle="Assistant mode"
+              buttonClassName="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink [&_svg]:h-4 [&_svg]:w-4"
+              button={
+                <>
+                  {MODE_ICONS[p.mode]}
+                  <span className="hidden sm:inline">{MODE_LABELS[p.mode].label}</span>
+                </>
+              }
+            >
+                  <MenuLabel>Mode</MenuLabel>
+                  {CHAT_MODES.map((m) => (
+                    <MenuItem
+                      key={m}
+                      role="menuitemradio"
+                      checked={p.mode === m}
+                      icon={MODE_ICONS[m]}
+                      hint={MODE_LABELS[m].blurb}
+                      right={p.mode === m ? <Check /> : null}
+                      onClick={() => p.onMode?.(m)}
+                    >
+                      {MODE_LABELS[m].label}
+                    </MenuItem>
+                  ))}
+            </Menu>
+          )}
 
-          {p.useWeb && p.mode === "research" && p.webAvailable && (
+          {p.useWeb && webAllowed && p.webAvailable && (
             <button
               type="button"
               onClick={() => p.onUseWeb(false)}

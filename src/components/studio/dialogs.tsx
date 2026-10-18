@@ -277,6 +277,62 @@ function DeleteBody({ conv, onClose, onConfirm }: { conv: ConvSummary; onClose: 
   );
 }
 
+/* Generic confirmation ---------------------------------------------------- */
+
+export function ConfirmDialog({
+  open,
+  title,
+  description,
+  confirmLabel,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  return (
+    <Dialog open={open} onClose={onClose} title={title} description={description} width={440}>
+      {open && <ConfirmBody confirmLabel={confirmLabel} onClose={onClose} onConfirm={onConfirm} />}
+    </Dialog>
+  );
+}
+
+function ConfirmBody({ confirmLabel, onClose, onConfirm }: { confirmLabel: string; onClose: () => void; onConfirm: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <>
+      {error && <p role="alert" className="mb-3 text-[13px] text-s-danger">{error}</p>}
+      <div className="flex justify-end gap-2">
+        <button type="button" className={btnQuiet} onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          className={cn(btn, "bg-s-danger text-white hover:brightness-110")}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await onConfirm();
+              onClose();
+            } catch (e) {
+              setError((e as Error).message);
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? "Deleting…" : confirmLabel}
+        </button>
+      </div>
+    </>
+  );
+}
+
 /* Save to project (signed-in users) -------------------------------------- */
 
 export function SaveToProjectDialog({ message, onClose }: { message: Msg | null; onClose: () => void }) {

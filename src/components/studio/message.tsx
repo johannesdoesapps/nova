@@ -1,6 +1,6 @@
 "use client";
-import { memo, useState } from "react";
-import { BookmarkPlus, Check, CircleAlert, Copy, Ellipsis, FileText, FolderPlus, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-react";
+import { memo, useState, type ReactNode } from "react";
+import { BookmarkPlus, ChartColumn, Check, ChevronRight, CircleAlert, Copy, Ellipsis, FileText, FolderPlus, Globe, RefreshCw, ThumbsDown, ThumbsUp, Wrench } from "lucide-react";
 import { Markdown } from "@/components/common/markdown";
 import { cn, formatUsd } from "@/lib/utils";
 import type { Msg } from "./history";
@@ -17,6 +17,8 @@ export const MessageView = memo(function MessageView({
   onFeedback,
   onSavePrompt,
   onSaveToProject,
+  assistantName,
+  assistantAvatar,
 }: {
   m: Msg;
   isLast: boolean;
@@ -27,6 +29,9 @@ export const MessageView = memo(function MessageView({
   onFeedback: (id: string, f: Feedback) => void;
   onSavePrompt: (text: string) => boolean;
   onSaveToProject?: (m: Msg) => void;
+  /** Agent conversations show the agent's own name and avatar. */
+  assistantName?: string;
+  assistantAvatar?: ReactNode;
 }) {
   if (m.role === "user") {
     return (
@@ -56,8 +61,9 @@ export const MessageView = memo(function MessageView({
   return (
     <div className="group/msg s-in">
       <div className="mb-2.5 flex items-center gap-2 text-[12.5px] text-s-ink-3">
-        <NovaMark className="h-[18px] w-[18px] text-s-ink" />
-        <span className="font-medium text-s-ink-2">{m.modelName ?? "NOVA"}</span>
+        {assistantAvatar ?? <NovaMark className="h-[18px] w-[18px] text-s-ink" />}
+        <span className="font-medium text-s-ink-2">{assistantName ?? m.modelName ?? "NOVA"}</span>
+        {assistantName && m.modelName && <span className="hidden sm:inline">· {m.modelName}</span>}
         {m.simulated && (
           <span className="rounded-full border border-s-line-strong px-2 py-px text-[11px]" title="No AI provider is configured; this reply is a template.">
             Simulated
@@ -70,6 +76,8 @@ export const MessageView = memo(function MessageView({
           <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" /> {n}
         </p>
       ))}
+
+      {m.tools?.map((t, i) => <ToolRow key={i} tool={t} />)}
 
       {m.content ? (
         <div className={cn(streaming && "s-caret")}>
@@ -164,6 +172,37 @@ export const MessageView = memo(function MessageView({
     </div>
   );
 });
+
+const TOOL_ICONS: Record<string, ReactNode> = { web_search: <Globe />, data_analysis: <ChartColumn /> };
+
+/** A tool the server ran for this reply; expandable when it produced output. */
+function ToolRow({ tool }: { tool: NonNullable<Msg["tools"]>[number] }) {
+  const [open, setOpen] = useState(false);
+  const icon = TOOL_ICONS[tool.name] ?? <Wrench />;
+  const body = (
+    <>
+      <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-lg [&_svg]:h-3.5 [&_svg]:w-3.5", tool.status === "ok" ? "bg-s-accent-soft text-s-accent" : "bg-s-hover text-s-danger")}>
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{tool.label}</span>
+      {tool.detail && <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 transition-transform", open && "rotate-90")} />}
+    </>
+  );
+  return (
+    <div className="s-in mb-3 overflow-hidden rounded-2xl border border-s-line text-[13px] text-s-ink-2">
+      {tool.detail ? (
+        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-2.5 px-2.5 py-2 text-left transition hover:bg-s-hover">
+          {body}
+        </button>
+      ) : (
+        <div className="flex items-center gap-2.5 px-2.5 py-2">{body}</div>
+      )}
+      {open && tool.detail && (
+        <pre className="s-scroll s-fade max-h-64 overflow-auto border-t border-s-line bg-[var(--s-code)] px-3.5 py-3 font-mono text-[12px] leading-relaxed text-s-ink-2">{tool.detail}</pre>
+      )}
+    </div>
+  );
+}
 
 function CopyAction({ text }: { text: string }) {
   const [done, setDone] = useState(false);

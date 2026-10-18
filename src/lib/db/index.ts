@@ -21,6 +21,9 @@ export interface ConversationRow {
   project_id: string | null;
   title: string;
   mode: string;
+  /** Set for agent conversations: a custom agent's id, or a built-in agent's key. */
+  agent_id?: string | null;
+  builtin_agent?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -156,6 +159,8 @@ export async function listConversations(db: ServerSupabase, userId: string, limi
     .from("conversations")
     .select("id,project_id,title,mode,created_at,updated_at")
     .eq("user_id", userId)
+    .is("agent_id", null)
+    .is("builtin_agent", null)
     .order("updated_at", { ascending: false })
     .limit(limit);
   if (error) fail(error, "Conversations");
@@ -165,7 +170,7 @@ export async function listConversations(db: ServerSupabase, userId: string, limi
 export async function getConversation(db: ServerSupabase, userId: string, id: string) {
   const { data, error } = await db
     .from("conversations")
-    .select("id,project_id,title,mode,created_at,updated_at")
+    .select("id,project_id,title,mode,agent_id,builtin_agent,created_at,updated_at")
     .eq("id", id)
     .eq("user_id", userId)
     .maybeSingle();
@@ -184,13 +189,20 @@ export async function getConversation(db: ServerSupabase, userId: string, id: st
 export async function createConversation(
   db: ServerSupabase,
   userId: string,
-  input: { title: string; mode: string; projectId?: string | null },
+  input: { title: string; mode: string; projectId?: string | null; agentId?: string | null; builtinAgent?: string | null },
 ) {
   await assertProject(db, userId, input.projectId);
   const { data, error } = await db
     .from("conversations")
-    .insert({ user_id: userId, title: input.title, mode: input.mode, project_id: input.projectId ?? null })
-    .select("id,project_id,title,mode,created_at,updated_at")
+    .insert({
+      user_id: userId,
+      title: input.title,
+      mode: input.mode,
+      project_id: input.projectId ?? null,
+      agent_id: input.agentId ?? null,
+      builtin_agent: input.builtinAgent ?? null,
+    })
+    .select("id,project_id,title,mode,agent_id,builtin_agent,created_at,updated_at")
     .single();
   if (error) fail(error, "Conversation");
   return data as ConversationRow;

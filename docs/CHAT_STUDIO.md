@@ -1,5 +1,7 @@
 # Chat Studio (`/chat`)
 
+See also [AGENTS.md](AGENTS.md) for the Agents workspace, which shares this frame.
+
 The chat is a full-screen workspace with its own layout (`src/app/(studio)`), separate from the dashboard shell. It shares the app's session data through `AppProvider`.
 
 ## Design language
@@ -15,8 +17,10 @@ The chat is a full-screen workspace with its own layout (`src/app/(studio)`), se
 
 | File | Role |
 | --- | --- |
-| `studio.tsx` | Page root: layout, scrolling, shortcuts, dialogs |
-| `use-chat.ts` | Chat state: send, stream, stop, retry, open/new, URL sync |
+| `frame.tsx` | Persistent shell shared by Chat and Agents: sidebar, dialogs, theme, shortcuts, toasts; `useStudio()` context and `StudioHeader` |
+| `studio.tsx` | The general chat page |
+| `thread.tsx` | `ConversationPane`: message list, scroll-follow, floating composer, loading and error states (shared with agents) |
+| `use-chat.ts` | Chat state: send, stream, stop, retry, open/new, URL sync. `basePath` and `transport` let agents reuse it |
 | `chat-client.ts` | Integration layer, the only code that calls the AI backend |
 | `history.ts` | `HistoryStore`, with a server implementation (signed in) and a localStorage implementation (guest); date grouping |
 | `composer.tsx` | Auto-growing glass composer: attachments (button, drag-drop, paste), mode, model, web search, voice input |

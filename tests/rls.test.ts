@@ -138,3 +138,61 @@ describe("row level security", () => {
     });
   });
 });
+
+describe("agents", () => {
+  let aliceAgent: string;
+  let aliceAgentChat: string;
+  const instructions = "You are a careful research helper for my thesis.";
+
+  it("lets a user create a private agent and attach conversations to it", async () => {
+    await as(ALICE, async () => {
+      const a = await db.query<{ id: string }>(
+        "insert into public.agents (name, instructions, capabilities) values ('Thesis Helper', $1, array['file_analysis']) returning id",
+        [instructions],
+      );
+      aliceAgent = a.rows[0]!.id;
+      const c = await db.query<{ id: string }>("insert into public.conversations (title, agent_id) values ('Chapter 2', $1) returning id", [aliceAgent]);
+      aliceAgentChat = c.rows[0]!.id;
+      await db.query("insert into public.conversations (title, builtin_agent) values ('Ask research', 'research')");
+      const mine = await db.query("select * from public.agents");
+      expect(mine.rows).toHaveLength(1);
+    });
+  });
+
+  it("hides one user's agents and agent conversations from another", async () => {
+    await as(BOB, async () => {
+      expect((await db.query("select * from public.agents")).rows).toHaveLength(0);
+      expect((await db.query("select * from public.conversations where agent_id is not null or builtin_agent is not null")).rows).toHaveLength(0);
+      const u = await db.query("update public.agents set instructions = 'pwned instructions for the agent' where id = $1", [aliceAgent]);
+      expect(u.affectedRows).toBe(0);
+    });
+  });
+
+  it("prevents attaching a conversation to someone else's agent", async () => {
+    await as(BOB, async () => {
+      await expect(db.query("insert into public.conversations (title, agent_id) values ('sneaky', $1)", [aliceAgent])).rejects.toThrow(
+        /row-level security/,
+      );
+    });
+  });
+
+  it("rejects unknown capabilities, unknown built-ins and a conversation with two agents", async () => {
+    await as(ALICE, async () => {
+      await expect(
+        db.query("insert into public.agents (name, instructions, capabilities) values ('x', $1, array['shell_access'])", [instructions]),
+      ).rejects.toThrow(/check constraint/);
+      await expect(db.query("insert into public.conversations (title, builtin_agent) values ('x', 'hacker')")).rejects.toThrow(/check constraint/);
+      await expect(
+        db.query("insert into public.conversations (title, agent_id, builtin_agent) values ('x', $1, 'research')", [aliceAgent]),
+      ).rejects.toThrow(/check constraint/);
+    });
+  });
+
+  it("deletes an agent's conversations with the agent", async () => {
+    await as(ALICE, async () => {
+      await db.query("delete from public.agents where id = $1", [aliceAgent]);
+      expect((await db.query("select * from public.conversations where id = $1", [aliceAgentChat])).rows).toHaveLength(0);
+      expect((await db.query("select * from public.conversations where builtin_agent = 'research'")).rows).toHaveLength(1);
+    });
+  });
+});
