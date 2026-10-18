@@ -21,7 +21,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/* Apply the saved theme before paint to avoid a flash. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('nova:theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}`,
+            __html: `try{var t=localStorage.getItem('nova:theme');if(t==='system')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}`,
           }}
         />
       </head>

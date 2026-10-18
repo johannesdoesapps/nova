@@ -1,0 +1,204 @@
+"use client";
+import { memo, useState } from "react";
+import { BookmarkPlus, Check, CircleAlert, Copy, Ellipsis, FileText, FolderPlus, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Markdown } from "@/components/common/markdown";
+import { cn, formatUsd } from "@/lib/utils";
+import type { Msg } from "./history";
+import type { Feedback } from "./prefs";
+import { IconButton, iconButtonClass, Menu, MenuItem, NovaMark } from "./ui";
+
+export const MessageView = memo(function MessageView({
+  m,
+  isLast,
+  busy,
+  feedback,
+  thinkingLabel,
+  onRetry,
+  onFeedback,
+  onSavePrompt,
+  onSaveToProject,
+}: {
+  m: Msg;
+  isLast: boolean;
+  busy: boolean;
+  feedback?: Feedback;
+  thinkingLabel: string;
+  onRetry: (id: string) => void;
+  onFeedback: (id: string, f: Feedback) => void;
+  onSavePrompt: (text: string) => boolean;
+  onSaveToProject?: (m: Msg) => void;
+}) {
+  if (m.role === "user") {
+    return (
+      <div className="group/msg s-in flex flex-col items-end">
+        {m.attachments && m.attachments.length > 0 && (
+          <div className="mb-1.5 flex max-w-[85%] flex-wrap justify-end gap-1.5">
+            {m.attachments.map((a) => (
+              <span key={a} className="inline-flex items-center gap-1.5 rounded-xl border border-s-line px-2.5 py-1 text-[12px] text-s-ink-2">
+                <FileText className="h-3.5 w-3.5" /> {a}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="max-w-[88%] whitespace-pre-wrap break-words rounded-[22px] rounded-br-lg bg-s-user px-4 py-2.5 text-[15.5px] leading-relaxed sm:max-w-[78%]">
+          {m.content}
+        </div>
+        <div className="s-actions mt-1 flex items-center gap-0.5">
+          <CopyAction text={m.content} />
+          <SavePromptAction onSave={() => onSavePrompt(m.content)} />
+        </div>
+      </div>
+    );
+  }
+
+  const streaming = m.status === "streaming";
+  const valid = new Set((m.sources ?? []).map((s) => s.index));
+  return (
+    <div className="group/msg s-in">
+      <div className="mb-2.5 flex items-center gap-2 text-[12.5px] text-s-ink-3">
+        <NovaMark className="h-[18px] w-[18px] text-s-ink" />
+        <span className="font-medium text-s-ink-2">{m.modelName ?? "NOVA"}</span>
+        {m.simulated && (
+          <span className="rounded-full border border-s-line-strong px-2 py-px text-[11px]" title="No AI provider is configured; this reply is a template.">
+            Simulated
+          </span>
+        )}
+      </div>
+
+      {m.notices?.map((n, i) => (
+        <p key={i} className="mb-3 flex items-start gap-2 rounded-2xl border border-s-line px-3.5 py-2.5 text-[13.5px] text-s-ink-2">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" /> {n}
+        </p>
+      ))}
+
+      {m.content ? (
+        <div className={cn(streaming && "s-caret")}>
+          <Markdown
+            text={m.content}
+            className="s-prose"
+            validCitations={valid}
+            onCitation={(n) => {
+              const s = m.sources?.find((x) => x.index === n);
+              if (s) window.open(s.url, "_blank", "noopener,noreferrer");
+            }}
+          />
+        </div>
+      ) : streaming ? (
+        <div role="status" className="flex h-7 items-center gap-3">
+          <span className="flex gap-1" aria-hidden>
+            <span className="s-dot h-1.5 w-1.5 rounded-full bg-s-accent" />
+            <span className="s-dot h-1.5 w-1.5 rounded-full bg-s-accent [animation-delay:160ms]" />
+            <span className="s-dot h-1.5 w-1.5 rounded-full bg-s-accent [animation-delay:320ms]" />
+          </span>
+          <span className="s-shimmer text-[14px]">{thinkingLabel}</span>
+        </div>
+      ) : null}
+
+      {m.sources && m.sources.length > 0 && (
+        <div className="mt-4 flex flex-wrap gap-1.5">
+          {m.sources.map((s) => (
+            <a
+              key={s.index}
+              href={s.url}
+              target="_blank"
+              rel="noopener noreferrer nofollow"
+              title={s.title}
+              className="glass inline-flex max-w-[240px] items-center gap-1.5 rounded-full py-1 pl-1 pr-2.5 text-[12px] text-s-ink-2 transition hover:text-s-ink"
+            >
+              <span className="grid h-5 min-w-5 place-items-center rounded-full bg-s-accent-soft px-1 text-[11px] font-semibold text-s-accent">{s.index}</span>
+              <span className="truncate">{s.domain}</span>
+            </a>
+          ))}
+        </div>
+      )}
+
+      {m.status === "error" && (
+        <div role="alert" className="s-in mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-s-line bg-s-hover px-4 py-3 text-[14px]">
+          <CircleAlert className="h-4 w-4 shrink-0 text-s-danger" />
+          <span className="min-w-0 flex-1 text-s-ink-2">{m.error ?? "Something went wrong."}</span>
+          <button
+            type="button"
+            onClick={() => onRetry(m.id)}
+            disabled={busy}
+            className="inline-flex items-center gap-1.5 rounded-full border border-s-line-strong px-3 py-1 text-[13px] transition hover:bg-s-hover disabled:opacity-40"
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Try again
+          </button>
+        </div>
+      )}
+
+      {m.status === "done" && m.content && (
+        <div className="s-actions mt-3 flex items-center gap-0.5" data-pinned={isLast}>
+          <CopyAction text={m.content} />
+          <IconButton size="sm" label="Regenerate" onClick={() => onRetry(m.id)} disabled={busy}>
+            <RefreshCw />
+          </IconButton>
+          <IconButton
+            size="sm"
+            label="Good response"
+            aria-pressed={feedback === "up"}
+            onClick={() => onFeedback(m.id, "up")}
+            className={cn(feedback === "up" && "text-s-accent hover:text-s-accent")}
+          >
+            <ThumbsUp className={cn(feedback === "up" && "fill-current")} />
+          </IconButton>
+          <IconButton
+            size="sm"
+            label="Bad response"
+            aria-pressed={feedback === "down"}
+            onClick={() => onFeedback(m.id, "down")}
+            className={cn(feedback === "down" && "text-s-accent hover:text-s-accent")}
+          >
+            <ThumbsDown className={cn(feedback === "down" && "fill-current")} />
+          </IconButton>
+          {onSaveToProject && (
+            <Menu label="More actions" side="auto" buttonLabel="More actions" buttonClassName={iconButtonClass("sm")} button={<Ellipsis />}>
+              <MenuItem icon={<FolderPlus />} onClick={() => onSaveToProject(m)}>
+                Save to project
+              </MenuItem>
+            </Menu>
+          )}
+          {typeof m.cost === "number" && m.cost > 0 && <span className="ml-2 text-[11.5px] text-s-ink-3">≈ {formatUsd(m.cost)}</span>}
+        </div>
+      )}
+    </div>
+  );
+});
+
+function CopyAction({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <IconButton
+      size="sm"
+      label={done ? "Copied" : "Copy"}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setDone(true);
+          setTimeout(() => setDone(false), 1400);
+        } catch {
+          /* clipboard blocked */
+        }
+      }}
+    >
+      {done ? <Check className="s-pop text-s-accent" /> : <Copy />}
+    </IconButton>
+  );
+}
+
+function SavePromptAction({ onSave }: { onSave: () => boolean }) {
+  const [done, setDone] = useState(false);
+  return (
+    <IconButton
+      size="sm"
+      label={done ? "Saved to prompts" : "Save as prompt"}
+      onClick={() => {
+        onSave();
+        setDone(true);
+        setTimeout(() => setDone(false), 1400);
+      }}
+    >
+      {done ? <Check className="s-pop text-s-accent" /> : <BookmarkPlus />}
+    </IconButton>
+  );
+}

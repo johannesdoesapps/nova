@@ -1,0 +1,214 @@
+/*
+ * NOVA chat studio — material and motion tokens.
+ * Light: warm, airy paper. Dark: deep charcoal, never pure black.
+ * Glass is reserved for the sidebar, composer, menus and dialogs; the reading
+ * column stays clean.
+ */
+@layer components {
+.studio {
+  --s-bg: #f5f2ec;
+  --s-ink: #1c1b18;
+  --s-ink-2: #5d5951;
+  --s-ink-3: #8f8a80;
+  --s-glass: rgba(255, 255, 255, 0.5);
+  --s-glass-strong: rgba(255, 255, 255, 0.72);
+  --s-glass-menu: rgba(253, 251, 248, 0.88);
+  --s-hover: rgba(28, 25, 20, 0.05);
+  --s-line: rgba(28, 25, 20, 0.08);
+  --s-line-strong: rgba(28, 25, 20, 0.13);
+  --s-hi: rgba(255, 255, 255, 0.9);
+  --s-accent: #5b54c4;
+  --s-accent-ink: #ffffff;
+  --s-accent-soft: rgba(91, 84, 196, 0.1);
+  --s-user: rgba(28, 25, 20, 0.05);
+  --s-danger: #b0453f;
+  --s-code: rgba(28, 25, 20, 0.035);
+  --s-scrim: rgba(40, 36, 30, 0.18);
+  --s-shadow-sm: 0 1px 2px rgba(28, 25, 20, 0.05), 0 6px 16px -6px rgba(28, 25, 20, 0.1);
+  --s-shadow: 0 1px 1px rgba(28, 25, 20, 0.03), 0 10px 30px -10px rgba(28, 25, 20, 0.14), 0 30px 70px -30px rgba(28, 25, 20, 0.16);
+  --s-glow-a: rgba(122, 108, 220, 0.16);
+  --s-glow-b: rgba(70, 160, 168, 0.11);
+  --s-ring: rgba(91, 84, 196, 0.38);
+  --s-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  color-scheme: light;
+  color: var(--s-ink);
+  background: var(--s-bg);
+}
+
+:root[data-theme="dark"] .studio {
+  --s-bg: #17171b;
+  --s-ink: #ecebf0;
+  --s-ink-2: #a5a3ae;
+  --s-ink-3: #6e6c78;
+  --s-glass: rgba(40, 40, 48, 0.5);
+  --s-glass-strong: rgba(34, 34, 41, 0.78);
+  --s-glass-menu: rgba(30, 30, 37, 0.92);
+  --s-hover: rgba(255, 255, 255, 0.05);
+  --s-line: rgba(255, 255, 255, 0.07);
+  --s-line-strong: rgba(255, 255, 255, 0.12);
+  --s-hi: rgba(255, 255, 255, 0.09);
+  --s-accent: #a198f3;
+  --s-accent-ink: #16151d;
+  --s-accent-soft: rgba(161, 152, 243, 0.14);
+  --s-user: rgba(255, 255, 255, 0.06);
+  --s-danger: #ee8d86;
+  --s-code: rgba(0, 0, 0, 0.24);
+  --s-scrim: rgba(6, 6, 9, 0.5);
+  --s-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25), 0 8px 20px -8px rgba(0, 0, 0, 0.45);
+  --s-shadow: 0 1px 1px rgba(0, 0, 0, 0.2), 0 12px 32px -10px rgba(0, 0, 0, 0.5), 0 34px 80px -30px rgba(0, 0, 0, 0.65);
+  --s-glow-a: rgba(126, 112, 235, 0.17);
+  --s-glow-b: rgba(64, 160, 170, 0.09);
+  --s-ring: rgba(161, 152, 243, 0.45);
+  color-scheme: dark;
+}
+
+.studio ::selection { background: var(--s-accent-soft); }
+.studio :focus-visible { outline: 2px solid var(--s-ring); outline-offset: 2px; }
+
+/* Soft, static ambient light — no continuous motion. */
+.studio-ambient {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 520px at 78% -12%, var(--s-glow-a), transparent 62%),
+    radial-gradient(700px 480px at 4% 108%, var(--s-glow-b), transparent 60%);
+}
+
+/* Glass surfaces */
+.glass {
+  background: var(--s-glass);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  backdrop-filter: blur(22px) saturate(1.4);
+  border: 1px solid var(--s-line);
+  box-shadow: inset 0 1px 0 var(--s-hi);
+}
+.glass-strong {
+  background: var(--s-glass-strong);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+  backdrop-filter: blur(28px) saturate(1.5);
+  border: 1px solid var(--s-line-strong);
+  box-shadow: inset 0 1px 0 var(--s-hi), var(--s-shadow);
+}
+/* Menus and dialogs sit over text, so they stay readable first. */
+.glass-strong.glass-solid { background: var(--s-glass-menu); }
+
+/* Reflective edge: a 1px gradient stroke brighter along the top. */
+.glass-edge { position: relative; isolation: isolate; }
+.glass-edge::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(180deg, var(--s-hi), transparent 38%, transparent 72%, var(--s-line));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Composer focus: a soft accent halo, never neon. */
+.composer { transition: border-color 0.25s var(--s-ease), box-shadow 0.3s var(--s-ease); }
+.composer:hover { border-color: color-mix(in srgb, var(--s-ink) 18%, transparent); }
+.composer:focus-within {
+  border-color: color-mix(in srgb, var(--s-accent) 42%, transparent);
+  box-shadow:
+    inset 0 1px 0 var(--s-hi),
+    var(--s-shadow),
+    0 0 0 4px var(--s-accent-soft),
+    0 18px 50px -18px color-mix(in srgb, var(--s-accent) 35%, transparent);
+}
+.composer.drag { border-color: var(--s-accent); border-style: dashed; }
+
+/* Motion */
+@keyframes s-in { from { opacity: 0; transform: translateY(5px); } }
+@keyframes s-pop { from { opacity: 0; transform: translateY(var(--s-pop-y, 4px)) scale(0.97); } }
+@keyframes s-fade { from { opacity: 0; } }
+@keyframes s-dot { 0%, 80%, 100% { opacity: 0.25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
+@keyframes s-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes s-caret { 50% { opacity: 0; } }
+@keyframes s-dialog { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
+
+.s-in { animation: s-in 0.34s var(--s-ease) both; }
+.s-pop { animation: s-pop 0.18s var(--s-ease) both; }
+.s-fade { animation: s-fade 0.2s ease both; }
+.s-dot { animation: s-dot 1.2s ease-in-out infinite; }
+.s-shimmer {
+  background: linear-gradient(90deg, var(--s-ink-3) 0%, var(--s-ink) 50%, var(--s-ink-3) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: s-shimmer 2.4s linear infinite;
+}
+.s-skeleton {
+  background: linear-gradient(90deg, var(--s-hover) 0%, var(--s-line-strong) 50%, var(--s-hover) 100%);
+  background-size: 200% 100%;
+  animation: s-shimmer 1.6s linear infinite;
+  border-radius: 8px;
+}
+
+/* Smooth theme switch, applied briefly by the theme hook. */
+html.theming .studio,
+html.theming .studio * {
+  transition: background-color 0.35s ease, border-color 0.35s ease, color 0.35s ease, fill 0.35s ease !important;
+}
+
+/* Dialogs */
+.studio-dialog { padding: 0; border: 0; background: transparent; color: inherit; max-width: none; max-height: none; overflow: visible; }
+.studio-dialog[open] > div { animation: s-dialog 0.22s var(--s-ease) both; }
+.studio-dialog::backdrop { background: var(--s-scrim); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); animation: s-fade 0.2s ease both; }
+
+/* Reading column */
+.s-prose { font-size: 16px; line-height: 1.75; color: var(--s-ink); overflow-wrap: anywhere; }
+.s-prose > * { animation: s-in 0.32s var(--s-ease) both; }
+.s-prose > :first-child { margin-top: 0; }
+.s-prose > :last-child { margin-bottom: 0; }
+.s-prose p { margin: 0.75em 0; line-height: 1.75; }
+.s-prose h2, .s-prose h3, .s-prose h4 { font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; color: var(--s-ink); }
+.s-prose h2 { font-size: 1.3em; margin: 1.5em 0 0.5em; }
+.s-prose h3 { font-size: 1.1em; margin: 1.4em 0 0.4em; }
+.s-prose h4 { font-size: 1em; margin: 1.2em 0 0.3em; }
+.s-prose ul, .s-prose ol { padding-left: 1.4em; margin: 0.7em 0; }
+  .s-prose ul { list-style: disc; }
+  .s-prose ol { list-style: decimal; }
+.s-prose li { margin: 0.3em 0; padding-left: 0.2em; }
+.s-prose li::marker { color: var(--s-ink-3); }
+.s-prose strong { font-weight: 600; }
+.s-prose a { color: var(--s-accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--s-accent) 40%, transparent); text-underline-offset: 3px; }
+.s-prose a:hover { text-decoration-color: var(--s-accent); }
+.s-prose code { font-family: var(--font-mono); font-size: 0.86em; background: var(--s-user); padding: 0.12em 0.38em; border-radius: 6px; }
+.s-prose blockquote { margin: 1em 0; padding: 0.1em 0 0.1em 1.1em; border-left: 2px solid color-mix(in srgb, var(--s-accent) 45%, transparent); color: var(--s-ink-2); font-style: italic; }
+.s-prose hr { border: 0; border-top: 1px solid var(--s-line-strong); margin: 1.8em 0; }
+.s-prose .nova-code { margin: 1em 0; border: 1px solid var(--s-line); border-radius: 14px; background: var(--s-code); }
+.s-prose .nova-code-head { border-bottom: 1px solid var(--s-line); color: var(--s-ink-3); padding: 0.4em 0.5em 0.4em 1.1em; }
+.s-prose pre { background: transparent; border: 0; padding: 1em 1.1em; overflow-x: auto; font-size: 13.5px; line-height: 1.65; }
+.s-prose pre code { background: none; padding: 0; font-size: inherit; }
+.s-caret > .s-prose > :last-child::after {
+  content: "";
+  display: inline-block;
+  width: 0.5em;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  border-radius: 2px;
+  background: var(--s-accent);
+  animation: s-caret 1s steps(1) infinite;
+}
+
+/* Hover-reveal actions; always visible on touch screens. */
+.s-actions { opacity: 0; transition: opacity 0.2s ease; }
+.group\/msg:hover .s-actions, .group\/msg:focus-within .s-actions, .s-actions[data-pinned="true"] { opacity: 1; }
+@media (hover: none) { .s-actions { opacity: 1; } }
+
+.s-scroll { scrollbar-width: thin; scrollbar-color: var(--s-line-strong) transparent; }
+.s-scroll::-webkit-scrollbar { width: 10px; }
+.s-scroll::-webkit-scrollbar-thumb { background: var(--s-line-strong); border-radius: 10px; border: 3px solid transparent; background-clip: content-box; }
+
+@media (prefers-reduced-motion: reduce) {
+  .s-shimmer { animation: none; color: var(--s-ink-2); background: none; }
+  .s-caret > .s-prose > :last-child::after { animation: none; }
+}
+
+}

@@ -1,0 +1,394 @@
+"use client";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { ArrowUpRight, Bookmark, Check, FolderKanban, Monitor, Moon, Plus, Sun, Trash2 } from "lucide-react";
+import { saveNote } from "@/components/projects/save-to-project";
+import { jsonFetch } from "@/hooks/use-ndjson";
+import { CHAT_MODES, MODE_LABELS, type ChatMode } from "@/lib/ai/modes";
+import { cn } from "@/lib/utils";
+import type { ConvSummary, Msg } from "./history";
+import type { SavedPrompt, StudioSettings, ThemePref } from "./prefs";
+import { Dialog, IconButton, Kbd, Segmented, Switch } from "./ui";
+
+const btn =
+  "inline-flex h-9 items-center justify-center gap-1.5 rounded-xl px-3.5 text-[13.5px] font-medium transition active:scale-[0.98] disabled:opacity-40 [&_svg]:h-4 [&_svg]:w-4";
+const btnPrimary = cn(btn, "bg-s-accent text-s-accent-ink hover:brightness-110");
+const btnQuiet = cn(btn, "border border-s-line-strong hover:bg-s-hover");
+
+/* Settings --------------------------------------------------------------- */
+
+export function SettingsDialog({
+  open,
+  onClose,
+  settings,
+  onSettings,
+  theme,
+  historyKind,
+  onClearLocal,
+  signedIn,
+}: {
+  open: boolean;
+  onClose: () => void;
+  settings: StudioSettings;
+  onSettings: (s: Partial<StudioSettings>) => void;
+  theme: { pref: ThemePref; setTheme: (p: ThemePref) => void };
+  historyKind: "server" | "local";
+  onClearLocal: () => void;
+  signedIn: boolean;
+}) {
+  return (
+    <Dialog open={open} onClose={onClose} title="Settings" width={520}>
+      <SettingsBody settings={settings} onSettings={onSettings} theme={theme} historyKind={historyKind} onClearLocal={onClearLocal} signedIn={signedIn} />
+    </Dialog>
+  );
+}
+
+function SettingsBody({
+  settings,
+  onSettings,
+  theme,
+  historyKind,
+  onClearLocal,
+  signedIn,
+}: {
+  settings: StudioSettings;
+  onSettings: (s: Partial<StudioSettings>) => void;
+  theme: { pref: ThemePref; setTheme: (p: ThemePref) => void };
+  historyKind: "server" | "local";
+  onClearLocal: () => void;
+  signedIn: boolean;
+}) {
+  const [confirmClear, setConfirmClear] = useState(false);
+  return (
+    <>
+      <div className="divide-y divide-s-line">
+        <Row title="Appearance" hint="Auto follows your system setting.">
+          <Segmented
+            label="Theme"
+            value={theme.pref}
+            onChange={theme.setTheme}
+            options={[
+              { value: "light", label: "Light", icon: <Sun /> },
+              { value: "dark", label: "Dark", icon: <Moon /> },
+              { value: "system", label: "Auto", icon: <Monitor /> },
+            ]}
+          />
+        </Row>
+        <Row title="Default mode" hint="Used for new chats.">
+          <select
+            value={settings.defaultMode}
+            onChange={(e) => onSettings({ defaultMode: e.target.value as ChatMode })}
+            className="h-9 rounded-xl border border-s-line-strong bg-transparent px-3 text-[13.5px] text-s-ink outline-none"
+            aria-label="Default mode"
+          >
+            {CHAT_MODES.map((m) => (
+              <option key={m} value={m} className="bg-s-bg">
+                {MODE_LABELS[m].label}
+              </option>
+            ))}
+          </select>
+        </Row>
+        <Row title="Send with Enter" hint={settings.enterToSend ? "Shift + Enter adds a new line." : "Ctrl/⌘ + Enter sends; Enter adds a new line."}>
+          <Switch label="Send with Enter" checked={settings.enterToSend} onChange={(v) => onSettings({ enterToSend: v })} />
+        </Row>
+        <Row title="Chat history" hint={historyKind === "server" ? "Saved to your account." : "As a guest, chats are stored in this browser only."}>
+          {historyKind === "local" ? (
+            confirmClear ? (
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  className={cn(btn, "bg-s-danger text-white hover:brightness-110")}
+                  onClick={() => {
+                    onClearLocal();
+                    setConfirmClear(false);
+                  }}
+                >
+                  Clear all
+                </button>
+                <button type="button" className={btnQuiet} onClick={() => setConfirmClear(false)}>
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button type="button" className={btnQuiet} onClick={() => setConfirmClear(true)}>
+                <Trash2 /> Clear
+              </button>
+            )
+          ) : (
+            <span className="text-[13px] text-s-ink-3">Delete chats from the sidebar</span>
+          )}
+        </Row>
+        <div className="py-4">
+          <div className="mb-2.5 text-[13.5px] font-medium">Keyboard shortcuts</div>
+          <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 text-[13px] text-s-ink-2">
+            <dt>Send message</dt>
+            <dd>{settings.enterToSend ? <Kbd>Enter</Kbd> : <><Kbd>Ctrl/⌘</Kbd> <Kbd>Enter</Kbd></>}</dd>
+            <dt>New line</dt>
+            <dd>{settings.enterToSend ? <><Kbd>Shift</Kbd> <Kbd>Enter</Kbd></> : <Kbd>Enter</Kbd>}</dd>
+            <dt>Search chats</dt>
+            <dd><Kbd>Ctrl/⌘</Kbd> <Kbd>K</Kbd></dd>
+            <dt>New chat</dt>
+            <dd><Kbd>Ctrl/⌘</Kbd> <Kbd>Shift</Kbd> <Kbd>O</Kbd></dd>
+            <dt>Toggle sidebar</dt>
+            <dd><Kbd>Ctrl/⌘</Kbd> <Kbd>B</Kbd></dd>
+          </dl>
+        </div>
+      </div>
+      <div className="mt-2 flex justify-end">
+        <Link href="/settings" className={btnQuiet}>
+          {signedIn ? "Account & usage" : "More settings"} <ArrowUpRight />
+        </Link>
+      </div>
+    </>
+  );
+}
+
+function Row({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-1">
+      <div className="min-w-0">
+        <div className="text-[13.5px] font-medium">{title}</div>
+        {hint && <div className="mt-0.5 text-[12.5px] text-s-ink-3">{hint}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/* Saved prompts ---------------------------------------------------------- */
+
+export function PromptsDialog({
+  open,
+  onClose,
+  prompts,
+  onAdd,
+  onRemove,
+  onUse,
+}: {
+  open: boolean;
+  onClose: () => void;
+  prompts: SavedPrompt[];
+  onAdd: (text: string) => boolean;
+  onRemove: (id: string) => void;
+  onUse: (text: string) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const [note, setNote] = useState<string | null>(null);
+  return (
+    <Dialog open={open} onClose={onClose} title="Saved prompts" description="Reusable prompts, kept in this browser." width={560}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!draft.trim()) return;
+          if (onAdd(draft)) {
+            setDraft("");
+            setNote(null);
+          } else setNote("That prompt is already saved.");
+        }}
+        className="mb-4"
+      >
+        <label htmlFor="new-prompt" className="sr-only">New prompt</label>
+        <textarea
+          id="new-prompt"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setNote(null);
+          }}
+          rows={2}
+          maxLength={4000}
+          placeholder="Write a prompt to reuse…"
+          className="s-scroll block w-full resize-none rounded-2xl border border-s-line-strong bg-transparent px-3.5 py-2.5 text-[14px] text-s-ink outline-none transition placeholder:text-s-ink-3 focus:border-[color-mix(in_srgb,var(--s-accent)_45%,transparent)] focus-visible:outline-none"
+        />
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <span className="text-[12.5px] text-s-ink-3">{note ?? "Tip: save any of your messages with the bookmark icon."}</span>
+          <button type="submit" className={btnPrimary} disabled={!draft.trim()}>
+            <Plus /> Save
+          </button>
+        </div>
+      </form>
+      {prompts.length === 0 ? (
+        <div className="grid place-items-center rounded-2xl border border-dashed border-s-line-strong px-6 py-10 text-center">
+          <Bookmark className="h-5 w-5 text-s-ink-3" />
+          <p className="mt-2 text-[13.5px] text-s-ink-2">No saved prompts yet.</p>
+        </div>
+      ) : (
+        <ul className="flex flex-col gap-1.5">
+          {prompts.map((p) => (
+            <li key={p.id} className="group flex items-start gap-2 rounded-2xl border border-s-line p-1.5 transition hover:border-s-line-strong">
+              <button
+                type="button"
+                onClick={() => onUse(p.text)}
+                className="min-w-0 flex-1 rounded-xl px-2.5 py-1.5 text-left text-[13.5px] leading-relaxed text-s-ink-2 transition hover:text-s-ink"
+                title="Use this prompt"
+              >
+                <span className="line-clamp-3 whitespace-pre-wrap">{p.text}</span>
+              </button>
+              <IconButton size="sm" label="Delete prompt" onClick={() => onRemove(p.id)}>
+                <Trash2 />
+              </IconButton>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Dialog>
+  );
+}
+
+/* Delete confirmation ---------------------------------------------------- */
+
+export function DeleteDialog({ conv, onClose, onConfirm }: { conv: ConvSummary | null; onClose: () => void; onConfirm: (c: ConvSummary) => Promise<void> }) {
+  return (
+    <Dialog open={!!conv} onClose={onClose} title="Delete chat?" description={conv ? `“${conv.title}” will be permanently deleted.` : undefined} width={420}>
+      {conv && <DeleteBody key={conv.id} conv={conv} onClose={onClose} onConfirm={onConfirm} />}
+    </Dialog>
+  );
+}
+
+function DeleteBody({ conv, onClose, onConfirm }: { conv: ConvSummary; onClose: () => void; onConfirm: (c: ConvSummary) => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <>
+      {error && <p role="alert" className="mb-3 text-[13px] text-s-danger">{error}</p>}
+      <div className="flex justify-end gap-2">
+        <button type="button" className={btnQuiet} onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          className={cn(btn, "bg-s-danger text-white hover:brightness-110")}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await onConfirm(conv);
+              onClose();
+            } catch (e) {
+              setError((e as Error).message);
+              setBusy(false);
+            }
+          }}
+        >
+          Delete
+        </button>
+      </div>
+    </>
+  );
+}
+
+/* Save to project (signed-in users) -------------------------------------- */
+
+export function SaveToProjectDialog({ message, onClose }: { message: Msg | null; onClose: () => void }) {
+  return (
+    <Dialog open={!!message} onClose={onClose} title="Save to project" description="Adds this reply as a note in a research project." width={440}>
+      {message && <SaveBody key={message.id} message={message} onClose={onClose} />}
+    </Dialog>
+  );
+}
+
+function SaveBody({ message, onClose }: { message: Msg; onClose: () => void }) {
+  const [projects, setProjects] = useState<{ id: string; name: string }[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [name, setName] = useState("");
+
+  useEffect(() => {
+    jsonFetch<{ projects: { id: string; name: string }[] }>("/api/projects")
+      .then((r) => setProjects(r.projects))
+      .catch((e: Error) => setError(e.message));
+  }, []);
+
+  const save = async (id: string, projectName: string) => {
+    setBusy(id);
+    setError(null);
+    try {
+      await saveNote(id, {
+        title: message.content.replace(/[#*`>\n]+/g, " ").trim().slice(0, 80) || "Saved answer",
+        content: message.content,
+        sourceType: "chat",
+        sourceRef: message.id,
+      });
+      setSaved(projectName);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <>
+      {saved ? (
+        <div className="flex flex-col items-center py-6 text-center">
+          <span className="s-pop grid h-10 w-10 place-items-center rounded-full bg-s-accent-soft text-s-accent">
+            <Check className="h-5 w-5" />
+          </span>
+          <p className="mt-3 text-[14px]">Saved to {saved}.</p>
+          <button type="button" onClick={onClose} className={cn(btnQuiet, "mt-4")}>
+            Done
+          </button>
+        </div>
+      ) : (
+        <>
+          {error && <p role="alert" className="mb-3 text-[13px] text-s-danger">{error}</p>}
+          {projects === null && !error ? (
+            <div className="space-y-2">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="s-skeleton h-10" />
+              ))}
+            </div>
+          ) : (
+            <ul className="s-scroll flex max-h-64 flex-col gap-1 overflow-y-auto">
+              {projects?.length === 0 && <li className="px-1 py-2 text-[13.5px] text-s-ink-3">No projects yet. Create one below.</li>}
+              {projects?.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    disabled={!!busy}
+                    onClick={() => void save(p.id, p.name)}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13.5px] transition hover:bg-s-hover disabled:opacity-50"
+                  >
+                    <FolderKanban className="h-4 w-4 text-s-ink-3" />
+                    <span className="truncate">{p.name}</span>
+                    {busy === p.id && <span className="ml-auto text-[12px] text-s-ink-3">Saving…</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form
+            className="mt-4 flex gap-2 border-t border-s-line pt-4"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const n = name.trim();
+              if (!n) return;
+              setBusy("new");
+              try {
+                const r = await jsonFetch<{ project: { id: string; name: string } }>("/api/projects", { method: "POST", body: JSON.stringify({ name: n }) });
+                setName("");
+                await save(r.project.id, r.project.name);
+              } catch (err) {
+                setError((err as Error).message);
+                setBusy(null);
+              }
+            }}
+          >
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="New project name"
+              aria-label="New project name"
+              maxLength={120}
+              className="h-9 min-w-0 flex-1 rounded-xl border border-s-line-strong bg-transparent px-3 text-[13.5px] text-s-ink outline-none placeholder:text-s-ink-3 focus-visible:outline-none"
+            />
+            <button type="submit" className={btnPrimary} disabled={!name.trim() || !!busy}>
+              Create & save
+            </button>
+          </form>
+        </>
+      )}
+    </>
+  );
+}

@@ -58,6 +58,23 @@
   --color-danger: var(--danger);
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-serif: var(--font-instrument-serif), "Iowan Old Style", Georgia, serif;
+
+  /* Chat studio tokens (values live in components/studio/studio.css) */
+  --color-s-bg: var(--s-bg);
+  --color-s-ink: var(--s-ink);
+  --color-s-ink-2: var(--s-ink-2);
+  --color-s-ink-3: var(--s-ink-3);
+  --color-s-glass: var(--s-glass);
+  --color-s-glass-strong: var(--s-glass-strong);
+  --color-s-hover: var(--s-hover);
+  --color-s-line: var(--s-line);
+  --color-s-line-strong: var(--s-line-strong);
+  --color-s-accent: var(--s-accent);
+  --color-s-accent-ink: var(--s-accent-ink);
+  --color-s-accent-soft: var(--s-accent-soft);
+  --color-s-user: var(--s-user);
+  --color-s-danger: var(--s-danger);
 }
 
 html,
@@ -106,6 +123,11 @@ body {
 .nova-prose code { font-family: var(--font-mono); font-size: 0.88em; background: var(--panel-2); padding: 0.1em 0.35em; border-radius: 4px; }
 .nova-prose pre { background: var(--panel-2); border: 1px solid var(--border); padding: 0.9em 1em; border-radius: 10px; overflow-x: auto; margin: 0.8em 0; }
 .nova-prose pre code { background: none; padding: 0; }
+.nova-prose blockquote { border-left: 2px solid var(--border-strong); padding-left: 1em; color: var(--fg-muted); margin: 0.8em 0; }
+.nova-prose hr { border: 0; border-top: 1px solid var(--border); margin: 1.4em 0; }
+.nova-code { margin: 0.8em 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--panel-2); }
+.nova-code pre { margin: 0; border: 0; border-radius: 0; }
+.nova-code-head { display: flex; align-items: center; justify-content: space-between; padding: 0.35em 0.6em 0.35em 1em; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--fg-faint); font-family: var(--font-mono); }
 .nova-prose a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 .nova-prose strong { font-weight: 600; }
 

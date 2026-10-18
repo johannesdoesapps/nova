@@ -1,35 +1,49 @@
 "use client";
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
+import { Check, Copy } from "lucide-react";
 import { isSafeHttpUrl } from "@/lib/utils";
 
 /**
  * Small, safe Markdown renderer. It builds React elements (never raw HTML),
  * so model or web text cannot inject markup. Supports headings, lists, code
- * blocks, inline code, bold/italic, http(s) links and [n] citation chips.
+ * blocks (with a language label and copy button), quotes, rules, inline code,
+ * bold/italic, http(s) links and [n] citation chips.
  */
 export function Markdown({
   text,
   onCitation,
   validCitations,
+  className = "nova-prose text-[15px]",
 }: {
   text: string;
   onCitation?: (n: number) => void;
   validCitations?: Set<number>;
+  className?: string;
 }) {
   const blocks = parseBlocks(text);
   return (
-    <div className="nova-prose text-[15px]">
+    <div className={className}>
       {blocks.map((b, i) => {
         const inl = (s: string) => inline(s, onCitation, validCitations);
         switch (b.type) {
           case "code":
             return (
-              <pre key={i}>
-                <code>{b.text}</code>
-              </pre>
+              <div key={i} className="nova-code">
+                <div className="nova-code-head">
+                  <span>{b.lang || "code"}</span>
+                  <CodeCopy text={b.text} />
+                </div>
+                <pre>
+                  <code>{b.text}</code>
+                </pre>
+              </div>
             );
           case "h":
-            return b.level === 1 ? <h2 key={i} className="text-lg">{inl(b.text)}</h2> : <h3 key={i}>{inl(b.text)}</h3>;
+            return b.level === 1 ? <h2 key={i}>{inl(b.text)}</h2> : b.level === 2 ? <h3 key={i}>{inl(b.text)}</h3> : <h4 key={i}>{inl(b.text)}</h4>;
+          case "quote":
+            return <blockquote key={i}>{inl(b.text)}</blockquote>;
+          case "hr":
+            return <hr key={i} />;
           case "ul":
             return <ul key={i}>{b.items.map((it, j) => <li key={j}>{inl(it)}</li>)}</ul>;
           case "ol":
@@ -45,7 +59,9 @@ export function Markdown({
 type Block =
   | { type: "p"; text: string }
   | { type: "h"; level: number; text: string }
-  | { type: "code"; text: string }
+  | { type: "code"; lang: string; text: string }
+  | { type: "quote"; text: string }
+  | { type: "hr" }
   | { type: "ul"; items: string[] }
   | { type: "ol"; items: string[] };
 
@@ -61,10 +77,24 @@ function parseBlocks(src: string): Block[] {
     const line = lines[i]!;
     if (line.trim().startsWith("```")) {
       flush();
+      const lang = line.trim().slice(3).trim().split(/\s/)[0]!.slice(0, 20);
       const code: string[] = [];
       i++;
       while (i < lines.length && !lines[i]!.trim().startsWith("```")) code.push(lines[i++]!);
-      out.push({ type: "code", text: code.join("\n") });
+      out.push({ type: "code", lang, text: code.join("\n") });
+      continue;
+    }
+    if (/^\s{0,3}(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+      flush();
+      out.push({ type: "hr" });
+      continue;
+    }
+    if (/^\s*>/.test(line)) {
+      flush();
+      const q: string[] = [];
+      while (i < lines.length && /^\s*>/.test(lines[i]!)) q.push(lines[i++]!.replace(/^\s*>\s?/, "").trim());
+      i--;
+      out.push({ type: "quote", text: q.filter(Boolean).join(" ") });
       continue;
     }
     const h = line.match(/^(#{1,4})\s+(.*)$/);
@@ -153,4 +183,27 @@ function inline(s: string, onCitation?: (n: number) => void, valid?: Set<number>
   }
   if (last < s.length) parts.push(<Fragment key={k++}>{s.slice(last)}</Fragment>);
   return parts;
+}
+
+function CodeCopy({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setDone(true);
+          setTimeout(() => setDone(false), 1500);
+        } catch {
+          /* clipboard blocked */
+        }
+      }}
+      className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 font-sans text-[11.5px] opacity-80 transition hover:opacity-100"
+      aria-label={done ? "Copied" : "Copy code"}
+    >
+      {done ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      {done ? "Copied" : "Copy"}
+    </button>
+  );
 }
