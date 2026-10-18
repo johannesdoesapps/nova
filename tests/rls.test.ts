@@ -1,0 +1,140 @@
+/**
+ * Applies the real migration to an in-process Postgres (PGlite) with a minimal
+ * Supabase-like auth shim, then checks Row Level Security as two different users.
+ */
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { PGlite } from "@electric-sql/pglite";
+import { beforeAll, describe, expect, it } from "vitest";
+
+const ALICE = "11111111-1111-4111-8111-111111111111";
+const BOB = "22222222-2222-4222-8222-222222222222";
+let db: PGlite;
+
+async function as<T>(user: string | null, fn: () => Promise<T>): Promise<T> {
+  await db.exec(`reset role; select set_config('request.jwt.claim.sub', '${user ?? ""}', false);`);
+  await db.exec(user ? "set role authenticated" : "set role anon");
+  try {
+    return await fn();
+  } finally {
+    await db.exec("reset role");
+  }
+}
+
+beforeAll(async () => {
+  db = new PGlite();
+  await db.exec(`
+    create role anon nologin;
+    create role authenticated nologin;
+    create schema auth;
+    create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}'::jsonb);
+    create function auth.uid() returns uuid language sql stable as $$
+      select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+    $$;
+    grant usage on schema auth to anon, authenticated;
+    grant execute on function auth.uid() to anon, authenticated;
+  `);
+  const dir = join(__dirname, "..", "supabase", "migrations");
+  for (const f of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
+    await db.exec(readFileSync(join(dir, f), "utf8"));
+  }
+  await db.exec(`
+    grant usage on schema public to anon, authenticated;
+    grant select, insert, update, delete on all tables in schema public to authenticated;
+    grant select on all tables in schema public to anon;
+    insert into auth.users (id, email, raw_user_meta_data) values
+      ('${ALICE}', 'alice@example.com', '{"display_name":"Alice"}'),
+      ('${BOB}', 'bob@example.com', '{}');
+    insert into public.model_registry (id, provider, provider_model_id, display_name) values ('openai:x', 'openai', 'x', 'X');
+  `);
+}, 60_000);
+
+describe("schema", () => {
+  it("creates a profile automatically on sign-up", async () => {
+    const r = await db.query<{ id: string; display_name: string }>("select id, display_name from public.profiles order by display_name");
+    expect(r.rows.map((x) => x.display_name)).toEqual(["Alice", "bob"]);
+  });
+});
+
+describe("row level security", () => {
+  let aliceProject: string;
+  let aliceConversation: string;
+
+  it("lets a user create and read their own rows", async () => {
+    await as(ALICE, async () => {
+      const p = await db.query<{ id: string }>("insert into public.projects (name) values ('Startup Research') returning id");
+      aliceProject = p.rows[0]!.id;
+      const c = await db.query<{ id: string }>("insert into public.conversations (title, project_id) values ('Hi', $1) returning id", [aliceProject]);
+      aliceConversation = c.rows[0]!.id;
+      await db.query("insert into public.messages (conversation_id, role, content) values ($1, 'user', 'secret plan')", [aliceConversation]);
+      await db.query("insert into public.project_notes (project_id, title, content) values ($1, 'n', 'c')", [aliceProject]);
+      const mine = await db.query("select * from public.projects");
+      expect(mine.rows).toHaveLength(1);
+      const user = await db.query<{ user_id: string }>("select user_id from public.projects");
+      expect(user.rows[0]!.user_id).toBe(ALICE);
+    });
+  });
+
+  it("hides another user's projects, conversations, messages and notes", async () => {
+    await as(BOB, async () => {
+      for (const t of ["projects", "conversations", "messages", "project_notes", "profiles"]) {
+        const r = await db.query<{ id: string }>(`select * from public.${t}`);
+        if (t === "profiles") expect(r.rows.map((x) => x.id)).toEqual([BOB]);
+        else expect(r.rows).toHaveLength(0);
+      }
+    });
+  });
+
+  it("prevents updating or deleting another user's data", async () => {
+    await as(BOB, async () => {
+      const u = await db.query("update public.projects set name = 'pwned' where id = $1", [aliceProject]);
+      expect(u.affectedRows).toBe(0);
+      const d = await db.query("delete from public.conversations where id = $1", [aliceConversation]);
+      expect(d.affectedRows).toBe(0);
+    });
+    const check = await db.query<{ name: string }>("select name from public.projects where id = $1", [aliceProject]);
+    expect(check.rows[0]!.name).toBe("Startup Research");
+  });
+
+  it("prevents writing rows on behalf of someone else", async () => {
+    await as(BOB, async () => {
+      await expect(db.query("insert into public.projects (user_id, name) values ($1, 'fake')", [ALICE])).rejects.toThrow(/row-level security/);
+      await expect(
+        db.query("insert into public.messages (conversation_id, role, content) values ($1, 'user', 'injected')", [aliceConversation]),
+      ).rejects.toThrow(/row-level security/);
+    });
+  });
+
+  it("prevents attaching your rows to another user's project", async () => {
+    await as(BOB, async () => {
+      await expect(db.query("insert into public.conversations (title, project_id) values ('sneaky', $1)", [aliceProject])).rejects.toThrow(
+        /row-level security/,
+      );
+      await expect(db.query("insert into public.project_notes (project_id, title, content) values ($1, 't', 'c')", [aliceProject])).rejects.toThrow(
+        /row-level security/,
+      );
+    });
+  });
+
+  it("lets anonymous visitors read the model registry but nothing private", async () => {
+    await as(null, async () => {
+      const reg = await db.query("select * from public.model_registry");
+      expect(reg.rows).toHaveLength(1);
+      const projects = await db.query("select * from public.projects");
+      expect(projects.rows).toHaveLength(0);
+    });
+  });
+
+  it("does not let users edit the model registry or other users' usage records", async () => {
+    await as(ALICE, async () => {
+      const u = await db.query("update public.model_registry set input_price = 0 where id = 'openai:x'");
+      expect(u.affectedRows).toBe(0);
+      await db.query("insert into public.model_runs (model_id, status) values ('openai:x', 'success')");
+      const upd = await db.query("update public.model_runs set estimated_cost = 0");
+      expect(upd.affectedRows).toBe(0);
+    });
+    await as(BOB, async () => {
+      expect((await db.query("select * from public.model_runs")).rows).toHaveLength(0);
+    });
+  });
+});

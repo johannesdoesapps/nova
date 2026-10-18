@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+/* NOVARA design tokens — dark-first, with a light theme for completeness. */
+:root {
+  --bg: #07070b;
+  --bg-elev: #0e0e15;
+  --panel: #12121b;
+  --panel-2: #181824;
+  --border: #23233a;
+  --border-strong: #33335a;
+  --fg: #ececf4;
+  --fg-muted: #9a9ab3;
+  --fg-faint: #63637d;
+  --accent: #7c6cff;
+  --accent-2: #4f8bff;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(124, 108, 255, 0.12);
+  --success: #3ccf91;
+  --warning: #f2b24c;
+  --danger: #ff6b7a;
+  --ring: rgba(124, 108, 255, 0.45);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f7f7fb;
+  --bg-elev: #ffffff;
+  --panel: #ffffff;
+  --panel-2: #f1f1f8;
+  --border: #e3e3ee;
+  --border-strong: #cfcfe2;
+  --fg: #12121c;
+  --fg-muted: #55556e;
+  --fg-faint: #8a8aa3;
+  --accent: #5b4bf0;
+  --accent-2: #2f6bf0;
+  --accent-soft: rgba(91, 75, 240, 0.1);
+  --ring: rgba(91, 75, 240, 0.35);
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-elev: var(--bg-elev);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-faint: var(--fg-faint);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* In the base layer so utilities like focus-visible:outline-none can override it. */
+@layer base {
+  *:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/* Restrained ambient glow behind the main canvas */
+.nova-glow {
+  background:
+    radial-gradient(800px 400px at 70% -10%, rgba(124, 108, 255, 0.12), transparent 60%),
+    radial-gradient(600px 300px at 10% 0%, rgba(79, 139, 255, 0.08), transparent 60%);
+}
+
+.nova-gradient-text {
+  background: linear-gradient(100deg, var(--fg) 30%, var(--accent) 70%, var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Minimal prose styling for model answers */
+.nova-prose p { margin: 0.6em 0; line-height: 1.7; }
+.nova-prose ul { list-style: disc; padding-left: 1.3em; margin: 0.6em 0; }
+.nova-prose ol { list-style: decimal; padding-left: 1.3em; margin: 0.6em 0; }
+.nova-prose li { margin: 0.25em 0; }
+.nova-prose h1, .nova-prose h2, .nova-prose h3 { font-weight: 600; margin: 1em 0 0.4em; }
+.nova-prose code { font-family: var(--font-mono); font-size: 0.88em; background: var(--panel-2); padding: 0.1em 0.35em; border-radius: 4px; }
+.nova-prose pre { background: var(--panel-2); border: 1px solid var(--border); padding: 0.9em 1em; border-radius: 10px; overflow-x: auto; margin: 0.8em 0; }
+.nova-prose pre code { background: none; padding: 0; }
+.nova-prose a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.nova-prose strong { font-weight: 600; }
+
+@keyframes nova-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+.nova-dot { animation: nova-pulse 1.2s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
