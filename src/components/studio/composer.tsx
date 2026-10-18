@@ -7,6 +7,7 @@ import { ALLOWED_ATTACHMENT_EXT, MAX_ATTACHMENT_CHARS } from "@/lib/limits";
 import { cn } from "@/lib/utils";
 import type { ChatAttachment } from "./chat-client";
 import { IconButton, iconButtonClass, Menu, MenuItem, MenuLabel, MenuSeparator, Switch } from "./ui";
+import { UsageNotice, useUsage } from "./usage";
 
 export const MODE_ICONS: Record<ChatMode, ReactNode> = {
   research: <Telescope />,
@@ -104,6 +105,7 @@ export function Composer(p: ComposerProps) {
 
   const model = p.models?.find((m) => m.id === p.modelId);
   const error = fileError ?? speech.error;
+  const usage = useUsage(p.busy);
 
   return (
     <div className="w-full">
@@ -350,6 +352,7 @@ export function Composer(p: ComposerProps) {
           {error}
         </p>
       )}
+      <UsageNotice usage={usage} />
     </div>
   );
 }

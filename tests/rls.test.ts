@@ -196,3 +196,23 @@ describe("agents", () => {
     });
   });
 });
+
+describe("subscriptions", () => {
+  it("lets users read their own plan but never grant themselves Pro", async () => {
+    await db.exec(`insert into public.subscriptions (user_id, plan, status) values ('${ALICE}', 'pro', 'active')`);
+    await as(ALICE, async () => {
+      const r = await db.query<{ plan: string }>("select plan from public.subscriptions");
+      expect(r.rows).toEqual([{ plan: "pro" }]);
+    });
+    await as(BOB, async () => {
+      expect((await db.query("select * from public.subscriptions")).rows).toHaveLength(0);
+      await expect(db.query(`insert into public.subscriptions (user_id, plan, status) values ('${BOB}', 'pro', 'active')`)).rejects.toThrow(/row-level security/);
+      const u = await db.query(`update public.subscriptions set user_id = '${BOB}' where user_id = '${ALICE}'`);
+      expect(u.affectedRows).toBe(0);
+    });
+    await as(ALICE, async () => {
+      const u = await db.query("update public.subscriptions set status = 'active', plan = 'pro'");
+      expect(u.affectedRows).toBe(0);
+    });
+  });
+});

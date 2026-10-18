@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import type { ConvSummary, Msg } from "./history";
 import type { SavedPrompt, StudioSettings, ThemePref } from "./prefs";
 import { Dialog, IconButton, Kbd, Segmented, Switch } from "./ui";
+import { UsageMeters, useUsage } from "./usage";
 
 const btn =
   "inline-flex h-9 items-center justify-center gap-1.5 rounded-xl px-3.5 text-[13.5px] font-medium transition active:scale-[0.98] disabled:opacity-40 [&_svg]:h-4 [&_svg]:w-4";
@@ -54,9 +55,15 @@ function SettingsBody({
   onClearLocal: () => void;
 }) {
   const [confirmClear, setConfirmClear] = useState(false);
+  const usage = useUsage();
   return (
     <>
       <div className="divide-y divide-s-line">
+        {usage && (
+          <div className="pb-2">
+            <UsageMeters usage={usage} />
+          </div>
+        )}
         <Row title="Appearance" hint="Auto follows your system setting.">
           <Segmented
             label="Theme"

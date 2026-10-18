@@ -183,7 +183,7 @@ Applies to search answers (Part 2), Claim DNA (Part 4), AI Lab (Part 7), Radar (
 | Control | Where |
 |---|---|
 | Per-minute rate limits | Web: `NOVA_RATE_LIMIT_PER_MINUTE` per user or IP (default 20 AI requests per minute; engine proxy 240 per minute per IP). Engine: token bucket of 120 per minute per identity, with writes costing 5. |
-| Daily model-run quota | Web: `NOVA_DAILY_REQUEST_LIMIT` (counts `model_runs`). |
+| Usage limits | Signed-in users: Claude-style 5-hour window plus a weekly cap per plan (`src/lib/plans.ts`, counted from `model_runs`, plan from `subscriptions`). Guests: `NOVA_DAILY_REQUEST_LIMIT`. |
 | Workflow limits | Per-run budgets (cost, calls, tokens, steps, duration), ≤ 5 active runs per user, ≤ 200 workflows. |
 | Radar limits | ≤ 50 watches per user, 3 manual checks per watch per 10 minutes, daily paid-search cap. |
 | Workspace limits | ≤ 100 workspaces per user, 50 members, 5000 items, 500 KB per item. Body limits: 2 MB (10 MB for import). |

@@ -1,11 +1,18 @@
 "use client";
 
-export type ApiErrorBody = { error?: { code?: string; message?: string } };
+export type ApiErrorBody = { error?: { code?: string; message?: string; details?: { resetsAt?: string } } };
 
 export async function readApiError(res: Response): Promise<string> {
   try {
     const j = (await res.json()) as ApiErrorBody;
-    return j.error?.message ?? `Request failed (${res.status}).`;
+    const message = j.error?.message ?? `Request failed (${res.status}).`;
+    const resetsAt = j.error?.details?.resetsAt ? new Date(j.error.details.resetsAt) : null;
+    if (resetsAt && !Number.isNaN(resetsAt.getTime())) {
+      const sameDay = resetsAt.toDateString() === new Date().toDateString();
+      const time = resetsAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      return `${message} It resets ${sameDay ? `at ${time}` : `on ${resetsAt.toLocaleDateString([], { weekday: "long" })} at ${time}`}.`;
+    }
+    return message;
   } catch {
     return `Request failed (${res.status}).`;
   }

@@ -33,8 +33,8 @@ export async function POST(req: Request) {
   try {
     const body = await parseJsonBody(req, chatRequest, 220_000);
     const auth = await requireUserIfConfigured();
-    await enforceLimits(req, auth, 1);
     const model = await resolveModel(body.modelId);
+    await enforceLimits(req, auth, 1, [model]);
 
     // Conversation + history
     let conversationId: string | null = null;

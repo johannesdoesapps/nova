@@ -29,7 +29,6 @@ export async function POST(req: Request) {
   try {
     const body = await parseJsonBody(req, agentChatRequest, 240_000);
     const auth = await requireUserIfConfigured();
-    await enforceLimits(req, auth, 1);
 
     // 1–2. Identify the agent and load its configuration.
     let agent: AgentConfig;
@@ -55,6 +54,7 @@ export async function POST(req: Request) {
         modelNotice = `${agent.name}'s preferred model isn't available, so ${model.displayName} answered instead.`;
       }
     } else model = await resolveModel();
+    await enforceLimits(req, auth, 1, [model]);
 
     // Conversation and history.
     let conversationId: string | null = null;

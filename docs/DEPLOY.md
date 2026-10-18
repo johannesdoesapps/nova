@@ -61,7 +61,7 @@ Total time is about 30–45 minutes the first time.
    | `NEXT_PUBLIC_SITE_URL` | `https://nova-ai.vercel.app` (your final address) |
    | `ANTHROPIC_API_KEY` | your Anthropic key (Claude Haiku 5.5 becomes the default model) |
 | `OPENAI_API_KEY` | your OpenAI key (optional backup) |
-   | `NOVA_DAILY_REQUEST_LIMIT` | `100` (model calls per user per day; start low) |
+   | `NOVA_DAILY_REQUEST_LIMIT` | `30` (guest requests per day; signed-in users follow the plan limits in `src/lib/plans.ts`) |
    | `NOVA_RATE_LIMIT_PER_MINUTE` | `10` |
    | `NOVA_TRIAL_SECRET` | output of `openssl rand -base64 32` |
    | `SEARCH_PROVIDER`, `SEARCH_API_KEY` | optional: `tavily` and your key |

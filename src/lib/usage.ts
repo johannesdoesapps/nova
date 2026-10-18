@@ -1,17 +1,20 @@
 import "server-only";
 import type { AuthContext } from "./auth";
+import { getModels } from "./ai";
 import { estimateCost } from "./ai/cost";
 import type { ModelInfo, Usage } from "./ai/types";
 import { serverEnv } from "./env";
 import { ApiError, clientIp } from "./http";
+import { PLANS, WEEK_MS, checkUsage, computeUsage, modelUnits, type PlanId, type UsageState } from "./plans";
 import { limiter } from "./rate-limit";
 import { reportError } from "./observability";
 
 /**
- * Enforce per-minute rate limits and a daily request quota before any paid
- * call. `cost` lets expensive operations (e.g. a 3-model battle) count as more.
+ * Enforce per-minute rate limits, then the plan's 5-hour and weekly
+ * allowance (signed-in users) or a daily cap (guests). `cost` is the number of
+ * model calls; when `models` is given each call is weighted by its model.
  */
-export async function enforceLimits(req: Request, auth: AuthContext, cost = 1): Promise<void> {
+export async function enforceLimits(req: Request, auth: AuthContext, cost = 1, models?: ModelInfo[]): Promise<void> {
   const env = serverEnv();
   const who = auth.mode === "authenticated" ? `u:${auth.user.id}` : `ip:${clientIp(req)}`;
 
@@ -23,19 +26,55 @@ export async function enforceLimits(req: Request, auth: AuthContext, cost = 1): 
   }
 
   if (auth.mode === "authenticated") {
-    const since = new Date();
-    since.setUTCHours(0, 0, 0, 0);
-    const { count, error } = await auth.supabase
-      .from("model_runs")
-      .select("id", { count: "exact", head: true })
-      .gte("created_at", since.toISOString());
-    if (!error && (count ?? 0) + cost > env.dailyRequestLimit) {
-      throw new ApiError("quota_exceeded", `Daily limit of ${env.dailyRequestLimit} model runs reached. It resets at 00:00 UTC.`);
+    const state = await planUsage(auth);
+    if (!state) return;
+    const units = models?.length ? models.reduce((s, m) => s + modelUnits(m.capabilities), 0) : cost;
+    const check = checkUsage(state, units, Date.now());
+    if (!check.ok) {
+      const plan = PLANS[state.plan];
+      throw new ApiError(
+        "quota_exceeded",
+        check.scope === "window"
+          ? `You've reached your ${plan.label} plan's 5-hour limit.`
+          : `You've reached your ${plan.label} plan's weekly limit.`,
+        { scope: check.scope, resetsAt: new Date(check.resetsAt).toISOString(), plan: state.plan },
+      );
     }
   } else {
     const day = limiter("day", env.dailyRequestLimit, 86_400_000).check(who, cost);
     if (!day.ok) throw new ApiError("quota_exceeded", `Daily guest limit of ${env.dailyRequestLimit} requests reached.`);
   }
+}
+
+/** The user's plan: Pro only while a subscription is active; everyone else is Free. */
+export async function userPlan(auth: AuthContext & { mode: "authenticated" }): Promise<PlanId> {
+  const { data } = await auth.supabase.from("subscriptions").select("plan, status").eq("user_id", auth.user.id).maybeSingle();
+  const row = data as { plan: PlanId; status: string } | null;
+  return row && row.plan === "pro" && ["active", "trialing"].includes(row.status) ? "pro" : "free";
+}
+
+/** Current 5-hour window and weekly usage, from the user's successful model runs. Null if it can't be read. */
+export async function planUsage(auth: AuthContext): Promise<UsageState | null> {
+  if (auth.mode !== "authenticated") return null;
+  const now = Date.now();
+  const [plan, runs, models] = await Promise.all([
+    userPlan(auth),
+    auth.supabase
+      .from("model_runs")
+      .select("model_id, created_at")
+      .eq("status", "success")
+      .gte("created_at", new Date(now - WEEK_MS).toISOString())
+      .order("created_at", { ascending: true })
+      .limit(5000),
+    getModels(),
+  ]);
+  if (runs.error || !runs.data) return null;
+  const caps = new Map(models.map((m) => [m.id, m.capabilities]));
+  const unitRuns = (runs.data as { model_id: string; created_at: string }[]).map((r) => ({
+    at: Date.parse(r.created_at),
+    units: caps.has(r.model_id) ? modelUnits(caps.get(r.model_id)) : 1,
+  }));
+  return computeUsage(unitRuns, now, PLANS[plan]);
 }
 
 export interface RunRecord {
