@@ -40,7 +40,6 @@ create index conversations_agent_idx on public.conversations (user_id, agent_id,
 create index conversations_builtin_agent_idx on public.conversations (user_id, builtin_agent, updated_at desc) where builtin_agent is not null;
 
 -- Nobody can attach a conversation to someone else's agent.
-drop policy "conversations_all_own" on public.conversations;
-create policy "conversations_all_own" on public.conversations for all to authenticated
+alter policy "conversations_all_own" on public.conversations
   using (user_id = (select auth.uid()))
   with check (user_id = (select auth.uid()) and public.owns_project(project_id) and public.owns_agent(agent_id));
