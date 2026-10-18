@@ -2,6 +2,7 @@
 import { Fragment, useState, type ReactNode } from "react";
 import { Check, Copy } from "lucide-react";
 import { isSafeHttpUrl } from "@/lib/utils";
+import { highlight } from "./highlight";
 
 /**
  * Small, safe Markdown renderer. It builds React elements (never raw HTML),
@@ -34,7 +35,7 @@ export function Markdown({
                   <CodeCopy text={b.text} />
                 </div>
                 <pre>
-                  <code>{b.text}</code>
+                  <code>{highlight(b.text, b.lang)}</code>
                 </pre>
               </div>
             );

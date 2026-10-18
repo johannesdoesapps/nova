@@ -31,7 +31,8 @@ export class OpenAICompatibleProvider implements AIProvider {
       body[this.id === "openai" ? "max_completion_tokens" : "max_tokens"] = params.maxOutputTokens;
     }
     if (params.temperature !== undefined && this.id !== "openai") body.temperature = params.temperature;
-    if (stream && this.id === "openai") body.stream_options = { include_usage: true };
+    // OpenAI and DeepSeek report token usage in the final stream chunk when asked.
+    if (stream && (this.id === "openai" || this.id === "deepseek")) body.stream_options = { include_usage: true };
     return body;
   }
 

@@ -34,6 +34,8 @@ export function serverEnv() {
     openaiBaseUrl: clean(process.env.OPENAI_BASE_URL) ?? "https://api.openai.com/v1",
     geminiKey: clean(process.env.GEMINI_API_KEY),
     geminiBaseUrl: clean(process.env.GEMINI_BASE_URL) ?? "https://generativelanguage.googleapis.com/v1beta/openai",
+    deepseekKey: clean(process.env.DEEPSEEK_API_KEY),
+    deepseekBaseUrl: clean(process.env.DEEPSEEK_BASE_URL) ?? "https://api.deepseek.com/v1",
     huggingfaceKey: clean(process.env.HUGGINGFACE_API_KEY),
     searchProvider: (clean(process.env.SEARCH_PROVIDER) ?? "tavily").toLowerCase() as
       | "tavily"
@@ -53,7 +55,7 @@ export function serverEnv() {
 }
 
 export type IntegrationStatus = {
-  id: "supabase" | "anthropic" | "openai" | "google" | "huggingface" | "search" | "sentry" | "engine";
+  id: "supabase" | "anthropic" | "openai" | "google" | "deepseek" | "huggingface" | "search" | "sentry" | "engine";
   label: string;
   configured: boolean;
   envVars: string[];
@@ -91,6 +93,13 @@ export function integrationStatus(): IntegrationStatus[] {
       configured: Boolean(env.geminiKey),
       envVars: ["GEMINI_API_KEY"],
       purpose: "Gemini models for chat and agents",
+    },
+    {
+      id: "deepseek",
+      label: "DeepSeek",
+      configured: Boolean(env.deepseekKey),
+      envVars: ["DEEPSEEK_API_KEY"],
+      purpose: "DeepSeek models for chat and agents (Chinese and English)",
     },
     {
       id: "huggingface",

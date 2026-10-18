@@ -23,6 +23,11 @@ const providers: Record<ProviderId, AIProvider> = {
     apiKey: () => serverEnv().geminiKey,
     envVar: "GEMINI_API_KEY",
   }),
+  deepseek: new OpenAICompatibleProvider("deepseek", {
+    baseUrl: serverEnv().deepseekBaseUrl,
+    apiKey: () => serverEnv().deepseekKey,
+    envVar: "DEEPSEEK_API_KEY",
+  }),
   huggingface: new OpenAICompatibleProvider("huggingface", {
     baseUrl: "https://router.huggingface.co/v1",
     apiKey: () => serverEnv().huggingfaceKey,
@@ -40,6 +45,7 @@ export function providerConfiguredMap(): Record<ProviderId, boolean> {
     anthropic: providers.anthropic.isConfigured(),
     openai: providers.openai.isConfigured(),
     google: providers.google.isConfigured(),
+    deepseek: providers.deepseek.isConfigured(),
     huggingface: providers.huggingface.isConfigured(),
     demo: true,
   };

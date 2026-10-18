@@ -23,6 +23,13 @@ export const PROVIDER_INFO: Record<Exclude<ProviderId, "demo">, { label: string;
     keyUrl: "https://aistudio.google.com/apikey",
     steps: "Create a Gemini API key in Google AI Studio, then add it to your hosting environment as GEMINI_API_KEY and redeploy.",
   },
+  deepseek: {
+    label: "DeepSeek",
+    short: "DS",
+    envVar: "DEEPSEEK_API_KEY",
+    keyUrl: "https://platform.deepseek.com/api_keys",
+    steps: "Create an API key on the DeepSeek platform and top up a small balance, then add it to your hosting environment as DEEPSEEK_API_KEY and redeploy.",
+  },
   huggingface: {
     label: "Hugging Face",
     short: "HF",

@@ -85,6 +85,35 @@ export const DEFAULT_MODELS: ModelInfo[] = [
     lastVerifiedAt: null,
   },
   {
+    // DeepSeek's OpenAI-compatible API. Model IDs change between releases: use
+    // Admin → Test connection to list the IDs your key supports, and add or
+    // disable models there. Prices stay unset until verified on DeepSeek's page.
+    id: "deepseek:deepseek-flash",
+    provider: "deepseek",
+    providerModelId: "deepseek-flash",
+    displayName: "DeepSeek Flash",
+    description: "DeepSeek's fast, economical model for everyday chat, writing and code, in Chinese and English.",
+    capabilities: ["chat", "fast", "low-cost", "coding", "writing"],
+    contextWindow: null,
+    inputPrice: null,
+    outputPrice: null,
+    isEnabled: true,
+    lastVerifiedAt: null,
+  },
+  {
+    id: "deepseek:deepseek-v4-pro",
+    provider: "deepseek",
+    providerModelId: "deepseek-v4-pro",
+    displayName: "DeepSeek V4 Pro",
+    description: "DeepSeek's more capable model for reasoning, analysis and harder coding tasks.",
+    capabilities: ["chat", "reasoning", "coding", "writing"],
+    contextWindow: null,
+    inputPrice: null,
+    outputPrice: null,
+    isEnabled: true,
+    lastVerifiedAt: null,
+  },
+  {
     id: "hf:gpt-oss-120b",
     provider: "huggingface",
     providerModelId: "openai/gpt-oss-120b",
@@ -143,7 +172,7 @@ const capability = z.enum(CAPABILITIES);
 
 export const modelInfoSchema = z.object({
   id: z.string().min(1).max(120),
-  provider: z.enum(["anthropic", "openai", "google", "huggingface", "demo"]),
+  provider: z.enum(["anthropic", "openai", "google", "deepseek", "huggingface", "demo"]),
   providerModelId: z.string().min(1).max(200),
   displayName: z.string().min(1).max(120),
   description: z.string().max(500).default(""),
@@ -176,6 +205,7 @@ export const KEY_VARS: Record<ProviderId, string> = {
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
   google: "GEMINI_API_KEY",
+  deepseek: "DEEPSEEK_API_KEY",
   huggingface: "HUGGINGFACE_API_KEY",
   demo: "",
 };
@@ -184,7 +214,7 @@ export function withStatus(
   models: ModelInfo[],
   configured: Record<ProviderId, boolean>,
 ): ModelWithStatus[] {
-  const anyReal = configured.anthropic || configured.openai || configured.google || configured.huggingface;
+  const anyReal = configured.anthropic || configured.openai || configured.google || configured.deepseek || configured.huggingface;
   return models
     .filter((m) => m.isEnabled)
     // Demo models are only offered when no real provider is configured.

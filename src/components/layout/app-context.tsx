@@ -19,6 +19,7 @@ export interface IntegrationFlags {
   anthropic: boolean;
   openai: boolean;
   google: boolean;
+  deepseek: boolean;
   huggingface: boolean;
   search: boolean;
 }

@@ -45,7 +45,7 @@ export async function getAuth(): Promise<AuthContext> {
  */
 export async function requireUserIfConfigured(): Promise<AuthContext> {
   const env = serverEnv();
-  if (!isSupabaseConfigured() && process.env.NODE_ENV === "production" && (env.anthropicKey || env.openaiKey || env.geminiKey || env.huggingfaceKey) && !env.allowGuestAi) {
+  if (!isSupabaseConfigured() && process.env.NODE_ENV === "production" && (env.anthropicKey || env.openaiKey || env.geminiKey || env.deepseekKey || env.huggingfaceKey) && !env.allowGuestAi) {
     throw new ApiError(
       "not_configured",
       "This site isn't accepting anonymous AI requests yet. The owner needs to set up accounts (Supabase) or explicitly allow guest use.",

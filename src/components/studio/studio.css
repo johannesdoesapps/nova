@@ -258,6 +258,14 @@ html.theming .studio * {
 .s-prose .nova-code-head { border-bottom: 1px solid var(--s-line); color: var(--s-ink-3); padding: 0.4em 0.5em 0.4em 1.1em; }
 .s-prose pre { background: transparent; border: 0; padding: 1em 1.1em; overflow-x: auto; font-size: 13.5px; line-height: 1.65; }
 .s-prose pre code { background: none; padding: 0; font-size: inherit; }
+/* Code colours: muted metals on glass, never neon. */
+.studio { --tok-k: #6a5fb0; --tok-s: #4f7a5c; --tok-n: #a0663a; --tok-f: #2f5f86; --tok-c: var(--s-ink-3); }
+:root[data-theme="dark"] .studio { --tok-k: #b9b1f0; --tok-s: #9fc8a7; --tok-n: #e2b48a; --tok-f: #9cc3e6; --tok-c: #75747c; }
+.s-prose .tok-k { color: var(--tok-k); }
+.s-prose .tok-s { color: var(--tok-s); }
+.s-prose .tok-n { color: var(--tok-n); }
+.s-prose .tok-f { color: var(--tok-f); }
+.s-prose .tok-c { color: var(--tok-c); font-style: italic; }
 .s-caret > .s-prose > :last-child::after {
   content: "";
   display: inline-block;
