@@ -298,6 +298,8 @@ export function StudioHeader({ children, actions, onNewChat }: { children?: Reac
         <IconButton
           label={theme.resolved === "dark" ? "Switch to light theme" : "Switch to dark theme"}
           onClick={() => theme.setTheme(theme.resolved === "dark" ? "light" : "dark")}
+          // Pages with their own actions are tight on phones; the theme is also in the profile menu.
+          className={cn(actions && "hidden sm:inline-grid")}
         >
           {theme.resolved === "dark" ? <Sun /> : <Moon />}
         </IconButton>

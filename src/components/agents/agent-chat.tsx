@@ -275,7 +275,7 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             <h1 className="truncate text-[14px] font-semibold">{agent.name}</h1>
-            <span className="shrink-0 rounded-full bg-s-accent-soft px-2 py-px text-[11px] font-medium text-s-accent">Agent</span>
+            <span className="hidden shrink-0 rounded-full bg-s-accent-soft px-2 py-px text-[11px] font-medium text-s-accent sm:inline">Agent</span>
           </div>
           <p className="truncate text-[12px] text-s-ink-3">{empty ? (agent.kind === "custom" ? "Custom agent" : agent.category) : (chat.title ?? "New conversation")}</p>
         </div>

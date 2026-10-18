@@ -346,6 +346,125 @@ dialog::backdrop { background: rgba(10,10,14,.4); backdrop-filter: blur(6px); -w
 .toast { position: absolute; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); z-index: 80; translate: -50% 12px; padding: 9px 16px; border-radius: 999px; background: var(--ink); color: var(--bg); font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s, translate .25s var(--ease); }
 .toast.show { opacity: 1; translate: -50% 0; }
 
+
+/* Agents */
+.agents { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+.agents-in { max-width: 1120px; margin: 0 auto; padding: 8px 32px 80px; }
+@media (max-width: 640px) { .agents-in { padding: 8px 16px 64px; } }
+.ag-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 24px; animation: in .34s var(--ease) both; }
+.ag-head h2 { margin: 0; font: 400 clamp(34px, 5vw, 46px)/1.05 var(--serif); letter-spacing: -.01em; }
+.ag-head p { margin: 8px 0 0; font-size: 15.5px; color: var(--ink-2); }
+.btn.big { height: 40px; padding: 0 16px; font-size: 14px; box-shadow: 0 8px 24px -10px var(--accent); }
+.btn .ic { width: 16px; height: 16px; }
+.ag-tools { display: flex; flex-direction: column; gap: 12px; margin-top: 28px; }
+@media (min-width: 1024px) { .ag-tools { flex-direction: row; align-items: center; } }
+.ag-search { position: relative; width: 100%; }
+@media (min-width: 1024px) { .ag-search { max-width: 320px; flex: none; } }
+.ag-search .ic { position: absolute; left: 14px; top: 50%; translate: 0 -50%; width: 16px; height: 16px; color: var(--ink-3); pointer-events: none; }
+.ag-search input { width: 100%; height: 40px; padding: 0 12px 0 40px; border-radius: 12px; outline: none; font-size: 14px; }
+.ag-search input::placeholder { color: var(--ink-3); }
+.ag-search input::-webkit-search-cancel-button { display: none; }
+.chiprow { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; min-width: 0; }
+.chiprow::-webkit-scrollbar { display: none; }
+.fchip { flex: none; height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); font-size: 13px; color: var(--ink-2); transition: background .2s, color .2s, border-color .2s; }
+.fchip:hover { border-color: var(--line-strong); color: var(--ink); }
+.fchip[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: transparent; }
+.ag-note { margin: 16px 0 0; font-size: 13px; color: var(--ink-3); }
+.ag-grid { display: grid; gap: 16px; margin-top: 24px; grid-template-columns: 1fr; }
+@media (min-width: 640px) { .ag-grid { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 1200px) { .ag-grid { grid-template-columns: 1fr 1fr 1fr; } }
+.card { position: relative; display: flex; flex-direction: column; padding: 20px; border-radius: 22px; transition: transform .3s var(--ease), background .3s, border-color .3s, box-shadow .3s; animation: in .34s var(--ease) both; }
+.card:hover { transform: translateY(-2px); background: var(--glass-strong); border-color: var(--line-strong); box-shadow: inset 0 1px 0 var(--hi), var(--shadow); }
+.card-top { display: flex; align-items: flex-start; gap: 14px; }
+.card-top > div { min-width: 0; flex: 1; padding-top: 2px; }
+.card h3 { margin: 0; font-size: 15.5px; font-weight: 600; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card h3 button { font: inherit; text-align: left; }
+.card h3 button::after { content: ""; position: absolute; inset: 0; border-radius: 22px; }
+.card h3 button:focus-visible { outline: none; }
+.card h3 button:focus-visible::after { outline: 2px solid var(--ring); }
+.meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); flex: none; }
+.dot.warn { background: #c98a1c; }
+.card .desc { margin: 14px 0 0; min-height: 2.9em; font-size: 13.5px; line-height: 1.55; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
+.caps { display: flex; gap: 4px; list-style: none; margin: 0; padding: 0; font-size: 12px; color: var(--ink-3); }
+.caps li.c { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink-2); }
+.caps li.c.off { color: var(--ink-3); opacity: .6; }
+.caps .ic { width: 14px; height: 14px; }
+.openbtn { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 12px; font-size: 13px; font-weight: 500; transition: background .2s, color .2s, border-color .2s; }
+.openbtn .ic { width: 14px; height: 14px; transition: transform .2s var(--ease); }
+.card:hover .openbtn { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.card:hover .openbtn .ic { transform: translateX(2px); }
+.card .more { position: relative; z-index: 2; margin: -4px -6px 0 0; }
+.ag-empty { margin-top: 24px; padding: 48px 24px; border: 1px dashed var(--line-strong); border-radius: 22px; text-align: center; color: var(--ink-2); font-size: 14px; }
+.ag-empty b { display: block; margin-bottom: 4px; color: var(--ink); font-size: 16px; }
+.ag-empty .btn { margin-top: 18px; }
+.av { display: grid; place-items: center; flex: none; border: 1px solid; }
+.av .ic { width: 22px; height: 22px; }
+.av.xs { width: 18px; height: 18px; border-radius: 6px; } .av.xs .ic { width: 12px; height: 12px; }
+.av.sm { width: 32px; height: 32px; border-radius: 10px; } .av.sm .ic { width: 16px; height: 16px; }
+.av.md { width: 44px; height: 44px; border-radius: 14px; }
+.av.lg { width: 64px; height: 64px; border-radius: 20px; } .av.lg .ic { width: 32px; height: 32px; }
+.agent-head { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.backbtn { display: inline-flex; align-items: center; gap: 4px; height: 36px; padding: 0 10px 0 6px; border-radius: 12px; font-size: 13.5px; color: var(--ink-2); flex: none; transition: background .2s, color .2s; }
+.backbtn:hover { background: var(--hover); color: var(--ink); }
+.backbtn .ic { width: 16px; height: 16px; }
+.vsep { width: 1px; height: 20px; background: var(--line-strong); flex: none; }
+.agent-head .nm { min-width: 0; }
+.agent-head .nm > div { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.agent-head b { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-head small { display: block; font-size: 12px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pill-agent { flex: none; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 500; }
+@media (max-width: 640px) { .backbtn span, .vsep, .app.in-agent #themeBtn, .app.in-agent .pill-agent { display: none; } }
+.capchips { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.capchips li { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; color: var(--ink-2); }
+.capchips li.off { color: var(--ink-3); }
+.capchips .ic { width: 14px; height: 14px; }
+.intro-meta { margin: 8px 0 0; display: flex; gap: 8px; font-size: 13px; color: var(--ink-3); }
+.intro-meta .warn { color: #c98a1c; }
+.starters button { align-items: center; justify-content: space-between; font-size: 13.5px; color: var(--ink-2); }
+.starters button:hover { color: var(--ink); }
+.starters .ic { width: 16px; height: 16px; color: var(--ink-3); flex: none; }
+.toolrow { margin-bottom: 12px; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; font-size: 13px; color: var(--ink-2); animation: in .3s var(--ease) both; }
+.toolrow button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; text-align: left; transition: background .2s; }
+.toolrow button:hover { background: var(--hover); }
+.toolrow .ti { display: grid; place-items: center; width: 24px; height: 24px; flex: none; border-radius: 8px; background: var(--accent-soft); color: var(--accent); }
+.toolrow .ti .ic { width: 14px; height: 14px; }
+.toolrow .tl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toolrow .chev { width: 14px; height: 14px; transition: transform .2s; }
+.toolrow button[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.toolrow pre { margin: 0; padding: 12px 14px; max-height: 260px; overflow: auto; border-top: 1px solid var(--line); background: var(--code); font: 12px/1.6 var(--mono); color: var(--ink-2); }
+.dlg.wide { width: min(calc(100vw - 32px), 640px); }
+.form { display: flex; flex-direction: column; gap: 18px; }
+.fl { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 500; }
+.fl span { font-weight: 400; color: var(--ink-3); }
+.fin { width: 100%; height: 40px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 12px; background: transparent; outline: none; font-size: 14px; transition: border-color .2s; }
+textarea.fin { height: auto; padding: 10px 14px; line-height: 1.55; resize: vertical; }
+.fin:focus { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.fin::placeholder { color: var(--ink-3); }
+.fin[aria-invalid="true"] { border-color: var(--danger); }
+.ferr { margin: 6px 0 0; font-size: 12.5px; color: var(--danger); }
+.fhint { margin: 6px 0 0; font-size: 12.5px; color: var(--ink-3); }
+.namerow { display: flex; align-items: flex-start; gap: 16px; }
+.namerow > div { flex: 1; min-width: 0; }
+.iconpick { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+@media (min-width: 560px) { .iconpick { grid-template-columns: repeat(12, 1fr); } }
+.iconpick button { display: grid; place-items: center; aspect-ratio: 1; border: 1px solid var(--line); border-radius: 12px; color: var(--ink-2); transition: background .2s, color .2s; }
+.iconpick button:hover { background: var(--hover); color: var(--ink); }
+.iconpick button[aria-checked="true"] { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+.swatches button { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; color: #fff; }
+.swatches button[aria-checked="true"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ink-3); }
+.swatches .ic { width: 16px; height: 16px; }
+.caplist { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 16px; }
+.caplist li { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-top: 1px solid var(--line); font-size: 13.5px; }
+.caplist li:first-child { border-top: 0; }
+.caplist li > .ic { width: 16px; height: 16px; margin-top: 2px; color: var(--ink-2); }
+.caplist .t { flex: 1; min-width: 0; }
+.caplist small { display: block; margin-top: 2px; font-size: 12.5px; line-height: 1.4; color: var(--ink-3); }
+.req { margin-left: 6px; padding: 1px 8px; border: 1px solid var(--line-strong); border-radius: 999px; font-size: 11px; color: var(--ink-3); }
+.ferr.box { margin: 0; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--hover); }
+
 @keyframes in { from { opacity: 0; transform: translateY(5px); } }
 @keyframes pop { from { opacity: 0; transform: translateY(4px) scale(.97); } }
 @keyframes dlg { from { opacity: 0; transform: translateY(8px) scale(.98); } }
@@ -383,6 +502,7 @@ dialog::backdrop { background: rgba(10,10,14,.4); backdrop-filter: blur(6px); -w
     </div>
     <ul class="nav" aria-label="Main">
       <li><button type="button" aria-current="page" id="navChats" title="Chats"><span data-i="chats"></span><span>Chats</span></button></li>
+      <li><button type="button" id="navAgents" title="Agents"><span data-i="bot"></span><span>Agents</span></button></li>
       <li><button type="button" id="navProjects" title="Projects"><span data-i="folder"></span><span>Projects</span></button></li>
       <li><button type="button" id="navPrompts" title="Saved prompts"><span data-i="bookmark"></span><span>Saved prompts</span></button></li>
       <li><button type="button" id="navSettings" title="Settings"><span data-i="sliders"></span><span>Settings</span></button></li>
@@ -402,7 +522,10 @@ dialog::backdrop { background: rgba(10,10,14,.4); backdrop-filter: blur(6px); -w
     <header class="top">
       <button class="ib mobile-only" id="openDrawer" type="button" aria-label="Open sidebar" title="Open sidebar"></button>
       <h1 id="chatTitle"></h1>
+      <div class="agent-head" id="agentHead" hidden></div>
       <div class="push">
+        <button class="ib" id="agHistBtn" type="button" hidden aria-haspopup="menu" aria-expanded="false" aria-label="Conversation history" title="Conversation history"></button>
+        <button class="ib" id="agOptBtn" type="button" hidden aria-haspopup="menu" aria-expanded="false" aria-label="Agent options" title="Agent options"></button>
         <button class="ib" id="themeBtn" type="button"></button>
         <button class="ib mobile-only" id="topNew" type="button" aria-label="New chat" title="New chat"></button>
       </div>
@@ -426,8 +549,32 @@ dialog::backdrop { background: rgba(10,10,14,.4); backdrop-filter: blur(6px); -w
         <div class="fade"></div>
         <div class="dock-in">
           <button class="jump glass-strong away" id="jump" type="button" aria-label="Scroll to latest" tabindex="-1"></button>
-          <div><div id="dockSlot"></div><p class="disclaimer">NOVA can make mistakes. Check important information.</p></div>
+          <div><div id="dockSlot"></div><p class="disclaimer" id="disc">NOVA can make mistakes. Check important information.</p></div>
         </div>
+      </div>
+    </section>
+
+    <section class="agents" id="agentsView" hidden aria-label="Agents">
+      <div class="agents-in">
+        <div class="ag-head">
+          <div><h2>AI Agents</h2><p>Your specialized AI assistants, ready to work.</p></div>
+          <button class="btn primary big" type="button" id="createAgent"><span data-i="plus"></span>Create agent</button>
+        </div>
+        <div class="ag-tools">
+          <div class="ag-search"><span data-i="search"></span><input class="glass" id="agSearch" type="search" placeholder="Search agents" aria-label="Search agents" autocomplete="off"></div>
+          <div class="chiprow" role="tablist" aria-label="Filter agents" id="agFilters"></div>
+        </div>
+        <p class="ag-note">This preview saves agents you create in this browser. In the full app, signed-in users’ agents are stored in their account.</p>
+        <div id="agGrid"></div>
+      </div>
+    </section>
+
+    <section class="welcome" id="agentIntro" hidden aria-label="Agent">
+      <div class="welcome-in">
+        <div id="introTop" style="display:flex;flex-direction:column;align-items:center;width:100%"></div>
+        <div class="hero-slot" id="agentHeroSlot"></div>
+        <ul class="sugg starters" id="introStarters" aria-label="Suggested prompts"></ul>
+        <p class="note"><span data-i="info"></span>Preview: replies are simulated in your browser. Data analysis runs for real on attached CSV files.</p>
       </div>
     </section>
   </main>
@@ -496,6 +643,27 @@ dialog::backdrop { background: rgba(10,10,14,.4); backdrop-filter: blur(6px); -w
     <div class="dlg narrow glass-strong solid edge">
       <div class="dlg-head"><div><h2 id="ddT">Delete chat?</h2><p id="ddText"></p></div><button class="ib sm" type="button" data-close aria-label="Close"></button></div>
       <div class="dlg-foot"><button class="btn quiet" type="button" data-close>Cancel</button><button class="btn danger" type="button" id="ddGo">Delete</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="dlgAgent" aria-labelledby="daT">
+    <div class="dlg wide glass-strong solid edge">
+      <div class="dlg-head"><div><h2 id="daT">Create agent</h2><p id="daSub">Give your assistant a role, a look and the tools it may use.</p></div><button class="ib sm" type="button" data-close aria-label="Close"></button></div>
+      <form class="form" id="agentForm" novalidate>
+        <div class="namerow">
+          <span id="agPreview"></span>
+          <div><label class="fl" for="agName">Name</label><input class="fin" id="agName" maxlength="80" placeholder="e.g. Thesis Research Coach"><p class="ferr" id="errName" hidden></p></div>
+        </div>
+        <div><label class="fl" for="agDesc">Description <span>· shown on the agent’s card</span></label><input class="fin" id="agDesc" maxlength="300" placeholder="What does this agent help with?"></div>
+        <div><label class="fl" for="agInstr">Instructions</label>
+          <textarea class="fin" id="agInstr" rows="6" maxlength="8000" placeholder="Describe the agent's role, expertise and behaviour.&#10;e.g. You are a patient tutor for first-year statistics. Explain with small worked examples."></textarea>
+          <p class="ferr" id="errInstr" hidden></p><p class="fhint" id="hintInstr">NOVA’s safety rules always apply on top of these instructions.</p></div>
+        <fieldset style="border:0;margin:0;padding:0"><legend class="fl">Icon</legend><div class="iconpick" role="radiogroup" aria-label="Icon" id="agIcons"></div></fieldset>
+        <fieldset style="border:0;margin:0;padding:0"><legend class="fl">Accent</legend><div class="swatches" role="radiogroup" aria-label="Accent colour" id="agAccents"></div></fieldset>
+        <fieldset style="border:0;margin:0;padding:0"><legend class="fl">Capabilities</legend><ul class="caplist" id="agCaps"></ul></fieldset>
+        <div><label class="fl" for="agStarters">Starter prompts <span>· optional, one per line, up to 4</span></label><textarea class="fin" id="agStarters" rows="3" placeholder="Explain this concept with an example.&#10;Quiz me on chapter 3."></textarea><p class="ferr" id="errStarters" hidden></p></div>
+        <div class="dlg-foot" style="margin-top:0"><button class="btn quiet" type="button" data-close>Cancel</button><button class="btn primary" type="submit" id="agSave">Create agent</button></div>
+      </form>
     </div>
   </dialog>
 
@@ -654,6 +822,18 @@ it("cancel stops a pending call", () => {
     arrowdown: '<path d="M12 5v14M19 12l-7 7-7-7"/>',
     info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
     alert: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
+    bot: '<rect x="3" y="8" width="18" height="12" rx="3"/><path d="M12 8V4M9 4h6M9 13v2M15 13v2"/>',
+    chart: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/>',
+    bulb: '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5M9 18h6M10 22h4"/>',
+    sparkle: '<path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/>',
+    palette: '<circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2a10 10 0 0 0 0 20c1 0 1.7-.8 1.7-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.8-1.7 1.7-1.7H16a6 6 0 0 0 6-6c0-4.9-4.5-8.4-10-8.4z"/>',
+    rocket: '<path d="M4.5 16.5c-1.5 1.3-2 5-2 5s3.7-.5 5-2c.7-.8.7-2.1-.1-2.9a2.2 2.2 0 0 0-2.9-.1zM12 15l-3-3a22 22 0 0 1 2-3.9A12.9 12.9 0 0 1 22 2c0 2.7-.8 7.5-6 11a22.4 22.4 0 0 1-4 2z"/>',
+    terminal: '<path d="m4 17 6-6-6-6M12 19h8"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    back: '<path d="m15 18-6-6 6-6"/>',
+    right: '<path d="M5 12h14M12 5l7 7-7 7"/>',
+    upright: '<path d="M7 17 17 7M7 7h10v10"/>',
+    chev: '<path d="m9 18 6-6-6-6"/>',
     grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
   };
   const ic = (n, cls = "") => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n]}</svg>`;
@@ -691,6 +871,87 @@ it("cancel stops a pending call", () => {
   ];
   const sample = (m) => $("#r-" + m).textContent.trim();
 
+
+  /* Agents: same model as the full app (instructions, tools, starters, own history). */
+  const ACCENTS = { violet: "#7b6cf0", blue: "#4f86ea", teal: "#2a9d92", green: "#3f9f62", amber: "#c98a1c", rose: "#d9587a" };
+  const AG_ICONS = ["bot", "book", "code", "pencil", "chart", "bulb", "sparkle", "scale", "shield", "globe", "palette", "rocket"];
+  const CAPS = {
+    web_search: { label: "Web search", icon: "globe", ok: false, why: "Needs a search key in the full app (SEARCH_API_KEY)." , desc: "Search the web before answering and cite sources." },
+    file_analysis: { label: "File analysis", icon: "file", ok: true, desc: "Read attached text files as context." },
+    data_analysis: { label: "Data analysis", icon: "chart", ok: true, desc: "Compute column statistics for attached CSV/TSV files." },
+    code_execution: { label: "Code execution", icon: "terminal", ok: false, why: "Needs a sandboxed code runner, which isn't set up.", desc: "Run code in an isolated sandbox." },
+  };
+  const SAMPLE_CSV = "month,region,revenue\nJan,North,1200\nFeb,North,1350\nMar,South,980\nApr,South,1610\nMay,East,1420\nJun,East,1505\n";
+  const BUILTINS = [
+    { id: "research", name: "Research Agent", category: "Research", icon: "book", accent: "violet", caps: ["web_search", "file_analysis"],
+      description: "Investigates topics, compares sources and writes structured research summaries.",
+      role: "You are the Research Agent. Your job is to investigate a question and report what is known, how well it is supported, and what remains uncertain.",
+      starters: [SUGG[0].prompt, "Compare these three technologies: PostgreSQL, MongoDB and DynamoDB.", "Create a detailed research report on remote work and productivity."] },
+    { id: "coding", name: "Coding Agent", category: "Engineering", icon: "code", accent: "blue", caps: ["file_analysis"],
+      description: "Writes, explains, debugs and improves code, with tests and edge cases.",
+      role: "You are the Coding Agent, a senior software engineer.",
+      starters: [SUGG[3].prompt, "Explain what this error means: TypeError: Cannot read properties of undefined.", "Review this function for bugs and suggest improvements."] },
+    { id: "writing", name: "Writing Agent", category: "Writing", icon: "pencil", accent: "rose", caps: ["file_analysis"],
+      description: "Drafts, edits and rewrites emails, articles and documentation in the right tone.",
+      role: "You are the Writing Agent, an experienced editor and writer.",
+      starters: ["Write a polite follow-up email to a client who hasn't replied in two weeks.", "Rewrite this paragraph to be clearer and more concise.", "Draft a README introduction for an open-source CLI tool."] },
+    { id: "data", name: "Data Analyst", category: "Data", icon: "chart", accent: "teal", caps: ["file_analysis", "data_analysis"],
+      description: "Analyzes uploaded datasets, finds trends and explains statistics in plain language.",
+      role: "You are the Data Analyst.",
+      starters: ["Analyze the sample sales data and summarize the key trends.", "Which statistical test should I use to compare two groups?", "Suggest the right chart for showing sales by region over time."] },
+    { id: "creative", name: "Creative Agent", category: "Creative", icon: "bulb", accent: "amber", caps: [],
+      description: "Brainstorms ideas, develops concepts and explores different creative directions.",
+      role: "You are the Creative Agent, a generous and inventive creative partner.",
+      starters: ["Brainstorm ten names for a calm productivity app.", "Give me three very different concepts for a short film about memory.", "Write the opening paragraph of a mystery set in a lighthouse."] },
+    { id: "general", name: "General Assistant", category: "General", icon: "sparkle", accent: "green", caps: ["web_search", "file_analysis"],
+      description: "A flexible helper for everyday questions, planning, explanations and problem-solving.",
+      role: "You are the General Assistant: friendly, practical and clear.",
+      starters: [SUGG[1].prompt, SUGG[2].prompt, "Help me plan a productive week with three big deadlines."] },
+  ].map((a) => ({ ...a, kind: "builtin" }));
+  const avatar = (a, size = "md") => {
+    const c = ACCENTS[a.accent] || ACCENTS.violet;
+    return `<span class="av ${size}" aria-hidden="true" style="color:${c};background:color-mix(in srgb, ${c} 15%, transparent);border-color:color-mix(in srgb, ${c} 26%, transparent)${size === "lg" ? `;box-shadow:0 14px 40px -16px ${c}` : ""}">${ic(a.icon in P ? a.icon : "bot")}</span>`;
+  };
+  const agentStatus = (a) => (a.caps.some((c) => !CAPS[c].ok) ? { tone: "warn", label: "Setup needed", detail: `${CAPS[a.caps.find((c) => !CAPS[c].ok)].label} needs setup` } : { tone: "muted", label: "Preview replies", detail: "Replies are simulated in this preview" });
+
+  /* Data analysis tool: exact column statistics, computed in the browser here (on the server in the full app). */
+  function parseCSV(text, d) {
+    const rows = []; let row = [], f = "", q = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (q) { if (ch === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += ch; continue; }
+      if (ch === '"' && f === "") q = true;
+      else if (ch === d) { row.push(f); f = ""; }
+      else if (ch === "\n" || ch === "\r") { if (ch === "\r" && text[i + 1] === "\n") i++; row.push(f); f = ""; if (row.some((x) => x !== "")) rows.push(row); row = []; if (rows.length > 20001) break; }
+      else f += ch;
+    }
+    row.push(f); if (row.some((x) => x !== "")) rows.push(row);
+    return rows;
+  }
+  function csvStats(name, text) {
+    const rows = parseCSV(text, /\.tsv$/i.test(name) ? "\t" : ",");
+    if (rows.length < 2) return null;
+    const head = rows[0].slice(0, 50).map((h, i) => h.trim() || `column_${i + 1}`), body = rows.slice(1, 20001);
+    const r4 = (n) => Math.round(n * 1e4) / 1e4;
+    const lines = [`Dataset ${name}: ${body.length} rows × ${head.length} columns.`];
+    head.forEach((h, c) => {
+      const vals = body.map((r) => (r[c] || "").trim()).filter((v) => v && !/^(na|n\/a|null|nan)$/i.test(v));
+      const miss = body.length - vals.length;
+      const nums = vals.map((v) => (/^[-+]?(\d{1,3}(,\d{3})+|\d+)?(\.\d+)?([eE][-+]?\d+)?$/.test(v) && /\d/.test(v) ? Number(v.replace(/,/g, "")) : NaN));
+      if (vals.length && nums.every(Number.isFinite)) {
+        const s = [...nums].sort((a, b) => a - b), mean = nums.reduce((a, b) => a + b, 0) / nums.length, mid = Math.floor(s.length / 2);
+        const med = s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+        const sd = nums.length > 1 ? Math.sqrt(nums.reduce((a, b) => a + (b - mean) ** 2, 0) / (nums.length - 1)) : 0;
+        lines.push(`- ${h} (numeric): n=${nums.length}, missing=${miss}, min=${s[0]}, max=${s.at(-1)}, mean=${r4(mean)}, median=${r4(med)}, sd=${r4(sd)}`);
+      } else {
+        const freq = new Map(); vals.forEach((v) => freq.set(v, (freq.get(v) || 0) + 1));
+        const top = [...freq].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([v, n]) => `"${v.slice(0, 60)}" (${n})`).join(", ");
+        lines.push(`- ${h} (text): n=${vals.length}, missing=${miss}, distinct=${freq.size}, most common: ${top}`);
+      }
+    });
+    return { rows: body.length, cols: head.length, text: lines.join("\n") };
+  }
+
   /* State */
   const DAY = 864e5;
   const seed = () => {
@@ -706,7 +967,9 @@ it("cancel stops a pending call", () => {
     theme: load("theme", "system"),
     rail: load("rail", false),
     feedback: load("feedback", {}),
+    agents: load("agents", []),
   };
+  if (!Array.isArray(S.agents)) S.agents = [];
   if (!Array.isArray(S.chats)) { S.chats = seed(); save("chats", S.chats); }
   let activeId = null;
   let mode = S.settings.mode;
@@ -714,6 +977,13 @@ it("cancel stops a pending call", () => {
   let attachments = [];
   let stream = null;
   let stick = true;
+  let view = "chat";
+  let agentId = null;
+  let agFilter = "all";
+  const allAgents = () => [...S.agents, ...BUILTINS];
+  const agentById = (id) => allAgents().find((a) => a.id === id) || null;
+  const curAgent = () => (view === "agent" ? agentById(agentId) : null);
+  const saveAgents = () => save("agents", S.agents);
 
   const app = $("#app"), input = $("#input"), msgsEl = $("#msgs"), scrollEl = $("#scroll");
   const active = () => S.chats.find((c) => c.id === activeId) || null;
@@ -807,9 +1077,23 @@ it("cancel stops a pending call", () => {
   }
 
   /* Replies: four complete samples, otherwise an honest preview template. */
-  function replyFor(text, m, files) {
+  function replyFor(text, m, files, agent, stats) {
     const hit = SUGG.find((s) => s.prompt === text);
     if (hit) return sample(hit.mode);
+    if (agent) {
+      const q = text.replace(/\s+/g, " ").trim().slice(0, 160).replace(/[.!?…]+$/, "");
+      const usable = agent.caps.filter((c) => CAPS[c].ok).map((c) => CAPS[c].label.toLowerCase());
+      return [
+        `**Preview reply.** You asked **${agent.name}**: “${q}”. This page runs without an AI model, so the reply below shows how the agent is set up rather than an answer.`,
+        "",
+        `### How ${agent.name} would handle this`,
+        `- **Role:** ${agent.role}`,
+        `- **Tools enabled:** ${usable.length ? usable.join(", ") : "none"}.`,
+        ...(stats.length ? ["- **Data analysis ran for real:** the column statistics shown above this reply were computed in your browser. A connected model would interpret them."] : []),
+        ...(files && files.length && !stats.length ? [`- **Attached:** ${files.map((f) => "`" + f.name + "`").join(", ")} would be sent as context.`] : []),
+        "- In the full app, the agent’s full instructions go to your configured model and the reply streams in here.",
+      ].join("\n");
+    }
     const q = text.replace(/\s+/g, " ").trim().slice(0, 160);
     const lines = [
       `**Preview reply.** This page runs without an AI model, so it can’t answer “${q}”. In the full NOVA app, the same request goes to your configured model through the server, and the reply streams in here.`,
@@ -826,11 +1110,27 @@ it("cancel stops a pending call", () => {
   function setView() {
     const c = active();
     const empty = !c || c.messages.length === 0;
-    $("#welcome").hidden = !empty;
-    $("#thread").hidden = empty;
-    $(empty ? "#heroSlot" : "#dockSlot").append($("#composerWrap"));
-    $("#chatTitle").textContent = empty ? "" : c.title;
-    input.placeholder = empty ? "Ask anything…" : "Message NOVA";
+    const ag = curAgent();
+    $("#agentsView").hidden = view !== "agents";
+    $("#welcome").hidden = !(view === "chat" && empty);
+    $("#agentIntro").hidden = !(view === "agent" && empty);
+    $("#thread").hidden = view === "agents" || empty;
+    if (view !== "agents") $(empty ? (view === "agent" ? "#agentHeroSlot" : "#heroSlot") : "#dockSlot").append($("#composerWrap"));
+    $("#chatTitle").hidden = view === "agent";
+    $("#chatTitle").textContent = view === "agents" ? "Agents" : empty ? "" : c.title;
+    $("#agentHead").hidden = !ag;
+    $("#agHistBtn").hidden = !ag;
+    $("#agOptBtn").hidden = !ag;
+    $("#modeBtn").hidden = !!ag;
+    app.classList.toggle("in-agent", !!ag);
+    $("#navChats").toggleAttribute("aria-current", view === "chat");
+    $("#navAgents").toggleAttribute("aria-current", view !== "chat");
+    if ($("#navChats").hasAttribute("aria-current")) $("#navChats").setAttribute("aria-current", "page");
+    if ($("#navAgents").hasAttribute("aria-current")) $("#navAgents").setAttribute("aria-current", "page");
+    $("#disc").textContent = `${ag ? ag.name : "NOVA"} can make mistakes. Check important information.`;
+    input.placeholder = ag ? `Message ${ag.name}` : empty ? "Ask anything…" : "Message NOVA";
+    if (ag) renderAgentHead(ag, empty ? null : c.title);
+    if (ag && empty) renderIntro(ag);
     autosize();
   }
   function msgHTML(m) {
@@ -840,14 +1140,16 @@ it("cancel stops a pending call", () => {
         <div class="acts"><button class="ib sm" type="button" data-act="copy" aria-label="Copy" title="Copy">${ic("copy")}</button>
         <button class="ib sm" type="button" data-act="savep" aria-label="Save as prompt" title="Save as prompt">${ic("bookplus")}</button></div></div>`;
     }
-    return `<div class="msg ai" data-id="${m.id}"><div class="who">${MARK}<b>NOVA Preview</b><span class="tag" title="Generated in your browser, not by a model">Simulated</span></div><div class="body"></div><div class="foot"></div></div>`;
+    const ag = active() && active().agentId ? agentById(active().agentId) : null;
+    const tools = (m.tools || []).map((t, i) => `<div class="toolrow"><button type="button" data-tool="${i}" aria-expanded="false"><span class="ti">${ic("chart")}</span><span class="tl">${esc(t.label)}</span>${ic("chev", "chev")}</button><pre hidden>${esc(t.detail)}</pre></div>`).join("");
+    return `<div class="msg ai" data-id="${m.id}"><div class="who">${ag ? avatar(ag, "xs") : MARK}<b>${esc(ag ? ag.name : "NOVA Preview")}</b><span class="tag" title="Generated in your browser, not by a model">Simulated</span></div>${tools}<div class="body"></div><div class="foot"></div></div>`;
   }
   function paintAI(m) {
     const el = msgsEl.querySelector(`[data-id="${m.id}"]`);
     if (!el) return;
     const body = el.querySelector(".body"), foot = el.querySelector(".foot");
     if (!m.content && m.status === "streaming") {
-      if (!body.querySelector(".thinking")) body.innerHTML = `<div class="thinking" role="status"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="shimmer">${mode === "research" && useWeb ? "Searching the web" : "Thinking"}</span></div>`;
+      if (!body.querySelector(".thinking")) body.innerHTML = `<div class="thinking" role="status"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="shimmer">${m.tools && m.tools.length ? "Analyzing data" : !curAgent() && mode === "research" && useWeb ? "Searching the web" : "Thinking"}</span></div>`;
     } else {
       let prose = body.querySelector(".prose");
       if (!prose) { body.innerHTML = '<div class="prose"></div>'; prose = body.firstChild; }
@@ -888,9 +1190,9 @@ it("cancel stops a pending call", () => {
   }
   function renderHistory() {
     const q = $("#search").value.trim().toLowerCase();
-    const list = S.chats.filter((c) => c.messages.length && (!q || c.title.toLowerCase().includes(q))).sort((a, b) => b.updated - a.updated);
+    const list = S.chats.filter((c) => !c.agentId && c.messages.length && (!q || c.title.toLowerCase().includes(q))).sort((a, b) => b.updated - a.updated);
     const h = $("#history");
-    if (!S.chats.some((c) => c.messages.length)) { h.innerHTML = '<p class="empty-note">No chats yet. Your chats are kept in this browser only.</p>'; return; }
+    if (!S.chats.some((c) => !c.agentId && c.messages.length)) { h.innerHTML = '<p class="empty-note">No chats yet. Your chats are kept in this browser only.</p>'; return; }
     if (!list.length) { h.innerHTML = `<p class="empty-note">No chats match “${esc(q)}”.</p>`; return; }
     const groups = new Map();
     list.forEach((c) => { const g = groupLabel(c.updated); groups.set(g, [...(groups.get(g) || []), c]); });
@@ -919,7 +1221,7 @@ it("cancel stops a pending call", () => {
     $("#modelBtn").innerHTML = `<span>NOVA Preview</span>${ic("down", "sm")}`;
     $("#modelBtn").setAttribute("aria-label", "Model: NOVA Preview");
     const web = $("#webChip");
-    web.hidden = !(useWeb && mode === "research");
+    web.hidden = !(useWeb && mode === "research" && view === "chat");
     web.innerHTML = `${ic("globe", "sm")}Web`;
     const chips = $("#chips");
     chips.hidden = !attachments.length;
@@ -928,13 +1230,15 @@ it("cancel stops a pending call", () => {
   function showErr(t) { const e = $("#cerr"); e.hidden = !t; e.textContent = t || ""; }
   async function addFiles(list) {
     showErr("");
+    const ag = curAgent();
+    if (ag && !ag.caps.includes("file_analysis")) { showErr(`${ag.name} can't read files. Turn on File analysis in its settings.`); $("#file").value = ""; return; }
     for (const f of [...list]) {
       if (attachments.length >= 3) { showErr("Up to 3 files per message."); break; }
       if (!/\.(txt|md|markdown|csv|json|tsv|log)$/i.test(f.name)) { showErr(`${f.name}: only text files (.txt, .md, .csv, .json, .tsv, .log) can be read.`); continue; }
       if (f.size > 512000) { showErr(`${f.name} is larger than 500 KB.`); continue; }
       if (attachments.some((a) => a.name === f.name)) continue;
       const text = await f.text();
-      attachments.push({ name: f.name, size: Math.min(text.length, 60000) });
+      attachments.push({ name: f.name, size: Math.min(text.length, 60000), text: /\.(csv|tsv)$/i.test(f.name) ? text.slice(0, 60000) : undefined });
     }
     $("#file").value = "";
     paintComposer();
@@ -947,17 +1251,20 @@ it("cancel stops a pending call", () => {
     if (opts.mode) mode = opts.mode;
     let c = active();
     if (!c || opts.fresh) {
-      c = { id: uid(), title: content.replace(/\s+/g, " ").slice(0, 60) + (content.length > 60 ? "…" : ""), mode, updated: Date.now(), messages: [] };
+      c = { id: uid(), title: content.replace(/\s+/g, " ").slice(0, 60) + (content.length > 60 ? "…" : ""), mode, updated: Date.now(), messages: [], agentId: view === "agent" ? agentId : null };
       S.chats.unshift(c); activeId = c.id;
     }
+    const ag = c.agentId ? agentById(c.agentId) : null;
+    if (opts.sampleData) attachments = [{ name: "sample-sales.csv", size: SAMPLE_CSV.length, text: SAMPLE_CSV }];
     const files = attachments.slice();
+    const stats = ag && ag.caps.includes("data_analysis") ? files.filter((f) => f.text).map((f) => ({ f, s: csvStats(f.name, f.text) })).filter((x) => x.s) : [];
     if (!opts.retry) c.messages.push({ id: uid(), role: "user", content, status: "done", files: files.map((f) => f.name) });
-    const m = { id: uid(), role: "assistant", content: "", status: "streaming" };
+    const m = { id: uid(), role: "assistant", content: "", status: "streaming", tools: stats.map(({ f, s: st }) => ({ label: `Computed statistics for ${f.name} · ${st.rows} rows × ${st.cols} columns`, detail: st.text })) };
     c.messages.push(m);
     c.updated = Date.now(); c.mode = mode;
     attachments = []; input.value = ""; showErr("");
     persist(); setView(); renderThread(); renderHistory(); paintComposer();
-    const full = replyFor(content, mode, files);
+    const full = replyFor(content, mode, files, ag, stats);
     let i = 0;
     stream = { c, m, timer: 0 };
     const tick = () => {
@@ -968,7 +1275,7 @@ it("cancel stops a pending call", () => {
       if (i < full.length) stream.timer = setTimeout(tick, 16);
       else finish("done");
     };
-    stream.timer = setTimeout(tick, 650 + (useWeb && mode === "research" ? 500 : 0));
+    stream.timer = setTimeout(tick, 650 + (stats.length ? 400 : 0) + (!ag && useWeb && mode === "research" ? 500 : 0));
   }
   function finish(status, error) {
     if (!stream) return;
@@ -1001,15 +1308,134 @@ it("cancel stops a pending call", () => {
     activeId = id;
     const c = active();
     if (c) mode = c.mode || mode;
+    view = c && c.agentId ? "agent" : "chat";
+    agentId = c && c.agentId ? c.agentId : null;
     attachments = [];
     setView(); renderThread(); renderHistory(); paintComposer();
     closeDrawer();
   }
   function newChat() {
     if (stream) stop();
-    activeId = null; mode = S.settings.mode; attachments = []; input.value = "";
+    activeId = null; mode = S.settings.mode; attachments = []; input.value = ""; view = "chat"; agentId = null; useWeb = false;
     setView(); renderHistory(); paintComposer(); closeDrawer();
     requestAnimationFrame(() => input.focus());
+  }
+
+
+  /* Agents workspace */
+  function showAgents() {
+    if (stream) stop();
+    view = "agents"; agentId = null; activeId = null; attachments = [];
+    setView(); renderHistory(); renderAgents(); closeDrawer();
+  }
+  function openAgent(id, convId) {
+    if (stream) stop();
+    view = "agent"; agentId = id; activeId = convId || null; attachments = []; useWeb = false; input.value = "";
+    setView(); renderThread(); renderHistory(); paintComposer(); closeDrawer();
+    if (!convId) requestAnimationFrame(() => input.focus());
+  }
+  function renderAgents() {
+    const cats = [...new Set(BUILTINS.map((a) => a.category))];
+    const filters = [["all", "All"], ["builtin", "Built-in"], ["mine", `My agents${S.agents.length ? " · " + S.agents.length : ""}`], ...cats.map((c) => [c, c])];
+    $("#agFilters").innerHTML = filters.map(([id, l]) => `<button class="fchip" type="button" role="tab" data-f="${esc(id)}" aria-selected="${agFilter === id}">${esc(l)}</button>`).join("");
+    const q = $("#agSearch").value.trim().toLowerCase();
+    const list = allAgents().filter((a) => {
+      if (agFilter === "builtin" && a.kind !== "builtin") return false;
+      if (agFilter === "mine" && a.kind !== "custom") return false;
+      if (!["all", "builtin", "mine"].includes(agFilter) && a.category !== agFilter) return false;
+      return !q || `${a.name} ${a.description} ${a.category}`.toLowerCase().includes(q);
+    });
+    const g = $("#agGrid");
+    if (!list.length) {
+      g.innerHTML = agFilter === "mine" && !q
+        ? `<div class="ag-empty"><b>No agents of your own yet</b>Create one with its own instructions and tools, or duplicate a built-in agent and adjust it.<br><button class="btn primary big" type="button" data-create>${ic("plus")}Create agent</button></div>`
+        : `<div class="ag-empty"><b>No agents match</b>Try another search or filter.<br><button class="btn quiet" type="button" data-clear>Clear filters</button></div>`;
+      return;
+    }
+    g.innerHTML = `<div class="ag-grid">${list.map((a, i) => {
+      const st = agentStatus(a);
+      return `<article class="card glass" style="animation-delay:${Math.min(i, 8) * 35}ms">
+        <div class="card-top">${avatar(a)}
+          <div><h3><button type="button" data-open-agent="${a.id}">${esc(a.name)}</button></h3>
+            <p class="meta" style="margin:4px 0 0"><span>${esc(a.kind === "custom" ? "Custom" : a.category)}</span><span aria-hidden="true">·</span><span class="dot ${st.tone}" aria-hidden="true"></span><span title="${esc(st.detail)}">${st.label}</span></p></div>
+          <button class="ib sm more" type="button" data-agent-more="${a.id}" aria-haspopup="menu" aria-expanded="false" aria-label="Options for ${esc(a.name)}" title="Options">${ic("more")}</button>
+        </div>
+        <p class="desc">${esc(a.description || "No description.")}</p>
+        <div class="card-foot">
+          <ul class="caps" aria-label="Capabilities">${a.caps.length ? a.caps.map((c) => `<li class="c${CAPS[c].ok ? "" : " off"}" title="${CAPS[c].label}${CAPS[c].ok ? "" : " (needs setup)"}">${ic(CAPS[c].icon)}</li>`).join("") : "<li>Conversation only</li>"}</ul>
+          <span class="openbtn" aria-hidden="true">Open agent ${ic("right")}</span>
+        </div>
+      </article>`;
+    }).join("")}</div>`;
+  }
+  function renderAgentHead(a, title) {
+    $("#agentHead").innerHTML = `<button class="backbtn" type="button" data-back>${ic("back")}<span>Agents</span></button><span class="vsep" aria-hidden="true"></span>${avatar(a, "sm")}
+      <div class="nm"><div><b>${esc(a.name)}</b><span class="pill-agent">Agent</span></div><small>${esc(title || (a.kind === "custom" ? "Custom agent" : a.category))}</small></div>`;
+  }
+  function renderIntro(a) {
+    const st = agentStatus(a);
+    $("#introTop").innerHTML = `${avatar(a, "lg")}<h2 style="margin-top:24px">${esc(a.name)}</h2>
+      <p class="intro-meta"><span>${esc(a.kind === "custom" ? "Custom agent" : a.category)}</span><span aria-hidden="true">·</span><span class="${st.tone === "warn" ? "warn" : ""}">${st.tone === "warn" ? st.detail : st.label}</span></p>
+      ${a.description ? `<p class="sub">${esc(a.description)}</p>` : ""}
+      <ul class="capchips" aria-label="Capabilities">${a.caps.length ? a.caps.map((c) => `<li class="${CAPS[c].ok ? "" : "off"}" title="${esc(CAPS[c].ok ? CAPS[c].desc : CAPS[c].why)}">${ic(CAPS[c].icon)}${CAPS[c].label}${CAPS[c].ok ? "" : " · needs setup"}</li>`).join("") : "<li>Conversation only · no tools</li>"}</ul>`;
+    $("#introStarters").innerHTML = (a.starters || []).map((s, i) => `<li><button type="button" data-starter="${i}"><span>${esc(s)}</span>${ic("upright")}</button></li>`).join("");
+  }
+
+  /* Agent editor */
+  let editing = null;
+  let draft = null;
+  function openEditor(agent, asCopy) {
+    editing = agent && !asCopy ? agent : null;
+    draft = agent ? { name: asCopy ? `${agent.name} (copy)`.slice(0, 80) : agent.name, description: agent.description, instructions: agent.instructions || agent.role, icon: agent.icon, accent: agent.accent, caps: agent.caps.filter((c) => CAPS[c].ok), starters: agent.starters || [] }
+      : { name: "", description: "", instructions: "", icon: "bot", accent: "violet", caps: ["file_analysis"], starters: [] };
+    $("#daT").textContent = editing ? `Edit ${editing.name}` : "Create agent";
+    $("#daSub").textContent = editing ? "Changes apply to new messages in every conversation with this agent." : "Give your assistant a role, a look and the tools it may use.";
+    $("#agSave").textContent = editing ? "Save changes" : "Create agent";
+    $("#agName").value = draft.name; $("#agDesc").value = draft.description; $("#agInstr").value = draft.instructions; $("#agStarters").value = draft.starters.join("\n");
+    ["errName", "errInstr", "errStarters"].forEach((id) => ($("#" + id).hidden = true));
+    $$("#agentForm [aria-invalid]").forEach((x) => x.removeAttribute("aria-invalid"));
+    paintEditor();
+    dlg("dlgAgent").showModal();
+  }
+  function paintEditor() {
+    $("#agPreview").innerHTML = avatar(draft, "lg");
+    $("#agIcons").innerHTML = AG_ICONS.map((i) => `<button type="button" role="radio" aria-checked="${draft.icon === i}" aria-label="${i}" title="${i}" data-icon="${i}">${ic(i)}</button>`).join("");
+    $("#agAccents").innerHTML = Object.entries(ACCENTS).map(([k, c]) => `<button type="button" role="radio" aria-checked="${draft.accent === k}" aria-label="${k}" title="${k}" data-accent="${k}" style="background:${c}">${draft.accent === k ? ic("check") : ""}</button>`).join("");
+    $("#agCaps").innerHTML = Object.entries(CAPS).map(([k, c]) => `<li>${ic(c.icon)}<span class="t">${c.label}${c.ok ? "" : '<span class="req">Requires setup</span>'}<small>${esc(c.ok ? c.desc : c.why)}</small></span><button class="switch" type="button" role="switch" aria-label="${c.label}" data-cap="${k}" aria-checked="${draft.caps.includes(k) && c.ok}" ${c.ok ? "" : "disabled"}></button></li>`).join("");
+  }
+  function fieldError(input, errId, msg) { $("#" + errId).hidden = !msg; $("#" + errId).textContent = msg || ""; if (msg) input.setAttribute("aria-invalid", "true"); else input.removeAttribute("aria-invalid"); return !!msg; }
+  function saveEditor() {
+    const name = $("#agName").value.trim(), instructions = $("#agInstr").value.trim();
+    const starters = $("#agStarters").value.split("\n").map((x) => x.trim()).filter(Boolean);
+    const bad = [
+      fieldError($("#agName"), "errName", name ? "" : "Give the agent a name.") && $("#agName"),
+      fieldError($("#agInstr"), "errInstr", instructions.length >= 20 ? "" : "Describe the agent's role in at least 20 characters.") && $("#agInstr"),
+      fieldError($("#agStarters"), "errStarters", starters.length <= 4 ? "" : "Up to 4 starter prompts.") && $("#agStarters"),
+    ].filter(Boolean);
+    $("#hintInstr").hidden = !$("#errInstr").hidden;
+    if (bad.length) { bad[0].focus(); return; }
+    const now = Date.now();
+    const agent = { ...(editing || {}), id: editing ? editing.id : uid(), kind: "custom", category: "Custom", name: name.slice(0, 80), description: $("#agDesc").value.trim().slice(0, 300), instructions,
+      role: instructions.split("\n")[0].trim(), icon: draft.icon, accent: draft.accent, caps: draft.caps.filter((c) => CAPS[c].ok), starters, created: editing ? editing.created : now, updated: now };
+    S.agents = [agent, ...S.agents.filter((a) => a.id !== agent.id)];
+    saveAgents();
+    dlg("dlgAgent").close();
+    toast(editing ? "Changes saved" : `${agent.name} created`);
+    if (editing) { if (view === "agent") setView(); else renderAgents(); }
+    else openAgent(agent.id);
+  }
+  function agentMenuItems(a) {
+    const custom = a.kind === "custom";
+    return [
+      ...(custom ? [{ icon: "pencil", text: "Edit agent", run: () => openEditor(a) }] : []),
+      { icon: "copy", text: custom ? "Duplicate" : "Duplicate", hint: custom ? undefined : "Make your own editable version", run: () => openEditor(a, true) },
+      ...(custom ? [{ sep: true }, { icon: "trash", text: "Delete agent", danger: true, run: () => askDelete({ type: "agent", id: a.id }, `Delete ${a.name}?`, "The agent and all of its conversations will be permanently deleted.", "Delete agent") }] : []),
+    ];
+  }
+  function askDelete(target, title, text, label) {
+    pendingDelete = target;
+    $("#ddT").textContent = title; $("#ddText").textContent = text; $("#ddGo").textContent = label;
+    dlg("dlgDelete").showModal();
   }
 
   /* Menus */
@@ -1156,11 +1582,14 @@ it("cancel stops a pending call", () => {
   $("#plusBtn").addEventListener("click", (e) => {
     const row = document.createElement("div");
     row.className = "mrow";
-    const can = mode === "research";
-    row.innerHTML = `${ic("globe")}<span class="t">Search the web<small>${can ? "Show a web search step before the reply" : "Available in Research mode"}</small></span><button class="switch" type="button" role="switch" aria-label="Search the web" aria-checked="${useWeb && can}" ${can ? "" : "disabled"}></button>`;
+    const ag = curAgent();
+    const can = !ag && mode === "research";
+    const webHint = ag ? (ag.caps.includes("web_search") ? CAPS.web_search.why : "Not enabled for this agent") : can ? "Show a web search step before the reply" : "Available in Research mode";
+    row.innerHTML = `${ic("globe")}<span class="t">Search the web<small>${webHint}</small></span><button class="switch" type="button" role="switch" aria-label="Search the web" aria-checked="${useWeb && can}" ${can ? "" : "disabled"}></button>`;
+    const filesOk = !ag || ag.caps.includes("file_analysis");
     row.querySelector(".switch").addEventListener("click", (ev) => { useWeb = !useWeb; ev.currentTarget.setAttribute("aria-checked", String(useWeb)); paintComposer(); });
     menu(e.currentTarget, [
-      { icon: "clip", text: "Upload files", hint: "Text, Markdown, CSV or JSON · up to 3 files", run: () => $("#file").click() },
+      { icon: "clip", text: "Upload files", hint: filesOk ? "Text, Markdown, CSV or JSON · up to 3 files" : "Not enabled for this agent", disabled: !filesOk, run: () => $("#file").click() },
       { icon: "image", text: "Add images", hint: "The connected models accept text only for now", disabled: true },
       { sep: true },
       { el: row },
@@ -1216,7 +1645,7 @@ it("cancel stops a pending call", () => {
     const c = S.chats.find((x) => x.id === more.dataset.more);
     menu(more, [
       { icon: "pencil", text: "Rename", run: () => startRename(c) },
-      { icon: "trash", text: "Delete", danger: true, run: () => { pendingDelete = c; $("#ddText").textContent = `“${c.title}” will be permanently deleted.`; dlg("dlgDelete").showModal(); } },
+      { icon: "trash", text: "Delete", danger: true, run: () => askDelete({ type: "chat", id: c.id }, "Delete chat?", `“${c.title}” will be permanently deleted.`, "Delete") },
     ], { width: 180, label: "Chat actions" });
   });
   function startRename(c) {
@@ -1232,25 +1661,90 @@ it("cancel stops a pending call", () => {
   }
   $("#ddGo").addEventListener("click", () => {
     if (!pendingDelete) return;
-    const id = pendingDelete.id;
-    S.chats = S.chats.filter((c) => c.id !== id); persist();
+    const t = pendingDelete;
     dlg("dlgDelete").close(); pendingDelete = null;
+    if (t.type === "agent") {
+      S.agents = S.agents.filter((a) => a.id !== t.id); saveAgents();
+      S.chats = S.chats.filter((c) => c.agentId !== t.id); persist();
+      toast("Agent deleted");
+      showAgents();
+      return;
+    }
+    const id = t.id;
+    S.chats = S.chats.filter((c) => c.id !== id); persist();
+    if (t.type === "agentchat") { toast("Conversation deleted"); openAgent(agentId); return; }
     if (id === activeId) newChat(); else renderHistory();
     toast("Chat deleted");
+  });
+  // Agents events
+  $("#navAgents").addEventListener("click", showAgents);
+  $("#createAgent").addEventListener("click", () => openEditor(null));
+  $("#agSearch").addEventListener("input", renderAgents);
+  $("#agFilters").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (b) { agFilter = b.dataset.f; renderAgents(); } });
+  $("#agGrid").addEventListener("click", (e) => {
+    if (e.target.closest("[data-create]")) return openEditor(null);
+    if (e.target.closest("[data-clear]")) { $("#agSearch").value = ""; agFilter = "all"; return renderAgents(); }
+    const more = e.target.closest("[data-agent-more]");
+    if (more) { const a = agentById(more.dataset.agentMore); return menu(more, agentMenuItems(a), { width: 230, align: "end", label: `Options for ${a.name}` }); }
+    const card = e.target.closest(".card");
+    if (card) openAgent(card.querySelector("[data-open-agent]").dataset.openAgent);
+  });
+  $("#agentHead").addEventListener("click", (e) => { if (e.target.closest("[data-back]")) showAgents(); });
+  $("#introStarters").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-starter]");
+    if (!b) return;
+    const a = curAgent(), s = a.starters[+b.dataset.starter];
+    send(s, { fresh: true, sampleData: a.id === "data" && /sample sales data/i.test(s) });
+  });
+  $("#agHistBtn").addEventListener("click", (e) => {
+    const a = curAgent();
+    const convs = S.chats.filter((c) => c.agentId === a.id && c.messages.length).sort((x, y) => y.updated - x.updated);
+    menu(e.currentTarget, [
+      { label: `Conversations with ${a.name}` },
+      { icon: "pen", text: "New conversation", run: () => openAgent(a.id) },
+      ...(convs.length ? [{ sep: true }] : []),
+      ...convs.map((c) => ({ text: c.title, hint: groupLabel(c.updated), radio: true, checked: c.id === activeId, run: () => openAgent(a.id, c.id) })),
+      ...(convs.length ? [] : [{ text: "No conversations yet", disabled: true }]),
+    ], { width: 300, align: "end", label: "Conversation history" });
+  });
+  $("#agOptBtn").addEventListener("click", (e) => {
+    const a = curAgent(), c = active();
+    menu(e.currentTarget, [
+      ...(a.kind === "custom" ? [{ icon: "pencil", text: "Edit agent", run: () => openEditor(a) }, { icon: "copy", text: "Duplicate", run: () => openEditor(a, true) }]
+        : [{ icon: "pencil", text: "Customize a copy", hint: "Built-in agents can't be changed; edit a copy", run: () => openEditor(a, true) }]),
+      { icon: "pen", text: "New conversation", run: () => openAgent(a.id) },
+      ...(c || a.kind === "custom" ? [{ sep: true }] : []),
+      ...(c ? [{ icon: "trash", text: "Delete this conversation", danger: true, run: () => askDelete({ type: "agentchat", id: c.id }, "Delete this conversation?", `“${c.title}” will be permanently deleted.`, "Delete") }] : []),
+      ...(a.kind === "custom" ? [{ icon: "trash", text: "Delete agent", danger: true, run: () => askDelete({ type: "agent", id: a.id }, `Delete ${a.name}?`, "The agent and all of its conversations will be permanently deleted.", "Delete agent") }] : []),
+    ], { width: 250, align: "end", label: "Agent options" });
+  });
+  $("#agentForm").addEventListener("submit", (e) => { e.preventDefault(); saveEditor(); });
+  $("#agentForm").addEventListener("click", (e) => {
+    const i = e.target.closest("[data-icon]"), a = e.target.closest("[data-accent]"), c = e.target.closest("[data-cap]");
+    if (i) { draft.icon = i.dataset.icon; paintEditor(); $(`[data-icon="${draft.icon}"]`).focus(); }
+    if (a) { draft.accent = a.dataset.accent; paintEditor(); $(`[data-accent="${draft.accent}"]`).focus(); }
+    if (c && !c.disabled) { const k = c.dataset.cap; draft.caps = draft.caps.includes(k) ? draft.caps.filter((x) => x !== k) : [...draft.caps, k]; c.setAttribute("aria-checked", String(draft.caps.includes(k))); }
+  });
+  msgsEl.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-tool]");
+    if (!t) return;
+    const open = t.getAttribute("aria-expanded") !== "true";
+    t.setAttribute("aria-expanded", String(open));
+    t.nextElementSibling.hidden = !open;
   });
 
   $("#search").addEventListener("input", renderHistory);
   $("#search").addEventListener("keydown", (e) => { if (e.key === "Escape") { e.target.value = ""; renderHistory(); } });
   $("#newBtn").addEventListener("click", newChat);
   $("#railNew").addEventListener("click", newChat);
-  $("#topNew").addEventListener("click", newChat);
+  $("#topNew").addEventListener("click", () => (view === "agent" ? openAgent(agentId) : newChat()));
   $("#brand").addEventListener("click", newChat);
   $("#railSearch").addEventListener("click", () => { setRail(false); requestAnimationFrame(() => $("#search").focus()); });
   $("#railBtn").addEventListener("click", () => setRail(!S.rail));
   $("#openDrawer").addEventListener("click", openDrawer);
   $("#closeDrawer").addEventListener("click", closeDrawer);
   $("#scrim").addEventListener("click", closeDrawer);
-  $("#navChats").addEventListener("click", closeDrawer);
+  $("#navChats").addEventListener("click", () => (view === "chat" ? closeDrawer() : newChat()));
   $("#navProjects").addEventListener("click", () => { closeDrawer(); dlg("dlgProjects").showModal(); });
   $("#navPrompts").addEventListener("click", () => { closeDrawer(); renderPrompts(); dlg("dlgPrompts").showModal(); });
   $("#navSettings").addEventListener("click", openSettings);
@@ -1309,6 +1803,7 @@ it("cancel stops a pending call", () => {
   $("#railNew").innerHTML = ic("pen"); $("#railSearch").innerHTML = ic("search");
   $("#closeDrawer").innerHTML = ic("x"); $("#openDrawer").innerHTML = ic("menu"); $("#topNew").innerHTML = ic("pen");
   $("#plusBtn").innerHTML = ic("plus"); $("#jump").innerHTML = ic("arrowdown");
+  $("#agHistBtn").innerHTML = ic("clock"); $("#agOptBtn").innerHTML = ic("more");
   $$("[data-close].ib").forEach((b) => (b.innerHTML = ic("x")));
   applyTheme(S.theme);
   setRail(!!S.rail);
