@@ -45,6 +45,7 @@ type RegistryRow = {
   output_price: number | string | null;
   is_enabled: boolean;
   last_verified_at: string | null;
+  price_source_url?: string | null;
 };
 
 function num(v: number | string | null): number | null {
@@ -71,6 +72,7 @@ async function registryFromDatabase(): Promise<ModelInfo[] | null> {
       outputPrice: num(r.output_price),
       isEnabled: r.is_enabled,
       lastVerifiedAt: r.last_verified_at,
+      priceSourceUrl: r.price_source_url ?? null,
     }));
   } catch {
     return null;

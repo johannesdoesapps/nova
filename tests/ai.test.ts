@@ -105,7 +105,7 @@ describe("OpenAI-compatible provider", () => {
     let usage;
     for await (const ev of p.stream({ model, messages: [{ role: "user", content: "hi" }], maxOutputTokens: 50 })) {
       if (ev.type === "delta") text += ev.text;
-      else usage = ev.usage;
+      else if (ev.type === "usage") usage = ev.usage;
     }
     expect(text).toBe("Hello");
     expect(usage).toEqual({ inputTokens: 7, outputTokens: 2, estimated: false });

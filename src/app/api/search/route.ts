@@ -60,6 +60,7 @@ export async function POST(req: Request) {
       const started = performance.now();
       let raw = "";
       let usage: Usage | null = null;
+      let servedModel: string | null = null;
       let status: "success" | "error" = "success";
       try {
         for await (const ev of provider.stream({
@@ -72,7 +73,8 @@ export async function POST(req: Request) {
           if (ev.type === "delta") {
             raw += ev.text;
             send({ type: "delta", text: ev.text });
-          } else usage = ev.usage;
+          } else if (ev.type === "usage") usage = ev.usage;
+          else servedModel = ev.servedModel;
         }
       } catch (err) {
         status = "error";
@@ -80,7 +82,7 @@ export async function POST(req: Request) {
       } finally {
         const latencyMs = performance.now() - started;
         usage ??= { inputTokens: estimateTokens(messages), outputTokens: estimateTokens(raw), estimated: true };
-        void recordRun(auth, { model, prompt: body.query, response: raw, latencyMs, usage, status });
+        void recordRun(auth, { model, prompt: body.query, response: raw, latencyMs, usage, status, purpose: "search", category: "research", servedModel });
       }
 
       const cleaned = stripInvalidCitations(raw, sources);

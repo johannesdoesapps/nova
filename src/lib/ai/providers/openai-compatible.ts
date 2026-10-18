@@ -72,6 +72,7 @@ export class OpenAICompatibleProvider implements AIProvider {
   async generate(params: GenerateParams): Promise<GenerateResult> {
     const res = await this.request(params, false);
     const j = (await res.json()) as {
+      model?: string;
       choices?: { message?: { content?: string | null } }[];
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
@@ -79,15 +80,18 @@ export class OpenAICompatibleProvider implements AIProvider {
       text: j.choices?.[0]?.message?.content ?? "",
       usage: toUsage(j.usage),
       simulated: false,
+      servedModel: typeof j.model === "string" ? j.model : null,
     };
   }
 
   async *stream(params: GenerateParams): AsyncGenerator<StreamEvent> {
     const res = await this.request(params, true);
     if (!res.body) throw new ApiError("upstream_error", "Empty stream from provider.");
+    let served = false;
     for await (const data of sseData(res.body)) {
       if (data === "[DONE]") break;
       let j: {
+        model?: string;
         choices?: { delta?: { content?: string | null } }[];
         usage?: { prompt_tokens?: number; completion_tokens?: number } | null;
       };
@@ -95,6 +99,10 @@ export class OpenAICompatibleProvider implements AIProvider {
         j = JSON.parse(data);
       } catch {
         continue;
+      }
+      if (!served && typeof j.model === "string" && j.model) {
+        served = true;
+        yield { type: "served", servedModel: j.model };
       }
       const text = j.choices?.[0]?.delta?.content;
       if (text) yield { type: "delta", text };

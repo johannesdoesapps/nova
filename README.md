@@ -21,6 +21,10 @@ This repository is the **first milestone** (roadmap stages 1–2, plus the core 
 | Hugging Face Discovery | ✅ | Models + datasets, task/library/tag filters, sort, cursor pagination, details drawer with model-card excerpt, favourites, shortlist |
 | Research Projects | ✅ | CRUD, notes, saved searches/answers/comparisons, in-project search |
 | Security & cost controls | ✅ | Zod validation, body-size limits, rate limits, daily quotas, timeouts, RLS, prompt-injection hardening, secrets server-only |
+| **Claim DNA** (Part 4) | ✅ | Claims → evidence links (supports / conflicts / insufficient) with verified quotes, source provenance and reliability indicators, limitations on every claim, heuristic "evidence match" that is never shown as truth. Workflows: fact-check queue, unsupported, conflicts, missing evidence, direct vs inference, mis-citations. Optional model judgements count only when their quotes are found in the source. **Check claims** button on AI Search. See [`docs/CLAIM_DNA.md`](docs/CLAIM_DNA.md) |
+| **Hypothesis Arena** | ✅ | Competing explanations with testable predictions, discriminating-prediction detection, standings, provisional verdicts only after enough discriminating tests |
+| **Research Replay** | ✅ | Every analysis step recorded with input/output hashes; exact replay, what-if (drop sources), live re-run for model judgements, step diffs |
+| **Model Intelligence** (Part 5) | ✅ | Blind A/B trials (redacted, CSPRNG order, sealed AES-GCM identity tokens), reproducible benchmarks with deterministic checkers, per-category Model Fingerprint keeping personal preference and measured performance separate, sample-size gating with Wilson intervals and exact paired tests, served-version tracking and drift detection, constraint-based routing with cross-provider fallbacks and circuit breaker, model directory with price provenance/validation and privacy profiles, usage tracking. See [`docs/MODEL_INTELLIGENCE.md`](docs/MODEL_INTELLIGENCE.md) |
 | Radar, What-If Simulator, AI Lab, Knowledge Graph, Community | 🕒 | Honest "Coming soon" pages. `radar_tasks` table exists. |
 
 **Demo mode** (no keys): two simulated models make Chat, Search and Battle usable. Every simulated output starts with *"Demo mode — simulated response"* and carries a **Simulated** badge. Search never fabricates sources — without a search key it says that reliable web evidence could not be retrieved.
@@ -49,6 +53,8 @@ The app starts with zero configuration. Add keys incrementally:
 | `NOVARA_MODELS` | Override the model list / set verified prices | See below |
 | `NOVARA_MAX_COMPARE_MODELS`, `NOVARA_DAILY_REQUEST_LIMIT`, `NOVARA_RATE_LIMIT_PER_MINUTE` | Cost controls | Defaults: 3 / 200 / 20 |
 | `SENTRY_DSN` | Optional error monitoring | See *Observability* |
+| `NOVARA_TRIAL_SECRET` | Keeps blind-trial tokens valid across restarts / instances | Any long random string |
+| `NOVARA_PRIVACY_PROFILES` | Verified provider data-handling facts used by the Model Directory and privacy-constrained routing | JSON keyed by provider, see `.env.example` |
 
 No service-role key is used anywhere: all database access runs as the signed-in user, so Row Level Security always applies. Settings → Integrations shows which variables are set (booleans only — values never reach the browser).
 
@@ -61,7 +67,7 @@ supabase link --project-ref <ref>
 supabase db push
 ```
 
-or paste `supabase/migrations/20261018000000_initial_schema.sql` into the Supabase SQL editor.
+or paste the files in `supabase/migrations/` (in order) into the Supabase SQL editor.
 
 It creates `profiles` (auto-created on sign-up), `projects`, `conversations`, `messages`, `search_sessions`, `sources`, `model_registry`, `model_runs`, `model_comparisons`, `favorite_models`, `project_notes` and `radar_tasks`, with indexes, `updated_at` triggers and RLS policies on every table. Policies also stop users from attaching rows to someone else's project.
 
@@ -159,6 +165,6 @@ Key decisions:
 1. Replace in-memory rate limiting and caching with a shared store; add per-user monthly budgets.
 2. Verify model IDs and prices; add more providers (Anthropic, Mistral) behind `AIProvider`.
 3. PDF/DOCX attachment parsing via Supabase Storage.
-4. Trust Layer: claim extraction and per-claim source support labels on search answers.
+4. Claim DNA: fetch full pages (not just snippets) for checked sources; collect labelled data to measure evidence-linking precision (see docs).
 5. Radar: scheduled checks (Vercel Cron or Supabase scheduled functions) on the existing `radar_tasks` table.
 6. Playwright end-to-end tests against a Supabase test project.

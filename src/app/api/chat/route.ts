@@ -105,6 +105,7 @@ export async function POST(req: Request) {
       const started = performance.now();
       let text = "";
       let usage: Usage | null = null;
+      let servedModel: string | null = null;
       let status: "success" | "error" = "success";
       try {
         for await (const ev of getProvider(model.provider).stream({
@@ -116,7 +117,8 @@ export async function POST(req: Request) {
           if (ev.type === "delta") {
             text += ev.text;
             send({ type: "delta", text: ev.text });
-          } else usage = ev.usage;
+          } else if (ev.type === "usage") usage = ev.usage;
+          else servedModel = ev.servedModel;
         }
       } catch (err) {
         status = "error";
@@ -131,6 +133,8 @@ export async function POST(req: Request) {
           usage,
           status,
           conversationId,
+          purpose: "chat",
+          servedModel,
         });
       }
 

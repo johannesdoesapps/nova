@@ -72,7 +72,7 @@ export async function POST(req: Request) {
             r.usage.inputTokens === null || r.usage.outputTokens === null
               ? { inputTokens: estimateTokens(messages), outputTokens: estimateTokens(r.text), estimated: true }
               : r.usage;
-          void recordRun(auth, { model, prompt: body.prompt, response: r.text, latencyMs, usage, status: "success" });
+          void recordRun(auth, { model, prompt: body.prompt, response: r.text, latencyMs, usage, status: "success", purpose: "compare", servedModel: r.servedModel ?? null });
           return {
             modelId: model.id,
             displayName: model.displayName,

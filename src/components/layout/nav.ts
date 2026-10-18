@@ -12,6 +12,8 @@ import {
   Swords,
   Users,
   Cpu,
+  Dna,
+  Fingerprint,
   type LucideIcon,
 } from "lucide-react";
 
@@ -28,6 +30,8 @@ export const NAV: NavItem[] = [
   { href: "/chat", label: "AI Chat", icon: MessageSquare },
   { href: "/battle", label: "Model Battle", icon: Swords },
   { href: "/models", label: "Model Router", icon: Cpu },
+  { href: "/claims", label: "Claim DNA", icon: Dna },
+  { href: "/intel", label: "Model Intelligence", icon: Fingerprint },
   { href: "/discover", label: "Model Discovery", icon: Compass },
   { href: "/projects", label: "Research Projects", icon: FolderKanban },
   { href: "/radar", label: "Radar", icon: Radar, soon: true },

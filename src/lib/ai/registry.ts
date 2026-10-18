@@ -107,6 +107,7 @@ export const modelInfoSchema = z.object({
   outputPrice: z.number().nonnegative().nullable().default(null),
   isEnabled: z.boolean().default(true),
   lastVerifiedAt: z.string().nullable().default(null),
+  priceSourceUrl: z.url().nullable().default(null),
 });
 
 /** Parse NOVARA_MODELS; invalid config is reported and ignored rather than crashing the app. */

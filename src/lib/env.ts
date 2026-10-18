@@ -42,6 +42,8 @@ export function serverEnv() {
     dailyRequestLimit: int(process.env.NOVARA_DAILY_REQUEST_LIMIT, 200),
     ratePerMinute: int(process.env.NOVARA_RATE_LIMIT_PER_MINUTE, 20, 1, 1000),
     sentryDsn: clean(process.env.SENTRY_DSN),
+    privacyProfilesJson: clean(process.env.NOVARA_PRIVACY_PROFILES),
+    trialSecretSet: Boolean(clean(process.env.NOVARA_TRIAL_SECRET)),
   };
 }
 

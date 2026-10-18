@@ -1,13 +1,14 @@
 "use client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, ChevronDown, ExternalLink, Globe, Lightbulb, RefreshCw, Search, Sparkles, Square } from "lucide-react";
+import { ArrowRight, ChevronDown, Dna, ExternalLink, Globe, Lightbulb, RefreshCw, Search, Sparkles, Square } from "lucide-react";
 import { Markdown } from "@/components/common/markdown";
 import { CopyButton } from "@/components/common/copy-button";
 import { ModelPicker, defaultModelId, useModels } from "@/components/common/model-picker";
 import { SaveToProject } from "@/components/projects/save-to-project";
 import { SUGGESTED_PROMPTS } from "@/components/search/hero-search";
 import { useApp } from "@/components/layout/app-context";
+import { handoff } from "@/components/research/local-store";
 import { Badge, Button, Card, Notice, Skeleton } from "@/components/ui/primitives";
 import { jsonFetch, postNdjson } from "@/hooks/use-ndjson";
 import type { SearchSource } from "@/lib/search/types";
@@ -223,6 +224,7 @@ function TurnView({
   onRegenerate: () => void;
   busy: boolean;
 }) {
+  const router = useRouter();
   const valid = new Set(t.sources.map((s) => s.index));
   return (
     <article>
@@ -280,6 +282,21 @@ function TurnView({
               <CopyButton text={t.answer} />
               <Button variant="ghost" size="sm" onClick={onRegenerate} disabled={busy}>
                 <RefreshCw className="h-3.5 w-3.5" /> Regenerate
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                title="Break this answer into claims and check each one against the retrieved sources"
+                onClick={() => {
+                  handoff.set({
+                    question: t.query,
+                    answer: t.answer,
+                    sources: t.sources.map((src) => ({ index: src.index, url: src.url, title: src.title, text: src.snippet, publishedAt: src.publishedAt, provider: t.searchProvider })),
+                  });
+                  router.push("/claims");
+                }}
+              >
+                <Dna className="h-3.5 w-3.5" /> Check claims
               </Button>
               <SaveToProject
                 disabled={!t.searchId}

@@ -46,6 +46,12 @@ export interface RunRecord {
   usage: Usage;
   status: "success" | "error";
   conversationId?: string | null;
+  /** Which feature made the call: chat, search, compare, trial, benchmark, claims, route… */
+  purpose?: string;
+  category?: string | null;
+  servedModel?: string | null;
+  /** Set when this call happened because an earlier model in a fallback chain failed. */
+  fallbackFrom?: string | null;
 }
 
 /** Persist a model run for usage tracking. Failures are logged, never fatal. */
@@ -62,6 +68,10 @@ export async function recordRun(auth: AuthContext, run: RunRecord): Promise<void
     output_tokens: run.usage.outputTokens,
     estimated_cost: estimateCost(run.model, run.usage),
     status: run.status,
+    purpose: run.purpose ?? null,
+    category: run.category ?? null,
+    served_model: run.servedModel ?? null,
+    fallback_from: run.fallbackFrom ?? null,
   });
   if (error) reportError(error, { where: "recordRun" });
 }
