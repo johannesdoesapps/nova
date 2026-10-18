@@ -39,8 +39,13 @@ export function LoginForm({ url, supabaseKey, next, siteUrl }: { url: string; su
         });
         if (error) throw error;
         if (data.session) {
+          // Email confirmation is off: the new account is signed in straight away.
           router.replace(next);
           router.refresh();
+        } else if (data.user && data.user.identities?.length === 0) {
+          // Supabase hides whether an email is registered; an empty identity list means it already is.
+          setMode("signin");
+          setInfo("You already have an account with this email. Enter your password to sign in.");
         } else setInfo("Check your inbox to confirm your email, then sign in.");
       }
     } catch (e) {
