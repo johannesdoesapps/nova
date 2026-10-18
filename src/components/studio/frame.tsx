@@ -246,7 +246,6 @@ export function StudioFrame({ children }: { children: ReactNode }) {
           onSettings={updateSettings}
           theme={theme}
           historyKind={store.kind}
-          signedIn={!!user}
           onClearLocal={() => {
             localHistory.clear?.();
             if (onChat) router.replace("/chat?new=1");

@@ -6,7 +6,6 @@ import {
   Bookmark,
   Bot,
   Ellipsis,
-  FolderKanban,
   LayoutGrid,
   LogIn,
   LogOut,
@@ -159,7 +158,6 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
           <ul className={cn("flex flex-col gap-0.5", rail && "md:items-center")}>
             <NavItem rail={rail} icon={<MessagesSquare />} label="Chats" href="/chat" active={p.section === "chats"} onClick={p.onCloseMobile} />
             <NavItem rail={rail} icon={<Bot />} label="Agents" href="/agents" active={p.section === "agents"} onClick={p.onCloseMobile} />
-            <NavItem rail={rail} icon={<FolderKanban />} label="Projects" href="/projects" />
             <NavItem rail={rail} icon={<Bookmark />} label="Saved prompts" onClick={p.onOpenPrompts} />
             <NavItem rail={rail} icon={<Settings2 />} label="Settings" onClick={p.onOpenSettings} />
           </ul>

@@ -1,7 +1,6 @@
 "use client";
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowUpRight, Bookmark, Check, FolderKanban, Monitor, Moon, Plus, Sun, Trash2 } from "lucide-react";
+import { Bookmark, Check, FolderKanban, Monitor, Moon, Plus, Sun, Trash2 } from "lucide-react";
 import { saveNote } from "@/components/projects/save-to-project";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import { CHAT_MODES, MODE_LABELS, type ChatMode } from "@/lib/ai/modes";
@@ -25,7 +24,6 @@ export function SettingsDialog({
   theme,
   historyKind,
   onClearLocal,
-  signedIn,
 }: {
   open: boolean;
   onClose: () => void;
@@ -34,11 +32,10 @@ export function SettingsDialog({
   theme: { pref: ThemePref; setTheme: (p: ThemePref) => void };
   historyKind: "server" | "local";
   onClearLocal: () => void;
-  signedIn: boolean;
 }) {
   return (
     <Dialog open={open} onClose={onClose} title="Settings" width={520}>
-      <SettingsBody settings={settings} onSettings={onSettings} theme={theme} historyKind={historyKind} onClearLocal={onClearLocal} signedIn={signedIn} />
+      <SettingsBody settings={settings} onSettings={onSettings} theme={theme} historyKind={historyKind} onClearLocal={onClearLocal} />
     </Dialog>
   );
 }
@@ -49,14 +46,12 @@ function SettingsBody({
   theme,
   historyKind,
   onClearLocal,
-  signedIn,
 }: {
   settings: StudioSettings;
   onSettings: (s: Partial<StudioSettings>) => void;
   theme: { pref: ThemePref; setTheme: (p: ThemePref) => void };
   historyKind: "server" | "local";
   onClearLocal: () => void;
-  signedIn: boolean;
 }) {
   const [confirmClear, setConfirmClear] = useState(false);
   return (
@@ -133,11 +128,6 @@ function SettingsBody({
             <dd><Kbd>Ctrl/⌘</Kbd> <Kbd>B</Kbd></dd>
           </dl>
         </div>
-      </div>
-      <div className="mt-2 flex justify-end">
-        <Link href="/settings" className={btnQuiet}>
-          {signedIn ? "Account & usage" : "More settings"} <ArrowUpRight />
-        </Link>
       </div>
     </>
   );
