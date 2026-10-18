@@ -26,7 +26,9 @@ export function LoginForm({ url, supabaseKey, next, siteUrl }: { url: string; su
         router.replace(next);
         router.refresh();
       } else {
-        const origin = typeof window !== "undefined" ? window.location.origin : siteUrl;
+        // Confirmation links go to the main site address, which is the one on
+        // Supabase's redirect allow-list, even when signing up from a preview URL.
+        const origin = siteUrl.includes("localhost") && typeof window !== "undefined" ? window.location.origin : siteUrl;
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -42,7 +44,7 @@ export function LoginForm({ url, supabaseKey, next, siteUrl }: { url: string; su
         } else setInfo("Check your inbox to confirm your email, then sign in.");
       }
     } catch (e) {
-      setError((e as Error).message || "Authentication failed.");
+      setError(friendlyAuthError((e as Error).message, mode));
     } finally {
       setBusy(false);
     }
@@ -81,4 +83,15 @@ export function LoginForm({ url, supabaseKey, next, siteUrl }: { url: string; su
       </p>
     </form>
   );
+}
+
+function friendlyAuthError(message: string | undefined, mode: "signin" | "signup"): string {
+  const m = (message ?? "").toLowerCase();
+  if (m.includes("invalid login credentials"))
+    return "Wrong email or password. New to NOVA? Choose \u201cCreate an account\u201d below.";
+  if (m.includes("email not confirmed")) return "Confirm your email first: open the link we sent you, then sign in.";
+  if (m.includes("already registered")) return "An account with this email already exists. Sign in instead.";
+  if (m.includes("rate limit") || m.includes("too many"))
+    return "Too many attempts. Wait a few minutes and try again.";
+  return message || (mode === "signin" ? "Sign-in failed. Please try again." : "Sign-up failed. Please try again.");
 }

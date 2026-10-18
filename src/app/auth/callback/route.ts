@@ -13,5 +13,11 @@ export async function GET(req: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) return NextResponse.redirect(new URL(next, url.origin));
   }
-  return NextResponse.redirect(new URL("/login?error=Could%20not%20complete%20sign-in.%20Please%20try%20again.", url.origin));
+  // Supabase has already confirmed the email by the time it redirects here. The
+  // exchange fails when the link is opened in another browser or on another
+  // address than the one used to sign up, so ask for a normal sign-in instead.
+  const login = new URL("/login", url.origin);
+  login.searchParams.set("notice", "Your email is confirmed. Sign in with your password to continue.");
+  if (next !== "/") login.searchParams.set("next", next);
+  return NextResponse.redirect(login);
 }

@@ -13,7 +13,12 @@ const nextConfig: NextConfig = {
       "/integrations", "/radar", "/simulator", "/settings/:path*", "/projects/:path*", "/claims/:path*",
       "/intel/:path*", "/lab/:path*", "/workspaces/:path*",
     ];
-    return legacy.map((source) => ({ source, destination: "/chat", permanent: false }));
+    return [
+      // Supabase falls back to the bare Site URL with ?code= when a redirect
+      // address isn't allow-listed; finish the sign-in instead of dropping it.
+      { source: "/", has: [{ type: "query" as const, key: "code" }], destination: "/auth/callback", permanent: false },
+      ...legacy.map((source) => ({ source, destination: "/chat", permanent: false })),
+    ];
   },
   turbopack: {
     rules: {

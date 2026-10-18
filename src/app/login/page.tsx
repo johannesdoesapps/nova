@@ -24,6 +24,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
     if (auth.mode === "authenticated") redirect(next);
   }
   const error = typeof sp.error === "string" ? sp.error : null;
+  const notice = typeof sp.notice === "string" ? sp.notice : null;
 
   return (
     <div className="nova-glow grid min-h-dvh place-items-center px-4 py-10">
@@ -33,6 +34,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           <h1 className="text-xl font-semibold">Welcome to NOVA</h1>
           <p className="mt-1 text-sm text-muted">Sign in to save conversations, searches and projects.</p>
           {error && <Notice tone="danger" className="mt-4">{error}</Notice>}
+          {notice && <Notice tone="success" className="mt-4">{notice}</Notice>}
           {configured ? (
             <LoginForm url={publicEnv.supabaseUrl!} supabaseKey={publicEnv.supabaseKey!} next={next} siteUrl={publicEnv.siteUrl} />
           ) : (
