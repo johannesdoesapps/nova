@@ -29,6 +29,7 @@ export function isSupabaseConfigured(): boolean {
 /** Server-only settings. Never import the values into client components. */
 export function serverEnv() {
   return {
+    anthropicKey: clean(process.env.ANTHROPIC_API_KEY),
     openaiKey: clean(process.env.OPENAI_API_KEY),
     openaiBaseUrl: clean(process.env.OPENAI_BASE_URL) ?? "https://api.openai.com/v1",
     huggingfaceKey: clean(process.env.HUGGINGFACE_API_KEY),
@@ -50,7 +51,7 @@ export function serverEnv() {
 }
 
 export type IntegrationStatus = {
-  id: "supabase" | "openai" | "huggingface" | "search" | "sentry" | "engine";
+  id: "supabase" | "anthropic" | "openai" | "huggingface" | "search" | "sentry" | "engine";
   label: string;
   configured: boolean;
   envVars: string[];
@@ -67,6 +68,13 @@ export function integrationStatus(): IntegrationStatus[] {
       configured: isSupabaseConfigured(),
       envVars: ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"],
       purpose: "Accounts, saved conversations, projects and comparisons",
+    },
+    {
+      id: "anthropic",
+      label: "Anthropic (Claude)",
+      configured: Boolean(env.anthropicKey),
+      envVars: ["ANTHROPIC_API_KEY"],
+      purpose: "Claude models for chat, agents and search answers (default when set)",
     },
     {
       id: "openai",

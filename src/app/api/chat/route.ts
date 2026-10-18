@@ -1,6 +1,7 @@
 import { getProvider, resolveModel, withTimeout } from "@/lib/ai";
 import { estimateCost, estimateTokens } from "@/lib/ai/cost";
 import { systemPromptFor } from "@/lib/ai/modes";
+import { trimHistory } from "@/lib/ai/trim";
 import type { ChatMessage, Usage } from "@/lib/ai/types";
 import { requireUserIfConfigured } from "@/lib/auth";
 import { addMessages, createConversation, getConversation, updateConversation } from "@/lib/db";
@@ -104,7 +105,7 @@ export async function POST(req: Request) {
         userContent = `${docs}\n\n${body.message}`;
       }
 
-      const messages: ChatMessage[] = [{ role: "system", content: system }, ...history, { role: "user", content: userContent }];
+      const messages: ChatMessage[] = [{ role: "system", content: system }, ...trimHistory(history), { role: "user", content: userContent }];
       const started = performance.now();
       let text = "";
       let usage: Usage | null = null;

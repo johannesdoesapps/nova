@@ -3,11 +3,13 @@ import { serverEnv, isSupabaseConfigured } from "../env";
 import { ApiError } from "../http";
 import { createServerSupabase } from "../supabase/server";
 import { demoProvider } from "./providers/demo";
+import { AnthropicProvider } from "./providers/anthropic";
 import { OpenAICompatibleProvider } from "./providers/openai-compatible";
 import { DEFAULT_MODELS, parseModelsOverride, withStatus } from "./registry";
 import type { AIProvider, ModelInfo, ModelWithStatus, ProviderId } from "./types";
 
 const providers: Record<ProviderId, AIProvider> = {
+  anthropic: new AnthropicProvider(() => serverEnv().anthropicKey),
   openai: new OpenAICompatibleProvider("openai", {
     baseUrl: serverEnv().openaiBaseUrl,
     apiKey: () => serverEnv().openaiKey,
@@ -27,6 +29,7 @@ export function getProvider(id: ProviderId): AIProvider {
 
 export function providerConfiguredMap(): Record<ProviderId, boolean> {
   return {
+    anthropic: providers.anthropic.isConfigured(),
     openai: providers.openai.isConfigured(),
     huggingface: providers.huggingface.isConfigured(),
     demo: true,

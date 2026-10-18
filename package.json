@@ -15,6 +15,7 @@
     "engine:test": "cd engine && .venv/bin/python -m pytest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
     "@xyflow/react": "^12.12.0",

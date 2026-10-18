@@ -355,7 +355,7 @@ export function Composer(p: ComposerProps) {
 }
 
 function providerName(p: string) {
-  return p === "openai" ? "OpenAI" : p === "huggingface" ? "Hugging Face" : p;
+  return p === "anthropic" ? "Anthropic" : p === "openai" ? "OpenAI" : p === "huggingface" ? "Hugging Face" : p;
 }
 
 /* Voice input via the browser's Web Speech API (shown only where supported). */

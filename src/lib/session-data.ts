@@ -26,6 +26,7 @@ export const loadShellData = cache(async function loadShellData() {
     user: auth.user,
     integrations: {
       supabase: isSupabaseConfigured(),
+      anthropic: flag("anthropic"),
       openai: flag("openai"),
       huggingface: flag("huggingface"),
       search: flag("search"),

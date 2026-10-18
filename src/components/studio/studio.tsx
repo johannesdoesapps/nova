@@ -71,7 +71,7 @@ export function Studio() {
   };
 
   const empty = chat.messages.length === 0 && chat.load.status === "idle";
-  const demo = !integrations.openai && !integrations.huggingface;
+  const demo = !integrations.anthropic && !integrations.openai && !integrations.huggingface;
 
   const composer = (variant: "hero" | "dock") => (
     <Composer

@@ -2,6 +2,7 @@ import "server-only";
 import { getProvider, withTimeout } from "../ai";
 import { estimateTokens } from "../ai/cost";
 import { ASSISTANT_BASE } from "../ai/modes";
+import { trimHistory } from "../ai/trim";
 import type { ChatMessage, ModelWithStatus, Usage } from "../ai/types";
 import { serverEnv } from "../env";
 import { ApiError } from "../http";
@@ -163,7 +164,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
 
   const messages: ChatMessage[] = [
     { role: "system", content: buildAgentSystemPrompt(agent, status, extra) },
-    ...input.history,
+    ...trimHistory(input.history),
     { role: "user", content: userContent },
   ];
 

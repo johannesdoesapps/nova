@@ -1,4 +1,4 @@
-export type ProviderId = "openai" | "huggingface" | "demo";
+export type ProviderId = "anthropic" | "openai" | "huggingface" | "demo";
 
 export type Capability =
   | "chat"

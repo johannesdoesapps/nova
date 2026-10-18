@@ -6,7 +6,7 @@ import { OpenAICompatibleProvider, sseData } from "@/lib/ai/providers/openai-com
 import { demoProvider, DEMO_NOTICE } from "@/lib/ai/providers/demo";
 import type { ModelWithStatus } from "@/lib/ai/types";
 
-const all = { openai: true, huggingface: true, demo: true };
+const all = { anthropic: false, openai: true, huggingface: true, demo: true };
 
 describe("cost", () => {
   it("estimates ~4 chars per token", () => {
@@ -22,17 +22,25 @@ describe("cost", () => {
 });
 
 describe("registry", () => {
-  it("ships no fabricated prices for real providers", () => {
+  it("ships prices for real providers only with a source and verification date", () => {
     for (const m of DEFAULT_MODELS.filter((m) => m.provider !== "demo")) {
-      expect(m.inputPrice).toBeNull();
-      expect(m.outputPrice).toBeNull();
+      if (m.inputPrice === null && m.outputPrice === null) continue;
+      expect(m.priceSourceUrl).toMatch(/^https:\/\//);
+      expect(m.lastVerifiedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     }
   });
+  it("defaults to the low-cost Claude model when an Anthropic key is set", () => {
+    const models = withStatus(DEFAULT_MODELS, { anthropic: true, openai: true, huggingface: false, demo: true });
+    expect(models.find((m) => m.available)?.id).toBe("anthropic:claude-haiku-5-5");
+    const noClaude = withStatus(DEFAULT_MODELS, { anthropic: false, openai: true, huggingface: false, demo: true });
+    expect(noClaude.find((m) => m.available)?.provider).toBe("openai");
+    expect(noClaude.find((m) => m.provider === "anthropic")?.unavailableReason).toContain("ANTHROPIC_API_KEY");
+  });
   it("offers demo models only when no real provider is configured", () => {
-    const none = withStatus(DEFAULT_MODELS, { openai: false, huggingface: false, demo: true });
+    const none = withStatus(DEFAULT_MODELS, { anthropic: false, openai: false, huggingface: false, demo: true });
     expect(none.some((m) => m.provider === "demo" && m.available)).toBe(true);
     expect(none.filter((m) => m.provider === "openai").every((m) => !m.available && m.unavailableReason?.includes("OPENAI_API_KEY"))).toBe(true);
-    const some = withStatus(DEFAULT_MODELS, { openai: true, huggingface: false, demo: true });
+    const some = withStatus(DEFAULT_MODELS, { anthropic: false, openai: true, huggingface: false, demo: true });
     expect(some.some((m) => m.provider === "demo")).toBe(false);
   });
   it("parses a valid NOVA_MODELS override and ignores invalid JSON", () => {
@@ -64,7 +72,7 @@ describe("router", () => {
     expect(r.model?.contextWindow ?? 0).toBeGreaterThan(150_000 * 1.25);
   });
   it("never recommends unavailable models and always explains itself", () => {
-    const none = withStatus(DEFAULT_MODELS.filter((m) => m.provider !== "demo"), { openai: false, huggingface: false, demo: true });
+    const none = withStatus(DEFAULT_MODELS.filter((m) => m.provider !== "demo"), { anthropic: false, openai: false, huggingface: false, demo: true });
     const r = recommendModel(none, "anything");
     expect(r.model).toBeNull();
     expect(r.explanation.length).toBeGreaterThan(0);
@@ -74,7 +82,7 @@ describe("router", () => {
 
 describe("OpenAI-compatible provider", () => {
   afterEach(() => vi.unstubAllGlobals());
-  const model = { ...DEFAULT_MODELS[0]! };
+  const model = { ...DEFAULT_MODELS.find((m) => m.id === "openai:gpt-5-mini")! };
 
   it("parses SSE across chunk boundaries", async () => {
     const enc = new TextEncoder();
@@ -141,5 +149,39 @@ describe("demo provider", () => {
     let s = "";
     for await (const ev of demoProvider.stream(params)) if (ev.type === "delta") s += ev.text;
     expect(s).toBe((await demoProvider.generate(params)).text);
+  });
+});
+
+describe("history trimming", () => {
+  it("keeps the most recent turns within budget and starts on a user turn", async () => {
+    const { trimHistory } = await import("@/lib/ai/trim");
+    const h = Array.from({ length: 30 }, (_, i) => ({ role: (i % 2 ? "assistant" : "user") as "user" | "assistant", content: `m${i}` }));
+    const t = trimHistory(h, 5);
+    expect(t[0]!.role).toBe("user");
+    expect(t.at(-1)!.content).toBe("m29");
+    expect(t.length).toBeLessThanOrEqual(5);
+    const big = [{ role: "user" as const, content: "a".repeat(30_000) }, { role: "assistant" as const, content: "ok" }, { role: "user" as const, content: "next" }];
+    expect(trimHistory(big, 20, 24_000).map((m) => m.content)).toEqual(["next"]);
+  });
+});
+
+describe("Anthropic provider", () => {
+  it("moves system prompts to the top level and starts on a user turn", async () => {
+    const { toAnthropicMessages } = await import("@/lib/ai/providers/anthropic");
+    const r = toAnthropicMessages([
+      { role: "system", content: "Be brief." },
+      { role: "assistant", content: "orphan" },
+      { role: "user", content: "hi" },
+      { role: "assistant", content: "hello" },
+      { role: "user", content: "again" },
+    ]);
+    expect(r.system).toBe("Be brief.");
+    expect(r.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+  });
+  it("is unavailable without ANTHROPIC_API_KEY", async () => {
+    const { AnthropicProvider } = await import("@/lib/ai/providers/anthropic");
+    const p = new AnthropicProvider(() => undefined);
+    expect(p.isConfigured()).toBe(false);
+    expect(p.missingConfig()).toContain("ANTHROPIC_API_KEY");
   });
 });

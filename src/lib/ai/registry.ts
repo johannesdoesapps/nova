@@ -4,8 +4,9 @@ import type { ModelInfo, ModelWithStatus, ProviderId } from "./types";
 /**
  * Default model registry.
  *
- * Prices are deliberately `null`: provider pricing changes often and NOVA
- * must not show invented numbers. Set verified prices (USD per 1M tokens)
+ * Prices are `null` unless copied from the provider's pricing page (with the
+ * date in lastVerifiedAt): pricing changes often and NOVA must not show
+ * invented numbers. Set verified prices (USD per 1M tokens)
  * through the NOVA_MODELS env var or the `model_registry` table, and they
  * will flow into cost estimates automatically.
  *
@@ -13,6 +14,35 @@ import type { ModelInfo, ModelWithStatus, ProviderId } from "./types";
  * re-checked before relying on them (lastVerifiedAt is null until you do).
  */
 export const DEFAULT_MODELS: ModelInfo[] = [
+  // The first available model is the default, so the low-cost Claude model leads.
+  {
+    id: "anthropic:claude-haiku-5-5",
+    provider: "anthropic",
+    providerModelId: "claude-haiku-5-5",
+    displayName: "Claude Haiku 5.5",
+    description: "Fast, low-cost Claude model for everyday chat, summaries and quick questions.",
+    capabilities: ["chat", "fast", "low-cost", "coding", "long-context"],
+    contextWindow: 1_000_000,
+    inputPrice: 0.1,
+    outputPrice: 0.5,
+    isEnabled: true,
+    lastVerifiedAt: "2026-10-06",
+    priceSourceUrl: "https://www.anthropic.com/pricing",
+  },
+  {
+    id: "anthropic:claude-sonnet-5-5",
+    provider: "anthropic",
+    providerModelId: "claude-sonnet-5-5",
+    displayName: "Claude Sonnet 5.5",
+    description: "More capable Claude model for harder questions, analysis and coding.",
+    capabilities: ["chat", "reasoning", "coding", "long-context"],
+    contextWindow: 1_000_000,
+    inputPrice: 2,
+    outputPrice: 10,
+    isEnabled: true,
+    lastVerifiedAt: "2026-10-06",
+    priceSourceUrl: "https://www.anthropic.com/pricing",
+  },
   {
     id: "openai:gpt-5-mini",
     provider: "openai",
@@ -97,7 +127,7 @@ const capability = z.enum(["chat", "reasoning", "coding", "long-context", "fast"
 
 export const modelInfoSchema = z.object({
   id: z.string().min(1).max(120),
-  provider: z.enum(["openai", "huggingface", "demo"]),
+  provider: z.enum(["anthropic", "openai", "huggingface", "demo"]),
   providerModelId: z.string().min(1).max(200),
   displayName: z.string().min(1).max(120),
   description: z.string().max(500).default(""),
@@ -126,11 +156,18 @@ export function parseModelsOverride(json: string | undefined): ModelInfo[] | nul
   }
 }
 
+const KEY_VARS: Record<ProviderId, string> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
+  huggingface: "HUGGINGFACE_API_KEY",
+  demo: "",
+};
+
 export function withStatus(
   models: ModelInfo[],
   configured: Record<ProviderId, boolean>,
 ): ModelWithStatus[] {
-  const anyReal = configured.openai || configured.huggingface;
+  const anyReal = configured.anthropic || configured.openai || configured.huggingface;
   return models
     .filter((m) => m.isEnabled)
     // Demo models are only offered when no real provider is configured.
@@ -140,11 +177,7 @@ export function withStatus(
       return {
         ...m,
         available,
-        unavailableReason: available
-          ? undefined
-          : m.provider === "openai"
-            ? "Set OPENAI_API_KEY to enable"
-            : "Set HUGGINGFACE_API_KEY to enable",
+        unavailableReason: available ? undefined : `Set ${KEY_VARS[m.provider]} to enable`,
       };
     });
 }

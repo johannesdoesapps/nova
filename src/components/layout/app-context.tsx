@@ -14,6 +14,7 @@ export interface Recents {
 
 export interface IntegrationFlags {
   supabase: boolean;
+  anthropic: boolean;
   openai: boolean;
   huggingface: boolean;
   search: boolean;

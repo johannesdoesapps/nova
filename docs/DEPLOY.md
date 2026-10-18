@@ -59,7 +59,8 @@ Total time is about 30–45 minutes the first time.
    | `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL |
    | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable key |
    | `NEXT_PUBLIC_SITE_URL` | `https://nova-ai.vercel.app` (your final address) |
-   | `OPENAI_API_KEY` | your OpenAI key |
+   | `ANTHROPIC_API_KEY` | your Anthropic key (Claude Haiku 5.5 becomes the default model) |
+| `OPENAI_API_KEY` | your OpenAI key (optional backup) |
    | `NOVA_DAILY_REQUEST_LIMIT` | `100` (model calls per user per day; start low) |
    | `NOVA_RATE_LIMIT_PER_MINUTE` | `10` |
    | `NOVA_TRIAL_SECRET` | output of `openssl rand -base64 32` |
