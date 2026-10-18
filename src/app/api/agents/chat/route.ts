@@ -1,4 +1,5 @@
-import { resolveModel } from "@/lib/ai";
+import { fallbackChain, getModels, resolveModel, resolveModelChoice, type ModelChoice } from "@/lib/ai";
+import { pickForCapability } from "@/lib/ai/router";
 import { estimateCost } from "@/lib/ai/cost";
 import type { ChatMessage, ModelWithStatus } from "@/lib/ai/types";
 import { builtinAgent } from "@/lib/agents/builtins";
@@ -36,25 +37,34 @@ export async function POST(req: Request) {
     else if (auth.mode === "authenticated") agent = await getAgent(auth.supabase, auth.user.id, body.agentId);
     else if (body.agent) {
       // Guest mode (no accounts configured): the agent lives in the browser and is sent with the request.
-      agent = { ...body.agent, id: body.agentId, kind: "custom", category: "Custom", temperature: null, createdAt: null, updatedAt: null };
+      agent = { ...body.agent, id: body.agentId, kind: "custom", category: "Custom", modelPreference: null, temperature: null, createdAt: null, updatedAt: null };
     } else throw new ApiError("not_found", "Agent not found.");
 
     const attachments = body.attachments ?? [];
     authorizeTurn(agent, { attachments, useWeb: !!body.useWeb });
 
-    // Model: an explicit choice must be available; the agent's saved default falls back politely.
-    let model: ModelWithStatus;
+    // Model: the user's pick for this conversation, else the agent's saved model,
+    // else a model with the agent's preferred capability, else the site default.
+    // Instructions and tools don't change with the model.
+    const ctx = { prompt: body.message };
+    let choice: ModelChoice;
     let modelNotice: string | null = null;
-    if (body.modelId) model = await resolveModel(body.modelId);
+    if (body.modelId) choice = await resolveModelChoice(body.modelId, ctx);
     else if (agent.modelId) {
       try {
-        model = await resolveModel(agent.modelId);
+        choice = await resolveModelChoice(agent.modelId, ctx);
       } catch {
-        model = await resolveModel();
-        modelNotice = `${agent.name}'s preferred model isn't available, so ${model.displayName} answered instead.`;
+        choice = await resolveModelChoice(null, ctx);
+        modelNotice = `${agent.name}'s preferred model isn't available, so ${choice.model.displayName} answered instead.`;
       }
-    } else model = await resolveModel();
+    } else {
+      choice = await resolveModelChoice(null, ctx);
+      const preferred = pickForCapability(await getModels(choice.settings), agent.modelPreference);
+      if (preferred) choice = { ...choice, model: await resolveModel(preferred.id, choice.settings) };
+    }
+    let model: ModelWithStatus = choice.model;
     await enforceLimits(req, auth, 1, [model]);
+    const fallbacks = await fallbackChain(model, choice.settings, !!body.allowFallback);
 
     // Conversation and history.
     let conversationId: string | null = null;
@@ -87,13 +97,15 @@ export async function POST(req: Request) {
         persisted: auth.mode === "authenticated",
         model: { id: model.id, displayName: model.displayName, provider: model.provider },
         agent: { id: agent.id, name: agent.name },
+        routing: choice.routing,
       });
       if (modelNotice) send({ type: "notice", level: "info", message: modelNotice });
 
       // 3–5. Shared execution service: tools, prompt, streaming.
       let result;
       try {
-        result = await runAgentTurn({ agent, model, history, message: body.message, attachments, useWeb: !!body.useWeb, signal, send });
+        result = await runAgentTurn({ agent, model, fallbacks, history, message: body.message, attachments, useWeb: !!body.useWeb, signal, send });
+        model = result.model;
       } catch (err) {
         void recordRun(auth, {
           model,

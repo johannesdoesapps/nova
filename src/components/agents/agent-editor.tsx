@@ -3,7 +3,8 @@ import { useState } from "react";
 import { Check } from "lucide-react";
 import type { ModelWithStatus } from "@/lib/ai/types";
 import { agentInput, type AgentInput } from "@/lib/agents/schema";
-import { AGENT_ACCENTS, AGENT_CAPABILITIES, AGENT_ICONS, CAPABILITY_INFO, type AgentConfig, type CapabilityStatus } from "@/lib/agents/types";
+import { AGENT_ACCENTS, AGENT_CAPABILITIES, AGENT_ICONS, CAPABILITY_INFO, HISTORY_LIMITS, RESPONSE_STYLE_INFO, RESPONSE_STYLES, type AgentConfig, type CapabilityStatus } from "@/lib/agents/types";
+import { AUTO_MODEL_ID } from "@/lib/ai/platform";
 import { cn } from "@/lib/utils";
 import { Dialog, Switch } from "@/components/studio/ui";
 import { ACCENT_COLORS, AGENT_ICON_COMPONENTS, AgentAvatar, CAPABILITY_ICONS } from "./agent-visuals";
@@ -18,6 +19,8 @@ const EMPTY: AgentInput = {
   modelId: null,
   capabilities: ["file_analysis"],
   starters: [],
+  responseStyle: "balanced",
+  historyLimit: 20,
 };
 
 const field =
@@ -71,7 +74,18 @@ export function AgentEditor({
 }
 
 function toFormValue(a: AgentConfig): AgentInput {
-  return { name: a.name, description: a.description, instructions: a.instructions, icon: a.icon, accent: a.accent, modelId: a.modelId, capabilities: a.capabilities, starters: a.starters };
+  return {
+    name: a.name,
+    description: a.description,
+    instructions: a.instructions,
+    icon: a.icon,
+    accent: a.accent,
+    modelId: a.modelId,
+    capabilities: a.capabilities,
+    starters: a.starters,
+    responseStyle: a.responseStyle,
+    historyLimit: a.historyLimit,
+  };
 }
 
 function EditorForm({
@@ -265,14 +279,59 @@ function EditorForm({
           onChange={(e) => patch({ modelId: e.target.value || null })}
           className={cn(field, "h-10 bg-s-bg")}
         >
-          <option value="">Automatic (best available)</option>
-          {models?.map((m) => (
-            <option key={m.id} value={m.id} disabled={!m.available}>
-              {m.displayName}
-              {m.available ? "" : " — needs an API key"}
-            </option>
-          ))}
+          <option value="">Site default</option>
+          <option value={AUTO_MODEL_ID}>Auto (routes each message by task type)</option>
+          {models
+            ?.filter((m) => m.available || m.id === v.modelId)
+            .map((m) => (
+              <option key={m.id} value={m.id} disabled={!m.available}>
+                {m.displayName}
+                {m.available ? "" : " — no longer available"}
+              </option>
+            ))}
         </select>
+        <p className="mt-1.5 text-[12.5px] text-s-ink-3">People can still switch models in a conversation; the agent&apos;s instructions and tools stay the same.</p>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <fieldset>
+          <legend className={label}>Response style</legend>
+          <div role="radiogroup" aria-label="Response style" className="flex rounded-xl border border-s-line-strong p-0.5">
+            {RESPONSE_STYLES.map((s) => (
+              <button
+                key={s}
+                type="button"
+                role="radio"
+                aria-checked={v.responseStyle === s}
+                title={RESPONSE_STYLE_INFO[s].instruction}
+                onClick={() => patch({ responseStyle: s })}
+                className={cn(
+                  "h-9 flex-1 rounded-[10px] text-[13px] transition",
+                  v.responseStyle === s ? "bg-s-ink text-s-bg" : "text-s-ink-2 hover:bg-s-hover hover:text-s-ink",
+                )}
+              >
+                {RESPONSE_STYLE_INFO[s].label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+        <div>
+          <label htmlFor="agent-memory" className={label}>
+            Conversation memory
+          </label>
+          <select
+            id="agent-memory"
+            value={v.historyLimit}
+            onChange={(e) => patch({ historyLimit: Number(e.target.value) })}
+            className={cn(field, "h-10 bg-s-bg")}
+          >
+            {HISTORY_LIMITS.map((n) => (
+              <option key={n} value={n}>
+                Last {n} messages{n === 20 ? " (recommended)" : n === 40 ? " (uses more of your allowance)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <fieldset>

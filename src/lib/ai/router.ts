@@ -1,7 +1,7 @@
 import { estimateTokens } from "./cost";
-import type { ModelWithStatus } from "./types";
+import type { Capability, ModelWithStatus } from "./types";
 
-export type TaskKind = "summary" | "analysis" | "coding" | "long-document" | "general";
+export type TaskKind = "summary" | "analysis" | "coding" | "writing" | "long-document" | "general";
 
 export interface TaskSignal {
   kind: TaskKind;
@@ -12,6 +12,8 @@ export interface TaskSignal {
 const CODE_HINTS =
   /```|\b(function|class|const|let|def|import|export|SELECT|INSERT|stack ?trace|TypeError|exception|compile|bug|debug|refactor|regex|typescript|javascript|python|rust|golang|sql|api endpoint)\b/i;
 const SUMMARY_HINTS = /\b(summari[sz]e|summary|tl;?dr|shorten|key points|bullet points|recap|condense)\b/i;
+const WRITING_HINTS =
+  /\b(write|draft|rewrite|redraft|proofread|edit (?:this|my)|essay|article|blog post|cover letter|email|newsletter|story|poem|tone|copywriting|press release)\b/i;
 const ANALYSIS_HINTS =
   /\b(analy[sz]e|compare|trade-?offs?|pros and cons|evaluate|strategy|why|reason|implications|assess|plan|decide|critique)\b/i;
 
@@ -30,6 +32,10 @@ export function classifyTask(prompt: string, mode?: string): TaskSignal {
   if (SUMMARY_HINTS.test(prompt)) {
     reasons.push("The prompt asks for a summary, which a fast, inexpensive model usually handles well.");
     return { kind: "summary", reasons, estimatedTokens };
+  }
+  if (WRITING_HINTS.test(prompt)) {
+    reasons.push("The prompt asks for writing or editing, which suits a model tagged for writing.");
+    return { kind: "writing", reasons, estimatedTokens };
   }
   if (mode === "analyst" || mode === "critic" || ANALYSIS_HINTS.test(prompt)) {
     reasons.push("The prompt asks for analysis or comparison, which benefits from a reasoning model.");
@@ -57,14 +63,20 @@ function knownCost(m: ModelWithStatus): number {
 export function recommendModel(
   models: ModelWithStatus[],
   prompt: string,
-  opts: { mode?: string; costSensitive?: boolean } = {},
+  opts: { mode?: string; costSensitive?: boolean; needs?: Capability[] } = {},
 ): Recommendation {
   const task = classifyTask(prompt, opts.mode);
   const disclaimer =
     "Recommendations follow simple, published rules (task type, capabilities, context window and known price). They are estimates, not quality guarantees.";
-  const pool = models.filter((m) => m.available);
+  const needs = opts.needs ?? [];
+  const pool = models.filter((m) => m.available && needs.every((c) => m.capabilities.includes(c)));
   if (pool.length === 0) {
-    return { model: null, task, explanation: ["No models are currently available. Add an API key in .env.local."], disclaimer };
+    return {
+      model: null,
+      task,
+      explanation: [needs.length ? `No configured model supports ${needs.join(", ")}.` : "No models are currently available. Add an API key in .env.local."],
+      disclaimer,
+    };
   }
 
   const explanation = [...task.reasons];
@@ -82,6 +94,10 @@ export function recommendModel(
       case "coding":
         if (has(m, "coding")) s += 4;
         if (has(m, "reasoning")) s += 2;
+        break;
+      case "writing":
+        if (has(m, "writing")) s += 4;
+        if (has(m, "low-cost")) s += 1;
         break;
       case "long-document": {
         const needed = task.estimatedTokens * 1.3;
@@ -112,4 +128,59 @@ export function recommendModel(
   explanation.push(`${model.displayName} best matches these rules among ${pool.length} available model(s).`);
   if (model.inputPrice === null) explanation.push("No verified price is configured for this model, so cost is shown as n/a.");
   return { model, task, explanation, disclaimer };
+}
+
+export interface AutoRoute {
+  model: ModelWithStatus;
+  task: TaskKind;
+  /** Short, user-facing reason for the choice. */
+  reason: string;
+}
+
+const TASK_LABEL: Record<TaskKind, string> = {
+  summary: "summary",
+  analysis: "analysis",
+  coding: "coding",
+  writing: "writing",
+  "long-document": "long document",
+  general: "everyday question",
+};
+
+/**
+ * Auto mode: route one message with the published rules above. Everyday and
+ * summary tasks prefer low-cost models; analysis and coding prefer capable
+ * ones. When the user's allowance is nearly used up, low-cost models win.
+ * Demo models are only used when nothing real is configured.
+ */
+export function autoRoute(
+  models: ModelWithStatus[],
+  prompt: string,
+  opts: { mode?: string; needs?: Capability[]; preferLowCost?: boolean } = {},
+): AutoRoute | null {
+  const real = models.filter((m) => m.provider !== "demo");
+  let pool = real.some((m) => m.available) ? real : models;
+  // Near the usage limit, only low-cost models are considered (when any are available).
+  const cheap = pool.filter((m) => m.available && m.capabilities.includes("low-cost"));
+  if (opts.preferLowCost && cheap.length) pool = cheap;
+  const task = classifyTask(prompt, opts.mode).kind;
+  const costSensitive = opts.preferLowCost || task === "general" || task === "summary";
+  const r = recommendModel(pool, prompt, { mode: opts.mode, costSensitive, needs: opts.needs });
+  if (!r.model) return null;
+  return {
+    model: r.model,
+    task,
+    reason: `Auto chose ${r.model.displayName} for this ${TASK_LABEL[task]}${opts.preferLowCost ? " (saving your allowance)" : ""}.`,
+  };
+}
+
+/** The best available model with a capability, cheapest known price first (used for agent defaults). */
+export function pickForCapability(models: ModelWithStatus[], capability: Capability | null): ModelWithStatus | null {
+  if (!capability) return null;
+  const pool = models.filter((m) => m.available && m.provider !== "demo" && m.capabilities.includes(capability));
+  if (!pool.length) return null;
+  return [...pool].sort((a, b) => {
+    const lc = Number(b.capabilities.includes("low-cost")) - Number(a.capabilities.includes("low-cost"));
+    if (capability !== "reasoning" && lc !== 0) return lc;
+    return knownCost(a) - knownCost(b);
+  })[0]!;
 }

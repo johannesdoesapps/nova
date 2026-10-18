@@ -35,7 +35,19 @@ export class OpenAICompatibleProvider implements AIProvider {
     return body;
   }
 
+  /** One retry for transient failures (429, 5xx, network) before any output has been received. */
   private async request(params: GenerateParams, stream: boolean): Promise<Response> {
+    try {
+      return await this.requestOnce(params, stream);
+    } catch (err) {
+      const transient = err instanceof ApiError && (err.code === "rate_limited" || err.code === "upstream_error") && !params.signal?.aborted;
+      if (!transient) throw err;
+      await new Promise((r) => setTimeout(r, 700));
+      return this.requestOnce(params, stream);
+    }
+  }
+
+  private async requestOnce(params: GenerateParams, stream: boolean): Promise<Response> {
     const key = this.opts.apiKey();
     if (!key) throw new ApiError("not_configured", this.missingConfig()!);
     let res: Response;
@@ -60,7 +72,14 @@ export class OpenAICompatibleProvider implements AIProvider {
       } catch {
         /* ignore */
       }
-      const code = res.status === 429 ? "rate_limited" : res.status === 401 ? "not_configured" : "upstream_error";
+      const code =
+        res.status === 429
+          ? "rate_limited"
+          : res.status === 401 || res.status === 403
+            ? "not_configured"
+            : res.status >= 500
+              ? "upstream_error"
+              : "bad_request";
       throw new ApiError(
         code,
         `${params.model.displayName} returned ${res.status}${detail ? `: ${detail.slice(0, 300)}` : ""}`,

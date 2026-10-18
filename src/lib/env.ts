@@ -32,6 +32,8 @@ export function serverEnv() {
     anthropicKey: clean(process.env.ANTHROPIC_API_KEY),
     openaiKey: clean(process.env.OPENAI_API_KEY),
     openaiBaseUrl: clean(process.env.OPENAI_BASE_URL) ?? "https://api.openai.com/v1",
+    geminiKey: clean(process.env.GEMINI_API_KEY),
+    geminiBaseUrl: clean(process.env.GEMINI_BASE_URL) ?? "https://generativelanguage.googleapis.com/v1beta/openai",
     huggingfaceKey: clean(process.env.HUGGINGFACE_API_KEY),
     searchProvider: (clean(process.env.SEARCH_PROVIDER) ?? "tavily").toLowerCase() as
       | "tavily"
@@ -51,7 +53,7 @@ export function serverEnv() {
 }
 
 export type IntegrationStatus = {
-  id: "supabase" | "anthropic" | "openai" | "huggingface" | "search" | "sentry" | "engine";
+  id: "supabase" | "anthropic" | "openai" | "google" | "huggingface" | "search" | "sentry" | "engine";
   label: string;
   configured: boolean;
   envVars: string[];
@@ -82,6 +84,13 @@ export function integrationStatus(): IntegrationStatus[] {
       configured: Boolean(env.openaiKey),
       envVars: ["OPENAI_API_KEY"],
       purpose: "Chat, search answers and OpenAI models in Model Battle",
+    },
+    {
+      id: "google",
+      label: "Google (Gemini)",
+      configured: Boolean(env.geminiKey),
+      envVars: ["GEMINI_API_KEY"],
+      purpose: "Gemini models for chat and agents",
     },
     {
       id: "huggingface",

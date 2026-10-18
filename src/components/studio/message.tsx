@@ -1,6 +1,6 @@
 "use client";
 import { memo, useState, type ReactNode } from "react";
-import { BookmarkPlus, ChartColumn, Check, ChevronRight, CircleAlert, Copy, Ellipsis, FileText, FolderPlus, Globe, RefreshCw, ThumbsDown, ThumbsUp, Wrench } from "lucide-react";
+import { BookmarkPlus, ChartColumn, Check, ChevronRight, CircleAlert, Copy, Ellipsis, FileText, FolderPlus, Globe, RefreshCw, Sparkles, ThumbsDown, ThumbsUp, Wrench } from "lucide-react";
 import { Markdown } from "@/components/common/markdown";
 import { cn, formatUsd } from "@/lib/utils";
 import type { Msg } from "./history";
@@ -64,6 +64,11 @@ export const MessageView = memo(function MessageView({
         {assistantAvatar ?? <NovaMark className="h-[18px] w-[18px] text-s-ink" />}
         <span className="font-medium text-s-ink-2">{assistantName ?? m.modelName ?? "NOVA"}</span>
         {assistantName && m.modelName && <span className="hidden sm:inline">· {m.modelName}</span>}
+        {m.routing && (
+          <span title={m.routing} className="inline-flex items-center gap-1 rounded-full bg-s-accent-soft px-2 py-px text-[11px] text-s-accent">
+            <Sparkles className="h-3 w-3" /> Auto
+          </span>
+        )}
         {m.simulated && (
           <span className="rounded-full border border-s-line-strong px-2 py-px text-[11px]" title="No AI provider is configured; this reply is a template.">
             Simulated

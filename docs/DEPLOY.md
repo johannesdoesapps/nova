@@ -60,7 +60,8 @@ Total time is about 30–45 minutes the first time.
    | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable key |
    | `NEXT_PUBLIC_SITE_URL` | `https://nova-ai.vercel.app` (your final address) |
    | `ANTHROPIC_API_KEY` | your Anthropic key (Claude Haiku 5.5 becomes the default model) |
-| `OPENAI_API_KEY` | your OpenAI key (optional backup) |
+| `OPENAI_API_KEY` | your OpenAI key (optional) |
+   | `GEMINI_API_KEY` | your Google Gemini key (optional) |
    | `NOVA_DAILY_REQUEST_LIMIT` | `30` (guest requests per day; signed-in users follow the plan limits in `src/lib/plans.ts`) |
    | `NOVA_RATE_LIMIT_PER_MINUTE` | `10` |
    | `NOVA_TRIAL_SECRET` | output of `openssl rand -base64 32` |
@@ -78,6 +79,17 @@ Every later `git push` to `main` redeploys automatically.
 - [ ] `/agents`: create an agent, reload the page, and it's still there.
 - [ ] Sign in from a second browser with a different account. You can't see the first account's chats or agents.
 - [ ] Send messages quickly. After the per-minute limit you get a "Too many requests" message.
+
+## Step 5b: Administer models
+
+Administrators are rows in `public.admins` (add one in the Supabase SQL editor: `insert into public.admins (user_id) values ('<auth user id>');`). Admins see **Admin** in the sidebar, where they can:
+
+- check each provider's key with **Test connection** (lists the model IDs the key can use);
+- enable or disable models, pick the default, and add newly released models without a code change;
+- turn **Auto mode** and **Backup models** (fallback) on or off;
+- set how many usage units a message to each model costs.
+
+API keys are never entered in the app; they stay in your hosting environment variables.
 
 ## Step 6 (optional): The Python engine (AI Lab, Signal Radar, Workspaces)
 

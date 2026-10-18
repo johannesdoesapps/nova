@@ -93,6 +93,12 @@ function SettingsBody({
         <Row title="Send with Enter" hint={settings.enterToSend ? "Shift + Enter adds a new line." : "Ctrl/⌘ + Enter sends; Enter adds a new line."}>
           <Switch label="Send with Enter" checked={settings.enterToSend} onChange={(v) => onSettings({ enterToSend: v })} />
         </Row>
+        <Row
+          title="Backup model"
+          hint="If the model you chose is down, let another compatible model answer (possibly from a different AI provider). Only works when the site allows it; you'll always be told."
+        >
+          <Switch label="Backup model" checked={!!settings.allowFallback} onChange={(v) => onSettings({ allowFallback: v })} />
+        </Row>
         <Row title="Chat history" hint={historyKind === "server" ? "Saved to your account." : "As a guest, chats are stored in this browser only."}>
           {historyKind === "local" ? (
             confirmClear ? (

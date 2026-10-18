@@ -29,7 +29,7 @@ export function AgentsView() {
   const [toDelete, setToDelete] = useState<AgentConfig | null>(null);
 
   const blockedGuest = integrations.supabase && !user;
-  const demo = !integrations.anthropic && !integrations.openai && !integrations.huggingface;
+  const demo = !integrations.anthropic && !integrations.openai && !integrations.google && !integrations.huggingface;
   const ready = state.status === "ready" ? state : null;
   const all = useMemo(() => (ready ? [...ready.custom, ...ready.builtins] : []), [ready]);
   const categories = useMemo(() => [...new Set(ready?.builtins.map((a) => a.category) ?? [])], [ready]);

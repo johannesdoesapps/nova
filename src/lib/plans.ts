@@ -26,7 +26,9 @@ export const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 /** Larger models cost roughly 10–20× more per message, so they use more of the allowance. */
 export const LARGE_MODEL_UNITS = 15;
 
-export function modelUnits(capabilities: readonly Capability[] | undefined): number {
+/** Units per message for a model: the admin's override if set, else 1 for low-cost models and 15 otherwise. */
+export function modelUnits(capabilities: readonly Capability[] | undefined, override?: number): number {
+  if (override !== undefined) return override;
   return capabilities?.includes("low-cost") ? 1 : LARGE_MODEL_UNITS;
 }
 

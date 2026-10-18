@@ -1,5 +1,6 @@
 import "server-only";
-import { getProvider, withTimeout } from "../ai";
+import { withTimeout } from "../ai";
+import { streamWithFallback } from "../ai/fallback";
 import { estimateTokens } from "../ai/cost";
 import { ASSISTANT_BASE } from "../ai/modes";
 import { trimHistory } from "../ai/trim";
@@ -11,7 +12,7 @@ import type { SearchSource } from "../search/types";
 import { webSearch } from "../search/web";
 import { capabilityStatus } from "./capabilities";
 import { formatSummary, summarizeDataset } from "./tools/csv-stats";
-import { CAPABILITY_INFO, type AgentConfig, type AgentCapability, type CapabilityStatus } from "./types";
+import { CAPABILITY_INFO, RESPONSE_STYLE_INFO, type AgentConfig, type AgentCapability, type CapabilityStatus } from "./types";
 
 /**
  * Shared agent execution service. Every agent, built-in or custom, runs
@@ -33,6 +34,8 @@ export interface ToolRecord {
 export interface AgentTurnInput {
   agent: AgentConfig;
   model: ModelWithStatus;
+  /** Compatible models allowed to answer if `model` fails (empty unless admin and user allow it). */
+  fallbacks?: ModelWithStatus[];
   history: ChatMessage[];
   message: string;
   attachments: Attachment[];
@@ -42,6 +45,8 @@ export interface AgentTurnInput {
 }
 
 export interface AgentTurnResult {
+  /** The model that actually answered (differs from the input only after a fallback). */
+  model: ModelWithStatus;
   text: string;
   usage: Usage;
   servedModel: string | null;
@@ -86,6 +91,8 @@ export function buildAgentSystemPrompt(agent: AgentConfig, status: CapabilitySta
     "<agent_instructions>",
     escapeDoc(agent.instructions),
     "</agent_instructions>",
+    "",
+    `Response style: ${RESPONSE_STYLE_INFO[agent.responseStyle].instruction}`,
     ...extra,
   ].join("\n");
 }
@@ -164,7 +171,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
 
   const messages: ChatMessage[] = [
     { role: "system", content: buildAgentSystemPrompt(agent, status, extra) },
-    ...trimHistory(input.history),
+    ...trimHistory(input.history, agent.historyLimit),
     { role: "user", content: userContent },
   ];
 
@@ -172,20 +179,24 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
   let text = "";
   let usage: Usage | null = null;
   let servedModel: string | null = null;
-  for await (const ev of getProvider(input.model.provider).stream({
-    model: input.model,
-    messages,
-    maxOutputTokens: 2400,
-    temperature: agent.temperature ?? undefined,
-    signal: withTimeout(MODEL_TIMEOUT_MS, signal),
-  })) {
+  let model = input.model;
+  for await (const ev of streamWithFallback(
+    model,
+    input.fallbacks ?? [],
+    { messages, maxOutputTokens: 2400, temperature: agent.temperature ?? undefined },
+    () => withTimeout(MODEL_TIMEOUT_MS, signal),
+  )) {
     if (ev.type === "delta") {
       text += ev.text;
       send({ type: "delta", text: ev.text });
     } else if (ev.type === "usage") usage = ev.usage;
-    else servedModel = ev.servedModel;
+    else if (ev.type === "fallback") {
+      model = ev.to;
+      send({ type: "model", model: { id: model.id, displayName: model.displayName, provider: model.provider } });
+      send({ type: "notice", level: "info", message: `${ev.from.displayName} was unavailable, so ${ev.to.displayName} answered instead (you allowed fallback in Settings).` });
+    } else servedModel = ev.servedModel;
   }
   if (sources.length) text = stripInvalidCitations(text, sources);
   usage ??= { inputTokens: estimateTokens(messages), outputTokens: estimateTokens(text), estimated: true };
-  return { text, usage, servedModel, sources, tools, latencyMs: performance.now() - started };
+  return { model, text, usage, servedModel, sources, tools, latencyMs: performance.now() - started };
 }

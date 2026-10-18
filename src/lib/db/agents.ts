@@ -18,11 +18,13 @@ interface AgentRow {
   model_id: string | null;
   capabilities: string[];
   starters: string[];
+  response_style: string;
+  history_limit: number;
   created_at: string;
   updated_at: string;
 }
 
-const COLUMNS = "id,name,description,instructions,icon,accent,model_id,capabilities,starters,created_at,updated_at";
+const COLUMNS = "id,name,description,instructions,icon,accent,model_id,capabilities,starters,response_style,history_limit,created_at,updated_at";
 
 export function rowToAgent(r: AgentRow): AgentConfig {
   return {
@@ -35,6 +37,9 @@ export function rowToAgent(r: AgentRow): AgentConfig {
     icon: r.icon as AgentConfig["icon"],
     accent: r.accent as AgentConfig["accent"],
     modelId: r.model_id,
+    modelPreference: null,
+    responseStyle: r.response_style as AgentConfig["responseStyle"],
+    historyLimit: r.history_limit,
     capabilities: r.capabilities as AgentConfig["capabilities"],
     starters: r.starters,
     temperature: null,
@@ -69,6 +74,8 @@ const toRow = (a: Partial<AgentInput>) => ({
   ...(a.modelId !== undefined && { model_id: a.modelId }),
   ...(a.capabilities !== undefined && { capabilities: a.capabilities }),
   ...(a.starters !== undefined && { starters: a.starters }),
+  ...(a.responseStyle !== undefined && { response_style: a.responseStyle }),
+  ...(a.historyLimit !== undefined && { history_limit: a.historyLimit }),
 });
 
 export async function createAgent(db: ServerSupabase, userId: string, input: AgentInput): Promise<AgentConfig> {

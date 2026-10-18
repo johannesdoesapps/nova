@@ -3,7 +3,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowUpRight, ChevronLeft, Clock, Copy, Ellipsis, Pencil, SquarePen, Trash2 } from "lucide-react";
-import { defaultModelId, useModels } from "@/components/common/model-picker";
+import { defaultModelId, useCatalog } from "@/components/common/model-picker";
+import { AUTO_MODEL_ID } from "@/lib/ai/platform";
+import { pickForCapability } from "@/lib/ai/router";
 import { useApp } from "@/components/layout/app-context";
 import type { ChatAttachment, ChatTransport } from "@/components/studio/chat-client";
 import { streamAgentChat } from "@/components/studio/chat-client";
@@ -75,7 +77,7 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
   const router = useRouter();
   const { user, integrations } = useApp();
   const studio = useStudio();
-  const demo = !integrations.anthropic && !integrations.openai && !integrations.huggingface;
+  const demo = !integrations.anthropic && !integrations.openai && !integrations.google && !integrations.huggingface;
   const basePath = `/agents/${agent.id}`;
 
   // This agent's own conversation history, separate from ordinary chats.
@@ -103,10 +105,19 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
   }, [store]);
 
   // Model: the agent's preferred model when available; the user may switch for this session.
-  const models = useModels();
+  // Same order as the server: this conversation's pick, the agent's saved model, its preferred kind of model, the site default.
+  const catalog = useCatalog();
+  const models = catalog?.models ?? null;
   const [picked, setPicked] = useState<string | null>(null);
-  const preferred = agent.modelId && models?.some((m) => m.id === agent.modelId && m.available) ? agent.modelId : undefined;
-  const modelId = picked ?? preferred ?? defaultModelId(models);
+  const saved =
+    agent.modelId === AUTO_MODEL_ID
+      ? catalog?.auto.enabled
+        ? AUTO_MODEL_ID
+        : undefined
+      : agent.modelId && models?.some((m) => m.id === agent.modelId && m.available)
+        ? agent.modelId
+        : undefined;
+  const modelId = picked ?? saved ?? (models ? pickForCapability(models, agent.modelPreference)?.id : undefined) ?? defaultModelId(models);
 
   // Guests' custom agents live in the browser, so their config travels with each request.
   const transport = useCallback<ChatTransport>(
@@ -118,6 +129,7 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
           message: req.message,
           modelId: picked ?? undefined,
           useWeb: req.useWeb,
+          allowFallback: req.allowFallback,
           history: req.history,
           attachments: req.attachments,
           agent: agent.kind === "custom" && persistence === "local" ? toInput(agent) : undefined,
@@ -127,7 +139,15 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
     [agent, persistence, picked],
   );
 
-  const chat = useStudioChat({ store, defaultMode: "research", modelId, onHistoryChanged: refreshConversations, basePath, transport });
+  const chat = useStudioChat({
+    store,
+    defaultMode: "research",
+    modelId,
+    allowFallback: !!studio.settings.allowFallback,
+    onHistoryChanged: refreshConversations,
+    basePath,
+    transport,
+  });
 
   const [input, setInput] = useState(() => studio.takePendingPrompt() ?? "");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
@@ -183,6 +203,7 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
       models={models}
       modelId={modelId}
       onModel={setPicked}
+      auto={catalog?.auto ?? null}
       mode={chat.mode}
       useWeb={chat.useWeb}
       onUseWeb={chat.setUseWeb}

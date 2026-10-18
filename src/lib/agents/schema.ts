@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ALLOWED_ATTACHMENT_EXT, MAX_ATTACHMENT_CHARS } from "../limits";
-import { AGENT_ACCENTS, AGENT_CAPABILITIES, AGENT_ICONS } from "./types";
+import { AGENT_ACCENTS, AGENT_CAPABILITIES, AGENT_ICONS, HISTORY_LIMITS, RESPONSE_STYLES } from "./types";
 
 /** Fields a user can set on a custom agent. Shared by create, update and guest chat. */
 export const agentInput = z.object({
@@ -20,6 +20,12 @@ export const agentInput = z.object({
     .default([])
     .transform((c) => [...new Set(c)]),
   starters: z.array(z.string().trim().min(1).max(200)).max(4, "Up to 4 starter prompts.").default([]),
+  responseStyle: z.enum(RESPONSE_STYLES).default("balanced"),
+  historyLimit: z
+    .number()
+    .int()
+    .refine((n) => (HISTORY_LIMITS as readonly number[]).includes(n), "Choose 10, 20 or 40 messages.")
+    .default(20),
 });
 export type AgentInput = z.infer<typeof agentInput>;
 
@@ -33,6 +39,8 @@ export const agentChatRequest = z.object({
   message: z.string().trim().min(1).max(12_000),
   modelId: z.string().min(1).max(120).optional(),
   useWeb: z.boolean().optional(),
+  /** The user allows another compatible model to answer if the chosen one fails (also needs the admin setting). */
+  allowFallback: z.boolean().optional(),
   /** Guests only: prior turns, since the server keeps no guest history. */
   history: z
     .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(20_000) }))

@@ -1,12 +1,13 @@
 "use client";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { ArrowUp, Check, ChevronDown, CodeXml, FileText, Globe, ImagePlus, Mic, Paperclip, Plus, Scale, ShieldQuestionMark, Square, Telescope, X } from "lucide-react";
+import { ArrowUp, Check, CodeXml, FileText, Globe, ImagePlus, Mic, Paperclip, Plus, Scale, ShieldQuestionMark, Square, Telescope, X } from "lucide-react";
 import type { ModelWithStatus } from "@/lib/ai/types";
 import { CHAT_MODES, MODE_LABELS, type ChatMode } from "@/lib/ai/modes";
 import { ALLOWED_ATTACHMENT_EXT, MAX_ATTACHMENT_CHARS } from "@/lib/limits";
 import { cn } from "@/lib/utils";
 import type { ChatAttachment } from "./chat-client";
 import { IconButton, iconButtonClass, Menu, MenuItem, MenuLabel, MenuSeparator, Switch } from "./ui";
+import { ModelSelector } from "./model-selector";
 import { UsageNotice, useUsage } from "./usage";
 
 export const MODE_ICONS: Record<ChatMode, ReactNode> = {
@@ -30,6 +31,8 @@ export interface ComposerProps {
   models: ModelWithStatus[] | null;
   modelId: string | undefined;
   onModel: (id: string) => void;
+  /** Auto mode availability; null hides the Auto option. */
+  auto?: { enabled: boolean; reason: string | null } | null;
   mode: ChatMode;
   /** Omit to hide the mode menu (agents define their own behaviour). */
   onMode?: (m: ChatMode) => void;
@@ -103,7 +106,6 @@ export function Composer(p: ComposerProps) {
     if (canSend) p.onSubmit();
   };
 
-  const model = p.models?.find((m) => m.id === p.modelId);
   const error = fileError ?? speech.error;
   const usage = useUsage(p.busy);
 
@@ -265,38 +267,7 @@ export function Composer(p: ComposerProps) {
           )}
 
           <div className="ml-auto flex items-center gap-1">
-            <Menu
-              label="Model"
-              side="auto"
-              align="end"
-              width={300}
-              disabled={!p.models}
-              buttonLabel={`Model: ${model?.displayName ?? "loading"}`}
-              buttonTitle="Choose model"
-              buttonClassName="inline-flex h-9 max-w-[150px] items-center gap-1 rounded-full px-3 text-[13px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink disabled:opacity-50 sm:max-w-[220px]"
-              button={
-                <>
-                  <span className="truncate">{model?.displayName ?? (p.models ? "Choose model" : "Loading…")}</span>
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                </>
-              }
-            >
-                  <MenuLabel>Model</MenuLabel>
-                  {p.models?.length === 0 && <p className="px-2.5 py-2 text-[13px] text-s-ink-3">No models are configured.</p>}
-                  {p.models?.map((m) => (
-                    <MenuItem
-                      key={m.id}
-                      role="menuitemradio"
-                      checked={m.id === p.modelId}
-                      disabled={!m.available}
-                      hint={!m.available ? "Needs an API key on the server" : m.provider === "demo" ? "Simulated replies — no AI provider" : providerName(m.provider)}
-                      right={m.id === p.modelId ? <Check /> : null}
-                      onClick={() => p.onModel(m.id)}
-                    >
-                      {m.displayName}
-                    </MenuItem>
-                  ))}
-            </Menu>
+            <ModelSelector models={p.models} value={p.modelId} onChange={p.onModel} auto={p.auto ?? null} />
 
             {speech.supported && (
               <IconButton
@@ -355,10 +326,6 @@ export function Composer(p: ComposerProps) {
       <UsageNotice usage={usage} />
     </div>
   );
-}
-
-function providerName(p: string) {
-  return p === "anthropic" ? "Anthropic" : p === "openai" ? "OpenAI" : p === "huggingface" ? "Hugging Face" : p;
 }
 
 /* Voice input via the browser's Web Speech API (shown only where supported). */

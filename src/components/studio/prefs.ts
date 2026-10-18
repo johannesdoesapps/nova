@@ -69,9 +69,11 @@ export function useTheme() {
 export interface StudioSettings {
   enterToSend: boolean;
   defaultMode: ChatMode;
+  /** Let another compatible model answer if the chosen one fails (only when the site allows fallback). */
+  allowFallback?: boolean;
 }
 
-const DEFAULT_SETTINGS: StudioSettings = { enterToSend: true, defaultMode: "research" };
+const DEFAULT_SETTINGS: StudioSettings = { enterToSend: true, defaultMode: "research", allowFallback: false };
 
 export function useSettings() {
   const [value, set] = useStoredJson<StudioSettings>("nova:studio:settings", DEFAULT_SETTINGS, (v): v is StudioSettings => {

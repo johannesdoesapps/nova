@@ -20,6 +20,7 @@ export function useStudioChat({
   store,
   defaultMode,
   modelId,
+  allowFallback = false,
   onHistoryChanged,
   basePath = "/chat",
   transport = chatTransport,
@@ -27,6 +28,8 @@ export function useStudioChat({
   store: HistoryStore;
   defaultMode: ChatMode;
   modelId: string | undefined;
+  /** The user lets another compatible model answer if the chosen one fails. */
+  allowFallback?: boolean;
   onHistoryChanged: () => void;
   basePath?: string;
   transport?: ChatTransport;
@@ -155,20 +158,22 @@ export function useStudioChat({
             mode: turnMode,
             modelId,
             useWeb,
+            allowFallback,
             history,
             attachments: files,
           },
           ac.signal,
         )) {
           if (ev.type === "meta") {
-            patch((m) => ({ ...m, modelName: ev.model.displayName }));
+            patch((m) => ({ ...m, modelName: ev.model.displayName, routing: ev.routing?.reason }));
             if (!local && ev.conversationId && ev.conversationId !== convId) {
               convId = ev.conversationId;
               setId(convId);
               setTitle(titleFrom(content));
               router.replace(`${basePath}?c=${convId}`, { scroll: false });
             }
-          } else if (ev.type === "tool") patch((m) => ({ ...m, tools: [...(m.tools ?? []), ev.tool] }));
+          } else if (ev.type === "model") patch((m) => ({ ...m, modelName: ev.model.displayName, routing: undefined }));
+          else if (ev.type === "tool") patch((m) => ({ ...m, tools: [...(m.tools ?? []), ev.tool] }));
           else if (ev.type === "sources") patch((m) => ({ ...m, sources: ev.sources }));
           else if (ev.type === "notice") patch((m) => ({ ...m, notices: [...(m.notices ?? []), ev.message] }));
           else if (ev.type === "delta") patch((m) => ({ ...m, content: m.content + ev.text }));
@@ -191,7 +196,7 @@ export function useStudioChat({
       }
       return true;
     },
-    [busy, mode, messages, store, conversationId, title, router, modelId, useWeb, onHistoryChanged, setId, basePath, transport],
+    [busy, mode, messages, store, conversationId, title, router, modelId, allowFallback, useWeb, onHistoryChanged, setId, basePath, transport],
   );
 
   const stop = useCallback(() => abortRef.current?.abort(), []);

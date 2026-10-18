@@ -1,7 +1,9 @@
-import { getProvider, resolveModel, withTimeout } from "@/lib/ai";
+import { fallbackChain, resolveModelChoice, withTimeout } from "@/lib/ai";
+import { streamWithFallback } from "@/lib/ai/fallback";
 import { estimateCost, estimateTokens } from "@/lib/ai/cost";
 import { systemPromptFor } from "@/lib/ai/modes";
 import { trimHistory } from "@/lib/ai/trim";
+import { AUTO_MODEL_ID } from "@/lib/ai/platform";
 import type { ChatMessage, Usage } from "@/lib/ai/types";
 import { requireUserIfConfigured } from "@/lib/auth";
 import { addMessages, createConversation, getConversation, updateConversation } from "@/lib/db";
@@ -11,7 +13,7 @@ import { reportError } from "@/lib/observability";
 import { stripInvalidCitations } from "@/lib/search/grounding";
 import type { SearchSource } from "@/lib/search/types";
 import { webSearch } from "@/lib/search/web";
-import { enforceLimits, recordRun } from "@/lib/usage";
+import { enforceLimits, planUsage, recordRun } from "@/lib/usage";
 import { chatRequest } from "@/lib/validation";
 
 export const maxDuration = 60;
@@ -25,6 +27,12 @@ function escapeDoc(s: string) {
   return s.replace(/<\/?\s*(document|source|system)\b[^>]*>/gi, "[tag removed]");
 }
 
+/** Auto mode saves the allowance when the user has used most of it. */
+async function nearLimit(auth: Awaited<ReturnType<typeof requireUserIfConfigured>>): Promise<boolean> {
+  const u = await planUsage(auth);
+  return !!u && (u.window.used >= u.window.limit * 0.8 || u.week.used >= u.week.limit * 0.8);
+}
+
 /**
  * POST /api/chat — streams NDJSON: meta → (sources) → delta… → done | error.
  * Authenticated users get history persisted; guests send their own history.
@@ -33,8 +41,14 @@ export async function POST(req: Request) {
   try {
     const body = await parseJsonBody(req, chatRequest, 220_000);
     const auth = await requireUserIfConfigured();
-    const model = await resolveModel(body.modelId);
+    const choice = await resolveModelChoice(body.modelId, {
+      prompt: body.message,
+      mode: body.mode,
+      preferLowCost: body.modelId === AUTO_MODEL_ID ? await nearLimit(auth) : false,
+    });
+    let model = choice.model;
     await enforceLimits(req, auth, 1, [model]);
+    const fallbacks = await fallbackChain(model, choice.settings, !!body.allowFallback);
 
     // Conversation + history
     let conversationId: string | null = null;
@@ -71,6 +85,7 @@ export async function POST(req: Request) {
         conversationId,
         persisted: auth.mode === "authenticated",
         model: { id: model.id, displayName: model.displayName, provider: model.provider },
+        routing: choice.routing,
       });
 
       let system = systemPromptFor(body.mode);
@@ -112,17 +127,16 @@ export async function POST(req: Request) {
       let servedModel: string | null = null;
       let status: "success" | "error" = "success";
       try {
-        for await (const ev of getProvider(model.provider).stream({
-          model,
-          messages,
-          maxOutputTokens: 2400,
-          signal: withTimeout(50_000, signal),
-        })) {
+        for await (const ev of streamWithFallback(model, fallbacks, { messages, maxOutputTokens: 2400 }, () => withTimeout(50_000, signal))) {
           if (ev.type === "delta") {
             text += ev.text;
             send({ type: "delta", text: ev.text });
           } else if (ev.type === "usage") usage = ev.usage;
-          else servedModel = ev.servedModel;
+          else if (ev.type === "fallback") {
+            model = ev.to;
+            send({ type: "model", model: { id: model.id, displayName: model.displayName, provider: model.provider } });
+            send({ type: "notice", level: "info", message: `${ev.from.displayName} was unavailable, so ${ev.to.displayName} answered instead (you allowed fallback in Settings).` });
+          } else servedModel = ev.servedModel;
         }
       } catch (err) {
         status = "error";

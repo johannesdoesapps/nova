@@ -20,6 +20,7 @@ export const UNVERIFIED_PRIVACY: PrivacyProfile = {
 export const POLICY_PAGES: Record<string, string> = {
   anthropic: "https://www.anthropic.com/legal/commercial-terms",
   openai: "https://openai.com/policies/",
+  google: "https://ai.google.dev/gemini-api/terms",
   huggingface: "https://huggingface.co/docs/inference-providers",
   demo: "",
 };

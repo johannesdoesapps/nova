@@ -1,6 +1,7 @@
 import "server-only";
 import type { AuthContext } from "./auth";
-import { getModels } from "./ai";
+import { getAllModels } from "./ai";
+import { getPlatformSettings } from "./ai/settings";
 import { estimateCost } from "./ai/cost";
 import type { ModelInfo, Usage } from "./ai/types";
 import { serverEnv } from "./env";
@@ -26,9 +27,9 @@ export async function enforceLimits(req: Request, auth: AuthContext, cost = 1, m
   }
 
   if (auth.mode === "authenticated") {
-    const state = await planUsage(auth);
+    const [state, settings] = await Promise.all([planUsage(auth), getPlatformSettings()]);
     if (!state) return;
-    const units = models?.length ? models.reduce((s, m) => s + modelUnits(m.capabilities), 0) : cost;
+    const units = models?.length ? models.reduce((s, m) => s + modelUnits(m.capabilities, settings.modelUnits[m.id]), 0) : cost;
     const check = checkUsage(state, units, Date.now());
     if (!check.ok) {
       const plan = PLANS[state.plan];
@@ -57,6 +58,7 @@ export async function userPlan(auth: AuthContext & { mode: "authenticated" }): P
 export async function planUsage(auth: AuthContext): Promise<UsageState | null> {
   if (auth.mode !== "authenticated") return null;
   const now = Date.now();
+  const settings = await getPlatformSettings();
   const [plan, runs, models] = await Promise.all([
     userPlan(auth),
     auth.supabase
@@ -66,13 +68,13 @@ export async function planUsage(auth: AuthContext): Promise<UsageState | null> {
       .gte("created_at", new Date(now - WEEK_MS).toISOString())
       .order("created_at", { ascending: true })
       .limit(5000),
-    getModels(),
+    getAllModels(settings),
   ]);
   if (runs.error || !runs.data) return null;
   const caps = new Map(models.map((m) => [m.id, m.capabilities]));
   const unitRuns = (runs.data as { model_id: string; created_at: string }[]).map((r) => ({
     at: Date.parse(r.created_at),
-    units: caps.has(r.model_id) ? modelUnits(caps.get(r.model_id)) : 1,
+    units: caps.has(r.model_id) ? modelUnits(caps.get(r.model_id), settings.modelUnits[r.model_id]) : 1,
   }));
   return computeUsage(unitRuns, now, PLANS[plan]);
 }

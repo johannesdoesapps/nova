@@ -198,7 +198,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
           onToggleCollapsed={() => setRailStored(collapsed ? "0" : "1")}
           mobileOpen={mobileOpen}
           onCloseMobile={() => setMobileOpen(false)}
-          section={pathname.startsWith("/agents") ? "agents" : "chats"}
+          section={pathname.startsWith("/agents") ? "agents" : pathname.startsWith("/admin") ? "admin" : "chats"}
           conversations={conversations}
           listError={listError}
           activeId={activeChat}

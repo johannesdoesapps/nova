@@ -26,6 +26,8 @@ export const chatRequest = z.object({
   mode: z.enum(CHAT_MODES).default("research"),
   modelId: modelId.optional(),
   useWeb: z.boolean().optional(),
+  /** The user allows another compatible model to answer if the chosen one fails (also needs the admin setting). */
+  allowFallback: z.boolean().optional(),
   /** Used only for guests (no persistence); authenticated history is loaded from the DB. */
   history: z.array(historyMessage).max(30).optional(),
   attachments: z

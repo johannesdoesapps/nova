@@ -21,7 +21,7 @@ export const DEFAULT_MODELS: ModelInfo[] = [
     providerModelId: "claude-haiku-5-5",
     displayName: "Claude Haiku 5.5",
     description: "Fast, low-cost Claude model for everyday chat, summaries and quick questions.",
-    capabilities: ["chat", "fast", "low-cost", "coding", "long-context"],
+    capabilities: ["chat", "fast", "low-cost", "coding", "writing", "long-context", "vision"],
     contextWindow: 1_000_000,
     inputPrice: 0.1,
     outputPrice: 0.5,
@@ -34,8 +34,8 @@ export const DEFAULT_MODELS: ModelInfo[] = [
     provider: "anthropic",
     providerModelId: "claude-sonnet-5-5",
     displayName: "Claude Sonnet 5.5",
-    description: "More capable Claude model for harder questions, analysis and coding.",
-    capabilities: ["chat", "reasoning", "coding", "long-context"],
+    description: "More capable Claude model for harder questions, analysis, long-form writing and coding.",
+    capabilities: ["chat", "reasoning", "coding", "writing", "long-context", "vision"],
     contextWindow: 1_000_000,
     inputPrice: 2,
     outputPrice: 10,
@@ -49,7 +49,7 @@ export const DEFAULT_MODELS: ModelInfo[] = [
     providerModelId: "gpt-5-mini",
     displayName: "GPT-5 mini",
     description: "Fast, lower-cost OpenAI model for everyday questions and summaries.",
-    capabilities: ["chat", "fast", "low-cost", "coding", "long-context"],
+    capabilities: ["chat", "fast", "low-cost", "coding", "long-context", "vision"],
     contextWindow: 400_000,
     inputPrice: null,
     outputPrice: null,
@@ -62,8 +62,23 @@ export const DEFAULT_MODELS: ModelInfo[] = [
     providerModelId: "gpt-5",
     displayName: "GPT-5",
     description: "OpenAI's more capable reasoning model for complex analysis and coding.",
-    capabilities: ["chat", "reasoning", "coding", "long-context"],
+    capabilities: ["chat", "reasoning", "coding", "writing", "long-context", "vision"],
     contextWindow: 400_000,
+    inputPrice: null,
+    outputPrice: null,
+    isEnabled: true,
+    lastVerifiedAt: null,
+  },
+  {
+    // Google's OpenAI-compatible Gemini endpoint. Admins can add other Gemini
+    // models (listed by "Test connection" in Admin) without a code change.
+    id: "google:gemini-3.8-flash",
+    provider: "google",
+    providerModelId: "gemini-3.8-flash",
+    displayName: "Gemini 3.8 Flash",
+    description: "Google's fast Gemini model for everyday questions, summaries and quick drafts.",
+    capabilities: ["chat", "fast", "low-cost", "coding", "writing", "vision"],
+    contextWindow: null,
     inputPrice: null,
     outputPrice: null,
     isEnabled: true,
@@ -123,11 +138,12 @@ export const DEFAULT_MODELS: ModelInfo[] = [
   },
 ];
 
-const capability = z.enum(["chat", "reasoning", "coding", "long-context", "fast", "low-cost", "vision"]);
+export const CAPABILITIES = ["chat", "reasoning", "coding", "writing", "long-context", "fast", "low-cost", "vision"] as const;
+const capability = z.enum(CAPABILITIES);
 
 export const modelInfoSchema = z.object({
   id: z.string().min(1).max(120),
-  provider: z.enum(["anthropic", "openai", "huggingface", "demo"]),
+  provider: z.enum(["anthropic", "openai", "google", "huggingface", "demo"]),
   providerModelId: z.string().min(1).max(200),
   displayName: z.string().min(1).max(120),
   description: z.string().max(500).default(""),
@@ -156,9 +172,10 @@ export function parseModelsOverride(json: string | undefined): ModelInfo[] | nul
   }
 }
 
-const KEY_VARS: Record<ProviderId, string> = {
+export const KEY_VARS: Record<ProviderId, string> = {
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
+  google: "GEMINI_API_KEY",
   huggingface: "HUGGINGFACE_API_KEY",
   demo: "",
 };
@@ -167,7 +184,7 @@ export function withStatus(
   models: ModelInfo[],
   configured: Record<ProviderId, boolean>,
 ): ModelWithStatus[] {
-  const anyReal = configured.anthropic || configured.openai || configured.huggingface;
+  const anyReal = configured.anthropic || configured.openai || configured.google || configured.huggingface;
   return models
     .filter((m) => m.isEnabled)
     // Demo models are only offered when no real provider is configured.

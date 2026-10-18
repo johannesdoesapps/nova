@@ -3,34 +3,50 @@ import { useEffect, useState } from "react";
 import type { ModelWithStatus } from "@/lib/ai/types";
 import { Select } from "@/components/ui/primitives";
 
-let cache: Promise<ModelWithStatus[]> | null = null;
+export interface ModelCatalog {
+  models: ModelWithStatus[];
+  /** Whether Auto mode can be chosen, and why not when it can't. */
+  auto: { enabled: boolean; reason: string | null };
+}
 
-export function fetchModels(): Promise<ModelWithStatus[]> {
+const EMPTY_CATALOG: ModelCatalog = { models: [], auto: { enabled: false, reason: "Models could not be loaded." } };
+let cache: Promise<ModelCatalog> | null = null;
+
+export function fetchCatalog(): Promise<ModelCatalog> {
   cache ??= fetch("/api/models")
-    .then((r) => (r.ok ? r.json() : { models: [] }))
-    .then((j: { models: ModelWithStatus[] }) => j.models)
+    .then((r) => (r.ok ? r.json() : EMPTY_CATALOG))
+    .then((j: Partial<ModelCatalog>) => ({ models: j.models ?? [], auto: j.auto ?? EMPTY_CATALOG.auto }))
     .catch(() => {
       cache = null;
-      return [];
+      return EMPTY_CATALOG;
     });
   return cache;
 }
 
-export function useModels() {
-  const [models, setModels] = useState<ModelWithStatus[] | null>(null);
+export function fetchModels(): Promise<ModelWithStatus[]> {
+  return fetchCatalog().then((c) => c.models);
+}
+
+export function useCatalog(): ModelCatalog | null {
+  const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
   useEffect(() => {
     let alive = true;
-    void fetchModels().then((m) => alive && setModels(m));
+    void fetchCatalog().then((c) => alive && setCatalog(c));
     return () => {
       alive = false;
     };
   }, []);
-  return models;
+  return catalog;
 }
 
+export function useModels() {
+  return useCatalog()?.models ?? null;
+}
+
+/** The admin's default when set (it comes first), else the first available real model. */
 export function defaultModelId(models: ModelWithStatus[] | null): string | undefined {
   if (!models) return undefined;
-  return (models.find((m) => m.available && m.provider !== "demo") ?? models.find((m) => m.available))?.id;
+  return (models.find((m) => m.available && m.isDefault) ?? models.find((m) => m.available && m.provider !== "demo") ?? models.find((m) => m.available))?.id;
 }
 
 export function ModelPicker({

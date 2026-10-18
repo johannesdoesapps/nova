@@ -32,6 +32,7 @@ const TASK_TO_CATEGORY: Record<TaskKind, TaskCategory> = {
   coding: "coding",
   analysis: "analysis",
   summary: "writing",
+  writing: "writing",
   "long-document": "research",
   general: "general",
 };

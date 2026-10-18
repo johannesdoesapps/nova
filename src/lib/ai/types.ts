@@ -1,9 +1,10 @@
-export type ProviderId = "anthropic" | "openai" | "huggingface" | "demo";
+export type ProviderId = "anthropic" | "openai" | "google" | "huggingface" | "demo";
 
 export type Capability =
   | "chat"
   | "reasoning"
   | "coding"
+  | "writing"
   | "long-context"
   | "fast"
   | "low-cost"
@@ -37,6 +38,8 @@ export interface ModelInfo {
 export interface ModelWithStatus extends ModelInfo {
   available: boolean;
   unavailableReason?: string;
+  /** The administrator's default model for new chats. */
+  isDefault?: boolean;
 }
 
 export interface Usage {

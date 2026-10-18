@@ -5,6 +5,8 @@ export interface AppUser {
   id: string;
   email: string | null;
   displayName: string | null;
+  /** Site administrator (can open Admin). Checked again on the server for every admin request. */
+  isAdmin?: boolean;
 }
 
 export interface Recents {
@@ -16,6 +18,7 @@ export interface IntegrationFlags {
   supabase: boolean;
   anthropic: boolean;
   openai: boolean;
+  google: boolean;
   huggingface: boolean;
   search: boolean;
 }

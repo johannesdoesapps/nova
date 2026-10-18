@@ -17,6 +17,7 @@ import {
   Pencil,
   Search,
   Settings2,
+  SlidersHorizontal,
   SquarePen,
   Sun,
   Trash2,
@@ -34,7 +35,7 @@ export interface SidebarProps {
   mobileOpen: boolean;
   onCloseMobile: () => void;
   /** Which workspace is open, for the nav's active state. */
-  section: "chats" | "agents";
+  section: "chats" | "agents" | "admin";
   conversations: ConvSummary[] | null;
   listError: string | null;
   activeId: string | null;
@@ -158,6 +159,9 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
           <ul className={cn("flex flex-col gap-0.5", rail && "md:items-center")}>
             <NavItem rail={rail} icon={<MessagesSquare />} label="Chats" href="/chat" active={p.section === "chats"} onClick={p.onCloseMobile} />
             <NavItem rail={rail} icon={<Bot />} label="Agents" href="/agents" active={p.section === "agents"} onClick={p.onCloseMobile} />
+            {p.user?.isAdmin && (
+              <NavItem rail={rail} icon={<SlidersHorizontal />} label="Admin" href="/admin" active={p.section === "admin"} onClick={p.onCloseMobile} />
+            )}
             <NavItem rail={rail} icon={<Bookmark />} label="Saved prompts" onClick={p.onOpenPrompts} />
             <NavItem rail={rail} icon={<Settings2 />} label="Settings" onClick={p.onOpenSettings} />
           </ul>

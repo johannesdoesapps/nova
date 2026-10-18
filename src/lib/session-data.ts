@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import { isAdmin } from "./admin";
 import { getAuth } from "./auth";
 import { listConversations, listProjects } from "./db";
 import { integrationStatus, isSupabaseConfigured, publicEnv } from "./env";
@@ -23,11 +24,12 @@ export const loadShellData = cache(async function loadShellData() {
 
   return {
     auth,
-    user: auth.user,
+    user: auth.user ? { ...auth.user, isAdmin: await isAdmin(auth) } : null,
     integrations: {
       supabase: isSupabaseConfigured(),
       anthropic: flag("anthropic"),
       openai: flag("openai"),
+      google: flag("google"),
       huggingface: flag("huggingface"),
       search: flag("search"),
     },

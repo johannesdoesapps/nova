@@ -26,13 +26,17 @@ export interface ChatRequest {
   mode: ChatMode;
   modelId?: string;
   useWeb?: boolean;
+  allowFallback?: boolean;
   /** Guests only: prior turns, since the server keeps no guest history. */
   history?: { role: "user" | "assistant"; content: string }[];
   attachments?: ChatAttachment[];
 }
 
+type ModelRef = { id: string; displayName: string; provider: string };
+
 export type ChatEvent =
-  | { type: "meta"; conversationId: string | null; persisted: boolean; model: { id: string; displayName: string; provider: string } }
+  | { type: "meta"; conversationId: string | null; persisted: boolean; model: ModelRef; routing?: { auto: true; reason: string } | null }
+  | { type: "model"; model: ModelRef }
   | { type: "sources"; sources: SearchSource[] }
   | { type: "notice"; level?: string; message: string }
   | { type: "tool"; tool: ToolRecord }
@@ -55,6 +59,7 @@ export interface TurnRequest {
   mode: ChatMode;
   modelId?: string;
   useWeb: boolean;
+  allowFallback: boolean;
   history?: { role: "user" | "assistant"; content: string }[];
   attachments: ChatAttachment[];
 }
@@ -66,6 +71,7 @@ export interface AgentChatRequest {
   message: string;
   modelId?: string;
   useWeb?: boolean;
+  allowFallback?: boolean;
   history?: { role: "user" | "assistant"; content: string }[];
   attachments?: ChatAttachment[];
   /** Guests only: a custom agent stored in this browser. */

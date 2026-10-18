@@ -22,6 +22,8 @@ export interface Msg {
   content: string;
   status: "streaming" | "done" | "error";
   modelName?: string;
+  /** Why Auto chose the model, when Auto answered. */
+  routing?: string;
   error?: string;
   simulated?: boolean;
   sources?: SearchSource[];

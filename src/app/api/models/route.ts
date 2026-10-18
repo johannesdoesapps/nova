@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getModels } from "@/lib/ai";
+import { getPlatformSettings } from "@/lib/ai/settings";
 import { recommendModel } from "@/lib/ai/router";
 import { errorResponse, parseQuery } from "@/lib/http";
 
@@ -14,7 +15,14 @@ const query = z.object({
 export async function GET(req: Request) {
   try {
     const q = parseQuery(req.url, query);
-    const models = await getModels();
+    const settings = await getPlatformSettings();
+    const models = await getModels(settings);
+    const realAvailable = models.some((m) => m.available && m.provider !== "demo");
+    const auto = !settings.autoEnabled
+      ? { enabled: false, reason: "Auto mode is turned off by the site administrator." }
+      : !realAvailable
+        ? { enabled: false, reason: "Auto mode needs at least one configured AI provider." }
+        : { enabled: true, reason: null };
     const recommendation =
       q.prompt !== undefined
         ? recommendModel(models, q.prompt, { mode: q.mode, costSensitive: q.costSensitive === "true" })
@@ -22,6 +30,8 @@ export async function GET(req: Request) {
     return NextResponse.json(
       {
         models,
+        auto,
+        defaultModelId: models.find((m) => m.isDefault)?.id ?? null,
         recommendation: recommendation && {
           modelId: recommendation.model?.id ?? null,
           task: recommendation.task,

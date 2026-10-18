@@ -87,6 +87,8 @@ export function toInput(a: AgentConfig): AgentInput {
     icon: a.icon,
     accent: a.accent,
     modelId: a.modelId,
+    responseStyle: a.responseStyle,
+    historyLimit: a.historyLimit,
     capabilities: a.capabilities,
     starters: a.starters,
   };
@@ -113,6 +115,7 @@ export async function saveAgent(input: AgentInput, id?: string): Promise<AgentCo
       id: prev?.id ?? crypto.randomUUID(),
       kind: "custom",
       category: "Custom",
+      modelPreference: null,
       temperature: null,
       createdAt: prev?.createdAt ?? now,
       updatedAt: now,

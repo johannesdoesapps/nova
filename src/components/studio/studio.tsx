@@ -2,7 +2,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Info } from "lucide-react";
-import { defaultModelId, useModels } from "@/components/common/model-picker";
+import { defaultModelId, useCatalog } from "@/components/common/model-picker";
+import { AUTO_MODEL_ID } from "@/lib/ai/platform";
 import { useApp } from "@/components/layout/app-context";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import type { ChatMode } from "@/lib/ai/modes";
@@ -25,11 +26,23 @@ export function Studio() {
   const blockedGuest = integrations.supabase && !user;
 
   // Models: remember the last choice if it is still available.
-  const models = useModels();
+  const catalog = useCatalog();
+  const models = catalog?.models ?? null;
   const [storedModel, setStoredModel] = useLocalStorage("nova:studio:model");
-  const modelId = models?.some((m) => m.id === storedModel && m.available) ? storedModel! : defaultModelId(models);
+  const modelId =
+    storedModel === AUTO_MODEL_ID && catalog?.auto.enabled
+      ? AUTO_MODEL_ID
+      : models?.some((m) => m.id === storedModel && m.available)
+        ? storedModel!
+        : defaultModelId(models);
 
-  const chat = useStudioChat({ store, defaultMode: studio.settings.defaultMode, modelId, onHistoryChanged: refresh });
+  const chat = useStudioChat({
+    store,
+    defaultMode: studio.settings.defaultMode,
+    modelId,
+    allowFallback: !!studio.settings.allowFallback,
+    onHistoryChanged: refresh,
+  });
 
   const [input, setInput] = useState(() => studio.takePendingPrompt() ?? "");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
@@ -71,7 +84,7 @@ export function Studio() {
   };
 
   const empty = chat.messages.length === 0 && chat.load.status === "idle";
-  const demo = !integrations.anthropic && !integrations.openai && !integrations.huggingface;
+  const demo = !integrations.anthropic && !integrations.openai && !integrations.google && !integrations.huggingface;
 
   const composer = (variant: "hero" | "dock") => (
     <Composer
@@ -86,6 +99,7 @@ export function Studio() {
       models={models}
       modelId={modelId}
       onModel={setStoredModel}
+      auto={catalog?.auto ?? null}
       mode={chat.mode}
       onMode={chat.setMode}
       useWeb={chat.useWeb}

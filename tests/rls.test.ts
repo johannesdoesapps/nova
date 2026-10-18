@@ -216,3 +216,38 @@ describe("subscriptions", () => {
     });
   });
 });
+
+describe("platform settings", () => {
+  it("lets everyone read settings but only administrators change them", async () => {
+    await db.exec("set role anon");
+    try {
+      const r = await db.query<{ id: number }>("select id from public.app_settings");
+      expect(r.rows).toEqual([{ id: 1 }]);
+    } finally {
+      await db.exec("reset role");
+    }
+    await as(BOB, async () => {
+      const u = await db.query(`update public.app_settings set settings = '{"autoEnabled": false}' where id = 1`);
+      expect(u.affectedRows).toBe(0);
+      await expect(db.query(`insert into public.admins (user_id) values ('${BOB}')`)).rejects.toThrow(/row-level security|permission denied/);
+    });
+    await db.exec(`insert into public.admins (user_id) values ('${ALICE}')`);
+    await as(ALICE, async () => {
+      const u = await db.query(`update public.app_settings set settings = '{"autoEnabled": false}' where id = 1`);
+      expect(u.affectedRows).toBe(1);
+    });
+    await as(BOB, async () => {
+      expect((await db.query("select * from public.admins")).rows).toHaveLength(0);
+    });
+  });
+
+  it("stores custom agents' response style and memory with valid values only", async () => {
+    await as(ALICE, async () => {
+      const r = await db.query<{ response_style: string; history_limit: number }>(
+        "insert into public.agents (name, instructions) values ('Tutor', 'You help students understand algebra step by step.') returning response_style, history_limit",
+      );
+      expect(r.rows[0]).toEqual({ response_style: "balanced", history_limit: 20 });
+      await expect(db.query("insert into public.agents (name, instructions, history_limit) values ('X', 'You help students understand algebra step by step.', 15)")).rejects.toThrow(/check/);
+    });
+  });
+});
