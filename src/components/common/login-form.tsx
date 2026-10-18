@@ -74,7 +74,7 @@ export function LoginForm({ url, supabaseKey, next, siteUrl }: { url: string; su
       {info && <Notice tone="success">{info}</Notice>}
       <Button type="submit" className="w-full" loading={busy}>{mode === "signin" ? "Sign in" : "Create account"}</Button>
       <p className="text-center text-xs text-faint">
-        {mode === "signin" ? "New to NOVARA?" : "Already have an account?"}{" "}
+        {mode === "signin" ? "New to NOVA?" : "Already have an account?"}{" "}
         <button type="button" className="text-accent hover:underline" onClick={() => setMode(mode === "signin" ? "signup" : "signin")}>
           {mode === "signin" ? "Create an account" : "Sign in"}
         </button>

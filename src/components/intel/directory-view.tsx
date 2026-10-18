@@ -51,7 +51,7 @@ export function DirectoryView() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-16 pt-8 sm:px-6">
-      <PageHeader title="Model Directory" description="Every model NOVARA can call, with where its price came from, when it was last checked, what is known about data handling, and which versions you have actually been served." actions={<Button variant="secondary" onClick={runSync} loading={busy}><RefreshCw className="h-4 w-4" /> Check provider model lists</Button>} />
+      <PageHeader title="Model Directory" description="Every model NOVA can call, with where its price came from, when it was last checked, what is known about data handling, and which versions you have actually been served." actions={<Button variant="secondary" onClick={runSync} loading={busy}><RefreshCw className="h-4 w-4" /> Check provider model lists</Button>} />
       <SectionTabs tabs={INTEL_TABS} />
       {error && <Notice tone="danger" className="mb-4">{error}</Notice>}
       {!rows ? <Skeleton className="h-48" /> : (
@@ -120,9 +120,9 @@ export function DirectoryView() {
         <summary className="cursor-pointer font-medium text-fg">Where this data comes from</summary>
         <ul className="mt-2 list-disc space-y-1 pl-5">
           <li><b>Model availability</b>: whether this server has credentials for the provider. Model lists are cross-checked against each provider&apos;s <code>/v1/models</code> API on demand.</li>
-          <li><b>Prices</b> are entered by the operator (database or <code>NOVARA_MODELS</code>) with a source URL and date — never scraped. They are validated for missing data, unit typos, unusual ratios and staleness (re-check every {staleDays} days). Price changes are logged to a history table.</li>
+          <li><b>Prices</b> are entered by the operator (database or <code>NOVA_MODELS</code>) with a source URL and date — never scraped. They are validated for missing data, unit typos, unusual ratios and staleness (re-check every {staleDays} days). Price changes are logged to a history table.</li>
           <li><b>Costs</b> are provider-reported token counts × the verified price, marked “(est.)” when tokens were estimated. Compare against your provider billing export periodically.</li>
-          <li><b>Data handling</b> defaults to “Not verified” because policies change and depend on your account and contract. Operators record what they have confirmed in <code>NOVARA_PRIVACY_PROFILES</code>.</li>
+          <li><b>Data handling</b> defaults to “Not verified” because policies change and depend on your account and contract. Operators record what they have confirmed in <code>NOVA_PRIVACY_PROFILES</code>.</li>
           <li><b>Versions</b> are the model strings providers return with each response, collected from your own calls.</li>
         </ul>
       </details>

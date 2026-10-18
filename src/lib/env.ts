@@ -37,18 +37,18 @@ export function serverEnv() {
       | "brave"
       | string,
     searchKey: clean(process.env.SEARCH_API_KEY),
-    modelsJson: clean(process.env.NOVARA_MODELS),
-    maxCompareModels: int(process.env.NOVARA_MAX_COMPARE_MODELS, 3, 2, 6),
-    dailyRequestLimit: int(process.env.NOVARA_DAILY_REQUEST_LIMIT, 200),
-    ratePerMinute: int(process.env.NOVARA_RATE_LIMIT_PER_MINUTE, 20, 1, 1000),
+    modelsJson: clean(process.env.NOVA_MODELS),
+    maxCompareModels: int(process.env.NOVA_MAX_COMPARE_MODELS, 3, 2, 6),
+    dailyRequestLimit: int(process.env.NOVA_DAILY_REQUEST_LIMIT, 200),
+    ratePerMinute: int(process.env.NOVA_RATE_LIMIT_PER_MINUTE, 20, 1, 1000),
     sentryDsn: clean(process.env.SENTRY_DSN),
-    privacyProfilesJson: clean(process.env.NOVARA_PRIVACY_PROFILES),
-    trialSecretSet: Boolean(clean(process.env.NOVARA_TRIAL_SECRET)),
+    privacyProfilesJson: clean(process.env.NOVA_PRIVACY_PROFILES),
+    trialSecretSet: Boolean(clean(process.env.NOVA_TRIAL_SECRET)),
   };
 }
 
 export type IntegrationStatus = {
-  id: "supabase" | "openai" | "huggingface" | "search" | "sentry";
+  id: "supabase" | "openai" | "huggingface" | "search" | "sentry" | "engine";
   label: string;
   configured: boolean;
   envVars: string[];
@@ -86,6 +86,13 @@ export function integrationStatus(): IntegrationStatus[] {
       configured: Boolean(env.searchKey) && ["tavily", "brave"].includes(env.searchProvider),
       envVars: ["SEARCH_PROVIDER", "SEARCH_API_KEY"],
       purpose: "Live web sources and citations for AI Search",
+    },
+    {
+      id: "engine",
+      label: "NOVA engine (Python)",
+      configured: Boolean(clean(process.env.NOVA_ENGINE_SECRET)),
+      envVars: ["NOVA_ENGINE_URL", "NOVA_ENGINE_SECRET"],
+      purpose: "AI Lab workflows, Signal Radar, Workspaces, Community and Integrations",
     },
     {
       id: "sentry",

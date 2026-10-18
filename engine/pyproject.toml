@@ -1,0 +1,9 @@
+[project]
+name = "nova-engine"
+version = "0.1.0"
+description = "NOVA AI engine: AI Lab workflows, Signal Radar, workspaces and connectors"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

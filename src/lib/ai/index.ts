@@ -80,7 +80,7 @@ async function registryFromDatabase(): Promise<ModelInfo[] | null> {
 }
 
 /**
- * Registry source priority: model_registry table → NOVARA_MODELS env → defaults.
+ * Registry source priority: model_registry table → NOVA_MODELS env → defaults.
  * Demo models are always appended so the UI works with no keys.
  */
 export async function getModels(): Promise<ModelWithStatus[]> {

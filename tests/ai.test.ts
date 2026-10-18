@@ -35,7 +35,7 @@ describe("registry", () => {
     const some = withStatus(DEFAULT_MODELS, { openai: true, huggingface: false, demo: true });
     expect(some.some((m) => m.provider === "demo")).toBe(false);
   });
-  it("parses a valid NOVARA_MODELS override and ignores invalid JSON", () => {
+  it("parses a valid NOVA_MODELS override and ignores invalid JSON", () => {
     const parsed = parseModelsOverride(JSON.stringify([{ id: "x", provider: "openai", providerModelId: "m", displayName: "X", inputPrice: 1, outputPrice: 2 }]));
     expect(parsed?.[0]).toMatchObject({ id: "x", capabilities: ["chat"], contextWindow: null, inputPrice: 1 });
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

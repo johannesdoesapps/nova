@@ -79,7 +79,7 @@ export function BattleView({ maxModels }: { maxModels: number }) {
     <div className="mx-auto max-w-7xl px-4 pb-16 pt-8 sm:px-6">
       <PageHeader
         title="Model Battle"
-        description={`Run one prompt against up to ${maxModels} models side by side. NOVARA shows measured latency and reported usage — it never invents quality scores.`}
+        description={`Run one prompt against up to ${maxModels} models side by side. NOVA shows measured latency and reported usage — it never invents quality scores.`}
       />
 
       <Card className="p-4">

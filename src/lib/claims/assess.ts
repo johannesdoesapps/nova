@@ -6,7 +6,7 @@ export const ESTIMATE_CAVEAT =
 
 /**
  * Turn evidence links into a status. The status vocabulary is about evidence,
- * not truth: "insufficient" means NOVARA found nothing to check against — the
+ * not truth: "insufficient" means NOVA found nothing to check against — the
  * claim may still be correct.
  */
 export function assessClaim(claim: ExtractedClaim, links: EvidenceLink[], sources: SourceRecord[]): Assessment {

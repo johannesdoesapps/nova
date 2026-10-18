@@ -339,7 +339,7 @@ export function ChatView() {
                 }}
                 rows={1}
                 maxLength={12000}
-                placeholder={`Message NOVARA in ${MODE_LABELS[mode].label} mode…`}
+                placeholder={`Message NOVA in ${MODE_LABELS[mode].label} mode…`}
                 className="max-h-48 min-h-9 flex-1 border-0 bg-transparent px-1 py-2 focus:border-0 focus-visible:outline-none"
                 aria-label="Message"
               />
@@ -406,7 +406,7 @@ function MessageView({ m, onRetry, busy }: { m: Msg; onRetry: () => void; busy: 
       <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent"><Sparkles className="h-4 w-4" /></span>
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-center gap-2 text-xs text-faint">
-          {m.modelName ?? "NOVARA"}
+          {m.modelName ?? "NOVA"}
           {m.simulated && <Badge tone="warning">Simulated</Badge>}
         </div>
         {m.notices?.map((n, i) => <Notice key={i} tone="warning" className="mb-2">{n}</Notice>)}

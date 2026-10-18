@@ -46,7 +46,7 @@ export function RouterView({ models }: { models: ModelWithStatus[] }) {
     <div className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6">
       <PageHeader
         title="Model Router"
-        description="Every model NOVARA can call, with its provider, capabilities and context window. Prices appear only when a verified figure is configured."
+        description="Every model NOVA can call, with its provider, capabilities and context window. Prices appear only when a verified figure is configured."
       />
 
       <Card className="p-4">
@@ -110,7 +110,7 @@ export function RouterView({ models }: { models: ModelWithStatus[] }) {
         </table>
       </div>
       <p className="mt-3 text-xs text-faint">
-        Context windows come from vendor model cards and should be re-verified (none are marked verified yet). Configure models and verified prices through the <code className="font-mono">model_registry</code> table or the <code className="font-mono">NOVARA_MODELS</code> env var. Availability reflects configured credentials, not live provider status.
+        Context windows come from vendor model cards and should be re-verified (none are marked verified yet). Configure models and verified prices through the <code className="font-mono">model_registry</code> table or the <code className="font-mono">NOVA_MODELS</code> env var. Availability reflects configured credentials, not live provider status.
       </p>
     </div>
   );

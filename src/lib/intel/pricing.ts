@@ -1,8 +1,8 @@
 import type { ModelInfo } from "../ai/types";
 
 /**
- * Pricing validation. NOVARA never scrapes prices from marketing pages at
- * runtime. Prices enter through the registry (DB or NOVARA_MODELS) with a
+ * Pricing validation. NOVA never scrapes prices from marketing pages at
+ * runtime. Prices enter through the registry (DB or NOVA_MODELS) with a
  * source URL and verification date, and are checked here before use.
  */
 
@@ -60,7 +60,7 @@ export interface Reconciliation {
   verdict: "match" | "investigate";
 }
 
-/** Compare NOVARA's token-based estimate with a provider billing export for the same period. */
+/** Compare NOVA's token-based estimate with a provider billing export for the same period. */
 export function reconcile(estimatedUsd: number, billedUsd: number, tolerancePct = 5): Reconciliation {
   const differencePct = billedUsd === 0 ? (estimatedUsd === 0 ? 0 : 100) : ((estimatedUsd - billedUsd) / billedUsd) * 100;
   return { estimatedUsd, billedUsd, differencePct: Math.round(differencePct * 10) / 10, verdict: Math.abs(differencePct) <= tolerancePct ? "match" : "investigate" };

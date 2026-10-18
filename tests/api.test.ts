@@ -13,7 +13,7 @@ beforeAll(() => {
     "OPENAI_API_KEY",
     "HUGGINGFACE_API_KEY",
     "SEARCH_API_KEY",
-    "NOVARA_MODELS",
+    "NOVA_MODELS",
   ])
     delete process.env[k];
 });
@@ -122,14 +122,14 @@ describe("POST /api/compare", () => {
 
   it("rate-limits bursts per client", async () => {
     vi.resetModules();
-    process.env.NOVARA_RATE_LIMIT_PER_MINUTE = "2";
+    process.env.NOVA_RATE_LIMIT_PER_MINUTE = "2";
     const { POST } = await import("@/app/api/compare/route");
     const body = { prompt: "p", modelIds: ["demo:alpha", "demo:beta"] };
     expect((await POST(post("/api/compare", body, "10.9.9.9"))).status).toBe(200);
     const limited = await POST(post("/api/compare", body, "10.9.9.9"));
     expect(limited.status).toBe(429);
     expect((await limited.json()).error.code).toBe("rate_limited");
-    delete process.env.NOVARA_RATE_LIMIT_PER_MINUTE;
+    delete process.env.NOVA_RATE_LIMIT_PER_MINUTE;
   });
 });
 

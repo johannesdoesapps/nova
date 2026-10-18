@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* NOVARA design tokens — dark-first, with a light theme for completeness. */
+/* NOVA design tokens — dark-first, with a light theme for completeness. */
 :root {
   --bg: #07070b;
   --bg-elev: #0e0e15;

@@ -14,6 +14,8 @@ import {
   Cpu,
   Dna,
   Fingerprint,
+  Layers,
+  Plug,
   type LucideIcon,
 } from "lucide-react";
 
@@ -33,11 +35,13 @@ export const NAV: NavItem[] = [
   { href: "/claims", label: "Claim DNA", icon: Dna },
   { href: "/intel", label: "Model Intelligence", icon: Fingerprint },
   { href: "/discover", label: "Model Discovery", icon: Compass },
+  { href: "/lab", label: "AI Lab", icon: FlaskConical },
+  { href: "/radar", label: "Signal Radar", icon: Radar },
+  { href: "/workspaces", label: "Workspaces", icon: Layers },
   { href: "/projects", label: "Research Projects", icon: FolderKanban },
-  { href: "/radar", label: "Radar", icon: Radar, soon: true },
+  { href: "/community", label: "Community", icon: Users },
+  { href: "/integrations", label: "Integrations", icon: Plug },
   { href: "/simulator", label: "What-If Simulator", icon: GitBranch, soon: true },
-  { href: "/lab", label: "AI Lab", icon: FlaskConical, soon: true },
   { href: "/graph", label: "Knowledge Graph", icon: Network, soon: true },
-  { href: "/community", label: "Community", icon: Users, soon: true },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

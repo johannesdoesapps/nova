@@ -12,7 +12,7 @@ const FEATURES = [
   { href: "/chat", icon: MessageSquare, title: "AI Chat", text: "Research, Analyst, Critic and Coding modes with saved history." },
   { href: "/battle", icon: Swords, title: "Model Battle", text: "One prompt, several models, side by side with latency and usage." },
   { href: "/models", icon: Cpu, title: "Model Router", text: "Transparent rules that suggest a model for your task." },
-  { href: "/discover", icon: Compass, title: "Model Discovery", text: "Browse Hugging Face models and datasets without leaving NOVARA." },
+  { href: "/discover", icon: Compass, title: "Model Discovery", text: "Browse Hugging Face models and datasets without leaving NOVA." },
   { href: "/projects", icon: FolderKanban, title: "Research Projects", text: "Collect searches, chats, comparisons and notes in one place." },
 ];
 

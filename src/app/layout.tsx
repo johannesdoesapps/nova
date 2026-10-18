@@ -4,7 +4,7 @@ import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "NOVARA AI", template: "%s · NOVARA AI" },
+  title: { default: "NOVA AI", template: "%s · NOVA AI" },
   description: "Discover Knowledge. Access AI. Turn Ideas into Action.",
 };
 
@@ -21,7 +21,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/* Apply the saved theme before paint to avoid a flash. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('novara:theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}`,
+            __html: `try{var t=localStorage.getItem('nova:theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}`,
           }}
         />
       </head>

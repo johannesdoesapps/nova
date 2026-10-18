@@ -1,4 +1,4 @@
--- NOVARA AI — initial schema
+-- NOVA AI — initial schema
 -- Every user-owned table has Row Level Security enabled. Policies use
 -- (select auth.uid()) so Postgres evaluates it once per statement.
 

@@ -30,7 +30,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
       <div className="w-full max-w-sm">
         <Link href="/" className="mb-8 flex justify-center"><Logo /></Link>
         <div className="rounded-2xl border border-border bg-panel p-6">
-          <h1 className="text-xl font-semibold">Welcome to NOVARA</h1>
+          <h1 className="text-xl font-semibold">Welcome to NOVA</h1>
           <p className="mt-1 text-sm text-muted">Sign in to save conversations, searches and projects.</p>
           {error && <Notice tone="danger" className="mt-4">{error}</Notice>}
           {configured ? (

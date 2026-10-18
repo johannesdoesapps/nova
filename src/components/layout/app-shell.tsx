@@ -10,7 +10,7 @@ import { Logo } from "./logo";
 import { useApp } from "./app-context";
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const [sidebarPref, setSidebarPref] = useLocalStorage("novara:sidebar", "open");
+  const [sidebarPref, setSidebarPref] = useLocalStorage("nova:sidebar", "open");
   const collapsed = sidebarPref === "collapsed";
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();

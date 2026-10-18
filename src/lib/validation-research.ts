@@ -57,7 +57,7 @@ export const storedArena = z.looseObject({
 export const trialStartRequest = z.object({
   prompt: z.string().trim().min(1).max(8000),
   category,
-  /** Two model ids, or omit to let NOVARA pick a random available pair. */
+  /** Two model ids, or omit to let NOVA pick a random available pair. */
   modelIds: z.array(modelId).length(2).optional(),
   testItemId: z.string().max(120).nullable().optional(),
 });

@@ -85,7 +85,7 @@ export function buildSource(input: SourceInput, position: number, now: string): 
             detail: url,
           }
         : { at: now, actor: "user", action: "Text pasted by the user" },
-      { at: now, actor: "novara", action: `Content fingerprinted (${contentKind.replace("_", " ")}, ${input.text.length} chars)`, detail: `hash ${hash(input.text)}` },
+      { at: now, actor: "nova", action: `Content fingerprinted (${contentKind.replace("_", " ")}, ${input.text.length} chars)`, detail: `hash ${hash(input.text)}` },
     ],
   };
 }

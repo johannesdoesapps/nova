@@ -11,7 +11,7 @@ export function SettingsClient({ email, displayName, themeOnly }: { email?: stri
   const [name, setName] = useState(displayName ?? "");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [stored, setStored] = useLocalStorage("novara:theme", "dark");
+  const [stored, setStored] = useLocalStorage("nova:theme", "dark");
   const theme = stored === "light" ? "light" : "dark";
 
   const applyTheme = (t: "dark" | "light") => {
@@ -37,7 +37,7 @@ export function SettingsClient({ email, displayName, themeOnly }: { email?: stri
     <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
       <div>
         <div className="text-sm">Appearance</div>
-        <div className="text-xs text-faint">Dark is the default NOVARA theme.</div>
+        <div className="text-xs text-faint">Dark is the default NOVA theme.</div>
       </div>
       <div className="flex rounded-lg border border-border p-0.5">
         <button onClick={() => applyTheme("dark")} aria-pressed={theme === "dark"} className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs ${theme === "dark" ? "bg-accent-soft text-fg" : "text-muted"}`}><Moon className="h-3.5 w-3.5" /> Dark</button>

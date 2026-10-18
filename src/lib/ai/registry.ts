@@ -4,9 +4,9 @@ import type { ModelInfo, ModelWithStatus, ProviderId } from "./types";
 /**
  * Default model registry.
  *
- * Prices are deliberately `null`: provider pricing changes often and NOVARA
+ * Prices are deliberately `null`: provider pricing changes often and NOVA
  * must not show invented numbers. Set verified prices (USD per 1M tokens)
- * through the NOVARA_MODELS env var or the `model_registry` table, and they
+ * through the NOVA_MODELS env var or the `model_registry` table, and they
  * will flow into cost estimates automatically.
  *
  * Context windows come from each vendor's published model card and should be
@@ -110,18 +110,18 @@ export const modelInfoSchema = z.object({
   priceSourceUrl: z.url().nullable().default(null),
 });
 
-/** Parse NOVARA_MODELS; invalid config is reported and ignored rather than crashing the app. */
+/** Parse NOVA_MODELS; invalid config is reported and ignored rather than crashing the app. */
 export function parseModelsOverride(json: string | undefined): ModelInfo[] | null {
   if (!json) return null;
   try {
     const parsed = z.array(modelInfoSchema).safeParse(JSON.parse(json));
     if (!parsed.success) {
-      console.warn("[novara] NOVARA_MODELS is invalid and was ignored:", parsed.error.issues[0]?.message);
+      console.warn("[nova] NOVA_MODELS is invalid and was ignored:", parsed.error.issues[0]?.message);
       return null;
     }
     return parsed.data;
   } catch {
-    console.warn("[novara] NOVARA_MODELS is not valid JSON and was ignored.");
+    console.warn("[nova] NOVA_MODELS is not valid JSON and was ignored.");
     return null;
   }
 }

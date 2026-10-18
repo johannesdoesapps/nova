@@ -6,7 +6,7 @@ function escapeTags(s: string): string {
   return s.replace(/<\/?\s*(source|sources|system|instructions?)\b[^>]*>/gi, "[tag removed]");
 }
 
-export const SEARCH_SYSTEM_PROMPT = `You are NOVARA Search. Answer the user's question using ONLY the numbered web sources provided.
+export const SEARCH_SYSTEM_PROMPT = `You are NOVA Search. Answer the user's question using ONLY the numbered web sources provided.
 Rules:
 - Cite claims inline with the source number in square brackets, e.g. [1] or [2][4]. Only use numbers that appear in <sources>.
 - If the sources do not contain enough information, say so plainly. Do not fill gaps from memory as if they were sourced.

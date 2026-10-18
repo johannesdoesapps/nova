@@ -5,14 +5,14 @@ import { ApiError } from "../http";
 /**
  * Sealed tokens keep the A/B → model mapping on the client without revealing
  * it: AES-256-GCM encrypted and authenticated, with an expiry. The key comes
- * from NOVARA_TRIAL_SECRET; without it a per-process random key is used, so
+ * from NOVA_TRIAL_SECRET; without it a per-process random key is used, so
  * pending trials expire when the server restarts (documented in the README).
  */
 let processKey: Buffer | null = null;
 
 function key(): Buffer {
-  const secret = process.env.NOVARA_TRIAL_SECRET?.trim();
-  if (secret) return createHash("sha256").update(`novara-trial:${secret}`).digest();
+  const secret = process.env.NOVA_TRIAL_SECRET?.trim();
+  if (secret) return createHash("sha256").update(`nova-trial:${secret}`).digest();
   processKey ??= randomBytes(32);
   return processKey;
 }

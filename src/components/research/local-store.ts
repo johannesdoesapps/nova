@@ -9,12 +9,12 @@ import type { ClaimReport } from "@/lib/claims/types";
 import type { BenchmarkRun, TrialRecord } from "@/lib/intel/types";
 
 const KEYS = {
-  reports: "novara.claimReports.v1",
-  arenas: "novara.arenas.v1",
-  trials: "novara.trials.v1",
-  benchmarks: "novara.benchmarks.v1",
-  customSets: "novara.customTestSets.v1",
-  handoff: "novara.claimHandoff.v1",
+  reports: "nova.claimReports.v1",
+  arenas: "nova.arenas.v1",
+  trials: "nova.trials.v1",
+  benchmarks: "nova.benchmarks.v1",
+  customSets: "nova.customTestSets.v1",
+  handoff: "nova.claimHandoff.v1",
 } as const;
 
 const LIMITS = { reports: 20, arenas: 30, trials: 1000, benchmarks: 200, customSets: 20 };

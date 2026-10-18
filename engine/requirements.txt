@@ -1,0 +1,9 @@
+# NOVA AI engine — pinned runtime dependencies
+fastapi==0.143.5
+uvicorn==0.38.0
+httpx==0.28.1
+SQLAlchemy==2.1.5
+cryptography==50.0.2
+pydantic==2.14.1
+# Postgres in production (Supabase). Not needed for local SQLite.
+# psycopg[binary]==3.2.*

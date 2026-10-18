@@ -5,7 +5,7 @@ import type { PrivacyProfile } from "./types";
  * Privacy profiles per provider. Defaults are deliberately "not verified":
  * provider data policies change and differ by account tier/contract, so the
  * operator must confirm them (with a source URL and date) for their account.
- * Override with NOVARA_PRIVACY_PROFILES (JSON keyed by provider id).
+ * Override with NOVA_PRIVACY_PROFILES (JSON keyed by provider id).
  */
 export const UNVERIFIED_PRIVACY: PrivacyProfile = {
   trainsOnApiData: null,
@@ -41,12 +41,12 @@ export function parsePrivacyProfiles(json: string | undefined): Record<string, P
   try {
     const parsed = z.record(z.string(), profileSchema).safeParse(JSON.parse(json));
     if (!parsed.success) {
-      console.warn("[novara] NOVARA_PRIVACY_PROFILES is invalid and was ignored.");
+      console.warn("[nova] NOVA_PRIVACY_PROFILES is invalid and was ignored.");
       return base;
     }
     return { ...base, ...parsed.data };
   } catch {
-    console.warn("[novara] NOVARA_PRIVACY_PROFILES is not valid JSON and was ignored.");
+    console.warn("[nova] NOVA_PRIVACY_PROFILES is not valid JSON and was ignored.");
     return base;
   }
 }

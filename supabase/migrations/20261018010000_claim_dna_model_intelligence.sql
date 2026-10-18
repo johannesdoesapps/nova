@@ -1,4 +1,4 @@
--- NOVARA AI — Part 4 (Claim DNA & Research Intelligence) and Part 5 (Model Intelligence)
+-- NOVA AI — Part 4 (Claim DNA & Research Intelligence) and Part 5 (Model Intelligence)
 -- All user-owned tables use RLS with the same (select auth.uid()) pattern as the initial schema.
 
 -- ─── usage tracking: richer model_runs ──────────────────────────────────────

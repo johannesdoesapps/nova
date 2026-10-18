@@ -1,5 +1,5 @@
 {
-  "name": "novara-ai",
+  "name": "nova-ai",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -8,11 +8,16 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "engine": "cd engine && .venv/bin/python -m nova_engine",
+    "engine:worker": "cd engine && .venv/bin/python -m nova_engine.worker",
+    "engine:setup": "cd engine && python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt",
+    "engine:test": "cd engine && .venv/bin/python -m pytest"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
+    "@xyflow/react": "^12.12.0",
     "clsx": "^2.1.1",
     "geist": "^1.8.1",
     "lucide-react": "^1.59.0",

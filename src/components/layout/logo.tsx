@@ -13,7 +13,7 @@ export function Logo({ collapsed, className }: { collapsed?: boolean; className?
       </span>
       {!collapsed && (
         <span className="text-[15px] font-semibold tracking-[0.18em]">
-          NOVARA<span className="ml-1 font-normal tracking-normal text-muted">AI</span>
+          NOVA<span className="ml-1 font-normal tracking-normal text-muted">AI</span>
         </span>
       )}
     </span>

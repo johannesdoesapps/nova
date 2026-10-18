@@ -5,9 +5,9 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 beforeAll(() => {
-  for (const k of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "OPENAI_API_KEY", "HUGGINGFACE_API_KEY", "SEARCH_API_KEY", "NOVARA_MODELS"]) delete process.env[k];
-  process.env.NOVARA_DAILY_REQUEST_LIMIT = "1000";
-  process.env.NOVARA_RATE_LIMIT_PER_MINUTE = "1000";
+  for (const k of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "OPENAI_API_KEY", "HUGGINGFACE_API_KEY", "SEARCH_API_KEY", "NOVA_MODELS"]) delete process.env[k];
+  process.env.NOVA_DAILY_REQUEST_LIMIT = "1000";
+  process.env.NOVA_RATE_LIMIT_PER_MINUTE = "1000";
 });
 
 const post = (url: string, body: unknown, ip = "10.0.9.1") =>

@@ -2,7 +2,7 @@
  * Claim DNA data model.
  *
  * Design rule: nothing in here is "truth". A claim's status describes the
- * relationship between the claim and the evidence NOVARA could see, and every
+ * relationship between the claim and the evidence NOVA could see, and every
  * judgement records who made it (rules, a model, or the user) so the UI can
  * show its provenance and limits.
  */
@@ -55,7 +55,7 @@ export type SourceType =
 
 export interface ProvenanceStep {
   at: string;
-  actor: "search_provider" | "user" | "novara" | "model";
+  actor: "search_provider" | "user" | "nova" | "model";
   action: string;
   detail?: string;
 }

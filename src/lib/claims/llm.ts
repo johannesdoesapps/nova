@@ -9,7 +9,7 @@ function escapeTags(s: string): string {
   return s.replace(/<\/?\s*(source|sources|claims?|system|instructions?)\b[^>]*>/gi, "[tag removed]");
 }
 
-export const JUDGE_SYSTEM_PROMPT = `You are NOVARA's evidence checker. For each claim, decide how each numbered source relates to it.
+export const JUDGE_SYSTEM_PROMPT = `You are NOVA's evidence checker. For each claim, decide how each numbered source relates to it.
 Rules:
 - Use ONLY the text inside <sources>. Do not use background knowledge.
 - stance is one of: "supports" (the source states the claim or something that entails it), "contradicts" (the source states something incompatible), "insufficient" (related but does not settle it).

@@ -25,6 +25,13 @@ export function relativeTime(iso: string | null | undefined, now = Date.now()): 
   const t = new Date(iso).getTime();
   if (Number.isNaN(t)) return "—";
   const s = Math.round((now - t) / 1000);
+  if (s < -60) {
+    // Future timestamps (e.g. the next scheduled check).
+    const f = -s;
+    if (f < 3600) return `in ${Math.round(f / 60)}m`;
+    if (f < 86400) return `in ${Math.round(f / 3600)}h`;
+    return `in ${Math.round(f / 86400)}d`;
+  }
   if (s < 60) return "just now";
   const m = Math.round(s / 60);
   if (m < 60) return `${m}m ago`;
