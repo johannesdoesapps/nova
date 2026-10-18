@@ -44,6 +44,8 @@ export function serverEnv() {
     sentryDsn: clean(process.env.SENTRY_DSN),
     privacyProfilesJson: clean(process.env.NOVA_PRIVACY_PROFILES),
     trialSecretSet: Boolean(clean(process.env.NOVA_TRIAL_SECRET)),
+    /** Explicit opt-in to let anonymous visitors use paid AI in production without accounts. */
+    allowGuestAi: clean(process.env.NOVA_ALLOW_GUEST_AI) === "1",
   };
 }
 

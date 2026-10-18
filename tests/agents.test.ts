@@ -171,3 +171,25 @@ describe("POST /api/agents/chat", () => {
     expect(prompt).toContain("[tag removed]");
   });
 });
+
+describe("public deployment safeguard", () => {
+  it("refuses anonymous paid AI in production without accounts unless explicitly allowed", async () => {
+    const env = process.env as Record<string, string | undefined>;
+    const prev = env.NODE_ENV;
+    env.NODE_ENV = "production";
+    env.OPENAI_API_KEY = "sk-test-not-real";
+    try {
+      const { POST } = await import("@/app/api/agents/chat/route");
+      const res = await POST(post("/api/agents/chat", { agentId: "general", message: "hi" }));
+      expect(res.status).toBe(503);
+      expect((await res.json()).error.message).toMatch(/isn't accepting anonymous AI requests/);
+      env.NOVA_ALLOW_GUEST_AI = "1";
+      const { requireUserIfConfigured } = await import("@/lib/auth");
+      await expect(requireUserIfConfigured()).resolves.toMatchObject({ mode: "guest" });
+    } finally {
+      env.NODE_ENV = prev;
+      delete env.OPENAI_API_KEY;
+      delete env.NOVA_ALLOW_GUEST_AI;
+    }
+  });
+});

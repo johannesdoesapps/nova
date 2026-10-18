@@ -11,7 +11,7 @@ It is two services:
 | **Web app** (`/`) | TypeScript · Next.js 16 · React 19 · Tailwind | UI, Supabase auth, search, chat, Claim DNA, Model Intelligence, and the signed proxy to the engine |
 | **NOVA engine** (`/engine`) | **Python 3.11+** · FastAPI · SQLAlchemy | AI Lab workflow execution, Signal Radar monitoring, workspaces, community and connectors, plus a background worker |
 
-Everything runs without API keys in a clearly-labelled demo mode, and switches to real integrations as keys are added. The architecture and launch roadmap are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Everything runs without API keys in a clearly-labelled demo mode, and switches to real integrations as keys are added. The architecture and launch roadmap are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). To put NOVA online, follow [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ---
 

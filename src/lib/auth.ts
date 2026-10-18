@@ -1,5 +1,5 @@
 import "server-only";
-import { isSupabaseConfigured } from "./env";
+import { isSupabaseConfigured, serverEnv } from "./env";
 import { ApiError } from "./http";
 import { createServerSupabase, type ServerSupabase } from "./supabase/server";
 
@@ -39,9 +39,18 @@ export async function getAuth(): Promise<AuthContext> {
 
 /**
  * For AI routes: with Supabase configured, a signed-in user is required (so
- * usage can be attributed and limited). Without Supabase, guests are allowed.
+ * usage can be attributed and limited). Without Supabase, guests are allowed —
+ * except in production with a paid provider key, where anonymous use of the
+ * owner's key must be enabled explicitly (NOVA_ALLOW_GUEST_AI=1).
  */
 export async function requireUserIfConfigured(): Promise<AuthContext> {
+  const env = serverEnv();
+  if (!isSupabaseConfigured() && process.env.NODE_ENV === "production" && (env.openaiKey || env.huggingfaceKey) && !env.allowGuestAi) {
+    throw new ApiError(
+      "not_configured",
+      "This site isn't accepting anonymous AI requests yet. The owner needs to set up accounts (Supabase) or explicitly allow guest use.",
+    );
+  }
   const auth = await getAuth();
   if (isSupabaseConfigured() && auth.mode !== "authenticated") {
     throw new ApiError("unauthorized", "Please sign in to continue.");
