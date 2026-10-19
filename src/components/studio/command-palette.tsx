@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bookmark, Bot, Cpu, Flag, ListPlus, MessageSquare, MessagesSquare, Search, Settings2, SlidersHorizontal, Sparkles, SquarePen, Swords, Users } from "lucide-react";
+import { Bookmark, Bot, Cpu, Flag, ListPlus, MessageSquare, MessagesSquare, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, SquarePen, Swords, Users } from "lucide-react";
 import { useCatalog } from "@/components/common/model-picker";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { jsonFetch } from "@/hooks/use-ndjson";
@@ -99,6 +99,7 @@ function Palette({
       { id: "arena", group: "Actions", label: "Open Arena", icon: <Swords />, keywords: "blind battle compare vote", run: go("/arena") },
       { id: "mission-new", group: "Actions", label: "New mission", icon: <Flag />, keywords: "project plan goal mission control", run: go("/missions") },
       { id: "task", group: "Actions", label: "Create a task in a mission", icon: <ListPlus />, keywords: "todo task", run: go("/missions") },
+      { id: "security", group: "Actions", label: "Security Team: scan, investigate or audit", icon: <ShieldCheck />, keywords: "security sentinel threat hunter code guardian vulnerability scan audit logs", run: go("/agents/security") },
       { id: "chats", group: "Go to", label: "Chats", icon: <MessagesSquare />, run: go("/chat") },
       { id: "missions", group: "Go to", label: "Mission Control", icon: <Flag />, run: go("/missions") },
       { id: "agents", group: "Go to", label: "Agents", icon: <Bot />, run: go("/agents") },

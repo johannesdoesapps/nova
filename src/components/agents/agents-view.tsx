@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ArrowRight, CircleAlert, Copy, Ellipsis, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowRight, CircleAlert, Code2, Copy, Crosshair, Ellipsis, Pencil, Plus, Radar, Search, Trash2 } from "lucide-react";
 import { useModels } from "@/components/common/model-picker";
 import { useApp } from "@/components/layout/app-context";
 import { ConfirmDialog } from "@/components/studio/dialogs";
@@ -76,6 +76,33 @@ export function AgentsView() {
               <Plus className="h-4 w-4" /> Create agent
             </button>
           </div>
+
+          <Link
+            href="/agents/security"
+            className="glass-strong glass-edge s-in group mt-7 flex flex-col gap-4 overflow-hidden rounded-[24px] p-5 transition duration-300 [animation-delay:40ms] hover:-translate-y-0.5 hover:shadow-[var(--s-shadow)] sm:flex-row sm:items-center sm:p-6"
+          >
+            <div className="flex shrink-0 -space-x-2">
+              {[
+                [Radar, "from-sky-500/25 text-sky-600 dark:text-sky-300"],
+                [Crosshair, "from-amber-500/25 text-amber-600 dark:text-amber-300"],
+                [Code2, "from-violet-500/25 text-violet-600 dark:text-violet-300"],
+              ].map(([Icon, cls], i) => {
+                const I = Icon as typeof Radar;
+                return (
+                  <span key={i} className={cn("grid h-11 w-11 place-items-center rounded-[14px] border border-s-line bg-s-bg bg-gradient-to-br to-transparent", cls as string)}>
+                    <I className="h-5 w-5" aria-hidden />
+                  </span>
+                );
+              })}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[16px] font-semibold tracking-[-0.01em]">Security Team</p>
+              <p className="mt-0.5 text-[13.5px] text-s-ink-2">Nova Sentinel, Threat Hunter and Code Guardian — website checks, log investigations and secure code review that work together.</p>
+            </div>
+            <span className="inline-flex h-9 shrink-0 items-center gap-1.5 self-start rounded-xl border border-s-line-strong px-3.5 text-[13px] font-medium transition group-hover:border-transparent group-hover:bg-s-accent group-hover:text-s-accent-ink sm:self-center">
+              Open security workspace <ArrowRight className="h-3.5 w-3.5" />
+            </span>
+          </Link>
 
           <div className="s-in mt-7 flex flex-col gap-3 [animation-delay:60ms] lg:flex-row lg:items-center">
             <div className="relative w-full lg:max-w-[320px]">

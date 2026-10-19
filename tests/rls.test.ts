@@ -287,3 +287,41 @@ describe("council sessions and missions", () => {
     });
   });
 });
+
+describe("security center", () => {
+  it("keeps targets, runs and findings private, and the audit trail append-only", async () => {
+    const { run } = await as(ALICE, async () => {
+      await db.query(`insert into public.security_targets (hostname, token) values ('alice.example', 'nova-verify-0123456789abcdef')`);
+      await expect(db.query(`insert into public.security_targets (hostname, token) values ('BAD HOST!', 'nova-verify-0123456789abcdef')`)).rejects.toThrow(/check/);
+      const r = await db.query<{ id: string }>(`insert into public.security_runs (agent, action, asset) values ('sentinel', 'scan', 'alice.example') returning id`);
+      await db.query(
+        `insert into public.security_findings (run_id, agent, fingerprint, rule_id, title, severity, confidence, asset, evidence_source) values ('${r.rows[0].id}', 'sentinel', 'fp-0000000001', 'headers.hsts-missing', 'HSTS missing', 'medium', 'confirmed', 'alice.example', 'nova:headers')`,
+      );
+      await expect(
+        db.query(`insert into public.security_findings (agent, fingerprint, rule_id, title, severity, confidence, asset, evidence_source) values ('sentinel', 'fp-0000000001', 'x', 'dup', 'low', 'firm', 'a', 'x')`),
+      ).rejects.toThrow(/duplicate key/);
+      await expect(
+        db.query(`insert into public.security_findings (agent, fingerprint, rule_id, title, severity, confidence, asset, evidence_source) values ('sentinel', 'fp-0000000002', 'x', 't', 'severe', 'firm', 'a', 'x')`),
+      ).rejects.toThrow(/check/);
+      await db.query(`insert into public.security_audit (action, run_id, detail) values ('scan.started', '${r.rows[0].id}', '{}')`);
+      expect((await db.query("update public.security_audit set action = 'tampered'")).affectedRows).toBe(0);
+      expect((await db.query("delete from public.security_audit")).affectedRows).toBe(0);
+      expect((await db.query("select * from public.security_audit")).rows).toHaveLength(1);
+      return { run: r.rows[0].id };
+    });
+    await as(BOB, async () => {
+      for (const t of ["security_targets", "security_runs", "security_findings", "security_audit"]) expect((await db.query(`select * from public.${t}`)).rows, t).toHaveLength(0);
+      expect((await db.query("update public.security_findings set status = 'verified'")).affectedRows).toBe(0);
+      await expect(db.query(`insert into public.security_audit (user_id, action) values ('${ALICE}', 'forged')`)).rejects.toThrow(/row-level security/);
+      await expect(db.query(`insert into public.security_runs (user_id, agent, action) values ('${ALICE}', 'sentinel', 'scan')`)).rejects.toThrow(/row-level security/);
+      // Bob can't attach his own finding to Alice's run's id... he can't even see it, and fingerprints are per user.
+      await db.query(`insert into public.security_findings (agent, fingerprint, rule_id, title, severity, confidence, asset, evidence_source) values ('sentinel', 'fp-0000000001', 'x', 'bob', 'low', 'firm', 'a', 'x')`);
+    });
+    await as(ALICE, async () => {
+      expect((await db.query("select * from public.security_findings")).rows).toHaveLength(1);
+      await db.query(`delete from public.security_runs where id = '${run}'`);
+      const f = await db.query<{ run_id: string | null }>("select run_id from public.security_findings");
+      expect(f.rows[0].run_id).toBeNull(); // findings outlive the run that found them
+    });
+  });
+});

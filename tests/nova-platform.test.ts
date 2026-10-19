@@ -139,4 +139,17 @@ describe("routes in guest/demo mode", () => {
     const sessions = await import("@/app/api/council/sessions/route");
     expect((await sessions.POST(post("/api/council/sessions", {}))).status).toBe(503);
   });
+
+  it("Security Team endpoints require an account and never run as a guest", async () => {
+    const overview = await import("@/app/api/security/overview/route");
+    expect((await overview.GET()).status).toBe(503);
+    const sentinel = await import("@/app/api/security/sentinel/route");
+    expect((await sentinel.POST(post("/api/security/sentinel", { targetId: "00000000-0000-4000-8000-000000000000", authorized: true }))).status).toBe(503);
+    const guardian = await import("@/app/api/security/guardian/route");
+    expect((await guardian.POST(post("/api/security/guardian", { source: { type: "github", repo: "a/b" } }))).status).toBe(503);
+    const hunter = await import("@/app/api/security/hunter/route");
+    expect((await hunter.POST(post("/api/security/hunter", { indicators: "8.8.8.8" }))).status).toBe(503);
+    const findings = await import("@/app/api/security/findings/route");
+    expect((await findings.GET(new Request("http://localhost/api/security/findings"))).status).toBe(503);
+  });
 });

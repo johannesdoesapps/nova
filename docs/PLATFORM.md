@@ -12,6 +12,7 @@ What each signature feature does, what it needs, and its honest limits.
 | Council web sources | Toggle on `/council` | `SEARCH_PROVIDER` + `SEARCH_API_KEY` | Toggle is disabled with the reason shown |
 | Research router mode | Model menu → Auto · Research | Search key for live sources | Answers without sources and says so |
 | Command palette | Ctrl+K / ⌘K anywhere in the studio | — | — |
+| Security Team | `/agents/security` | Accounts (sign-in); optional ABUSEIPDB_API_KEY, GITHUB_TOKEN | See docs/SECURITY_AGENTS.md |
 
 ## Smart Router
 Auto ids are `auto` (balanced) and `auto:quick|deep|research|coding`. Each mode narrows
