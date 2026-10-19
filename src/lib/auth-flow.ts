@@ -12,6 +12,15 @@ export function safeNext(n: string | string[] | null | undefined): string {
   return v;
 }
 
+/** Where people go after signing in when no specific page was requested: the chat, NOVA's main workspace. */
+export const DEFAULT_AFTER_SIGN_IN = "/chat";
+
+/** The page to open after sign-in: the requested same-site path, or the chat. */
+export function afterSignIn(n: string | string[] | null | undefined): string {
+  const next = safeNext(n);
+  return next === "/" ? DEFAULT_AFTER_SIGN_IN : next;
+}
+
 /**
  * Where Supabase sends the browser back after Google. `via=google` lets the
  * callback word its errors for the Google flow; `next` is re-checked there.

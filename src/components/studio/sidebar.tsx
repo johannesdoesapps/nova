@@ -7,7 +7,6 @@ import {
   Bot,
   Ellipsis,
   Flag,
-  LayoutGrid,
   LogIn,
   LogOut,
   MessagesSquare,
@@ -396,13 +395,6 @@ function ProfileMenu(p: Omit<SidebarProps, "searchRef"> & { rail: boolean }) {
               onClick={p.onOpenSettings}
             >
               Settings
-            </MenuItem>
-            <MenuItem
-              icon={<LayoutGrid />}
-              hint="Search, Claim DNA, AI Lab, Radar and more"
-              onClick={() => router.push("/")}
-            >
-              All NOVA tools
             </MenuItem>
             {p.accountsEnabled && <MenuSeparator />}
             {p.accountsEnabled &&

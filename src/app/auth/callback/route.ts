@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { exchangeFailureCode, oauthErrorCode, safeNext, type LoginMessageCode } from "@/lib/auth-flow";
+import { afterSignIn, exchangeFailureCode, oauthErrorCode, safeNext, type LoginMessageCode } from "@/lib/auth-flow";
 import { isSupabaseConfigured } from "@/lib/env";
 import { createServerSupabase } from "@/lib/supabase/server";
 
@@ -30,7 +30,7 @@ export async function GET(req: Request) {
     // have one pending); passing it also lets Supabase delete that verifier.
     const flowId = url.searchParams.get("sb_flow_id");
     const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code, flowId ? { flowId } : undefined);
-    if (!exchangeError) return NextResponse.redirect(new URL(next, url.origin));
+    if (!exchangeError) return NextResponse.redirect(new URL(afterSignIn(next), url.origin));
   }
   // The exchange fails when the code was used already, expired, or the flow
   // was started in another browser (no PKCE verifier here).

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAllModels } from "@/lib/ai";
 import { requireUser } from "@/lib/auth";
 import { deleteConversation, getConversation, updateConversation } from "@/lib/db";
 import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
@@ -14,7 +15,11 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/conversations/[
   try {
     const id = await idFrom(ctx);
     const { supabase, user } = await requireUser();
-    return NextResponse.json(await getConversation(supabase, user.id, id));
+    const [data, models] = await Promise.all([getConversation(supabase, user.id, id), getAllModels().catch(() => [])]);
+    // Saved replies store the model id; show the same name the live reply showed.
+    const names = new Map(models.map((m) => [m.id, m.displayName]));
+    const messages = data.messages.map((m) => ({ ...m, model_name: m.model_id ? (names.get(m.model_id) ?? null) : null }));
+    return NextResponse.json({ ...data, messages });
   } catch (err) {
     return errorResponse(err);
   }

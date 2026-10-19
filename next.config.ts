@@ -5,11 +5,11 @@ import type { NextConfig } from "next";
 // reliable model. Revisit once the data layer is stable.
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  // The public site is the chat studio only. The older workspace pages still
-  // exist in src/app/(app); remove an entry here to bring one back.
+  // "/" is the public homepage; the app itself lives at /chat. The older
+  // workspace pages still exist in src/app/(app); remove an entry here to bring one back.
   async redirects() {
     const legacy = [
-      "/", "/dashboard", "/search", "/models", "/discover", "/community", "/graph",
+      "/dashboard", "/search", "/models", "/discover", "/community", "/graph",
       "/integrations", "/radar", "/simulator", "/settings/:path*", "/projects/:path*", "/claims/:path*",
       "/intel/:path*", "/lab/:path*", "/workspaces/:path*",
     ];
@@ -39,8 +39,14 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Frame-Options", value: "DENY" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          // Voice input in the chat composer needs the microphone on NOVA's own pages.
+          { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=()" },
         ],
+      },
+      {
+        // API responses and auth redirects are never search results.
+        source: "/:dir(api|auth)/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       },
     ];
   },

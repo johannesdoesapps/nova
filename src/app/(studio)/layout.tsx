@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { PRIVATE_ROBOTS } from "@/lib/seo";
 import { Suspense } from "react";
 import { Instrument_Serif } from "next/font/google";
 import { AppProvider } from "@/components/layout/app-context";
@@ -6,6 +8,9 @@ import { loadShellData } from "@/lib/session-data";
 import "@/components/studio/studio.css";
 
 export const dynamic = "force-dynamic";
+
+// Signed-in app screens: never in search results.
+export const metadata: Metadata = { robots: PRIVATE_ROBOTS };
 
 const serif = Instrument_Serif({ subsets: ["latin"], weight: "400", variable: "--font-instrument-serif", display: "swap" });
 

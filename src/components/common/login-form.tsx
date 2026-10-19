@@ -122,11 +122,11 @@ export function LoginForm({
       <div className="mt-5">
         <GoogleButton onClick={() => void continueWithGoogle()} loading={googleBusy} disabled={google === false || busy} />
         {google === false && (
-          <p className="mt-2 text-center text-xs text-faint">Google sign-in isn&rsquo;t set up on this site yet. Use your email below.</p>
+          <p className="mt-2 text-center text-xs text-muted">Google sign-in isn&rsquo;t set up on this site yet. Use your email below.</p>
         )}
       </div>
 
-      <div className="my-5 flex items-center gap-3 text-xs text-faint" role="separator" aria-label={copy.divider}>
+      <div className="my-5 flex items-center gap-3 text-xs text-muted" role="separator" aria-label={copy.divider}>
         <span className="h-px flex-1 bg-border" aria-hidden />
         <span aria-hidden>{copy.divider}</span>
         <span className="h-px flex-1 bg-border" aria-hidden />
@@ -141,22 +141,22 @@ export function LoginForm({
       >
         {mode === "signup" && (
           <label className="block">
-            <span className="mb-1 block text-xs text-faint">Name</span>
+            <span className="mb-1 block text-xs text-muted">Name</span>
             <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} autoComplete="name" />
           </label>
         )}
         <label className="block">
-          <span className="mb-1 block text-xs text-faint">Email</span>
+          <span className="mb-1 block text-xs text-muted">Email</span>
           <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs text-faint">Password</span>
+          <span className="mb-1 block text-xs text-muted">Password</span>
           <Input type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "signin" ? "current-password" : "new-password"} />
         </label>
         {error && <Notice tone="danger">{error}</Notice>}
         {info && <Notice tone="success">{info}</Notice>}
         <Button type="submit" className="w-full" loading={busy} disabled={googleBusy}>{mode === "signin" ? "Sign in" : "Create account"}</Button>
-        <p className="text-center text-xs text-faint">
+        <p className="text-center text-xs text-muted">
           {mode === "signin" ? "Don’t have an account?" : "Already have an account?"}{" "}
           <button
             type="button"

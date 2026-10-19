@@ -6,17 +6,23 @@ import { LoginForm } from "@/components/common/login-form";
 import { Logo } from "@/components/layout/logo";
 import { Notice } from "@/components/ui/primitives";
 import { getAuth } from "@/lib/auth";
-import { loginMessage, safeNext } from "@/lib/auth-flow";
+import { afterSignIn, loginMessage } from "@/lib/auth-flow";
 import { authProviders } from "@/lib/auth-providers";
 import { publicEnv } from "@/lib/env";
 
-export const metadata: Metadata = { title: "Sign in" };
+export const metadata: Metadata = {
+  title: "Sign in or create an account",
+  description: "Sign in to NOVA or create a free account with your email address.",
+  alternates: { canonical: "/login" },
+  // An app screen, not content: keep it out of search results but let crawlers follow its links.
+  robots: { index: false, follow: true },
+};
 
 const serif = Instrument_Serif({ subsets: ["latin"], weight: "400", variable: "--font-instrument-serif", display: "swap" });
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const sp = await searchParams;
-  const next = safeNext(sp.next);
+  const next = afterSignIn(sp.next);
   const configured = Boolean(publicEnv.supabaseUrl && publicEnv.supabaseKey);
   if (configured) {
     const auth = await getAuth();

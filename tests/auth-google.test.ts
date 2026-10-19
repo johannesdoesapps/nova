@@ -59,7 +59,7 @@ describe("OAuth callback", () => {
     exchange.mockResolvedValue({ error: null });
     for (const next of ["https://evil.example", "%2F%2Fevil.example", "%2F%5Cevil.example"]) {
       const r = await callback(`code=abc&via=google&next=${next}`);
-      expect(r.origin + r.path).toBe("https://nova.example/");
+      expect(r.origin + r.path).toBe("https://nova.example/chat");
     }
   });
 

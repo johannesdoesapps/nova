@@ -54,6 +54,8 @@ type ServerMessage = {
   role: string;
   content: string;
   model_id: string | null;
+  /** Display name for model_id, added by the conversation API. */
+  model_name?: string | null;
   usage_metadata: { sources?: SearchSource[]; attachments?: string[]; tools?: ToolRecord[] } | null;
 };
 
@@ -78,7 +80,7 @@ export const serverHistory: HistoryStore = {
           role: m.role as Msg["role"],
           content: m.content,
           status: "done",
-          modelName: m.model_id ?? undefined,
+          modelName: m.model_name ?? m.model_id ?? undefined,
           simulated: m.model_id?.startsWith("demo:"),
           sources: m.usage_metadata?.sources,
           tools: m.usage_metadata?.tools,
