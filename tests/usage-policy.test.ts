@@ -89,8 +89,9 @@ describe("usage policy", () => {
   it("gives administrators no allowance, enforced on the server, and records it", async () => {
     const { auth, rpc, inserts } = fakeAuth({ admin: true });
     const t = await enforceLimits(req(), auth, 1, [sonnet]);
-    expect(t).toMatchObject({ units: 0, entitlement: "admin_unlimited" });
-    expect(rpc.some(([fn]) => fn === "usage_reserve")).toBe(false);
+    expect(t).toMatchObject({ units: 15, entitlement: "admin_unlimited" });
+    // Still reserved (so duplicates are refused), but with no limit.
+    expect(rpc[0]).toEqual(["usage_reserve", expect.objectContaining({ p_window_limit: 1_000_000_000, p_week_limit: 1_000_000_000 })]);
     expect(await planUsage(auth)).toBeNull();
     await recordRun(auth, run(sonnet));
     expect(inserts[0]).toMatchObject({ entitlement: "admin_unlimited", units: 15 });
@@ -100,7 +101,7 @@ describe("usage policy", () => {
     process.env.NOVA_ADMINS_UNLIMITED = "false";
     const { auth, rpc } = fakeAuth({ admin: true });
     await enforceLimits(req(), auth, 1, [sonnet]);
-    expect(rpc[0]![0]).toBe("usage_reserve");
+    expect(rpc[0]![1]).toMatchObject({ p_window_limit: 15 });
   });
 
   it("charges the model that actually answered and settles the reservation", async () => {

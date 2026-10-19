@@ -30,6 +30,7 @@ export interface UsageTicket {
 }
 
 const tickets = new WeakMap<object, UsageTicket>();
+const NO_LIMIT = 1_000_000_000;
 
 /** The reservation made for this request, if any (used to link runs to their request). */
 export function ticketFor(auth: AuthContext): UsageTicket | null {
@@ -73,18 +74,15 @@ export async function enforceLimits(
 
   const [entitlement, settings] = await Promise.all([entitlementFor(auth), getPlatformSettings()]);
   const units = unitsFor(models, cost, settings.modelUnits);
-  if (!entitlement || entitlement.kind === "unlimited") {
-    const ticket = { requestId, units: 0, entitlement: entitlement?.label ?? null };
-    tickets.set(auth, ticket);
-    return ticket;
-  }
+  if (!entitlement) return { requestId, units: 0, entitlement: null };
 
-  const plan = entitlement.limits;
+  // Accounts without an allowance still reserve, with no limit, so duplicate submissions are refused for everyone.
+  const unlimited = entitlement.kind === "unlimited";
   const { data, error } = await auth.supabase.rpc("usage_reserve", {
     p_request_id: requestId,
     p_units: units,
-    p_window_limit: plan.windowUnits,
-    p_week_limit: plan.weeklyUnits,
+    p_window_limit: unlimited ? NO_LIMIT : entitlement.limits.windowUnits,
+    p_week_limit: unlimited ? NO_LIMIT : entitlement.limits.weeklyUnits,
     p_purpose: opts.purpose ?? null,
     p_model: models?.map((m) => m.id).join(",") ?? null,
     // Calls without a model list are short checks; don't hold their units for long.
@@ -100,6 +98,11 @@ export async function enforceLimits(
     throw new ApiError("conflict", "This message was already sent. NOVA won't run or charge it twice.");
   }
   if (!r.ok) {
+    if (entitlement.kind === "unlimited") {
+      reportError(new Error(`usage_reserve refused an unlimited account: ${r.reason}`), { where: "usage_reserve" });
+      return { requestId, units: 0, entitlement: entitlement.label };
+    }
+    const plan = entitlement.limits;
     const left = Math.max(0, Number(r.limit ?? 0) - Number(r.used ?? 0));
     const scope = r.scope === "week" ? "weekly" : "5-hour";
     const heavy = models?.length === 1 && units > 1 ? ` ${models[0]!.displayName} uses ${units} units per message and you have ${left} left; Auto or a lighter model uses 1.` : "";
