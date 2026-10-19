@@ -325,3 +325,44 @@ describe("security center", () => {
     });
   });
 });
+
+describe("workforce (operators only)", () => {
+  it("lets only administrators read or write Workforce data, each seeing only their own", async () => {
+    // ALICE was made an admin in the platform settings test above; BOB is a regular user.
+    const ids = await as(ALICE, async () => {
+      const p = await db.query<{ id: string }>(`insert into public.wf_projects (name, repo) values ('Nova', 'acme/nova') returning id`);
+      await expect(db.query(`insert into public.wf_projects (name, repo) values ('Bad', 'not a repo!')`)).rejects.toThrow(/check/);
+      const t = await db.query<{ id: string }>(`insert into public.wf_tasks (project_id, title, objective) values ('${p.rows[0].id}', 'Task', 'Do the thing') returning id`);
+      await db.query(`insert into public.wf_steps (task_id, key, agent, agent_version, title) values ('${t.rows[0].id}', 'prepare', 'devops', '1.0.0', 'Prepare')`);
+      await expect(db.query(`insert into public.wf_steps (task_id, key, agent, agent_version, title) values ('${t.rows[0].id}', 'prepare', 'devops', '1.0.0', 'dup')`)).rejects.toThrow(/duplicate key/);
+      await db.query(`insert into public.wf_approvals (task_id, kind, title, payload_hash) values ('${t.rows[0].id}', 'plan', 'Approve', 'h')`);
+      await db.query(`insert into public.wf_events (task_id, level, type, message) values ('${t.rows[0].id}', 'audit', 'task.created', 'x'), ('${t.rows[0].id}', 'info', 'note', 'y')`);
+      await db.query(`insert into public.wf_memory (project_id, kind, content, source) values ('${p.rows[0].id}', 'project_knowledge', 'fact', 'task')`);
+      // Audit events can't be edited or deleted; ordinary log lines can be deleted by retention.
+      expect((await db.query("update public.wf_events set message = 'tampered'")).affectedRows).toBe(0);
+      expect((await db.query("delete from public.wf_events where level = 'audit'")).affectedRows).toBe(0);
+      expect((await db.query("delete from public.wf_events where level = 'info'")).affectedRows).toBe(1);
+      expect((await db.query<{ id: number }>("select id from public.wf_settings")).rows).toHaveLength(1);
+      expect((await db.query(`update public.wf_settings set settings = '{"maxAutonomy":"assist"}' where id = 1`)).affectedRows).toBe(1);
+      return { project: p.rows[0].id, task: t.rows[0].id };
+    });
+    await as(BOB, async () => {
+      for (const t of ["wf_projects", "wf_tasks", "wf_steps", "wf_events", "wf_approvals", "wf_memory", "wf_settings"]) expect((await db.query(`select * from public.${t}`)).rows, t).toHaveLength(0);
+      await expect(db.query(`insert into public.wf_projects (name, repo) values ('Mine', 'bob/repo')`)).rejects.toThrow(/row-level security/);
+      expect((await db.query(`update public.wf_approvals set status = 'approved'`)).affectedRows).toBe(0);
+      expect((await db.query(`update public.wf_settings set settings = '{}'`)).affectedRows).toBe(0);
+      await expect(db.query(`insert into public.wf_events (task_id, type, message) values ('${ids.task}', 'forged', 'x')`)).rejects.toThrow(/row-level security/);
+    });
+    await db.exec(`insert into public.admins (user_id) values ('${BOB}')`);
+    await as(BOB, async () => {
+      // A second operator still can't see the first operator's tasks.
+      expect((await db.query("select * from public.wf_tasks")).rows).toHaveLength(0);
+      await expect(db.query(`insert into public.wf_tasks (user_id, project_id, title, objective) values ('${ALICE}', '${ids.project}', 'x', 'y')`)).rejects.toThrow(/row-level security/);
+    });
+    await db.exec(`delete from public.admins where user_id = '${BOB}'`);
+    await as(ALICE, async () => {
+      await db.query(`delete from public.wf_projects where id = '${ids.project}'`);
+      expect((await db.query("select * from public.wf_steps")).rows).toHaveLength(0);
+    });
+  });
+});

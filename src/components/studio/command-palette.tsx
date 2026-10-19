@@ -107,6 +107,7 @@ function Palette({
       { id: "settings", group: "Go to", label: "Settings", icon: <Settings2 />, keywords: "preferences theme", run: onOpenSettings },
     ];
     if (isAdmin) list.push({ id: "admin", group: "Go to", label: "Admin", icon: <SlidersHorizontal />, keywords: "models providers keys", run: go("/admin") });
+    if (isAdmin) list.push({ id: "workforce", group: "Go to", label: "Workforce (internal AI engineers)", icon: <Bot />, keywords: "workforce commander tasks agents builder developer", run: go("/workforce") });
     if (catalog?.auto.enabled) {
       for (const m of ROUTER_MODES) {
         list.push({ id: `auto-${m.id}`, group: "Switch model", label: m.id === "balanced" ? "Auto" : `Auto · ${m.label}`, hint: m.blurb, icon: <Sparkles />, keywords: "smart router model", run: pickModel(autoIdFor(m.id)) });

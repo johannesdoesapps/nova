@@ -24,6 +24,7 @@ import {
   Swords,
   Trash2,
   Users,
+  Workflow,
   X,
 } from "lucide-react";
 import type { AppUser } from "@/components/layout/app-context";
@@ -38,7 +39,7 @@ export interface SidebarProps {
   mobileOpen: boolean;
   onCloseMobile: () => void;
   /** Which workspace is open, for the nav's active state. */
-  section: "chats" | "agents" | "admin" | "council" | "arena" | "missions";
+  section: "chats" | "agents" | "admin" | "council" | "arena" | "missions" | "workforce";
   conversations: ConvSummary[] | null;
   listError: string | null;
   activeId: string | null;
@@ -166,7 +167,10 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
             <NavItem rail={rail} icon={<Flag />} label="Missions" href="/missions" active={p.section === "missions"} onClick={p.onCloseMobile} />
             <NavItem rail={rail} icon={<Bot />} label="Agents" href="/agents" active={p.section === "agents"} onClick={p.onCloseMobile} />
             {p.user?.isAdmin && (
-              <NavItem rail={rail} icon={<SlidersHorizontal />} label="Admin" href="/admin" active={p.section === "admin"} onClick={p.onCloseMobile} />
+              <>
+                <NavItem rail={rail} icon={<Workflow />} label="Workforce" href="/workforce" active={p.section === "workforce"} onClick={p.onCloseMobile} />
+                <NavItem rail={rail} icon={<SlidersHorizontal />} label="Admin" href="/admin" active={p.section === "admin"} onClick={p.onCloseMobile} />
+              </>
             )}
             <NavItem rail={rail} icon={<Bookmark />} label="Saved prompts" onClick={p.onOpenPrompts} />
             <NavItem rail={rail} icon={<Settings2 />} label="Settings" onClick={p.onOpenSettings} />
