@@ -6,7 +6,7 @@ import { finishRun, getMission, getTask, startRun, updateTask } from "@/lib/db/m
 import { ApiError, errorResponse, ndjsonStream, parseJsonBody } from "@/lib/http";
 import { taskRunMessages } from "@/lib/missions/prompts";
 import { taskRunRequest } from "@/lib/missions/schema";
-import { enforceLimits, recordRun, shouldSaveAllowance } from "@/lib/usage";
+import { enforceLimits, planLimits, recordRunLater, shouldSaveAllowance } from "@/lib/usage";
 import { uuid } from "@/lib/validation";
 import { withTimeContext } from "@/lib/ai/turn-context";
 import { isAutoId } from "@/lib/ai/platform";
@@ -35,6 +35,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/missions/tasks/
     const { model, routing } = await resolveModelChoice(requested, {
       prompt: `${task.title}\n${task.description}`,
       preferLowCost: isAutoId(requested) ? await shouldSaveAllowance(auth) : false,
+      tiers: (await planLimits(auth)).tiers,
     });
     if (model.provider === "demo") throw new ApiError("not_configured", "Running tasks needs a real AI provider. An administrator can add one in Admin.");
     await enforceLimits(req, auth, 1, [model], { purpose: "mission-task" });
@@ -64,7 +65,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/missions/tasks/
       } catch (err) {
         const cancelled = signal.aborted;
         await finishRun(auth.supabase, runId, { status: cancelled ? "cancelled" : "failed", output: text, error: cancelled ? "Cancelled by the user." : err instanceof ApiError ? err.message : "The model call failed." });
-        void recordRun(auth, { model, prompt: task.title, response: text, latencyMs: performance.now() - started, usage: usage ?? { inputTokens: null, outputTokens: null, estimated: true }, status: "error", purpose: "mission-task" });
+        recordRunLater(auth, { model, prompt: task.title, response: text, latencyMs: performance.now() - started, usage: usage ?? { inputTokens: null, outputTokens: null, estimated: true }, status: "error", purpose: "mission-task" });
         throw err;
       }
       if (!text.trim()) {
@@ -72,7 +73,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/missions/tasks/
         throw new ApiError("upstream_error", "The model returned an empty reply. Try again or choose another model.");
       }
       usage ??= { inputTokens: estimateTokens(messages), outputTokens: estimateTokens(text), estimated: true };
-      void recordRun(auth, { model, prompt: task.title, response: text, latencyMs: performance.now() - started, usage, status: "success", purpose: "mission-task" });
+      recordRunLater(auth, { model, prompt: task.title, response: text, latencyMs: performance.now() - started, usage, status: "success", purpose: "mission-task" });
       await finishRun(auth.supabase, runId, { status: "succeeded", output: text });
       const updated = await updateTask(auth.supabase, auth.user.id, task.id, {
         output: text.slice(0, 60000),

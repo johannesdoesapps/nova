@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { ApiError, parseJsonBody } from "@/lib/http";
+import { ApiError, parseJsonBody, requireUuid } from "@/lib/http";
 import { validateChecks } from "@/lib/workforce/checks";
 import { checkSchema, fetchPackageJson, requireOperator, wfError } from "@/lib/workforce/server";
 
@@ -10,7 +10,7 @@ const patch = z.object({ name: z.string().trim().min(1).max(120).optional(), not
 export async function PATCH(req: Request, ctx: RouteContext<"/api/workforce/projects/[id]">) {
   try {
     const { store } = await requireOperator();
-    const { id } = await ctx.params;
+    const id = requireUuid((await ctx.params).id);
     const body = await parseJsonBody(req, patch);
     const project = await store.getProject(id);
     if (!project) throw new ApiError("not_found", "Project not found.");
@@ -31,7 +31,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/workforce/proj
 export async function DELETE(_req: Request, ctx: RouteContext<"/api/workforce/projects/[id]">) {
   try {
     const { store } = await requireOperator();
-    const { id } = await ctx.params;
+    const id = requireUuid((await ctx.params).id);
     const active = await store.listTasks({ projectId: id, statuses: ["created", "analyzing", "running", "verifying"] });
     if (active.length) throw new ApiError("bad_request", "Cancel the project's running tasks first.");
     await store.deleteProject(id);

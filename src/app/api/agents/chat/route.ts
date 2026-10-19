@@ -1,5 +1,5 @@
 import { fallbackChain, resolveModelChoice, type ModelChoice } from "@/lib/ai";
-import { estimateCost } from "@/lib/ai/cost";
+import { estimateCost, estimateTokens } from "@/lib/ai/cost";
 import type { ChatMessage, ModelWithStatus } from "@/lib/ai/types";
 import { builtinAgent } from "@/lib/agents/builtins";
 import { capabilityStatus } from "@/lib/agents/capabilities";
@@ -121,16 +121,25 @@ export async function POST(req: Request) {
 
       // 3–5. Shared execution service: tools, prompt, streaming.
       let result;
+      // Text already streamed is charged even if the request is stopped or fails part-way (the provider bills it).
+      let partial = "";
+      const relay = (event: Record<string, unknown>) => {
+        if (event.type === "delta" && typeof event.text === "string") partial += event.text;
+        send(event);
+      };
+      const started = performance.now();
       try {
-        result = await runAgentTurn({ agent, model, fallbacks, history, message: body.message, attachments, useWeb: !!body.useWeb && !searchesUsed, timeZone: body.timeZone, maxOutputTokens: limits.maxOutputTokens, historyChars: limits.historyChars, signal, send });
+        result = await runAgentTurn({ agent, model, fallbacks, history, message: body.message, attachments, useWeb: !!body.useWeb && !searchesUsed, timeZone: body.timeZone, maxOutputTokens: limits.maxOutputTokens, historyChars: limits.historyChars, signal, send: relay });
         model = result.model;
       } catch (err) {
         await recordRun(auth, {
           model,
           prompt: body.message,
-          response: "",
-          latencyMs: 0,
-          usage: { inputTokens: null, outputTokens: null, estimated: true },
+          response: partial,
+          latencyMs: performance.now() - started,
+          usage: partial
+            ? { inputTokens: estimateTokens([...history, { role: "user", content: body.message }]) + estimateTokens(attachments.map((a) => a.content).join("\n")), outputTokens: estimateTokens(partial), estimated: true }
+            : { inputTokens: null, outputTokens: null, estimated: true },
           status: "error",
           conversationId,
           purpose: "agent",

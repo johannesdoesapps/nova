@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { getFinding, listTargets } from "@/lib/db/security";
-import { ApiError, errorResponse, ndjsonStream } from "@/lib/http";
+import { ApiError, errorResponse, ndjsonStream, requireUuid } from "@/lib/http";
 import { checkRunLimit, runGuardianAgent, runSentinelAgent } from "@/lib/security/runners";
 
 export const maxDuration = 60;
@@ -13,7 +13,7 @@ export const maxDuration = 60;
 export async function POST(req: Request, ctx: RouteContext<"/api/security/findings/[id]/recheck">) {
   try {
     const auth = await requireUser();
-    const { id } = await ctx.params;
+    const id = requireUuid((await ctx.params).id);
     const { finding } = await getFinding(auth.supabase, auth.user.id, id);
     if (finding.agent === "sentinel") {
       const target = (await listTargets(auth.supabase, auth.user.id)).find((t) => t.hostname === finding.asset);

@@ -1,4 +1,5 @@
 import "server-only";
+import { after } from "next/server";
 import { entitlementFor } from "./entitlements";
 import type { AuthContext } from "./auth";
 import { getAllModels, getModels } from "./ai";
@@ -129,8 +130,10 @@ export async function enforceLimits(
     p_ttl_seconds: models?.length ? 180 : 45,
   });
   if (error) {
-    // The allowance can't be checked (database unavailable): log it and let the request through rather than block everyone.
+    // The allowance can't be checked (database unavailable). Fail closed for metered plans so spending can't
+    // run unchecked; accounts without an allowance (administrators) carry on.
     reportError(error, { where: "usage_reserve_v3" });
+    if (!unlimited) throw new ApiError("upstream_error", "Usage limits can't be checked right now, so AI requests are paused for a moment. Please try again shortly.");
     return { requestId, units: 0, entitlement: entitlement.label, estCostUsd: 0 };
   }
   const r = data as {
@@ -274,6 +277,27 @@ export interface RunRecord {
  */
 export async function recordRun(auth: AuthContext, run: RunRecord): Promise<void> {
   if (auth.mode !== "authenticated") return;
+  // Never throws: callers record in the background, and a failure to record must not break (or leak from) a reply.
+  try {
+    await recordRunUnsafe(auth, run);
+  } catch (err) {
+    reportError(err, { where: "recordRun" });
+  }
+}
+
+/**
+ * Record a run after the response without blocking it, keeping the function
+ * alive until it's stored (serverless platforms may otherwise freeze it).
+ */
+export function recordRunLater(auth: AuthContext, run: RunRecord): void {
+  try {
+    after(() => recordRun(auth, run));
+  } catch {
+    void recordRun(auth, run); // outside a request (tests, scripts)
+  }
+}
+
+async function recordRunUnsafe(auth: AuthContext & { mode: "authenticated" }, run: RunRecord): Promise<void> {
   const ticket = tickets.get(auth);
   const [entitlement, settings] = await Promise.all([entitlementFor(auth), getPlatformSettings()]);
   const refunded = run.status === "error" && !run.response;

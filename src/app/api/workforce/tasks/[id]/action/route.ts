@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { parseJsonBody } from "@/lib/http";
+import { parseJsonBody, requireUuid } from "@/lib/http";
 import { requestCancel, retryTask, reworkTask, setPaused } from "@/lib/workforce/commander";
 import { requireOperator, wfError } from "@/lib/workforce/server";
 
@@ -16,7 +16,7 @@ const body = z.discriminatedUnion("action", [
 export async function POST(req: Request, ctx: RouteContext<"/api/workforce/tasks/[id]/action">) {
   try {
     const { rt } = await requireOperator();
-    const { id } = await ctx.params;
+    const id = requireUuid((await ctx.params).id);
     const b = await parseJsonBody(req, body);
     if (b.action === "cancel") await requestCancel(rt, id);
     else if (b.action === "retry") await retryTask(rt, id);

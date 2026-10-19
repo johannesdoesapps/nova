@@ -45,14 +45,29 @@ export async function POST(req: Request) {
     const monthlyNow = (Number(sub?.price_usd ?? 0) || 0) / (sub?.billing_interval === "year" ? 12 : 1);
     const monthlyNew = chargeUsd(planOf(billing, plan), interval) / (interval === "year" ? 12 : 1);
     const upgrade = monthlyNew > monthlyNow;
-    await stripe.subscriptions.update(subId, {
-      items: [{ id: item.id, price }],
-      proration_behavior: upgrade ? "always_invoice" : "create_prorations",
-      cancel_at_period_end: false,
-      metadata: { ...current.metadata, user_id: user.id, nova_plan: plan },
-    });
+    const label = planOf(billing, plan).label;
+    if (upgrade) {
+      // The upgrade takes effect only once its pro-rated invoice is paid (Stripe keeps it pending otherwise).
+      const updated = await stripe.subscriptions.update(subId, {
+        items: [{ id: item.id, price }],
+        proration_behavior: "always_invoice",
+        payment_behavior: "pending_if_incomplete",
+      });
+      if (updated.pending_update) {
+        await syncSubscription(stripe, subId, user.id).catch((e) => reportError(e, { where: "billing.change.sync" }));
+        throw new ApiError("payment_required", `The payment for ${label} didn't go through, so your plan hasn't changed. Update your card under "Manage subscription" and try again.`);
+      }
+      await stripe.subscriptions.update(subId, { cancel_at_period_end: false, metadata: { ...current.metadata, user_id: user.id, nova_plan: plan } });
+    } else {
+      await stripe.subscriptions.update(subId, {
+        items: [{ id: item.id, price }],
+        proration_behavior: "create_prorations",
+        cancel_at_period_end: false,
+        metadata: { ...current.metadata, user_id: user.id, nova_plan: plan },
+      });
+    }
     await syncSubscription(stripe, subId, user.id).catch((e) => reportError(e, { where: "billing.change.sync" }));
-    return NextResponse.json({ ok: true, message: upgrade ? `You're now on ${planOf(billing, plan).label}. The difference was charged pro-rata.` : `You're now on ${planOf(billing, plan).label}. The unused part of your previous plan is credited to your next invoice.` });
+    return NextResponse.json({ ok: true, message: upgrade ? `You're now on ${label}. The difference was charged pro-rata.` : `You're now on ${label}. The unused part of your previous plan is credited to your next invoice.` });
   } catch (err) {
     return errorResponse(err);
   }

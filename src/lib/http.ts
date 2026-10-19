@@ -10,6 +10,7 @@ export type ApiErrorCode =
   | "not_found"
   | "conflict"
   | "plan_required"
+  | "payment_required"
   | "payload_too_large"
   | "rate_limited"
   | "quota_exceeded"
@@ -25,6 +26,7 @@ const STATUS: Record<ApiErrorCode, number> = {
   not_found: 404,
   conflict: 409,
   plan_required: 403,
+  payment_required: 402,
   payload_too_large: 413,
   rate_limited: 429,
   quota_exceeded: 429,
@@ -47,6 +49,8 @@ export class ApiError extends Error {
 /** Consistent error envelope: { error: { code, message, details? } } */
 export function errorResponse(err: unknown, headers?: HeadersInit): NextResponse {
   if (err instanceof ApiError) {
+    // Server-side failures are logged so they show up in monitoring; user errors (4xx) aren't noise.
+    if (STATUS[err.code] >= 500 && err.code !== "not_configured") reportError(err, { code: err.code });
     return NextResponse.json(
       { error: { code: err.code, message: err.message, details: err.details } },
       { status: STATUS[err.code], headers },
@@ -66,8 +70,7 @@ export async function parseJsonBody<T extends z.ZodType>(
 ): Promise<z.infer<T>> {
   const len = Number(req.headers.get("content-length") ?? "0");
   if (len > maxBytes) throw new ApiError("payload_too_large", `Request body exceeds ${maxBytes} bytes.`);
-  const text = await req.text();
-  if (text.length > maxBytes) throw new ApiError("payload_too_large", `Request body exceeds ${maxBytes} bytes.`);
+  const text = await readBodyLimited(req, maxBytes);
   let raw: unknown;
   try {
     raw = text ? JSON.parse(text) : {};
@@ -83,6 +86,25 @@ export async function parseJsonBody<T extends z.ZodType>(
     );
   }
   return parsed.data;
+}
+
+/** Read a body as text, stopping as soon as it passes maxBytes (a missing or false Content-Length can't bypass the limit). */
+async function readBodyLimited(req: Request, maxBytes: number): Promise<string> {
+  if (!req.body) return "";
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new ApiError("payload_too_large", `Request body exceeds ${maxBytes} bytes.`);
+    }
+    chunks.push(value);
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
 export function parseQuery<T extends z.ZodType>(url: string, schema: T): z.infer<T> {
@@ -145,4 +167,12 @@ export function ndjsonStream(
       "X-Accel-Buffering": "no",
     },
   });
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Path ids are UUIDs; anything else is simply not found (not a database error). */
+export function requireUuid(id: string): string {
+  if (!UUID.test(id)) throw new ApiError("not_found", "Not found.");
+  return id;
 }

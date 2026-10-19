@@ -1,4 +1,6 @@
 import { ApiError } from "../../http";
+import { reportError } from "../../observability";
+import { providerErrorMessage } from "./errors";
 import type { AIProvider, GenerateParams, GenerateResult, ProviderId, StreamEvent, Usage } from "../types";
 
 /**
@@ -87,10 +89,9 @@ export class OpenAICompatibleProvider implements AIProvider {
             : res.status >= 500
               ? "upstream_error"
               : "bad_request";
-      throw new ApiError(
-        code,
-        `${params.model.displayName} returned ${res.status}${detail ? `: ${detail.slice(0, 300)}` : ""}`,
-      );
+      // Provider details (which can echo parts of keys or internal settings) are logged, never shown to users.
+      reportError(new Error(`${params.model.id} returned ${res.status}: ${detail.slice(0, 500)}`), { where: "provider.openai-compatible" });
+      throw new ApiError(code, providerErrorMessage(params.model.displayName, res.status, detail));
     }
     return res;
   }

@@ -4,7 +4,7 @@ import { estimateCost, estimateTokens } from "../ai/cost";
 import type { ChatMessage, GenerateResult, ModelWithStatus, Usage } from "../ai/types";
 import type { AuthContext } from "../auth";
 import { ApiError } from "../http";
-import { recordRun } from "../usage";
+import { recordRunLater } from "../usage";
 
 /**
  * Provider fallbacks with a small per-provider circuit breaker. In-memory and
@@ -74,12 +74,12 @@ export async function callModel(
         ? { inputTokens: estimateTokens(messages), outputTokens: estimateTokens(result.text), estimated: true }
         : result.usage;
     noteSuccess(model.provider);
-    void recordRun(auth, { model, prompt: opts.prompt, response: result.text, latencyMs, usage, status: "success", purpose: opts.purpose, category: opts.category, servedModel: result.servedModel ?? null, fallbackFrom: opts.fallbackFrom ?? null });
+    recordRunLater(auth, { model, prompt: opts.prompt, response: result.text, latencyMs, usage, status: "success", purpose: opts.purpose, category: opts.category, servedModel: result.servedModel ?? null, fallbackFrom: opts.fallbackFrom ?? null });
     return { model, result, usage, latencyMs, cost: estimateCost(model, usage) };
   } catch (err) {
     const latencyMs = Math.round(performance.now() - started);
     if (isRetryable(err)) noteFailure(model.provider);
-    void recordRun(auth, { model, prompt: opts.prompt, response: "", latencyMs, usage: { inputTokens: null, outputTokens: null, estimated: true }, status: "error", purpose: opts.purpose, category: opts.category, fallbackFrom: opts.fallbackFrom ?? null });
+    recordRunLater(auth, { model, prompt: opts.prompt, response: "", latencyMs, usage: { inputTokens: null, outputTokens: null, estimated: true }, status: "error", purpose: opts.purpose, category: opts.category, fallbackFrom: opts.fallbackFrom ?? null });
     throw err;
   }
 }

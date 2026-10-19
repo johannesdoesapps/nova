@@ -12,7 +12,7 @@ import { ApiError, clientIp, errorResponse, parseJsonBody } from "@/lib/http";
 import { reportError } from "@/lib/observability";
 import { limiter } from "@/lib/rate-limit";
 import { webSearch } from "@/lib/search/web";
-import { enforceLimits, recordRun } from "@/lib/usage";
+import { enforceLimits, planLimits, recordRun } from "@/lib/usage";
 import { SEARCH_MISSING, verifyRequest, type VerifyResult } from "@/lib/verify/schema";
 
 export const maxDuration = 60;
@@ -48,7 +48,11 @@ export async function POST(req: Request) {
       return NextResponse.json(result);
     }
 
-    await enforceLimits(req, auth, 1, undefined, { purpose: "verify" });
+    // The judge model is chosen up front so plan access, cost and the plan's web searches are checked before anything runs.
+    const judge = await resolveModel(isAutoId(body.modelId) ? undefined : body.modelId).catch(() => null);
+    const limits = auth.mode === "authenticated" ? await planLimits(auth) : null;
+    if (limits?.webSearchesLeft === 0) throw new ApiError("quota_exceeded", "Your plan's web searches for this month are used up, so answers can't be checked against the web until it renews.", { scope: "web_search" });
+    await enforceLimits(req, auth, 1, judge && judge.provider !== "demo" ? [judge] : undefined, { purpose: "verify", inputTokens: Math.ceil(body.answer.length / 4) + 3000 });
     const who = auth.mode === "authenticated" ? `u:${auth.user.id}` : `ip:${clientIp(req)}`;
     if (!limiter("search-minute", Math.max(2, Math.floor(env.ratePerMinute / 2)), 60_000).check(who, 1).ok) {
       throw new ApiError("rate_limited", "Too many checks. Please wait a moment.");
@@ -63,7 +67,7 @@ export async function POST(req: Request) {
     let mode: "rules" | "model" = "rules";
     if (sources.length) {
       try {
-        const model = await resolveModel(isAutoId(body.modelId) ? undefined : body.modelId);
+        const model = judge ?? (await resolveModel(isAutoId(body.modelId) ? undefined : body.modelId));
         if (model.provider === "demo") {
           notices.push("No real AI model is configured, so only rule-based checks were applied.");
         } else {
@@ -90,6 +94,10 @@ export async function POST(req: Request) {
       }
     } else {
       notices.push("The web search returned no results for this question.");
+    }
+    // A search that wasn't followed by a model call is still billed and counted against the plan's searches.
+    if (mode === "rules" && judge && judge.provider !== "demo") {
+      await recordRun(auth, { model: judge, prompt: query, response: "(web search only)", latencyMs: 0, usage: { inputTokens: 0, outputTokens: 0, estimated: false }, status: "success", purpose: "verify", requestedModel: body.modelId ?? null, routingReason: "Truth Layer web search", tools: ["web_search"] });
     }
 
     const report = runClaimPipeline({ question: body.question, answer: body.answer, sources, now, mode, modelId, modelJudgements });

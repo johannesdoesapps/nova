@@ -30,7 +30,7 @@ export async function POST(req: Request) {
 
     const items = set.items.slice(0, body.maxItems);
     const auth = await requireUserIfConfigured();
-    await enforceLimits(req, auth, items.length);
+    await enforceLimits(req, auth, items.length, Array.from({ length: items.length }, () => model), { purpose: "benchmark" });
 
     const maxOutputTokens = 600;
     // OpenAI's newer models reject non-default temperature, so the provider omits it; record what was actually sent.

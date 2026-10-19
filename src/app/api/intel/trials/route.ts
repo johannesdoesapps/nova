@@ -9,7 +9,8 @@ import { seal } from "@/lib/intel/seal";
 import { TRIAL_SYSTEM_PROMPT, type SealedTrial } from "@/lib/intel/trials";
 import type { TrialArm } from "@/lib/intel/types";
 import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
-import { enforceLimits } from "@/lib/usage";
+import { modelTier } from "@/lib/plans";
+import { enforceLimits, planLimits } from "@/lib/usage";
 import { trialStartRequest } from "@/lib/validation-research";
 
 export const maxDuration = 60;
@@ -24,8 +25,10 @@ export async function POST(req: Request) {
   try {
     const body = await parseJsonBody(req, trialStartRequest, 48_000);
     const auth = await requireUserIfConfigured();
+    // Only models the user's plan includes take part (an explicit pick outside it is refused by enforceLimits).
+    const tiers = auth.mode === "authenticated" ? (await planLimits(auth)).tiers : null;
     const registry = await getModels();
-    const available = registry.filter((m) => m.available);
+    const available = registry.filter((m) => m.available && (!tiers || tiers.includes(modelTier(m))));
 
     let pair: [ModelWithStatus, ModelWithStatus] | null;
     if (body.modelIds) {
@@ -40,7 +43,7 @@ export async function POST(req: Request) {
     }
     if (!pair) throw new ApiError("not_configured", "At least two available models are needed for a blind trial.");
 
-    await enforceLimits(req, auth, 2);
+    await enforceLimits(req, auth, 2, pair, { purpose: "trial" });
     const messages: ChatMessage[] = [
       { role: "system", content: TRIAL_SYSTEM_PROMPT },
       { role: "user", content: body.prompt },

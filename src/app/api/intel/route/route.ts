@@ -10,7 +10,8 @@ import { parsePrivacyProfiles } from "@/lib/intel/profiles";
 import { planRoute } from "@/lib/intel/routing";
 import type { BenchmarkRun, TrialRecord } from "@/lib/intel/types";
 import { errorResponse, parseJsonBody } from "@/lib/http";
-import { enforceLimits } from "@/lib/usage";
+import { modelTier } from "@/lib/plans";
+import { enforceLimits, planLimits } from "@/lib/usage";
 import { routeRequest } from "@/lib/validation-research";
 
 export const maxDuration = 60;
@@ -25,7 +26,9 @@ export async function POST(req: Request) {
   try {
     const body = await parseJsonBody(req, routeRequest, 1_500_000);
     const auth = await requireUserIfConfigured();
-    const models = await getModels();
+    // Route only among the models the user's plan includes.
+    const tiers = auth.mode === "authenticated" ? (await planLimits(auth)).tiers : null;
+    const models = (await getModels()).filter((m) => !tiers || tiers.includes(modelTier(m)));
 
     let trials: TrialRecord[] = [];
     let benchmarks: BenchmarkRun[] = [];
@@ -50,8 +53,8 @@ export async function POST(req: Request) {
 
     if (!body.execute || !plan.primary) return NextResponse.json({ plan });
 
-    await enforceLimits(req, auth, 1);
     const chain = [plan.primary, ...plan.fallbacks].map((id) => models.find((m) => m.id === id)!).filter(Boolean);
+    await enforceLimits(req, auth, 1, chain.slice(0, 1), { purpose: "route", inputTokens: Math.ceil(body.prompt.length / 4) + 200 });
     const { outcome, attempts } = await generateWithFallback(
       auth,
       chain,

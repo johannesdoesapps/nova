@@ -6,7 +6,7 @@ import type { ChatMessage, ModelWithStatus } from "@/lib/ai/types";
 import { requireUserIfConfigured } from "@/lib/auth";
 import { serverEnv } from "@/lib/env";
 import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
-import { enforceLimits, recordRun } from "@/lib/usage";
+import { enforceLimits, recordRunLater } from "@/lib/usage";
 import { compareRequest } from "@/lib/validation";
 import { withTimeContext } from "@/lib/ai/turn-context";
 
@@ -41,9 +41,11 @@ export async function POST(req: Request) {
     if (ids.length > max) throw new ApiError("bad_request", `You can compare at most ${max} models at once.`);
 
     const auth = await requireUserIfConfigured();
-    await enforceLimits(req, auth, ids.length);
-
     const registry = await getModels();
+    // Plan access and cost are checked for the models that will actually run.
+    const resolved = ids.map((id) => registry.find((m) => m.id === (registry.some((x) => x.id === id) ? id : (RETIRED_MODELS[id]?.replacement ?? id)))).filter((m): m is ModelWithStatus => !!m);
+    await enforceLimits(req, auth, ids.length, resolved.length ? resolved : undefined, { purpose: "compare", inputTokens: estimateTokens((body.systemPrompt ?? "") + body.prompt) + 200 });
+
     const messages: ChatMessage[] = withTimeContext([
       {
         role: "system",
@@ -75,7 +77,7 @@ export async function POST(req: Request) {
             r.usage.inputTokens === null || r.usage.outputTokens === null
               ? { inputTokens: estimateTokens(messages), outputTokens: estimateTokens(r.text), estimated: true }
               : r.usage;
-          void recordRun(auth, { model, prompt: body.prompt, response: r.text, latencyMs, usage, status: "success", purpose: "compare", servedModel: r.servedModel ?? null });
+          recordRunLater(auth, { model, prompt: body.prompt, response: r.text, latencyMs, usage, status: "success", purpose: "compare", servedModel: r.servedModel ?? null });
           return {
             modelId: model.id,
             displayName: model.displayName,
@@ -93,7 +95,7 @@ export async function POST(req: Request) {
         } catch (err) {
           const latencyMs = Math.round(performance.now() - started);
           const message = err instanceof ApiError ? err.message : "The model call failed.";
-          void recordRun(auth, {
+          recordRunLater(auth, {
             model,
             prompt: body.prompt,
             response: "",

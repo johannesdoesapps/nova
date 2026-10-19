@@ -8,7 +8,7 @@ import type { AuthContext } from "../auth";
 import * as store from "../db/security";
 import { ApiError, clientIp } from "../http";
 import { limiter } from "../rate-limit";
-import { enforceLimits, recordRun } from "../usage";
+import { enforceLimits, planLimits, recordRunLater } from "../usage";
 import { agentDef } from "./agents";
 import { proveOwnership } from "./authz";
 import { runCodeRules, type SourceFile } from "./code-rules";
@@ -66,15 +66,16 @@ const countBy = (fs: FindingDraft[]) => fs.reduce<Record<string, number>>((acc, 
 
 /** One AI call with the user's chosen model. Demo models are skipped, never presented as analysis. */
 async function aiText(ctx: RunContext, opts: { defaultMode: "deep" | "coding"; messages: ChatMessage[]; purpose: string; prompt: string; maxOutputTokens: number }): Promise<{ text: string; modelId: string; modelName: string } | { skipped: string }> {
-  const choice = await resolveModelChoice(ctx.modelId ?? autoIdFor(opts.defaultMode), { prompt: opts.prompt, needs: ["reasoning"] }).catch(
-    () => resolveModelChoice(ctx.modelId ?? autoIdFor(opts.defaultMode), { prompt: opts.prompt }),
+  const tiers = (await planLimits(ctx.auth)).tiers;
+  const choice = await resolveModelChoice(ctx.modelId ?? autoIdFor(opts.defaultMode), { prompt: opts.prompt, needs: ["reasoning"], tiers }).catch(
+    () => resolveModelChoice(ctx.modelId ?? autoIdFor(opts.defaultMode), { prompt: opts.prompt, tiers }),
   );
   const model = choice.model;
   if (model.provider === "demo") return { skipped: "No AI model is configured, so results are shown without an AI explanation." };
-  await enforceLimits(ctx.req, ctx.auth, 1, [model]);
+  await enforceLimits(ctx.req, ctx.auth, 1, [model], { purpose: opts.purpose, inputTokens: Math.ceil(opts.messages.reduce((n, m) => n + m.content.length, 0) / 4) + 200, maxOutputTokens: opts.maxOutputTokens });
   const started = performance.now();
   const r = await getProvider(model.provider).generate({ model, messages: opts.messages, maxOutputTokens: opts.maxOutputTokens, temperature: 0.2, signal: withTimeout(40_000, ctx.signal) });
-  void recordRun(ctx.auth, {
+  recordRunLater(ctx.auth, {
     model,
     prompt: opts.prompt.slice(0, 400),
     response: r.text,

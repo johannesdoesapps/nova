@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { audit, getTarget, setTargetVerified } from "@/lib/db/security";
-import { ApiError, errorResponse } from "@/lib/http";
+import { ApiError, errorResponse, requireUuid } from "@/lib/http";
 import { limiter } from "@/lib/rate-limit";
 import { proveOwnership } from "@/lib/security/authz";
 
@@ -12,7 +12,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/security/target
   try {
     const auth = await requireUser();
     if (!limiter("target-verify", 10, 60_000).check(auth.user.id, 1).ok) throw new ApiError("rate_limited", "Too many checks. Please wait a minute.");
-    const { id } = await ctx.params;
+    const id = requireUuid((await ctx.params).id);
     const target = await getTarget(auth.supabase, auth.user.id, id);
     const proof = await proveOwnership(target, auth, req.signal);
     await setTargetVerified(auth.supabase, target.id, proof.ok ? proof.method : null);

@@ -5,7 +5,7 @@ import { templateHypotheses } from "@/lib/claims/hypothesis";
 import { HYPOTHESIS_SYSTEM_PROMPT, parseHypotheses } from "@/lib/claims/llm";
 import { errorResponse, parseJsonBody } from "@/lib/http";
 import { reportError } from "@/lib/observability";
-import { enforceLimits, recordRun } from "@/lib/usage";
+import { enforceLimits, recordRunLater } from "@/lib/usage";
 import { hypothesesRequest } from "@/lib/validation-research";
 
 export const maxDuration = 60;
@@ -17,8 +17,8 @@ export async function POST(req: Request) {
     if (!body.useModel) return NextResponse.json({ hypotheses: templateHypotheses(body.question), origin: "template", notices: [] });
 
     const auth = await requireUserIfConfigured();
-    await enforceLimits(req, auth, 1);
     const model = await resolveModel(body.modelId);
+    await enforceLimits(req, auth, 1, [model], { purpose: "hypotheses" });
     if (model.provider === "demo")
       return NextResponse.json({ hypotheses: templateHypotheses(body.question), origin: "template", notices: ["Demo mode: showing template hypotheses instead of model-generated ones."] });
 
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     const started = performance.now();
     try {
       const r = await getProvider(model.provider).generate({ model, messages, maxOutputTokens: 2000, temperature: 0.4, signal: withTimeout(45_000, req.signal) });
-      void recordRun(auth, { model, prompt: body.question, response: r.text, latencyMs: performance.now() - started, usage: r.usage, status: "success", purpose: "hypotheses", category: "research", servedModel: r.servedModel ?? null });
+      recordRunLater(auth, { model, prompt: body.question, response: r.text, latencyMs: performance.now() - started, usage: r.usage, status: "success", purpose: "hypotheses", category: "research", servedModel: r.servedModel ?? null });
       const hypotheses = parseHypotheses(r.text);
       if (!hypotheses) return NextResponse.json({ hypotheses: templateHypotheses(body.question), origin: "template", notices: ["The model's response could not be parsed, so template hypotheses are shown."] });
       return NextResponse.json({ hypotheses, origin: "model", modelId: model.id, notices: [] });

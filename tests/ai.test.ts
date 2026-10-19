@@ -135,10 +135,16 @@ describe("OpenAI-compatible provider", () => {
     expect(sent).toMatchObject({ model: "gpt-5.6-luna", stream: true, max_completion_tokens: 50, stream_options: { include_usage: true } });
   });
 
-  it("surfaces provider errors with the status code", async () => {
+  it("explains provider errors without exposing the provider's raw text", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { message: "bad model" } }), { status: 404 })));
     const p = new OpenAICompatibleProvider("huggingface", { baseUrl: "https://x.test/v1", apiKey: () => "hf", envVar: "HUGGINGFACE_API_KEY" });
-    await expect(p.generate({ model, messages: [{ role: "user", content: "hi" }] })).rejects.toThrow(/404: bad model/);
+    const err = await p.generate({ model, messages: [{ role: "user", content: "hi" }] }).then(() => null, (e: Error) => e);
+    expect(err?.message).toMatch(/isn't available from its provider right now/);
+    expect(err?.message).not.toMatch(/bad model/);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { message: "Incorrect API key provided: sk-proj-abcd****wxyz" } }), { status: 401 })));
+    const auth = await p.generate({ model, messages: [{ role: "user", content: "hi" }] }).then(() => null, (e: Error) => e);
+    expect(auth?.message).not.toMatch(/sk-|API key provided/);
+    expect(auth?.message).toMatch(/configuration problem/);
   });
 
   it("reports a missing key clearly", async () => {

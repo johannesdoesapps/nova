@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { audit, getFinding, updateFinding } from "@/lib/db/security";
-import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
+import { ApiError, errorResponse, parseJsonBody, requireUuid } from "@/lib/http";
 import { findingPatch } from "@/lib/security/schema";
 
 /** GET /api/security/findings/[id] — a finding with related findings, duplicates and its audit history. */
 export async function GET(_req: Request, ctx: RouteContext<"/api/security/findings/[id]">) {
   try {
     const auth = await requireUser();
-    const { id } = await ctx.params;
+    const id = requireUuid((await ctx.params).id);
     return NextResponse.json(await getFinding(auth.supabase, auth.user.id, id));
   } catch (err) {
     return errorResponse(err);
@@ -23,7 +23,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/security/findin
 export async function PATCH(req: Request, ctx: RouteContext<"/api/security/findings/[id]">) {
   try {
     const auth = await requireUser();
-    const { id } = await ctx.params;
+    const id = requireUuid((await ctx.params).id);
     const body = await parseJsonBody(req, findingPatch);
     const { finding: before } = await getFinding(auth.supabase, auth.user.id, id);
     if (body.duplicate_of) {

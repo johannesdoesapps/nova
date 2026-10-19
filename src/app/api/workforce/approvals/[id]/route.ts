@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { parseJsonBody } from "@/lib/http";
+import { parseJsonBody, requireUuid } from "@/lib/http";
 import { decideApproval } from "@/lib/workforce/commander";
 import { approvalDecisionSchema, requireOperator, wfError } from "@/lib/workforce/server";
 
@@ -11,7 +11,7 @@ import { approvalDecisionSchema, requireOperator, wfError } from "@/lib/workforc
 export async function POST(req: Request, ctx: RouteContext<"/api/workforce/approvals/[id]">) {
   try {
     const { rt } = await requireOperator();
-    const { id } = await ctx.params;
+    const id = requireUuid((await ctx.params).id);
     const b = await parseJsonBody(req, approvalDecisionSchema);
     const a = await decideApproval(rt, id, b.decision, b.note, b.payloadHash);
     return NextResponse.json({ approval: { ...a, status: b.decision } });

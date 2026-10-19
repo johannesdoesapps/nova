@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { withTimeout } from "@/lib/ai";
+import { resolveModel, withTimeout } from "@/lib/ai";
 import { requireUserIfConfigured } from "@/lib/auth";
 import { serverEnv } from "@/lib/env";
 import { ApiError, clientIp, errorResponse, parseJsonBody } from "@/lib/http";
 import { limiter } from "@/lib/rate-limit";
 import { webSearch } from "@/lib/search/web";
+import { enforceLimits, planLimits, recordRun, releaseUsage } from "@/lib/usage";
 
 const body = z.object({ question: z.string().trim().min(2).max(2000) });
 
@@ -24,7 +25,17 @@ export async function POST(req: Request) {
     const who = auth.mode === "authenticated" ? `u:${auth.user.id}` : `ip:${clientIp(req)}`;
     const ok = limiter("search-minute", Math.max(2, Math.floor(env.ratePerMinute / 2)), 60_000).check(who, 1);
     if (!ok.ok) throw new ApiError("rate_limited", "Too many searches. Please wait a moment.");
-    const r = await webSearch(question.slice(0, 400), { provider: env.searchProvider, apiKey: env.searchKey }, withTimeout(15_000, req.signal));
+    // A search is billable: it counts against the plan's monthly searches and the AI allowance.
+    if (auth.mode === "authenticated" && (await planLimits(auth)).webSearchesLeft === 0) {
+      return NextResponse.json({ available: false, reason: "Your plan's web searches for this month are used up.", sources: [] });
+    }
+    await enforceLimits(req, auth, 1, undefined, { purpose: "web_search", inputTokens: 0, maxOutputTokens: 0 });
+    const started = performance.now();
+    const r = await webSearch(question.slice(0, 400), { provider: env.searchProvider, apiKey: env.searchKey }, withTimeout(15_000, req.signal)).catch(async (err) => {
+      await releaseUsage(auth);
+      throw err;
+    });
+    await recordRun(auth, { model: await resolveModel(), prompt: question.slice(0, 400), response: "(web search)", latencyMs: performance.now() - started, usage: { inputTokens: 0, outputTokens: 0, estimated: false }, status: "success", purpose: "web_search", routingReason: "Council shared search", tools: ["web_search"] });
     return NextResponse.json({ available: true, sources: r.sources.slice(0, 8).map(({ index, url, title, snippet }) => ({ index, url, title, snippet })) });
   } catch (err) {
     return errorResponse(err);

@@ -22,8 +22,7 @@ export async function requireOperator(): Promise<{ auth: Extract<AuthContext, { 
 
 export function wfError(err: unknown) {
   if (err instanceof WorkforceError) {
-    const code = err.code === "conflict" ? "bad_request" : err.code;
-    return errorResponse(new ApiError(code, err.message));
+    return errorResponse(new ApiError(err.code, err.message));
   }
   return errorResponse(err);
 }

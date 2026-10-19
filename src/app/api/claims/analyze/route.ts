@@ -10,7 +10,7 @@ import type { ModelJudgement, PipelineInput } from "@/lib/claims/types";
 import { saveClaimReport } from "@/lib/db/research";
 import { errorResponse, parseJsonBody } from "@/lib/http";
 import { reportError } from "@/lib/observability";
-import { enforceLimits, recordRun } from "@/lib/usage";
+import { enforceLimits, recordRunLater } from "@/lib/usage";
 import { claimsAnalyzeRequest } from "@/lib/validation-research";
 
 export const maxDuration = 60;
@@ -33,8 +33,8 @@ export async function POST(req: Request) {
     let modelId: string | null = null;
 
     if (body.mode === "model") {
-      await enforceLimits(req, auth, 1);
       const model = await resolveModel(body.modelId);
+      await enforceLimits(req, auth, 1, [model], { purpose: "claims", inputTokens: Math.ceil(JSON.stringify(body).length / 4) + 1000 });
       modelId = model.id;
       if (model.provider === "demo") {
         notices.push("Demo mode: no real model is configured, so only rule-based checks were applied.");
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
           if (parsed.error) notices.push(parsed.error);
           modelJudgements = parsed.judgements;
           modelMeta = { servedModel: r.servedModel ?? null, temperature: 0, promptHash: promptHash(messages), durationMs };
-          void recordRun(auth, {
+          recordRunLater(auth, {
             model,
             prompt: `[claim-dna judge] ${body.question}`.slice(0, 400),
             response: r.text,

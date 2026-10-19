@@ -271,8 +271,18 @@ describe("POST /api/billing/change", () => {
     const { update, POST } = await setup({});
     const res = await POST(post({ plan: "max", interval: "month" }));
     expect(res.status).toBe(200);
-    expect(update).toHaveBeenCalledWith("sub_123", expect.objectContaining({ items: [{ id: "si_1", price: "price_nova_max_month_usd_11000" }], proration_behavior: "always_invoice", cancel_at_period_end: false }));
+    expect(update).toHaveBeenCalledWith("sub_123", { items: [{ id: "si_1", price: "price_nova_max_month_usd_11000" }], proration_behavior: "always_invoice", payment_behavior: "pending_if_incomplete" });
+    expect(update).toHaveBeenCalledWith("sub_123", expect.objectContaining({ cancel_at_period_end: false, metadata: expect.objectContaining({ nova_plan: "max" }) }));
     expect(upserts.length).toBeGreaterThan(0); // allowance updated immediately
+  });
+
+  it("keeps the old plan when the upgrade payment fails (Stripe leaves it pending)", async () => {
+    const { update, POST } = await setup({});
+    update.mockResolvedValueOnce({ ...subscription(), pending_update: { expires_at: 1 } } as never);
+    const res = await POST(post({ plan: "max", interval: "month" }));
+    expect(res.status).toBe(402);
+    expect((await res.json()).error.message).toMatch(/didn't go through, so your plan hasn't changed/);
+    expect(update).toHaveBeenCalledTimes(1); // no metadata switch to the new plan
   });
 
   it("downgrades Max to Pro with a credit for the unused time", async () => {

@@ -1,5 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ApiError } from "../../http";
+import { reportError } from "../../observability";
+import { providerErrorMessage } from "./errors";
 import type { AIProvider, ChatMessage, GenerateParams, GenerateResult, StreamEvent, Usage } from "../types";
 
 /**
@@ -48,8 +50,9 @@ export class AnthropicProvider implements AIProvider {
       max_tokens: params.maxOutputTokens ?? 4096,
       ...(system ? { system } : {}),
       messages,
-      // Caches the stable prefix (system prompt + earlier turns) so follow-ups cost less.
-      cache_control: { type: "ephemeral" },
+      // Caches the prefix (system prompt + earlier turns) only for long prompts: a cache write costs 1.25× input and
+      // short prompts are rarely re-read in time, so caching them costs more than it saves.
+      ...(shouldCache(params.messages) ? { cache_control: { type: "ephemeral" as const } } : {}),
       ...(opts.effort ? { output_config: { effort: opts.effort } } : {}),
       ...(opts.fallback ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
     };
@@ -117,6 +120,12 @@ export function toAnthropicMessages(input: ChatMessage[]): {
   return { system, messages };
 }
 
+/** Long prompts only (about 4,000+ tokens), where follow-ups re-reading the cache save more than the write costs. */
+export function shouldCache(messages: GenerateParams["messages"]): boolean {
+  return messages.reduce((n, m) => n + m.content.length, 0) >= CACHE_MIN_CHARS;
+}
+const CACHE_MIN_CHARS = 16_000;
+
 function toUsage(u: Anthropic.Beta.Messages.BetaUsage): Usage {
   return {
     inputTokens: u.input_tokens + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0),
@@ -135,10 +144,12 @@ function toApiError(err: unknown, params: GenerateParams): Error {
   }
   if (err instanceof Anthropic.RateLimitError) return new ApiError("rate_limited", `${name} is busy right now. Try again shortly.`);
   if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
-    return new ApiError("not_configured", `${name} rejected the API key. Check ANTHROPIC_API_KEY.`);
+    reportError(err, { where: "provider.anthropic", status: err.status });
+    return new ApiError("not_configured", providerErrorMessage(name, err.status ?? 401, ""));
   }
   if (err instanceof Anthropic.APIError) {
-    return new ApiError("upstream_error", `${name} returned ${err.status ?? "an error"}: ${err.message.slice(0, 300)}`);
+    reportError(err, { where: "provider.anthropic", status: err.status });
+    return new ApiError(err.status && err.status < 500 ? "bad_request" : "upstream_error", providerErrorMessage(name, err.status ?? 500, err.message));
   }
   return new ApiError("upstream_error", "Could not reach Anthropic.");
 }

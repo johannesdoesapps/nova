@@ -2,7 +2,7 @@ import "server-only";
 import { getProvider, resolveModelChoice, withTimeout } from "../ai";
 import type { ChatMessage } from "../ai/types";
 import type { AuthContext } from "../auth";
-import { recordRun } from "../usage";
+import { recordRunLater } from "../usage";
 import { estimateTokens, type ModelRunner, type ResolvedModel } from "./models";
 
 /** Production model access: Nova's provider registry, Auto routing and usage records. */
@@ -22,7 +22,7 @@ export function novaModelRunner(auth: AuthContext): ModelRunner {
       const estimated = r.usage.inputTokens === null || r.usage.outputTokens === null;
       const inputTokens = r.usage.inputTokens ?? estimateTokens(messages);
       const outputTokens = r.usage.outputTokens ?? estimateTokens(r.text);
-      void recordRun(auth, {
+      recordRunLater(auth, {
         model: info,
         prompt: `[workforce:${opts.purpose}]`,
         response: r.text.slice(0, 2000),

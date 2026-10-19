@@ -3,6 +3,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import { getAuth } from "./auth";
 import { ApiError } from "./http";
+import { reportError } from "./observability";
 
 /**
  * Bridge to the Python NOVA engine (AI Lab, Radar, Workspaces, Integrations).
@@ -56,6 +57,8 @@ export async function engineFetch(path: string, init: { method?: string; body?: 
       cache: "no-store",
     });
   } catch {
-    throw new ApiError("not_configured", `The NOVA engine is not reachable at ${url}. Start it with: cd engine && .venv/bin/python -m nova_engine`);
+    // The address and start command are for operators (logs), not visitors.
+    reportError(new Error(`NOVA engine not reachable at ${url}`), { where: "engine" });
+    throw new ApiError("not_configured", "This feature's service isn't available right now. Please try again later.");
   }
 }

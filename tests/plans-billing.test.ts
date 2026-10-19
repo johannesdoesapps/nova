@@ -231,6 +231,9 @@ describe("usage_reserve_v2 (budget, atomically)", () => {
     // A second request before the first is recorded: 4.5 + 0.1 held + 0.1 > 4.66.
     expect(await reserve(ALICE, rid(8), { est: 0.1 })).toMatchObject({ ok: false, scope: "insufficient" });
     await as(ALICE, () => db.query("select public.usage_finish($1, 'released')", [rid(7)]));
+    // A released hold still counts until it expires (a user could release their own); then it's free.
+    expect(await reserve(ALICE, rid(8), { est: 0.1 })).toMatchObject({ ok: false });
+    await db.exec("update public.usage_holds set expires_at = now() - interval '1 second'");
     expect(await reserve(ALICE, rid(8), { est: 0.1 })).toMatchObject({ ok: true });
   });
 
@@ -291,6 +294,9 @@ describe("usage_reserve_v3 (premium budget, daily and token caps, atomically)", 
     expect(await reserve3(ALICE, rid(103), { premium: true, est: 1.0 })).toMatchObject({ ok: true });
     expect(await reserve3(ALICE, rid(104), { premium: true, est: 1.0 })).toMatchObject({ ok: false, scope: "premium" });
     await as(ALICE, () => db.query("select public.usage_finish($1, 'released')", [rid(103)]));
+    // A released hold still counts until it expires (a user could release their own); then it's free.
+    expect(await reserve3(ALICE, rid(104), { premium: true, est: 1.0 })).toMatchObject({ ok: false });
+    await db.exec("update public.usage_holds set expires_at = now() - interval '1 second'");
     expect(await reserve3(ALICE, rid(104), { premium: true, est: 1.0 })).toMatchObject({ ok: true });
   });
 
@@ -407,5 +413,33 @@ describe("finance report alerts", () => {
     expect(r.plans.find((p) => p.plan === "pro")!.canceling).toBe(1);
     expect(r.pastDue).toBe(1);
     expect(r.projection.aiCostUsd).toBeGreaterThan(0);
+  });
+});
+
+describe("holds can't be released early to dodge the budget", () => {
+  it("keeps counting a hold the user releases or settles directly until it expires or its run is recorded", async () => {
+    expect(await reserve3(ALICE, rid(201), { est: 2.5 })).toMatchObject({ ok: true });
+    // The user calls usage_finish themselves, before any run is recorded.
+    await as(ALICE, () => db.query("select public.usage_finish($1, 'released')", [rid(201)]));
+    expect(await reserve3(ALICE, rid(202), { est: 1.0 })).toMatchObject({ ok: false, scope: "insufficient" });
+    await as(ALICE, () => db.query("select public.usage_finish($1, 'settled')", [rid(201)]));
+    expect(await reserve3(ALICE, rid(203), { est: 1.0 })).toMatchObject({ ok: false, scope: "insufficient" });
+    // Once the real run is recorded, its actual cost replaces the estimate.
+    await as(ALICE, () => db.query("insert into public.model_runs (model_id, status, units, estimated_cost, request_id) values ('anthropic:m', 'success', 1, 0.01, $1)", [rid(201)]));
+    expect(await reserve3(ALICE, rid(204), { est: 1.0 })).toMatchObject({ ok: true });
+  });
+
+  it("does the same for held tokens", async () => {
+    expect(await reserve3(ALICE, rid(205), { tokenLimit: 100_000, tokens: 80_000 })).toMatchObject({ ok: true });
+    await as(ALICE, () => db.query("select public.usage_finish($1, 'released')", [rid(205)]));
+    expect(await reserve3(ALICE, rid(206), { tokenLimit: 100_000, tokens: 30_000 })).toMatchObject({ ok: false, reason: "tokens" });
+  });
+});
+
+describe("prompt caching only where it pays", () => {
+  it("asks Anthropic to cache long prompts, not short ones (a write costs 1.25× input)", async () => {
+    const { shouldCache } = await import("@/lib/ai/providers/anthropic");
+    expect(shouldCache([{ role: "user", content: "hi" }])).toBe(false);
+    expect(shouldCache([{ role: "system", content: "x".repeat(8000) }, { role: "user", content: "y".repeat(8000) }])).toBe(true);
   });
 });

@@ -9,7 +9,7 @@ import { reportError } from "@/lib/observability";
 import { buildSearchMessages, splitFollowUps, stripInvalidCitations, usedCitations } from "@/lib/search/grounding";
 import type { SearchSource } from "@/lib/search/types";
 import { webSearch } from "@/lib/search/web";
-import { enforceLimits, recordRun } from "@/lib/usage";
+import { enforceLimits, planLimits, recordRun } from "@/lib/usage";
 import { searchRequest } from "@/lib/validation";
 import { withTimeContext } from "@/lib/ai/turn-context";
 
@@ -23,8 +23,10 @@ export async function POST(req: Request) {
   try {
     const body = await parseJsonBody(req, searchRequest, 48_000);
     const auth = await requireUserIfConfigured();
-    await enforceLimits(req, auth, 1);
     const model = await resolveModel(body.modelId);
+    await enforceLimits(req, auth, 1, [model], { purpose: "search", inputTokens: 4000 });
+    // Signed-in plans have a monthly number of searches (guest demo mode has its own per-IP limits).
+    const searchesLeft = auth.mode === "authenticated" ? (await planLimits(auth)).webSearchesLeft : null;
     const env = serverEnv();
 
     return ndjsonStream(async (send, signal) => {
@@ -33,7 +35,9 @@ export async function POST(req: Request) {
       // 1. Retrieve evidence. Failure is reported honestly, never papered over.
       let sources: SearchSource[] = [];
       let searchProvider: string | null = null;
-      try {
+      if (searchesLeft === 0) {
+        send({ type: "notice", level: "warning", code: "quota_exceeded", message: "Your plan's web searches for this month are used up, so this answer is not grounded in live sources." });
+      } else try {
         const result = await webSearch(
           body.query,
           { provider: env.searchProvider, apiKey: env.searchKey },
@@ -83,7 +87,8 @@ export async function POST(req: Request) {
       } finally {
         const latencyMs = performance.now() - started;
         usage ??= { inputTokens: estimateTokens(messages), outputTokens: estimateTokens(raw), estimated: true };
-        void recordRun(auth, { model, prompt: body.query, response: raw, latencyMs, usage, status, purpose: "search", category: "research", servedModel });
+        // The search is billed and counted against the plan's monthly searches.
+        await recordRun(auth, { model, prompt: body.query, response: raw, latencyMs, usage, status, purpose: "search", category: "research", servedModel, tools: searchProvider ? ["web_search"] : [] });
       }
 
       const cleaned = stripInvalidCitations(raw, sources);

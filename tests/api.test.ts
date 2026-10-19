@@ -159,3 +159,21 @@ describe("GET /api/status", () => {
     delete process.env.OPENAI_API_KEY;
   });
 });
+
+describe("request body limits", () => {
+  it("stops reading a body without Content-Length once it passes the limit", async () => {
+    const { parseJsonBody } = await import("@/lib/http");
+    const { z } = await import("zod");
+    const big = new ReadableStream({
+      start(c) {
+        for (let i = 0; i < 100; i++) c.enqueue(new TextEncoder().encode("x".repeat(1000)));
+        c.close();
+      },
+    });
+    const req = new Request("http://x", { method: "POST", body: big, duplex: "half" } as RequestInit);
+    await expect(parseJsonBody(req, z.object({}), 10_000)).rejects.toThrow(/exceeds 10000 bytes/);
+    // Limits count bytes, not characters.
+    const ok = new Request("http://x", { method: "POST", body: JSON.stringify({ t: "é".repeat(10) }) });
+    await expect(parseJsonBody(ok, z.object({ t: z.string() }), 1000)).resolves.toEqual({ t: "é".repeat(10) });
+  });
+});
