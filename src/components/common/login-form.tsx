@@ -4,9 +4,9 @@ import { useState } from "react";
 import { browserSupabase } from "@/lib/supabase/client";
 import { Button, Input, Notice } from "@/components/ui/primitives";
 
-export function LoginForm({ url, supabaseKey, next, siteUrl }: { url: string; supabaseKey: string; next: string; siteUrl: string }) {
+export function LoginForm({ url, supabaseKey, next, siteUrl, initialMode = "signin" }: { url: string; supabaseKey: string; next: string; siteUrl: string; initialMode?: "signin" | "signup" }) {
   const router = useRouter();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup">(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");

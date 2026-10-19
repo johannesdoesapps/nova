@@ -18,6 +18,7 @@ const nextConfig: NextConfig = {
       // address isn't allow-listed; finish the sign-in instead of dropping it.
       { source: "/", has: [{ type: "query" as const, key: "code" }], destination: "/auth/callback", permanent: false },
       { source: "/battle", destination: "/arena", permanent: false },
+      { source: "/:path(signup|sign-up|register)", destination: "/login?mode=signup", permanent: false },
       ...legacy.map((source) => ({ source, destination: "/chat", permanent: false })),
     ];
   },

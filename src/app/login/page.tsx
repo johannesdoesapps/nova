@@ -28,6 +28,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   }
   const error = typeof sp.error === "string" ? sp.error : null;
   const notice = typeof sp.notice === "string" ? sp.notice : null;
+  const initialMode = sp.mode === "signup" ? "signup" : "signin";
 
   return (
     <div className={`nova-glow grid min-h-dvh place-items-center px-4 py-10 ${serif.variable}`}>
@@ -39,7 +40,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           {error && <Notice tone="danger" className="mt-4">{error}</Notice>}
           {notice && <Notice tone="success" className="mt-4">{notice}</Notice>}
           {configured ? (
-            <LoginForm url={publicEnv.supabaseUrl!} supabaseKey={publicEnv.supabaseKey!} next={next} siteUrl={publicEnv.siteUrl} />
+            <LoginForm url={publicEnv.supabaseUrl!} supabaseKey={publicEnv.supabaseKey!} next={next} siteUrl={publicEnv.siteUrl} initialMode={initialMode} />
           ) : (
             <Notice tone="warning" className="mt-4" title="Authentication is not configured">
               Set <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY</code>, apply the migrations, and restart.{" "}
