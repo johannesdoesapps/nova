@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { Check, ChevronDown, Search, Sparkles } from "lucide-react";
 import { MODEL_CATEGORIES, inCategory, modelTags, priceLabel, recommendedIds, type ModelCategory } from "@/lib/ai/catalog";
 import { ROUTER_MODES, autoIdFor, isAutoId, routerModeOf } from "@/lib/ai/platform";
@@ -27,6 +28,8 @@ export function ProviderMark({ provider, className }: { provider: ProviderId | "
   );
 }
 
+const planName = (p: ModelWithStatus["requiredPlan"]) => (p === "max" ? "Max" : p === "pro" ? "Pro" : "Free");
+
 type Option = { id: string; kind: "auto" } | { id: string; kind: "model"; model: ModelWithStatus };
 
 export function ModelSelector({
@@ -42,6 +45,7 @@ export function ModelSelector({
   auto: { enabled: boolean; reason: string | null } | null;
   className?: string;
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<ModelCategory | "all">("all");
@@ -134,6 +138,13 @@ export function ModelSelector({
   }, [open, activeIndex, listId]);
 
   const choose = (id: string) => {
+    // A model outside the user's plan opens the plans instead of being selected.
+    const locked = available.find((m) => m.id === id && m.locked);
+    if (locked) {
+      close();
+      router.push(`/pricing?plan=${locked.requiredPlan ?? "pro"}`);
+      return;
+    }
     onChange(id);
     close();
   };
@@ -283,7 +294,7 @@ export function ModelSelector({
                   aria-selected={value === m.id}
                   onPointerEnter={() => setActive(indexOf.get(m.id) ?? 0)}
                   onClick={() => choose(m.id)}
-                  className={rowClass(m.id)}
+                  className={cn(rowClass(m.id), m.locked && "opacity-70")}
                 >
                   <ProviderMark provider={m.provider} />
                   <div className="min-w-0 flex-1">
@@ -291,6 +302,11 @@ export function ModelSelector({
                       {m.displayName}
                       {m.isDefault && <span className="rounded-full bg-s-accent-soft px-1.5 py-px text-[10.5px] font-medium text-s-accent">Default</span>}
                       {m.provider === "demo" && <span className="rounded-full border border-s-line-strong px-1.5 py-px text-[10.5px] text-s-ink-3">Simulated</span>}
+                      {m.locked && (
+                        <span className="rounded-full bg-s-accent-soft px-1.5 py-px text-[10.5px] font-medium text-s-accent" title={`Included in ${planName(m.requiredPlan)}. Select to see plans.`}>
+                          {planName(m.requiredPlan)}
+                        </span>
+                      )}
                     </div>
                     <p className="mt-0.5 line-clamp-2 text-[12.5px] leading-snug text-s-ink-3">{m.description}</p>
                     {(tags.length > 0 || price) && (

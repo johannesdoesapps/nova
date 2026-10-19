@@ -169,6 +169,9 @@ describe("fallback", () => {
       const chain = await fallbackChain(sonnet, { ...DEFAULT_PLATFORM_SETTINGS, fallbackEnabled: true }, true);
       expect(chain.length).toBeGreaterThan(0);
       expect(chain.every((m) => m.id !== sonnet.id && m.capabilities.includes("reasoning") && m.available)).toBe(true);
+      // A model the user picked is never replaced by another provider's, and backups stay within the plan.
+      const same = await fallbackChain(sonnet, { ...DEFAULT_PLATFORM_SETTINGS, fallbackEnabled: true }, true, { sameProvider: true, tiers: ["standard", "advanced"] });
+      expect(same.every((m) => m.provider === "anthropic" && m.id !== "anthropic:claude-opus-5-5")).toBe(true);
     } finally {
       delete process.env.ANTHROPIC_API_KEY;
       delete process.env.OPENAI_API_KEY;

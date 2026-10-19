@@ -4,6 +4,9 @@ import { getModels } from "@/lib/ai";
 import { getPlatformSettings } from "@/lib/ai/settings";
 import { recommendModel } from "@/lib/ai/router";
 import { errorResponse, parseQuery } from "@/lib/http";
+import { getAuth } from "@/lib/auth";
+import { entitlementFor } from "@/lib/entitlements";
+import { modelTier, planForTier, resolveBilling } from "@/lib/plans";
 
 const query = z.object({
   prompt: z.string().max(100_000).optional(),
@@ -11,12 +14,20 @@ const query = z.object({
   costSensitive: z.enum(["true", "false"]).optional(),
 });
 
-/** GET /api/models — the model registry with availability; add ?prompt= for a recommendation. */
+/** GET /api/models — the model registry with availability and plan access; add ?prompt= for a recommendation. */
 export async function GET(req: Request) {
   try {
     const q = parseQuery(req.url, query);
     const settings = await getPlatformSettings();
-    const models = await getModels(settings);
+    const [registry, auth] = await Promise.all([getModels(settings), getAuth()]);
+    const entitlement = await entitlementFor(auth);
+    const billing = entitlement?.billing ?? resolveBilling(settings.billing);
+    const allowed = entitlement?.kind === "unlimited" ? null : (entitlement?.limits.tiers ?? billing.plans.free.tiers);
+    // Each model's tier, the plan that includes it, and whether the caller's plan does.
+    const models = registry.map((m) => {
+      const tier = modelTier(m);
+      return { ...m, tier, requiredPlan: planForTier(billing, tier), locked: !!allowed && !allowed.includes(tier) };
+    });
     const realAvailable = models.some((m) => m.available && m.provider !== "demo");
     const auto = !settings.autoEnabled
       ? { enabled: false, reason: "Auto mode is turned off by the site administrator." }

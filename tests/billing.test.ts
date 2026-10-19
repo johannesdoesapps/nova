@@ -1,6 +1,7 @@
 /**
- * Stripe billing with Stripe's API mocked (no network): checkout parameters,
- * webhook signature checks, and how subscriptions are stored.
+ * Stripe billing with Stripe's API mocked (no network): checkout for Pro and
+ * Max (monthly and yearly), plan changes, cancellation, renewals, failed
+ * payments, webhook signature checks, and how subscriptions are stored.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -54,9 +55,13 @@ const subscription = (over: Record<string, unknown> = {}) => ({
   customer: "cus_123",
   cancel_at_period_end: false,
   metadata: { user_id: "user-1", nova_plan: "pro" },
-  items: { data: [{ current_period_start: 1_792_400_000, current_period_end: 1_795_000_000 }] },
+  items: { data: [{ id: "si_1", current_period_start: 1_792_400_000, current_period_end: 1_795_000_000, price: { id: "price_pro", lookup_key: "nova_pro_month_usd_2000", unit_amount: 2000, recurring: { interval: "month" }, metadata: {} } }] },
   ...over,
 });
+const withPrice = (lookup: string, cents: number, interval: "month" | "year") => ({
+  items: { data: [{ id: "si_1", current_period_start: 1_792_400_000, current_period_end: 1_795_000_000, price: { id: `price_${lookup}`, lookup_key: lookup, unit_amount: cents, recurring: { interval }, metadata: {} } }] },
+});
+const post = (body: unknown) => new Request("http://x", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
 async function signedPost(event: Record<string, unknown>, secret = SECRET) {
   const { stripeClient } = await import("@/lib/billing/stripe");
@@ -72,6 +77,8 @@ describe("subscription mapping", () => {
     expect(subscriptionRow(subscription() as never, "user-1")).toEqual({
       user_id: "user-1",
       plan: "pro",
+      billing_interval: "month",
+      price_usd: 20,
       status: "active",
       current_period_start: new Date(1_792_400_000_000).toISOString(),
       current_period_end: new Date(1_795_000_000_000).toISOString(),
@@ -82,6 +89,14 @@ describe("subscription mapping", () => {
     expect(["active", "trialing", "past_due", "canceled", "incomplete", "incomplete_expired", "unpaid", "paused"].map(dbStatus)).toEqual([
       "active", "trialing", "past_due", "canceled", "incomplete", "canceled", "inactive", "inactive",
     ]);
+  });
+
+  it("reads Max and yearly billing from the Stripe price", async () => {
+    const { subscriptionRow, parseLookupKey, priceLookupKey } = await import("@/lib/billing/stripe");
+    expect(subscriptionRow(subscription(withPrice("nova_max_year_usd_108000", 108_000, "year")) as never, "user-1")).toMatchObject({ plan: "max", billing_interval: "year", price_usd: 1080 });
+    expect(priceLookupKey("max", "year", 108_000)).toBe("nova_max_year_usd_108000");
+    expect(parseLookupKey("nova_pro_month_usd_2000")).toEqual({ plan: "pro", interval: "month" });
+    expect(parseLookupKey("something_else")).toBeNull();
   });
 });
 
@@ -121,6 +136,22 @@ describe("POST /api/stripe/webhook", () => {
     expect(upserts).toHaveLength(0);
   });
 
+  it("applies upgrades, renewals and failed payments from Stripe", async () => {
+    const { stripeClient } = await import("@/lib/billing/stripe");
+    const retrieve = vi.spyOn(stripeClient()!.subscriptions, "retrieve");
+    retrieve.mockResolvedValue(subscription(withPrice("nova_max_month_usd_10000", 10_000, "month")) as never);
+    await signedPost({ id: "evt_6", type: "customer.subscription.updated", data: { object: subscription() } });
+    expect(upserts.at(-1)).toMatchObject({ plan: "max", billing_interval: "month", price_usd: 100, status: "active" });
+    // Renewal: a new period.
+    retrieve.mockResolvedValue(subscription({ items: { data: [{ ...subscription().items.data[0], current_period_start: 1_795_000_000, current_period_end: 1_797_600_000 }] } }) as never);
+    await signedPost({ id: "evt_7", type: "customer.subscription.updated", data: { object: subscription() } });
+    expect(upserts.at(-1)).toMatchObject({ current_period_start: new Date(1_795_000_000_000).toISOString() });
+    // A failed renewal payment: past_due, which gives Free limits until paid.
+    retrieve.mockResolvedValue(subscription({ status: "past_due" }) as never);
+    await signedPost({ id: "evt_8", type: "customer.subscription.updated", data: { object: subscription() } });
+    expect(upserts.at(-1)).toMatchObject({ status: "past_due" });
+  });
+
   it("asks Stripe to retry when saving fails", async () => {
     const { stripeClient } = await import("@/lib/billing/stripe");
     vi.spyOn(stripeClient()!.subscriptions, "retrieve").mockRejectedValue(new Error("network"));
@@ -130,16 +161,16 @@ describe("POST /api/stripe/webhook", () => {
 });
 
 describe("POST /api/billing/checkout", () => {
-  it("opens a $12/month USD subscription checkout tied to the user", async () => {
+  it("opens a $20/month USD Pro checkout tied to the user", async () => {
     const { stripeClient } = await import("@/lib/billing/stripe");
     const s = stripeClient()!;
     vi.spyOn(s.prices, "list").mockResolvedValue({ data: [] } as never);
     const createPrice = vi.spyOn(s.prices, "create").mockResolvedValue({ id: "price_pro" } as never);
     const create = vi.spyOn(s.checkout.sessions, "create").mockResolvedValue({ url: "https://checkout.stripe.com/c/pay_1" } as never);
     const { POST } = await import("@/app/api/billing/checkout/route");
-    const res = await POST();
+    const res = await POST(post({ plan: "pro", interval: "month" }));
     expect(await res.json()).toEqual({ url: "https://checkout.stripe.com/c/pay_1" });
-    expect(createPrice).toHaveBeenCalledWith(expect.objectContaining({ currency: "usd", unit_amount: 1200, recurring: { interval: "month" }, lookup_key: "nova_pro_monthly_usd_1200" }));
+    expect(createPrice).toHaveBeenCalledWith(expect.objectContaining({ currency: "usd", unit_amount: 2000, recurring: { interval: "month" }, lookup_key: "nova_pro_month_usd_2000" }));
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: "subscription",
@@ -147,14 +178,72 @@ describe("POST /api/billing/checkout", () => {
         customer_email: "pat@example.com",
         client_reference_id: "user-1",
         subscription_data: { metadata: { user_id: "user-1", nova_plan: "pro" } },
-        success_url: "https://nova.example/chat?upgraded=1",
+        success_url: "https://nova.example/chat?upgraded=pro",
       }),
     );
   });
 
-  it("won't sell Pro twice", async () => {
+  it("sells Max yearly with the annual discount, reusing an existing Stripe price", async () => {
+    const { stripeClient } = await import("@/lib/billing/stripe");
+    const s = stripeClient()!;
+    const list = vi.spyOn(s.prices, "list").mockResolvedValue({ data: [{ id: "price_max_year" }] } as never);
+    const createPrice = vi.spyOn(s.prices, "create");
+    const create = vi.spyOn(s.checkout.sessions, "create").mockResolvedValue({ url: "https://checkout.stripe.com/c/pay_2" } as never);
+    const { POST } = await import("@/app/api/billing/checkout/route");
+    await POST(post({ plan: "max", interval: "year" }));
+    // $100 × 12 × (1 − 10%) = $1,080 a year.
+    expect(list).toHaveBeenCalledWith(expect.objectContaining({ lookup_keys: ["nova_max_year_usd_108000"] }));
+    expect(createPrice).not.toHaveBeenCalled();
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ line_items: [{ price: "price_max_year", quantity: 1 }] }));
+  });
+
+  it("won't sell a second subscription", async () => {
     userSub.row = { plan: "pro", status: "active", stripe_customer_id: "cus_1" };
     const { POST } = await import("@/app/api/billing/checkout/route");
-    expect((await POST()).status).toBe(409);
+    expect((await POST(post({ plan: "max" }))).status).toBe(409);
+  });
+
+  it("refuses unknown plans", async () => {
+    const { POST } = await import("@/app/api/billing/checkout/route");
+    expect((await POST(post({ plan: "free" }))).status).toBe(400);
+  });
+});
+
+describe("POST /api/billing/change", () => {
+  const setup = async (current: Record<string, unknown>) => {
+    userSub.row = { plan: "pro", status: "active", billing_interval: "month", price_usd: 20, stripe_customer_id: "cus_123", stripe_subscription_id: "sub_123", ...current };
+    const { stripeClient } = await import("@/lib/billing/stripe");
+    const s = stripeClient()!;
+    vi.spyOn(s.prices, "list").mockImplementation(((p: { lookup_keys: string[] }) => Promise.resolve({ data: [{ id: `price_${p.lookup_keys[0]}` }] })) as never);
+    vi.spyOn(s.subscriptions, "retrieve").mockResolvedValue(subscription() as never);
+    const update = vi.spyOn(s.subscriptions, "update").mockResolvedValue(subscription() as never);
+    const { POST } = await import("@/app/api/billing/change/route");
+    return { update, POST };
+  };
+
+  it("upgrades Pro to Max right away, charging the difference pro-rata", async () => {
+    const { update, POST } = await setup({});
+    const res = await POST(post({ plan: "max", interval: "month" }));
+    expect(res.status).toBe(200);
+    expect(update).toHaveBeenCalledWith("sub_123", expect.objectContaining({ items: [{ id: "si_1", price: "price_nova_max_month_usd_10000" }], proration_behavior: "always_invoice", cancel_at_period_end: false }));
+    expect(upserts.length).toBeGreaterThan(0); // allowance updated immediately
+  });
+
+  it("downgrades Max to Pro with a credit for the unused time", async () => {
+    const { update, POST } = await setup({ plan: "max", price_usd: 100 });
+    await POST(post({ plan: "pro", interval: "month" }));
+    expect(update).toHaveBeenCalledWith("sub_123", expect.objectContaining({ proration_behavior: "create_prorations" }));
+  });
+
+  it("moves to Free at the end of the paid period", async () => {
+    const { update, POST } = await setup({});
+    const res = await POST(post({ plan: "free" }));
+    expect(res.status).toBe(200);
+    expect(update).toHaveBeenCalledWith("sub_123", { cancel_at_period_end: true });
+  });
+
+  it("needs an existing subscription", async () => {
+    const { POST } = await setup({ status: "canceled" });
+    expect((await POST(post({ plan: "max" }))).status).toBe(404);
   });
 });

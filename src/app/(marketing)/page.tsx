@@ -187,36 +187,38 @@ export default function HomePage() {
 
       {/* Pricing */}
       <section aria-labelledby="pricing-title" className="mx-auto max-w-6xl px-5 py-20 sm:px-8">
-        <SectionHeading id="pricing-title" eyebrow="Pricing" title="Free to start, Pro when you need more" intro={`Everyone starts on the Free plan. Pro gives ten times the allowance for $${PRICING.pro.price} a month.`} />
-        <div className="mt-12 grid gap-5 md:grid-cols-2">
-          <div className="lux-card rounded-[22px] p-7">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-medium text-fg">{PRICING.free.name}</h3>
-              <StatusBadge status="available" />
-            </div>
-            <p className="mt-3 font-serif text-[44px] leading-none text-fg">$0</p>
-            <ul className="mt-6 space-y-2.5 text-[15px] text-muted">
-              {[`${PRICING.free.window} usage units per 5-hour window`, `${PRICING.free.weekly} usage units per week`, "Assistant, agents, Council, Arena and Mission Control", "Security Team (beta)"].map((x) => (
-                <li key={x} className="flex gap-2.5">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
-                  {x}
-                </li>
-              ))}
-            </ul>
-            <PrimaryCta className="mt-8 w-full justify-center" />
-          </div>
-          <div className="rounded-[22px] border border-border bg-panel p-7">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-medium text-fg">{PRICING.pro.name}</h3>
-              <span className="rounded-full border border-border-strong px-2.5 py-0.5 text-[11.5px] text-muted">${PRICING.pro.price} / month</span>
-            </div>
-            <p className="mt-3 text-[15px] leading-relaxed text-muted">
-              Ten times the Free allowance — {PRICING.pro.window} units per 5-hour window and {PRICING.pro.weekly} per week — for ${PRICING.pro.price} a month. Cancel any time.
-            </p>
-            <Link href="/pricing" className="mt-6 inline-flex items-center gap-1.5 text-sm text-fg underline-offset-4 hover:underline">
-              How usage units work <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-            </Link>
-          </div>
+        <SectionHeading id="pricing-title" eyebrow="Pricing" title="Free to start. Pro and Max when you need more" intro={`Everyone starts on Free. Pro is $${PRICING.pro.price} and Max $${PRICING.max.price} a month (USD), with more usage and larger models.`} />
+        <div className="mt-12 grid gap-5 md:grid-cols-3">
+          {(["free", "pro", "max"] as const).map((id) => {
+            const p = PRICING[id];
+            return (
+              <div key={id} className={id === "pro" ? "rounded-[22px] border-2 border-accent bg-panel p-7" : "lux-card rounded-[22px] p-7"}>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-medium text-fg">{p.name}</h3>
+                  {id === "free" && <StatusBadge status="available" />}
+                </div>
+                <p className="mt-3 font-serif text-[44px] leading-none text-fg">
+                  ${p.price}
+                  {p.price > 0 && <span className="font-sans text-base text-muted"> / month</span>}
+                </p>
+                <ul className="mt-6 space-y-2.5 text-[15px] text-muted">
+                  {[`${p.window} usage units per 5-hour window`, `${p.weekly.toLocaleString("en-US")} per week`, p.models].map((x) => (
+                    <li key={x} className="flex gap-2.5">
+                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
+                      {x}
+                    </li>
+                  ))}
+                </ul>
+                {id === "free" ? (
+                  <PrimaryCta className="mt-8 w-full justify-center" />
+                ) : (
+                  <Link href={`/pricing?plan=${id}`} className="mt-8 inline-flex items-center gap-1.5 text-sm text-fg underline-offset-4 hover:underline">
+                    See {p.name} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                  </Link>
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
 

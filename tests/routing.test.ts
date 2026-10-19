@@ -95,6 +95,14 @@ describe("explicit model choice", () => {
     expect(auto.routing?.reason).toMatch(/Auto chose Claude Haiku 5\.5/);
   });
 
+  it("Auto deep mode only chooses models the user's plan includes", async () => {
+    const { resolveModelChoice } = await import("@/lib/ai");
+    const pro = await resolveModelChoice("auto:deep", { prompt: "Prove that there are infinitely many primes, step by step", tiers: ["standard", "advanced"] });
+    expect(pro.model.tier ?? "advanced").not.toBe("premium");
+    const free = await resolveModelChoice("auto:deep", { prompt: "Prove that there are infinitely many primes", tiers: ["standard"] });
+    expect(free.model.id).toBe("anthropic:claude-haiku-5-5");
+  });
+
   it("refuses an unknown model instead of silently switching", async () => {
     const { resolveModelChoice } = await import("@/lib/ai");
     await expect(resolveModelChoice("anthropic:nope", { prompt: "hi" })).rejects.toThrow(/isn't an available model/);

@@ -1,7 +1,7 @@
 import "server-only";
 import Stripe from "stripe";
 import { serverEnv } from "../env";
-import { PLANS } from "../plans";
+import { chargeUsd, planOf, type BillingInterval, type BillingSettings } from "../plans";
 import { serviceSupabase } from "../supabase/admin";
 
 /**
@@ -25,22 +25,32 @@ export function stripeClient(): Stripe | null {
   return client;
 }
 
-/** Identifies NOVA's Pro price in Stripe; includes the amount, so a price change creates a new price. */
-export const proLookupKey = (cents = Math.round(PLANS.pro.priceUsd * 100)) => `nova_pro_monthly_usd_${cents}`;
+export type PaidPlan = "pro" | "max";
 
-/** The Stripe price for Pro: STRIPE_PRICE_ID if set, else NOVA's own price, created on first use. */
-export async function proPriceId(stripe: Stripe): Promise<string> {
-  const configured = serverEnv().stripePriceId;
-  if (configured) return configured;
-  const key = proLookupKey();
+/** Identifies a NOVA price in Stripe; includes the amount, so a price change creates a new price. */
+export const priceLookupKey = (plan: PaidPlan, interval: BillingInterval, cents: number) => `nova_${plan}_${interval}_usd_${cents}`;
+
+/** Parse a lookup key back into plan and interval. */
+export function parseLookupKey(key: string | null | undefined): { plan: PaidPlan; interval: BillingInterval } | null {
+  const m = key?.match(/^nova_(pro|max)_(month|year)_usd_\d+$/);
+  return m ? { plan: m[1] as PaidPlan, interval: m[2] as BillingInterval } : null;
+}
+
+/** The Stripe price for a plan and interval at its current USD amount, created on first use. */
+export async function planPriceId(stripe: Stripe, billing: BillingSettings, plan: PaidPlan, interval: BillingInterval): Promise<string> {
+  const p = planOf(billing, plan);
+  const cents = Math.round(chargeUsd(p, interval) * 100);
+  if (cents <= 0) throw new Error(`${p.label} has no price set.`);
+  const key = priceLookupKey(plan, interval, cents);
   const found = await stripe.prices.list({ lookup_keys: [key], active: true, limit: 1 });
   if (found.data[0]) return found.data[0].id;
   const price = await stripe.prices.create({
     currency: "usd",
-    unit_amount: Math.round(PLANS.pro.priceUsd * 100),
-    recurring: { interval: "month" },
+    unit_amount: cents,
+    recurring: { interval },
     lookup_key: key,
-    product_data: { name: "NOVA Pro" },
+    metadata: { nova_plan: plan, nova_interval: interval },
+    product_data: { name: `NOVA ${p.label}` },
   });
   return price.id;
 }
@@ -65,7 +75,9 @@ export function dbStatus(status: string): DbStatus {
 
 export interface SubscriptionRow {
   user_id: string;
-  plan: "pro";
+  plan: PaidPlan;
+  billing_interval: BillingInterval;
+  price_usd: number | null;
   status: DbStatus;
   current_period_start: string | null;
   current_period_end: string | null;
@@ -79,9 +91,16 @@ const iso = (s: number | null | undefined) => (s ? new Date(s * 1000).toISOStrin
 /** The row to store for a Stripe subscription (billing periods live on the subscription item). */
 export function subscriptionRow(sub: Stripe.Subscription, userId: string): SubscriptionRow {
   const item = sub.items?.data?.[0];
+  const price = item?.price;
+  const parsed = parseLookupKey(price?.lookup_key);
+  const metaPlan = (price?.metadata?.nova_plan ?? sub.metadata?.nova_plan) as string | undefined;
+  const plan: PaidPlan = parsed?.plan ?? (metaPlan === "max" ? "max" : "pro");
+  const interval: BillingInterval = parsed?.interval ?? (price?.recurring?.interval === "year" ? "year" : "month");
   return {
     user_id: userId,
-    plan: "pro",
+    plan,
+    billing_interval: interval,
+    price_usd: typeof price?.unit_amount === "number" ? price.unit_amount / 100 : null,
     status: dbStatus(sub.status),
     current_period_start: iso(item?.current_period_start),
     current_period_end: iso(item?.current_period_end),

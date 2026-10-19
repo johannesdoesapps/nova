@@ -32,6 +32,8 @@ export interface ModelInfo {
   lastVerifiedAt: string | null;
   /** Where the price was copied from (provider pricing page or contract). */
   priceSourceUrl?: string | null;
+  /** Plan tier: standard (every plan), advanced (Pro and Max), premium (Max). Derived when unset. */
+  tier?: "standard" | "advanced" | "premium";
 }
 
 /** ModelInfo plus runtime availability (does this deployment have credentials?). */
@@ -40,6 +42,9 @@ export interface ModelWithStatus extends ModelInfo {
   unavailableReason?: string;
   /** The administrator's default model for new chats. */
   isDefault?: boolean;
+  /** The plan that includes this model, and whether the caller's plan doesn't (set by /api/models). */
+  requiredPlan?: "free" | "pro" | "max";
+  locked?: boolean;
 }
 
 export interface Usage {

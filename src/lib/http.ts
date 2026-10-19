@@ -9,6 +9,7 @@ export type ApiErrorCode =
   | "forbidden"
   | "not_found"
   | "conflict"
+  | "plan_required"
   | "payload_too_large"
   | "rate_limited"
   | "quota_exceeded"
@@ -23,6 +24,7 @@ const STATUS: Record<ApiErrorCode, number> = {
   forbidden: 403,
   not_found: 404,
   conflict: 409,
+  plan_required: 403,
   payload_too_large: 413,
   rate_limited: 429,
   quota_exceeded: 429,

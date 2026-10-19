@@ -300,23 +300,15 @@ export const GUIDES: Guide[] = [
 export const guideBySlug = (slug: string) => GUIDES.find((g) => g.slug === slug);
 
 export const PRICING = {
-  free: {
-    name: PLANS.free.label,
-    window: PLANS.free.windowUnits,
-    weekly: PLANS.free.weeklyUnits,
-  },
-  pro: {
-    name: PLANS.pro.label,
-    price: PLANS.pro.priceUsd,
-    window: PLANS.pro.windowUnits,
-    weekly: PLANS.pro.weeklyUnits,
-  },
+  free: { name: PLANS.free.label, price: PLANS.free.priceUsd, window: PLANS.free.windowUnits, weekly: PLANS.free.weeklyUnits, models: "Fast, low-cost Claude and GPT models" },
+  pro: { name: PLANS.pro.label, price: PLANS.pro.priceUsd, window: PLANS.pro.windowUnits, weekly: PLANS.pro.weeklyUnits, models: "Adds Claude Sonnet and GPT Terra" },
+  max: { name: PLANS.max.label, price: PLANS.max.priceUsd, window: PLANS.max.windowUnits, weekly: PLANS.max.weeklyUnits, models: "Adds Claude Opus and GPT Sol" },
 };
 
 export const FAQ: { q: string; a: string }[] = [
   { q: "What is NOVA?", a: "NOVA is a web workspace for working with AI: a multi-model assistant, specialised and custom agents, tools to compare models, a planner that turns goals into tasks, and security agents for checking your own site and code." },
   { q: "Which AI models does NOVA use?", a: "This site offers Claude models from Anthropic and GPT models from OpenAI, and can add Gemini (Google) and Grok (xAI). Each reply shows which model answered." },
-  { q: "Is NOVA free?", a: `Yes. The Free plan includes ${PLANS.free.windowUnits} usage units per 5-hour window and ${PLANS.free.weeklyUnits} per week. A message to a low-cost model uses 1 unit; larger models use more. Pro costs $${PLANS.pro.priceUsd} per month and gives ten times the allowance.` },
+  { q: "Is NOVA free?", a: `Yes. The Free plan includes ${PLANS.free.windowUnits} usage units per 5-hour window and ${PLANS.free.weeklyUnits} per week. A message to a low-cost model uses 1 unit; larger models use more. Pro ($${PLANS.pro.priceUsd}/month) and Max ($${PLANS.max.priceUsd}/month) give more usage and larger models. No plan is unlimited.` },
   { q: "Do I need a credit card to sign up?", a: "No. You sign up with an email address and password and start on the Free plan." },
   { q: "What happens to my conversations?", a: "They're saved to your account so you can come back to them, and only you can read them. Your messages are sent to the AI provider of the model that answers them, which each reply names. See Security & data for details." },
   { q: "Can NOVA's agents take actions for me?", a: "No. NOVA's assistants and agents write, explain, plan and review. They don't send emails, make purchases or change your systems. The Autonomous Developer writes code changes in an isolated sandbox and never pushes them for you." },

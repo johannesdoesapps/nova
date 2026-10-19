@@ -2,6 +2,7 @@ import { fallbackChain, resolveModelChoice, type ModelChoice } from "@/lib/ai";
 import { estimateCost } from "@/lib/ai/cost";
 import type { ChatMessage, ModelWithStatus } from "@/lib/ai/types";
 import { builtinAgent } from "@/lib/agents/builtins";
+import { capabilityStatus } from "@/lib/agents/capabilities";
 import { authorizeTurn, runAgentTurn } from "@/lib/agents/execute";
 import { agentChatRequest } from "@/lib/agents/schema";
 import { isBuiltinId, type AgentConfig } from "@/lib/agents/types";
@@ -10,7 +11,8 @@ import { addMessages, createConversation, getConversation } from "@/lib/db";
 import { conversationIsFor, getAgent } from "@/lib/db/agents";
 import { ApiError, errorResponse, ndjsonStream, parseJsonBody } from "@/lib/http";
 import { reportError } from "@/lib/observability";
-import { enforceLimits, recordRun, releaseUsage, shouldSaveAllowance } from "@/lib/usage";
+import { enforceLimits, planLimits, recordRun, releaseUsage, shouldSaveAllowance } from "@/lib/usage";
+import { isAutoId } from "@/lib/ai/platform";
 
 export const maxDuration = 60;
 
@@ -49,7 +51,8 @@ export async function POST(req: Request) {
     // Instructions and tools don't change with the model.
     // Near the limit (and always on Free) Auto and agent defaults keep to low-cost models.
     const preferLowCost = await shouldSaveAllowance(auth);
-    const ctx = { prompt: body.message, preferLowCost };
+    const limits = await planLimits(auth);
+    const ctx = { prompt: body.message, preferLowCost, tiers: limits.tiers };
     let choice: ModelChoice;
     let modelNotice: string | null = null;
     if (body.modelId) choice = await resolveModelChoice(body.modelId, ctx);
@@ -68,8 +71,15 @@ export async function POST(req: Request) {
     let model: ModelWithStatus = choice.model;
     const requestedModel = body.modelId ?? agent.modelId ?? `agent-default:${agent.modelPreference ?? "none"}`;
     const routingReason = choice.routing?.reason ?? modelNotice ?? (body.modelId ? "Chosen by the user." : agent.modelId ? `${agent.name}'s saved model.` : "Site default model.");
-    await enforceLimits(req, auth, 1, [model], { requestId: body.requestId, purpose: "agent" });
-    const fallbacks = await fallbackChain(model, choice.settings, !!body.allowFallback);
+    const promptChars = body.message.length + attachments.reduce((n, a) => n + a.content.length, 0);
+    await enforceLimits(req, auth, 1, [model], {
+      requestId: body.requestId,
+      purpose: "agent",
+      inputTokens: Math.ceil((promptChars + limits.historyChars) / 4) + 2000,
+      maxOutputTokens: limits.maxOutputTokens,
+    });
+    // A model the user (or the agent's owner) picked is never swapped for another provider's.
+    const fallbacks = await fallbackChain(model, choice.settings, !!body.allowFallback, { sameProvider: !!(body.modelId ?? agent.modelId) && !isAutoId(body.modelId ?? agent.modelId), tiers: limits.tiers });
 
     // Conversation and history.
     let conversationId: string | null = null;
@@ -105,11 +115,14 @@ export async function POST(req: Request) {
         routing: choice.routing,
       });
       if (modelNotice) send({ type: "notice", level: "info", message: modelNotice });
+      // Web search is counted per plan; when it's set up but the plan's searches are used, say so and answer without it.
+      const searchesUsed = !!body.useWeb && limits.webSearchesLeft === 0 && capabilityStatus().web_search.available;
+      if (searchesUsed) send({ type: "notice", level: "info", message: "Your plan's web searches for this month are used up, so this answer comes from the model's own knowledge." });
 
       // 3–5. Shared execution service: tools, prompt, streaming.
       let result;
       try {
-        result = await runAgentTurn({ agent, model, fallbacks, history, message: body.message, attachments, useWeb: !!body.useWeb, timeZone: body.timeZone, signal, send });
+        result = await runAgentTurn({ agent, model, fallbacks, history, message: body.message, attachments, useWeb: !!body.useWeb && !searchesUsed, timeZone: body.timeZone, maxOutputTokens: limits.maxOutputTokens, historyChars: limits.historyChars, signal, send });
         model = result.model;
       } catch (err) {
         await recordRun(auth, {

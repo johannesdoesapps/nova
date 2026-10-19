@@ -1,18 +1,28 @@
 "use client";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { PLANS } from "@/lib/plans";
 import { BillingButton } from "@/components/common/billing-button";
 
+export interface PlanInfo {
+  id: "free" | "pro" | "max";
+  label: string;
+  interval: "month" | "year";
+  unlimited: boolean;
+  webSearchesLeft: number | null;
+  upgradeTo: { id: "pro" | "max"; label: string; priceUsd: number } | null;
+}
+
 export interface UsageState {
-  plan: "free" | "pro";
+  plan: "free" | "pro" | "max";
+  /** Plan details from /api/usage. */
+  info?: PlanInfo | null;
   window: { used: number; limit: number; resetsAt: number | null };
   week: { used: number; limit: number; resetsAt: number | null };
   /** This month's AI budget: share used, and "economy" (lowest-cost model only) or "exhausted". */
   budget?: { usedShare: number; state: "ok" | "economy" | "exhausted"; resetsAt: number } | null;
 }
 
-const PLAN_LABEL = { free: "Free", pro: "Pro" } as const;
+const PLAN_LABEL = { free: "Free", pro: "Pro", max: "Max" } as const;
 
 /** The signed-in user's allowance; refetched whenever a reply finishes (`busy` turns false). */
 export function useUsage(busy = false): UsageState | null {
@@ -22,8 +32,8 @@ export function useUsage(busy = false): UsageState | null {
     let alive = true;
     fetch("/api/usage", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((j: { usage: UsageState | null; budget?: UsageState["budget"] } | null) => {
-        if (alive) setUsage(j?.usage ? { ...j.usage, budget: j.budget ?? null } : null);
+      .then((j: { usage: UsageState | null; budget?: UsageState["budget"]; plan?: PlanInfo | null } | null) => {
+        if (alive) setUsage(j?.usage ? { ...j.usage, budget: j.budget ?? null, info: j.plan ?? null } : null);
       })
       .catch(() => {});
     return () => {
@@ -51,6 +61,7 @@ export function UsageNotice({ usage }: { usage: UsageState | null }) {
         {usage.budget.state === "exhausted"
           ? `You've used this month's AI budget. It renews on ${renews}.`
           : `Most of this month's AI budget is used, so NOVA uses its lowest-cost model (Auto) until ${renews}.`}
+        <UpgradeLink usage={usage} />
       </p>
     );
   }
@@ -66,8 +77,22 @@ export function UsageNotice({ usage }: { usage: UsageState | null }) {
     <p role="status" className={cn("s-in mt-2 px-3 text-[12.5px]", left === 0 ? "text-s-danger" : "text-s-ink-3")}>
       {left === 0
         ? `You've reached your ${weekly ? "weekly" : "5-hour"} limit${when ? `. It resets at ${when}` : ""}.`
-        : `${left} message${left === 1 ? "" : "s"} left${when ? ` until ${when}` : ""}.`}
+        : `${left} usage unit${left === 1 ? "" : "s"} left${when ? ` until ${when}` : ""}.`}
+      <UpgradeLink usage={usage} />
     </p>
+  );
+}
+
+function UpgradeLink({ usage }: { usage: UsageState }) {
+  const up = usage.info?.upgradeTo;
+  if (!up) return null;
+  return (
+    <>
+      {" "}
+      <a href={`/pricing?plan=${up.id}`} className="font-medium text-s-accent underline-offset-2 hover:underline">
+        Upgrade to {up.label}
+      </a>
+    </>
   );
 }
 
@@ -89,19 +114,33 @@ function Meter({ label, used, limit, resetsAt, idle }: { label: string; used: nu
 
 /** Plan allowance for the Settings dialog. */
 export function UsageMeters({ usage, billing = false }: { usage: UsageState; billing?: boolean }) {
+  const info = usage.info;
+  const paid = usage.plan !== "free";
+  const btn = "inline-flex h-8 items-center rounded-xl border border-s-line-strong px-3 text-[12.5px] font-medium transition hover:bg-s-hover";
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[12.5px] text-s-ink-3">
-          {PLAN_LABEL[usage.plan]} plan. Larger models like Sonnet use more of your allowance per message.
-        </p>
+        <div className="text-[12.5px] text-s-ink-3">
+          <p>
+            <span className="font-medium text-s-ink">{info?.label ?? PLAN_LABEL[usage.plan]} plan</span>
+            {paid && info ? ` · billed ${info.interval === "year" ? "yearly" : "monthly"}` : ""}
+            {usage.budget && paid ? ` · renews ${new Date(usage.budget.resetsAt).toLocaleDateString([], { month: "short", day: "numeric" })}` : ""}
+          </p>
+          <p>Larger models use more of your allowance per message.{info?.webSearchesLeft != null && info.webSearchesLeft >= 0 && paid ? ` ${info.webSearchesLeft} web searches left this month.` : ""}</p>
+        </div>
         {billing && (
-          <BillingButton
-            action={usage.plan === "pro" ? "manage" : "upgrade"}
-            className="inline-flex h-8 items-center rounded-xl border border-s-line-strong px-3 text-[12.5px] font-medium transition hover:bg-s-hover"
-          >
-            {usage.plan === "pro" ? "Manage subscription" : `Upgrade to Pro · $${PLANS.pro.priceUsd}/month`}
-          </BillingButton>
+          <div className="flex flex-wrap gap-2">
+            {info?.upgradeTo && (
+              <a href={`/pricing?plan=${info.upgradeTo.id}`} className={cn(btn, "border-transparent bg-s-accent text-white hover:bg-s-accent hover:brightness-110")}>
+                Upgrade to {info.upgradeTo.label} · ${info.upgradeTo.priceUsd}/month
+              </a>
+            )}
+            {paid && (
+              <BillingButton action="manage" className={btn}>
+                Manage subscription
+              </BillingButton>
+            )}
+          </div>
         )}
       </div>
       <Meter label="Current 5-hour session" used={usage.window.used} limit={usage.window.limit} resetsAt={usage.window.resetsAt} idle="Starts with your next message" />

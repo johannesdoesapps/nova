@@ -8,7 +8,7 @@ const runs = (...hoursAgo: number[]) => hoursAgo.sort((a, b) => b - a).map((h) =
 describe("5-hour windows", () => {
   it("opens a window at the first message and resets five hours later", () => {
     const u = computeUsage(runs(3, 2, 1), now, PLANS.free);
-    expect(u.window).toEqual({ used: 3, limit: 15, resetsAt: now - 3 * H + WINDOW_MS });
+    expect(u.window).toEqual({ used: 3, limit: 10, resetsAt: now - 3 * H + WINDOW_MS });
   });
 
   it("starts fresh once the window has closed, but still counts the week", () => {

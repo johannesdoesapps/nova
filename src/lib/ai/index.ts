@@ -10,6 +10,7 @@ import { DEFAULT_MODELS, RETIRED_MODELS, parseModelsOverride, withStatus } from 
 import { autoRoute, cheapestModel } from "./router";
 import { getPlatformSettings } from "./settings";
 import type { AIProvider, Capability, ModelInfo, ModelWithStatus, ProviderId } from "./types";
+import { modelTier } from "../plans";
 
 const providers: Record<ProviderId, AIProvider> = {
   anthropic: new AnthropicProvider(() => serverEnv().anthropicKey),
@@ -112,7 +113,10 @@ export async function getAllModels(settings?: PlatformSettings): Promise<ModelWi
   const demos = DEFAULT_MODELS.filter((m) => m.provider === "demo");
   const all = [...base, ...custom];
   const ids = new Set(all.map((m) => m.id));
-  return withStatus([...all, ...demos.filter((d) => !ids.has(d.id))], providerConfiguredMap());
+  // Administrators can move a model to another plan tier (Admin → Plans & pricing).
+  const tiers = ((cfg.billing as { modelTiers?: Record<string, ModelInfo["tier"]> } | undefined)?.modelTiers ?? {}) as Record<string, ModelInfo["tier"]>;
+  const tiered = all.map((m) => (tiers[m.id] ? { ...m, tier: tiers[m.id] } : m));
+  return withStatus([...tiered, ...demos.filter((d) => !ids.has(d.id))], providerConfiguredMap());
 }
 
 /**
@@ -154,7 +158,7 @@ export interface ModelChoice {
 /** Resolve the user's choice, including Auto, which routes by task type with the router's published rules. */
 export async function resolveModelChoice(
   modelId: string | null | undefined,
-  ctx: { prompt: string; mode?: string; needs?: Capability[]; preferLowCost?: boolean },
+  ctx: { prompt: string; mode?: string; needs?: Capability[]; preferLowCost?: boolean; tiers?: readonly string[] },
 ): Promise<ModelChoice> {
   const settings = await getPlatformSettings();
   if (!isAutoId(modelId)) return { model: await resolveModel(modelId, settings), routing: null, settings };
@@ -162,7 +166,9 @@ export async function resolveModelChoice(
     throw new ApiError("bad_request", "Auto mode is turned off on this site. Choose a model from the model menu.");
   }
   const routerMode = routerModeOf(modelId);
-  const route = autoRoute(await getModels(settings), ctx.prompt, { ...ctx, routerMode });
+  // Auto only chooses among the models the user's plan includes.
+  const models = (await getModels(settings)).filter((m) => !ctx.tiers || ctx.tiers.includes(modelTier(m)));
+  const route = autoRoute(models, ctx.prompt, { ...ctx, routerMode });
   if (!route) throw new ApiError("not_configured", "Auto mode has no configured model to choose from. Choose a model manually.");
   return { model: route.model, routing: { auto: true, mode: routerMode, reason: route.reason }, settings };
 }
@@ -170,13 +176,21 @@ export async function resolveModelChoice(
 /**
  * Models that may answer if the chosen one fails: only when the administrator
  * allows fallback and the user opted in, and only models with the same key
- * capabilities. Same-provider models are tried first.
+ * capabilities. Same-provider models are tried first; for a model the user
+ * picked, only same-provider models are used.
  */
-export async function fallbackChain(primary: ModelWithStatus, settings: PlatformSettings, userAllows: boolean): Promise<ModelWithStatus[]> {
+export async function fallbackChain(
+  primary: ModelWithStatus,
+  settings: PlatformSettings,
+  userAllows: boolean,
+  opts: { sameProvider?: boolean; tiers?: readonly string[] } = {},
+): Promise<ModelWithStatus[]> {
   if (!settings.fallbackEnabled || !userAllows || primary.provider === "demo") return [];
   const key: Capability[] = (["reasoning", "coding"] as Capability[]).filter((c) => primary.capabilities.includes(c));
   return (await getModels(settings))
     .filter((m) => m.available && m.provider !== "demo" && m.id !== primary.id && key.every((c) => m.capabilities.includes(c)))
+    // A model the user picked is never replaced by another provider's, and backups stay within the plan.
+    .filter((m) => (!opts.sameProvider || m.provider === primary.provider) && (!opts.tiers || opts.tiers.includes(modelTier(m))))
     .sort((a, b) => Number(b.provider === primary.provider) - Number(a.provider === primary.provider))
     .slice(0, 2);
 }

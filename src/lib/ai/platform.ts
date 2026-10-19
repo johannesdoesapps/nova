@@ -14,10 +14,12 @@ export const platformSettingsSchema = z.object({
   autoEnabled: z.boolean().default(true),
   /** Whether another compatible model may answer when the chosen one fails (users must also opt in). */
   fallbackEnabled: z.boolean().default(false),
-  /** Usage units per message, by model id, overriding the defaults (1 for low-cost models, 15 otherwise). */
+  /** Usage units per message, by model id, overriding the defaults (by default from the model tier: see tierUnits in src/lib/plans.ts). */
   modelUnits: z.record(z.string().min(1).max(120), z.number().int().min(0).max(100)).default({}),
   /** Extra models added by an administrator, e.g. new releases discovered with "Test connection". */
   customModels: z.array(modelInfoSchema).max(50).default([]),
+  /** Plans, prices, allowances and budget rules (merged over DEFAULT_BILLING; see src/lib/plans.ts). */
+  billing: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type PlatformSettings = z.infer<typeof platformSettingsSchema>;

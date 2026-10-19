@@ -26,8 +26,8 @@ export const DEFAULT_MODELS: ModelInfo[] = [
     inputPrice: 0.1,
     outputPrice: 0.5,
     isEnabled: true,
-    lastVerifiedAt: "2026-10-06",
-    priceSourceUrl: "https://www.anthropic.com/pricing",
+    lastVerifiedAt: "2026-10-19",
+    priceSourceUrl: "https://platform.claude.com/docs/en/about-claude/pricing",
   },
   {
     id: "anthropic:claude-sonnet-5-5",
@@ -40,8 +40,24 @@ export const DEFAULT_MODELS: ModelInfo[] = [
     inputPrice: 2,
     outputPrice: 10,
     isEnabled: true,
-    lastVerifiedAt: "2026-10-06",
-    priceSourceUrl: "https://www.anthropic.com/pricing",
+    lastVerifiedAt: "2026-10-19",
+    priceSourceUrl: "https://platform.claude.com/docs/en/about-claude/pricing",
+  },
+  {
+    // Premium: offered on the Max plan.
+    id: "anthropic:claude-opus-5-5",
+    provider: "anthropic",
+    providerModelId: "claude-opus-5-5",
+    displayName: "Claude Opus 5.5",
+    description: "Anthropic's most capable generally available Claude model, for the hardest reasoning, research and coding.",
+    capabilities: ["chat", "reasoning", "coding", "writing", "long-context", "vision"],
+    tier: "premium",
+    contextWindow: 1_000_000,
+    inputPrice: 4,
+    outputPrice: 20,
+    isEnabled: true,
+    lastVerifiedAt: "2026-10-19",
+    priceSourceUrl: "https://platform.claude.com/docs/en/about-claude/pricing",
   },
   // OpenAI GPT-5.6 replaces GPT-5 / GPT-5 mini, which OpenAI shuts down on
   // Dec 11, 2026 (see RETIRED_MODELS). Prices verified on OpenAI's model pages.
@@ -72,6 +88,22 @@ export const DEFAULT_MODELS: ModelInfo[] = [
     isEnabled: true,
     lastVerifiedAt: "2026-10-19",
     priceSourceUrl: "https://developers.openai.com/api/docs/models/gpt-5.6-terra",
+  },
+  {
+    // Premium: offered on the Max plan.
+    id: "openai:gpt-5.6-sol",
+    provider: "openai",
+    providerModelId: "gpt-5.6-sol",
+    displayName: "GPT-5.6 Sol",
+    description: "OpenAI's most capable GPT-5.6 model, for the hardest reasoning, research and coding.",
+    capabilities: ["chat", "reasoning", "coding", "writing", "long-context", "vision"],
+    tier: "premium",
+    contextWindow: 1_050_000,
+    inputPrice: 4,
+    outputPrice: 20,
+    isEnabled: true,
+    lastVerifiedAt: "2026-10-19",
+    priceSourceUrl: "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
   },
   {
     // Google's OpenAI-compatible Gemini endpoint. Admins can add other Gemini
@@ -238,6 +270,8 @@ export const modelInfoSchema = z.object({
   displayName: z.string().min(1).max(120),
   description: z.string().max(500).default(""),
   capabilities: z.array(capability).default(["chat"]),
+  /** Plan tier: standard (all plans), advanced (Pro and Max), premium (Max). Defaults by capability. */
+  tier: z.enum(["standard", "advanced", "premium"]).optional(),
   contextWindow: z.number().int().positive().nullable().default(null),
   inputPrice: z.number().nonnegative().nullable().default(null),
   outputPrice: z.number().nonnegative().nullable().default(null),

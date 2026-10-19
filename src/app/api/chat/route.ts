@@ -14,7 +14,7 @@ import { stripInvalidCitations } from "@/lib/search/grounding";
 import type { SearchSource } from "@/lib/search/types";
 import { webSearch } from "@/lib/search/web";
 import { buildTurnContext } from "@/lib/ai/turn-context";
-import { enforceLimits, recordRun, releaseUsage, shouldSaveAllowance } from "@/lib/usage";
+import { enforceLimits, planLimits, recordRun, releaseUsage, shouldSaveAllowance } from "@/lib/usage";
 import { chatRequest } from "@/lib/validation";
 
 export const maxDuration = 60;
@@ -38,16 +38,25 @@ export async function POST(req: Request) {
     const body = await parseJsonBody(req, chatRequest, 220_000);
     const auth = await requireUserIfConfigured();
     caller = auth;
+    const limits = await planLimits(auth);
     const choice = await resolveModelChoice(body.modelId, {
       prompt: body.message,
       mode: body.mode,
       preferLowCost: isAutoId(body.modelId) ? await shouldSaveAllowance(auth) : false,
+      tiers: limits.tiers,
     });
     let model = choice.model;
-    await enforceLimits(req, auth, 1, [model], { requestId: body.requestId, purpose: "chat" });
+    const promptChars = body.message.length + (body.attachments ?? []).reduce((n, a) => n + a.content.length, 0);
+    await enforceLimits(req, auth, 1, [model], {
+      requestId: body.requestId,
+      purpose: "chat",
+      inputTokens: Math.ceil((promptChars + limits.historyChars) / 4) + 1500,
+      maxOutputTokens: limits.maxOutputTokens,
+    });
     const requestedModel = body.modelId ?? "default";
     const routingReason = choice.routing?.reason ?? (body.modelId ? "Chosen by the user." : "Site default model.");
-    const fallbacks = await fallbackChain(model, choice.settings, !!body.allowFallback);
+    // A model the user picked is never swapped for another provider's.
+    const fallbacks = await fallbackChain(model, choice.settings, !!body.allowFallback, { sameProvider: !isAutoId(body.modelId) && !!body.modelId, tiers: limits.tiers });
 
     // Conversation + history
     let conversationId: string | null = null;
@@ -97,7 +106,11 @@ export async function POST(req: Request) {
       if (routerResearch && !searchReady) {
         send({ type: "notice", level: "info", message: "Research mode uses web sources when search is set up. It isn't on this site, so this answer comes from the model's own knowledge and may be out of date." });
       }
-      if ((body.mode === "research" && body.useWeb) || (routerResearch && searchReady)) {
+      const wantsSearch = (body.mode === "research" && body.useWeb) || (routerResearch && searchReady);
+      if (wantsSearch && limits.webSearchesLeft === 0) {
+        send({ type: "notice", level: "info", message: "Your plan's web searches for this month are used up, so this answer comes from the model's own knowledge." });
+      }
+      if (wantsSearch && limits.webSearchesLeft !== 0) {
         const env = serverEnv();
         try {
           const r = await webSearch(body.message.slice(0, 400), { provider: env.searchProvider, apiKey: env.searchKey }, withTimeout(15_000, signal));
@@ -131,7 +144,7 @@ export async function POST(req: Request) {
         userContent = `${docs}\n\n${body.message}`;
       }
 
-      const messages: ChatMessage[] = [{ role: "system", content: system }, ...trimHistory(history), { role: "user", content: userContent }];
+      const messages: ChatMessage[] = [{ role: "system", content: system }, ...trimHistory(history, 40, limits.historyChars), { role: "user", content: userContent }];
       const started = performance.now();
       let text = "";
       let usage: Usage | null = null;
@@ -139,7 +152,7 @@ export async function POST(req: Request) {
       let status: "success" | "error" = "success";
       let failure: string | null = null;
       try {
-        for await (const ev of streamWithFallback(model, fallbacks, { messages, maxOutputTokens: 2400 }, () => withTimeout(50_000, signal))) {
+        for await (const ev of streamWithFallback(model, fallbacks, { messages, maxOutputTokens: limits.maxOutputTokens }, () => withTimeout(50_000, signal))) {
           if (ev.type === "delta") {
             text += ev.text;
             send({ type: "delta", text: ev.text });

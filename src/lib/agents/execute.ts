@@ -40,6 +40,9 @@ export interface AgentTurnInput {
   useWeb: boolean;
   /** The browser's time zone, for the current-time line. */
   timeZone?: string;
+  /** Plan limits: longest reply and how much history is sent (characters). */
+  maxOutputTokens?: number;
+  historyChars?: number;
   signal: AbortSignal;
   send: (event: Record<string, unknown>) => void;
 }
@@ -180,7 +183,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
 
   const messages: ChatMessage[] = [
     { role: "system", content: buildAgentSystemPrompt(agent, status, extra) },
-    ...trimHistory(input.history, agent.historyLimit),
+    ...trimHistory(input.history, agent.historyLimit, input.historyChars),
     { role: "user", content: userContent },
   ];
 
@@ -192,7 +195,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
   for await (const ev of streamWithFallback(
     model,
     input.fallbacks ?? [],
-    { messages, maxOutputTokens: 2400, temperature: agent.temperature ?? undefined },
+    { messages, maxOutputTokens: input.maxOutputTokens ?? 2400, temperature: agent.temperature ?? undefined },
     () => withTimeout(MODEL_TIMEOUT_MS, signal),
   )) {
     if (ev.type === "delta") {

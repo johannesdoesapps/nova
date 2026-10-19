@@ -11,6 +11,8 @@ import { useApp } from "@/components/layout/app-context";
 import { StudioHeader } from "@/components/studio/frame";
 import { ProviderMark } from "@/components/studio/model-selector";
 import { Switch } from "@/components/studio/ui";
+import { FinancePanel } from "./finance-panel";
+import { PlansEditor } from "./plans-editor";
 import { RequestLog } from "./request-log";
 
 type ProviderRow = { id: Exclude<ProviderId, "demo">; label: string; envVar: string; keyUrl: string; steps: string; configured: boolean };
@@ -109,7 +111,7 @@ export function AdminView() {
         <div className="mx-auto w-full max-w-[960px] space-y-6 px-4 pb-28 pt-2 sm:px-8">
           <div className="s-in">
             <h1 className="font-serif text-[clamp(32px,5vw,42px)] leading-[1.05]">AI platform</h1>
-            <p className="mt-2 text-[15px] text-s-ink-2">Providers, models, Auto mode and usage weights for everyone on this site.</p>
+            <p className="mt-2 text-[15px] text-s-ink-2">Providers, models, Auto mode, plans, prices and finances for this site.</p>
           </div>
 
           {loadError && <p className="rounded-xl border border-s-line px-4 py-3 text-[13.5px] text-s-danger">{loadError}</p>}
@@ -309,6 +311,10 @@ export function AdminView() {
                   })}
                 </ul>
               </section>
+
+              <FinancePanel />
+
+              <PlansEditor stored={draft.billing} models={snap.models} onChange={(billing) => patch({ billing: billing as unknown as Record<string, unknown> })} />
 
               <RequestLog />
 

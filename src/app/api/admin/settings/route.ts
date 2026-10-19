@@ -6,6 +6,7 @@ import { getPlatformSettings } from "@/lib/ai/settings";
 import { requireAdmin } from "@/lib/admin";
 import { getAuth } from "@/lib/auth";
 import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
+import { validateBilling } from "@/lib/plans";
 
 async function snapshot() {
   const settings = await getPlatformSettings();
@@ -43,6 +44,11 @@ export async function PUT(req: Request) {
       throw new ApiError("bad_request", "Enable the default model, or choose a different default.");
     }
     if (next.enabledModelIds?.length === 0) throw new ApiError("bad_request", "Enable at least one model.");
+    if (next.billing) {
+      const b = validateBilling(next.billing);
+      if (!b.ok) throw new ApiError("bad_request", b.error);
+      next.billing = b.billing as unknown as Record<string, unknown>;
+    }
     const { data, error } = await auth.supabase
       .from("app_settings")
       .update({ settings: next, updated_by: auth.user.id })
