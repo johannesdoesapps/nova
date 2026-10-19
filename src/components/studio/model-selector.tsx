@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search, Sparkles } from "lucide-react";
 import { MODEL_CATEGORIES, inCategory, modelTags, priceLabel, recommendedIds, type ModelCategory } from "@/lib/ai/catalog";
 import { ROUTER_MODES, autoIdFor, isAutoId, routerModeOf } from "@/lib/ai/platform";
+import { routerPool } from "@/lib/ai/router";
 import { PROVIDER_INFO, providerLabel } from "@/lib/ai/provider-info";
 import type { ModelWithStatus, ProviderId } from "@/lib/ai/types";
 import { cn } from "@/lib/utils";
@@ -59,6 +60,11 @@ export function ModelSelector({
   const selected = available.find((m) => m.id === value);
   const isAuto = isAutoId(value);
   const autoMode = ROUTER_MODES.find((m) => m.id === routerModeOf(value))!;
+  // The models each Smart Router mode chooses from, named in its title.
+  const modePools = useMemo(
+    () => Object.fromEntries(ROUTER_MODES.map((m) => [m.id, routerPool(models ?? [], m.id).filter((x) => x.available).map((x) => x.displayName)])),
+    [models],
+  );
 
   const q = query.trim().toLowerCase();
   const filtered = available.filter(
@@ -235,7 +241,10 @@ export function ModelSelector({
                   >
                     <ProviderMark provider="auto" className={cn(mode.id !== "balanced" && "bg-transparent text-s-ink-2")} />
                     <div className="min-w-0 flex-1">
-                      <div className="text-[13.5px] font-medium">{mode.id === "balanced" ? "Auto" : `Auto · ${mode.label}`}</div>
+                      <div className="text-[13.5px] leading-snug">
+                        <span className="font-medium">{mode.id === "balanced" ? "Auto" : `Auto · ${mode.label}`}</span>
+                        {modePools[mode.id]?.length ? <span className="text-s-ink-2"> — {joinOr(modePools[mode.id]!)}</span> : null}
+                      </div>
                       <p className="text-[12px] leading-snug text-s-ink-3">{mode.blurb}</p>
                     </div>
                     {value === id && <Check className="h-4 w-4 shrink-0 text-s-accent" />}
@@ -345,4 +354,9 @@ export function ModelSelector({
         )}
     </>
   );
+}
+
+/** "A", "A or B", "A, B or C". */
+function joinOr(names: string[]): string {
+  return names.length < 2 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} or ${names.at(-1)}`;
 }

@@ -153,11 +153,12 @@ const TASK_LABEL: Record<TaskKind, string> = {
  * ones. When the user's allowance is nearly used up, low-cost models win.
  * Demo models are only used when nothing real is configured.
  */
-export function autoRoute(
-  models: ModelWithStatus[],
-  prompt: string,
-  opts: { mode?: string; needs?: Capability[]; preferLowCost?: boolean; routerMode?: RouterMode } = {},
-): AutoRoute | null {
+/**
+ * The models a Smart Router mode chooses from. Each mode narrows the pool when
+ * it can; near the usage limit only low-cost models are considered. Shared by
+ * the router and the model menu, so the menu names exactly these models.
+ */
+export function routerPool(models: ModelWithStatus[], routerMode: RouterMode = "balanced", preferLowCost = false): ModelWithStatus[] {
   const real = models.filter((m) => m.provider !== "demo");
   let pool = real.some((m) => m.available) ? real : models;
   const narrow = (pred: (m: ModelWithStatus) => boolean) => {
@@ -165,13 +166,21 @@ export function autoRoute(
     if (sub.length) pool = sub;
   };
   const has = (c: Capability) => (m: ModelWithStatus) => m.capabilities.includes(c);
-  const routerMode = opts.routerMode ?? "balanced";
-  // Each mode narrows the pool when it can, then the usual rules choose within it.
   if (routerMode === "quick") narrow((m) => has("fast")(m) || has("low-cost")(m));
   if (routerMode === "deep" || routerMode === "research") narrow(has("reasoning"));
   if (routerMode === "coding") narrow(has("coding"));
-  // Near the usage limit, only low-cost models are considered (when any are available).
-  if (opts.preferLowCost) narrow(has("low-cost"));
+  if (preferLowCost) narrow(has("low-cost"));
+  return pool;
+}
+
+export function autoRoute(
+  models: ModelWithStatus[],
+  prompt: string,
+  opts: { mode?: string; needs?: Capability[]; preferLowCost?: boolean; routerMode?: RouterMode } = {},
+): AutoRoute | null {
+  const routerMode = opts.routerMode ?? "balanced";
+  // Each mode narrows the pool, then the usual rules choose within it.
+  const pool = routerPool(models, routerMode, opts.preferLowCost);
   const task = routerMode === "coding" ? "coding" : classifyTask(prompt, opts.mode).kind;
   const costSensitive = opts.preferLowCost || routerMode === "quick" || (routerMode === "balanced" && (task === "general" || task === "summary"));
   const r = recommendModel(pool, prompt, { mode: routerMode === "coding" ? "coding" : opts.mode, costSensitive, needs: opts.needs });
