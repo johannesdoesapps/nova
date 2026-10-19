@@ -66,7 +66,7 @@ export interface PlanCapacity {
   mixed: { premiumShare: number; perMonth: number; perDay: number } | null;
 }
 
-/** What a plan's monthly AI budget buys. Advanced and premium models are also capped by the plan's premium budget. */
+/** What a plan's monthly allowance buys: the AI budget (advanced/premium models also by their part of it), daily, token and unit caps. */
 export function planCapacity(billing: BillingSettings, plan: PlanId, models: Priced[], interval: BillingInterval = "month", premiumShare = 0.2): PlanCapacity {
   const p = planOf(billing, plan);
   const e = planEconomics(billing, plan, interval);
@@ -76,8 +76,9 @@ export function planCapacity(billing: BillingSettings, plan: PlanId, models: Pri
     .filter((x): x is { m: Priced; c: number } => x.c !== null && x.c > 0)
     .sort((a, b) => a.c - b.c);
   const cap = (m: Priced) => (modelTier(m) === "standard" ? e.aiBudgetUsd : Math.min(e.aiBudgetUsd, e.premiumBudgetUsd));
+  const caps = messageCaps(billing, plan);
   const out = rows.map(({ m, c }) => {
-    const perMonth = Math.floor(cap(m) / c);
+    const perMonth = Math.floor(Math.min(cap(m) / c, caps.daily, caps.tokens, caps.units / Math.max(billing.tierUnits[modelTier(m)], 1e-9)));
     return { id: m.id, name: m.displayName, tier: modelTier(m), perMonth, perDay: Math.floor(perMonth / DAYS_PER_MONTH) };
   });
   let mixed: PlanCapacity["mixed"] = null;
@@ -88,10 +89,22 @@ export function planCapacity(billing: BillingSettings, plan: PlanId, models: Pri
     const perMsg = (1 - premiumShare) * lo.c + premiumShare * hi.c;
     const byTotal = e.aiBudgetUsd / perMsg;
     const byPremium = premiumShare > 0 ? e.premiumBudgetUsd / (premiumShare * hi.c) : Infinity;
-    const perMonth = Math.floor(Math.min(byTotal, byPremium));
+    const unitsPerMsg = (1 - premiumShare) * billing.tierUnits[modelTier(lo.m)] + premiumShare * billing.tierUnits[modelTier(hi.m)];
+    const perMonth = Math.floor(Math.min(byTotal, byPremium, caps.daily, caps.tokens, caps.units / Math.max(unitsPerMsg, 1e-9)));
     mixed = { premiumShare, perMonth, perDay: Math.floor(perMonth / DAYS_PER_MONTH) };
   }
   return { plan, interval, aiBudgetUsd: e.aiBudgetUsd, premiumBudgetUsd: e.premiumBudgetUsd, models: out, mixed };
+}
+
+/** Messages a month the plan's non-money caps allow: daily messages, tokens, and weekly units (spread over 30 days). */
+export function messageCaps(billing: BillingSettings, plan: PlanId): { daily: number; tokens: number; units: number } {
+  const p = planOf(billing, plan);
+  const s = billing.scenario;
+  return {
+    daily: p.dailyMessages > 0 ? p.dailyMessages * DAYS_PER_MONTH : Infinity,
+    tokens: p.monthlyTokens > 0 ? p.monthlyTokens / ((s.inputTokens + s.outputTokens) * s.callsPerMessage) : Infinity,
+    units: (p.weeklyUnits * DAYS_PER_MONTH) / 7,
+  };
 }
 
 export interface PlanScenario {
@@ -124,10 +137,9 @@ export function planScenario(billing: BillingSettings, plan: PlanId, model: Pric
   const e = planEconomics(billing, plan, interval);
   const tier = modelTier(model);
   const wanted = perDay * DAYS_PER_MONTH;
-  const dailyCap = p.dailyMessages > 0 ? p.dailyMessages * DAYS_PER_MONTH : Infinity;
-  const tokenCap = p.monthlyTokens > 0 ? p.monthlyTokens / ((billing.scenario.inputTokens + billing.scenario.outputTokens) * billing.scenario.callsPerMessage) : Infinity;
+  const caps = messageCaps(billing, plan);
   const moneyCap = (tier === "standard" ? e.aiBudgetUsd : Math.min(e.aiBudgetUsd, e.premiumBudgetUsd)) / c;
-  const allowed = Math.floor(Math.min(wanted, dailyCap, tokenCap, moneyCap));
+  const allowed = Math.floor(Math.min(wanted, caps.daily, caps.tokens, caps.units / Math.max(billing.tierUnits[tier], 1e-9), moneyCap));
   const ai = allowed * c;
   const contribution = e.revenueUsd - e.feesUsd - (plan === "free" ? 0 : e.overheadUsd) - ai;
   return {

@@ -115,7 +115,7 @@ describe("usage policy", () => {
     expect(pro.rpc[0]![1]).toMatchObject({ p_units: 20, p_window_limit: 200, p_week_limit: 1100, p_budget_usd: proEcon.aiBudgetUsd, p_premium_budget_usd: proEcon.premiumBudgetUsd, p_premium: true, p_daily_limit: 0 });
     const max = fakeAuth({ plan: MAX });
     await enforceLimits(req(), max.auth, 1, [opus]);
-    expect(max.rpc[0]![1]).toMatchObject({ p_units: 40, p_window_limit: 1200, p_budget_usd: planEconomics(DEFAULT_BILLING, "max").aiBudgetUsd });
+    expect(max.rpc[0]![1]).toMatchObject({ p_units: 40, p_window_limit: 2000, p_budget_usd: planEconomics(DEFAULT_BILLING, "max").aiBudgetUsd });
     const lapsed = fakeAuth({ plan: { ...PRO, status: "canceled" } });
     await enforceLimits(req(), lapsed.auth, 1, [haiku]);
     expect(lapsed.rpc[0]![1]).toMatchObject({ p_window_limit: 10 });

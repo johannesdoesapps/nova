@@ -141,20 +141,20 @@ Use the real "AI cost per paying subscriber" in Finance after launch.
 | Models | Standard: Haiku, Luna | + Advanced: Sonnet, Terra | + Premium: Opus, Sol |
 | Monthly AI budget | $0.10 | $3.01 | $31.76 |
 | Advanced-model part | — | $1.81 | $26.99 |
-| Messages / month, Auto (Haiku) | about 136 (token cap) | about 4,776 (159/day) | about 50,400 (5-hour/weekly units cap it lower) |
-| Messages / month, GPT Luna | about 65 | about 1,962 | about 20,700 |
+| Messages / month, Auto (Haiku) | about 128 (weekly cap) | about 4,714 (157/day) | about 20,400 (680/day; token cap) |
+| Messages / month, GPT Luna | about 65 | about 1,962 | about 20,400 |
 | Messages / month, advanced models | — | about 117 (Terra) – 143 (Sonnet) | about 1,760 (Terra) – 2,142 (Sonnet) |
 | Messages / month, premium models | — | — | about 988 (Sol) – 1,071 (Opus) |
-| Mix: 80% Auto, 20% top model | — | about 588 | about 4,943 |
+| Mix: 80% Auto, 20% top model | — | about 588 | about 4,870 |
 | Messages / day | 10 | no daily cap | no daily cap |
 | Tokens / month | 400,000 | 15,000,000 | 60,000,000 |
-| 5-hour / weekly units | 10 / 30 | 200 / 1,100 | 1,200 / 6,000 |
+| 5-hour / weekly units | 10 / 30 | 200 / 1,100 | 2,000 / 10,000 |
 | Longest reply | 1,200 tokens | 2,400 tokens | 4,800 tokens |
 | History sent per message | 12,000 characters | 24,000 characters | 80,000 characters |
 | Web searches / month | 0 | 50 | 500 |
 | Resets | calendar month | billing date, monthly | billing date, monthly (also on yearly plans) |
 
-Message counts assume the planning message above. Longer conversations use more of the allowance.
+Message counts assume the planning message above and apply every cap (budget, advanced-model part, daily, token and weekly units), whichever comes first. Longer conversations use more of the allowance.
 
 The pricing page shows these as "about" figures. Nothing is advertised as unlimited.
 
