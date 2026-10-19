@@ -51,6 +51,10 @@ export class OpenAICompatibleProvider implements AIProvider {
   private async requestOnce(params: GenerateParams, stream: boolean): Promise<Response> {
     const key = this.opts.apiKey();
     if (!key) throw new ApiError("not_configured", this.missingConfig()!);
+    // A key pasted with spaces, quotes or typographic characters can't go in a header and makes fetch throw.
+    if (!/^[\x21-\x7e]+$/.test(key)) {
+      throw new ApiError("not_configured", `The ${this.id} API key contains spaces or invalid characters. Re-paste it in your hosting environment and redeploy.`);
+    }
     let res: Response;
     try {
       res = await fetch(`${this.opts.baseUrl.replace(/\/$/, "")}/chat/completions`, {
@@ -63,7 +67,9 @@ export class OpenAICompatibleProvider implements AIProvider {
       if ((err as Error)?.name === "TimeoutError" || params.signal?.aborted) {
         throw new ApiError("timeout", `${params.model.displayName} did not respond in time.`);
       }
-      throw new ApiError("upstream_error", `Could not reach ${this.id}.`);
+      const cause = (err as { cause?: { code?: string } })?.cause?.code;
+      console.error(`[${this.id}] request failed: ${(err as Error)?.name ?? "Error"}${cause ? ` (${cause})` : ""}`);
+      throw new ApiError("upstream_error", `Could not reach ${this.id}${cause ? ` (${cause})` : ""}.`);
     }
     if (!res.ok) {
       let detail = "";
