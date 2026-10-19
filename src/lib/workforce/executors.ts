@@ -231,7 +231,7 @@ const gatePlan: Executor = async (ctx) => {
   const t = ctx.task;
   if (!t.plan || !t.plan_hash) return { status: "failed", error: "No plan to approve.", retryable: false };
   const approvals = await ctx.store.listApprovals({ taskId: t.id });
-  const match = approvals.find((a) => a.kind === "plan" && a.payload_hash === t.plan_hash);
+  const match = approvals.find((a) => a.kind === "plan" && a.payload_hash === t.plan_hash && a.status !== "expired");
   if (match?.status === "approved") return { status: "succeeded", output: { approvedBy: "operator", approvalId: match.id, at: match.decided_at } };
   if (match?.status === "rejected") return { status: "failed", error: `Plan rejected by the operator${match.decision_note ? `: ${match.decision_note}` : "."}`, retryable: false };
   // High-risk plans always need a person, whatever the autonomy mode.

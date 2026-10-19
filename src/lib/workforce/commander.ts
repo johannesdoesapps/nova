@@ -217,7 +217,7 @@ async function hasActionableWork(rt: Runtime, task: Task) {
   if (task.status === "awaiting_approval") {
     const gate = (await rt.store.listSteps(task.id)).find((s) => s.key === "gate-plan");
     const approvals = await rt.store.listApprovals({ taskId: task.id });
-    return approvals.some((a) => a.kind === "plan" && a.payload_hash === task.plan_hash && a.status !== "pending") || gate?.status === "pending";
+    return approvals.some((a) => a.kind === "plan" && a.payload_hash === task.plan_hash && (a.status === "approved" || a.status === "rejected")) || gate?.status === "pending";
   }
   return false;
 }
@@ -477,6 +477,10 @@ export async function decideApproval(rt: Runtime, approvalId: string, decision: 
   if (approval.status !== "pending") throw new WorkforceError(`This approval was already ${approval.status}.`, "conflict");
   if (approval.payload_hash !== expectedHash) throw new WorkforceError("The request changed since you viewed it. Reload and review it again.", "conflict");
   const task = (await rt.store.getTask(approval.task_id))!;
+  if (TERMINAL_STATUSES.includes(task.status)) {
+    await rt.store.updateApproval(approval.id, { status: "expired" });
+    throw new WorkforceError(`The task is ${task.status}; retry it before approving.`, "conflict");
+  }
   if (approval.kind === "plan" && task.plan_hash !== approval.payload_hash) {
     await rt.store.updateApproval(approval.id, { status: "expired" });
     throw new WorkforceError("This plan is out of date; a newer plan replaced it.", "conflict");
@@ -516,6 +520,10 @@ export async function retryTask(rt: Runtime, taskId: string) {
   if (prep?.status === "succeeded" && task.status !== "blocked") {
     // Stop the old workspace (a blocked task keeps it running) and recreate it from the stored diff.
     await rt.store.updateStep(prep.id, { status: "pending", attempt: 0, output: null, state: {} });
+    // Steps that were mid-run belong to the old workspace: start them again from scratch.
+    for (const s of steps.filter((x) => x.status === "running")) await rt.store.updateStep(s.id, { status: "pending", attempt: 0, error: null, state: {} });
+    // A restarted gate asks again, so earlier open requests are void.
+    for (const a of await rt.store.listApprovals({ taskId, status: "pending" })) await rt.store.updateApproval(a.id, { status: "expired" });
     await finalize(rt, taskId, { stop: true });
     const n = Number((task.sandbox_name ?? "-1").split("-").pop()) + 1;
     await rt.store.updateTask(taskId, { sandbox_name: `wf-${taskId.slice(0, 8)}-${n}` });

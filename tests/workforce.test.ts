@@ -388,6 +388,38 @@ describe("Commander: limits, approvals and control", () => {
     expect((await run(rt, t.id)).status).toBe("awaiting_approval");
   });
 
+  it("restarts steps that were mid-run when a failed task is retried later", async () => {
+    let planOk = false;
+    const { rt, store, ws } = setup({ script: { architect: () => (planOk ? JSON.stringify(PLAN) : "{}") } });
+    const t = await newTask(rt, store);
+    ws().script.typecheck = [{ exitCode: 0, output: "ok", pending: 1000 }, { exitCode: 0, output: "ok" }];
+    expect((await run(rt, t.id)).status).toBe("failed");
+    const baseline = (await store.listSteps(t.id)).find((s) => s.key === "baseline")!;
+    expect(baseline.status).toBe("running");
+    // The operator retries a day later: the old start time must not count against the new run.
+    await store.updateStep(baseline.id, { started_at: new Date(Date.now() - 86_400_000).toISOString() });
+    planOk = true;
+    await retryTask(rt, t.id);
+    const r = await run(rt, t.id);
+    expect(r.status).toBe("awaiting_approval");
+    expect((await store.listSteps(t.id)).find((s) => s.key === "baseline")!.status).not.toBe("failed");
+  });
+
+  it("won't accept an approval for a finished task, and Retry voids open requests", async () => {
+    const { rt, store } = setup();
+    const t = await newTask(rt, store);
+    await run(rt, t.id);
+    const old = (await store.listApprovals({ taskId: t.id, status: "pending" }))[0]!;
+    const baseline = (await store.listSteps(t.id)).find((s) => s.key === "baseline")!;
+    await store.updateStep(baseline.id, { status: "failed", error: "boom" });
+    await store.updateTask(t.id, { status: "failed" });
+    await expect(decideApproval(rt, old.id, "approved", null, old.payload_hash)).rejects.toThrow(/retry it/);
+    expect((await store.listApprovals({ taskId: t.id }))[0]!.status).toBe("expired");
+    await retryTask(rt, t.id);
+    expect((await run(rt, t.id)).status).toBe("awaiting_approval");
+    expect((await store.listApprovals({ taskId: t.id, status: "pending" })).length).toBe(1);
+  });
+
   it("does nothing while the emergency stop is on, or while paused", async () => {
     const { rt, store, models } = setup({ settings: { emergencyStop: true } });
     const t = await newTask(rt, store);
