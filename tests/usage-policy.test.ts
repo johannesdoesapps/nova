@@ -3,17 +3,19 @@
  * is tested in usage-ledger.test.ts): entitlements, reservations, charging by
  * the model that actually answered, refunds and idempotency.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { DEFAULT_MODELS } from "@/lib/ai/registry";
 import type { AuthContext } from "@/lib/auth";
 import { ApiError } from "@/lib/http";
 import { enforceLimits, planUsage, recordRun, redactSecrets } from "@/lib/usage";
+import { PLANS, TARGET_MARGIN, proAiBudgetUsd } from "@/lib/plans";
 
 const haiku = DEFAULT_MODELS.find((m) => m.id === "anthropic:claude-haiku-5-5")!;
 const sonnet = DEFAULT_MODELS.find((m) => m.id === "anthropic:claude-sonnet-5-5")!;
 const req = () => new Request("http://x/api/chat", { headers: { "x-forwarded-for": `10.9.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` } });
 
-function fakeAuth(opts: { admin?: boolean; plan?: { plan: string; status: string } | null; reserve?: (a: Record<string, unknown>) => unknown } = {}) {
+type FakeRun = { estimated_cost: number | null; input_tokens: number | null; output_tokens: number | null };
+function fakeAuth(opts: { admin?: boolean; plan?: Record<string, unknown> | null; reserve?: (a: Record<string, unknown>) => unknown; runs?: FakeRun[] } = {}) {
   const rpc: [string, Record<string, unknown>][] = [];
   const inserts: Record<string, unknown>[] = [];
   const supabase = {
@@ -21,6 +23,9 @@ function fakeAuth(opts: { admin?: boolean; plan?: { plan: string; status: string
       const q = {
         select: () => q,
         eq: () => q,
+        gte: () => q,
+        gt: () => q,
+        limit: async () => ({ data: opts.runs ?? [], error: null }),
         maybeSingle: async () => ({ data: table === "admins" ? (opts.admin ? { user_id: "u" } : null) : (opts.plan ?? null), error: null }),
         insert: async (row: Record<string, unknown>) => {
           inserts.push(row);
@@ -131,5 +136,70 @@ describe("usage policy", () => {
 
   it("redacts secrets from stored errors", () => {
     expect(redactSecrets("Bearer abc.def-123 failed for xai-1234567890abcdef")).toBe("Bearer [redacted] failed for [redacted]");
+  });
+});
+
+describe("AI budget guard", () => {
+  // Real providers configured, so the lowest-cost available model is Claude Haiku.
+  beforeAll(() => {
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    process.env.OPENAI_API_KEY = "test-key";
+  });
+  afterAll(() => {
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+  });
+  const pro = (runs: FakeRun[]) => fakeAuth({ plan: { plan: "pro", status: "active", current_period_start: new Date(Date.now() - 5 * 86_400_000).toISOString() }, runs });
+  const spend = (usd: number): FakeRun[] => [{ estimated_cost: usd, input_tokens: 1000, output_tokens: 500 }];
+
+  it("keeps 60% of the $12 Pro price after AI costs and payment fees", () => {
+    expect(PLANS.pro.priceUsd).toBe(12);
+    const budget = proAiBudgetUsd({ feePercent: 2.9, feeFixedUsd: 0.3, overheadUsd: 0 });
+    expect(budget).toBeCloseTo(4.152, 3);
+    const fee = 12 * 0.029 + 0.3;
+    expect((12 - fee - budget) / 12).toBeCloseTo(TARGET_MARGIN, 5);
+    // Other overheads per subscriber come out of the AI budget, not the margin.
+    expect(proAiBudgetUsd({ feePercent: 2.9, feeFixedUsd: 0.3, overheadUsd: 1 })).toBeCloseTo(3.152, 3);
+  });
+
+  it("allows any model while under 80% of the budget", async () => {
+    const { auth } = pro(spend(3.0));
+    await expect(enforceLimits(req(), auth, 1, [sonnet])).resolves.toMatchObject({ units: 15 });
+  });
+
+  it("from 80%, allows only the lowest-cost model", async () => {
+    const { auth } = pro(spend(3.5));
+    const err = (await enforceLimits(req(), auth, 1, [sonnet]).then(() => null, (e: unknown) => e)) as ApiError;
+    expect(err.code).toBe("quota_exceeded");
+    expect(err.message).toMatch(/only the lowest-cost model/);
+    expect(err.details).toMatchObject({ economy: true, budget: true });
+    const ok = pro(spend(3.5));
+    await expect(enforceLimits(req(), ok.auth, 1, [haiku])).resolves.toMatchObject({ units: 1 });
+  });
+
+  it("stops AI requests when the budget is used up, until it renews", async () => {
+    const { auth, rpc } = pro(spend(4.2));
+    const err = (await enforceLimits(req(), auth, 1, [haiku]).then(() => null, (e: unknown) => e)) as ApiError;
+    expect(err.message).toMatch(/used this month's AI budget/);
+    expect((err.details as { resetsAt: string }).resetsAt).toBeTruthy();
+    expect(rpc.some(([fn]) => fn === "usage_reserve")).toBe(false);
+  });
+
+  it("caps Free users with their own budget", async () => {
+    const { auth } = fakeAuth({ runs: spend(0.3) });
+    const err = (await enforceLimits(req(), auth, 1, [haiku]).then(() => null, (e: unknown) => e)) as ApiError;
+    expect(err.message).toMatch(/Free plan/);
+  });
+
+  it("counts runs without a verified price at the most expensive verified price", async () => {
+    // 300 unpriced runs of 2k in + 1k out tokens, at the top verified price ($2 in / $12 out per 1M): $4.80.
+    const runs: FakeRun[] = Array.from({ length: 300 }, () => ({ estimated_cost: null, input_tokens: 2000, output_tokens: 1000 }));
+    const { auth } = pro(runs);
+    await expect(enforceLimits(req(), auth, 1, [haiku])).rejects.toThrow(/AI budget/);
+  });
+
+  it("doesn't apply to administrators", async () => {
+    const { auth } = fakeAuth({ admin: true, runs: spend(1000) });
+    await expect(enforceLimits(req(), auth, 1, [sonnet])).resolves.toMatchObject({ entitlement: "admin_unlimited" });
   });
 });

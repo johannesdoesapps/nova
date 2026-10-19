@@ -11,14 +11,32 @@ export type PlanId = "free" | "pro";
 export interface Plan {
   id: PlanId;
   label: string;
+  /** Monthly price in USD (0 for Free). */
+  priceUsd: number;
   windowUnits: number;
   weeklyUnits: number;
 }
 
 export const PLANS: Record<PlanId, Plan> = {
-  free: { id: "free", label: "Free", windowUnits: 15, weeklyUnits: 100 },
-  pro: { id: "pro", label: "Pro", windowUnits: 150, weeklyUnits: 1000 },
+  free: { id: "free", label: "Free", priceUsd: 0, windowUnits: 15, weeklyUnits: 100 },
+  pro: { id: "pro", label: "Pro", priceUsd: 12, windowUnits: 150, weeklyUnits: 1000 },
 };
+
+/** Share of a subscription's price that must remain as profit after AI usage, payment fees and overheads. */
+export const TARGET_MARGIN = 0.6;
+
+/**
+ * The most a Pro subscriber's AI usage may cost per billing month so the
+ * target margin holds: price × (1 − margin) − payment fee − other overheads.
+ * At $12, 60%, 2.9% + $0.30: 4.80 − 0.648 = $4.152.
+ */
+export function proAiBudgetUsd(opts: { feePercent: number; feeFixedUsd: number; overheadUsd: number }, price = PLANS.pro.priceUsd, margin = TARGET_MARGIN): number {
+  const fee = (price * opts.feePercent) / 100 + opts.feeFixedUsd;
+  return Math.max(0, Math.round((price * (1 - margin) - fee - opts.overheadUsd) * 10_000) / 10_000);
+}
+
+/** Below this share of the budget any model may be used; above it, only the lowest-cost model, until the budget is reached. */
+export const PREMIUM_BUDGET_SHARE = 0.8;
 
 export const WINDOW_MS = 5 * 60 * 60 * 1000;
 export const WEEK_MS = 7 * 24 * 60 * 60 * 1000;

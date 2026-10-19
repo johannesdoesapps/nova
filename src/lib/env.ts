@@ -14,6 +14,12 @@ function int(v: string | undefined, fallback: number, min = 1, max = 100_000): n
   return Math.min(max, Math.max(min, n));
 }
 
+function num(v: string | undefined, fallback: number, min: number, max: number): number {
+  const n = Number.parseFloat(v ?? "");
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
 export const publicEnv = {
   supabaseUrl: clean(process.env.NEXT_PUBLIC_SUPABASE_URL),
   supabaseKey:
@@ -55,11 +61,27 @@ export function serverEnv() {
     allowGuestAi: clean(process.env.NOVA_ALLOW_GUEST_AI) === "1",
     /** Administrators have no usage allowance unless this is "false". */
     adminsUnlimited: clean(process.env.NOVA_ADMINS_UNLIMITED) !== "false",
+    // Billing (Stripe) and the AI budget guard; see docs/BILLING.md.
+    stripeSecretKey: clean(process.env.STRIPE_SECRET_KEY),
+    stripeWebhookSecret: clean(process.env.STRIPE_WEBHOOK_SECRET),
+    /** Optional: a Stripe Price ID for Pro. Without it, checkout charges PLANS.pro.priceUsd monthly. */
+    stripePriceId: clean(process.env.STRIPE_PRICE_ID),
+    /** Server-only key that lets the payment webhook update subscriptions (bypasses RLS). */
+    supabaseServiceRoleKey: clean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    /** Payment fees per charge, used for the profit-margin budget: percent and fixed USD. */
+    paymentFeePercent: num(process.env.NOVA_PAYMENT_FEE_PERCENT, 2.9, 0, 20),
+    paymentFeeFixedUsd: num(process.env.NOVA_PAYMENT_FEE_FIXED_USD, 0.3, 0, 5),
+    /** Other monthly costs per paying subscriber (e.g. a share of hosting), in USD. */
+    overheadPerSubscriberUsd: num(process.env.NOVA_OVERHEAD_PER_SUBSCRIBER_USD, 0, 0, 100),
+    /** Monthly AI spend allowed per Free user, in USD. */
+    freeAiBudgetUsd: num(process.env.NOVA_FREE_AI_BUDGET_USD, 0.25, 0, 100),
+    /** Optional cap on the whole site's AI spend per calendar month, in USD. Unset means no cap. */
+    monthlyAiBudgetUsd: process.env.NOVA_MONTHLY_AI_BUDGET_USD ? num(process.env.NOVA_MONTHLY_AI_BUDGET_USD, 0, 0, 1_000_000) : null,
   };
 }
 
 export type IntegrationStatus = {
-  id: "supabase" | "anthropic" | "openai" | "google" | "xai" | "deepseek" | "huggingface" | "search" | "sentry" | "engine";
+  id: "supabase" | "anthropic" | "openai" | "google" | "xai" | "deepseek" | "huggingface" | "search" | "billing" | "sentry" | "engine";
   label: string;
   configured: boolean;
   envVars: string[];
@@ -118,6 +140,13 @@ export function integrationStatus(): IntegrationStatus[] {
       configured: Boolean(env.huggingfaceKey),
       envVars: ["HUGGINGFACE_API_KEY"],
       purpose: "Open-model inference via Inference Providers; higher Hub rate limits",
+    },
+    {
+      id: "billing",
+      label: "Payments (Stripe)",
+      configured: Boolean(env.stripeSecretKey && env.stripeWebhookSecret && env.supabaseServiceRoleKey),
+      envVars: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "SUPABASE_SERVICE_ROLE_KEY"],
+      purpose: "Pro subscriptions: checkout, billing portal and the webhook that activates plans",
     },
     {
       id: "search",

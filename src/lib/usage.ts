@@ -1,7 +1,9 @@
 import "server-only";
 import { entitlementFor } from "./entitlements";
 import type { AuthContext } from "./auth";
+import { getAllModels, getModels } from "./ai";
 import { getPlatformSettings } from "./ai/settings";
+import { enforceBudget } from "./budget";
 import { estimateCost } from "./ai/cost";
 import type { ModelInfo, Usage } from "./ai/types";
 import { serverEnv } from "./env";
@@ -75,6 +77,12 @@ export async function enforceLimits(
   const [entitlement, settings] = await Promise.all([entitlementFor(auth), getPlatformSettings()]);
   const units = unitsFor(models, cost, settings.modelUnits);
   if (!entitlement) return { requestId, units: 0, entitlement: null };
+
+  // Money first: the monthly AI budget (keeps Pro's margin; caps Free and the whole site).
+  if (entitlement.kind !== "unlimited") {
+    const [available, all] = await Promise.all([getModels(settings), getAllModels(settings)]);
+    await enforceBudget(auth, entitlement, models, available, all);
+  }
 
   // Accounts without an allowance still reserve, with no limit, so duplicate submissions are refused for everyone.
   const unlimited = entitlement.kind === "unlimited";

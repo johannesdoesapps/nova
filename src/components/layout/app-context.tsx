@@ -25,6 +25,8 @@ export interface IntegrationFlags {
   deepseek: boolean;
   huggingface: boolean;
   search: boolean;
+  /** Stripe payments are set up (Pro can be bought). */
+  billing: boolean;
 }
 
 interface AppState {

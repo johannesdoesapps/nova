@@ -38,6 +38,7 @@ export const loadShellData = cache(async function loadShellData() {
       deepseek: flag("deepseek"),
       huggingface: flag("huggingface"),
       search: flag("search"),
+      billing: flag("billing"),
     },
     recents: { conversations, projects },
     supabasePublic:

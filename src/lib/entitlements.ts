@@ -20,8 +20,8 @@ import { PLANS, type Plan, type PlanId } from "./plans";
  *   subscriptions row, or admin rights with an admins row, if a test needs more.
  */
 export type Entitlement =
-  | { kind: "unlimited"; reason: "admin"; label: "admin_unlimited"; plan: PlanId }
-  | { kind: "plan"; plan: PlanId; limits: Plan; label: `plan:${PlanId}` };
+  | { kind: "unlimited"; reason: "admin"; label: "admin_unlimited"; plan: PlanId; periodStart: number | null }
+  | { kind: "plan"; plan: PlanId; limits: Plan; label: `plan:${PlanId}`; periodStart: number | null };
 
 const cache = new WeakMap<object, Promise<Entitlement | null>>();
 
@@ -37,14 +37,19 @@ export function entitlementFor(auth: AuthContext): Promise<Entitlement | null> {
 }
 
 async function resolve(auth: AuthContext & { mode: "authenticated" }): Promise<Entitlement> {
-  const [admin, plan] = await Promise.all([isAdmin(auth), userPlan(auth)]);
-  if (admin && serverEnv().adminsUnlimited) return { kind: "unlimited", reason: "admin", label: "admin_unlimited", plan };
-  return { kind: "plan", plan, limits: PLANS[plan], label: `plan:${plan}` };
+  const [admin, sub] = await Promise.all([isAdmin(auth), subscriptionOf(auth)]);
+  if (admin && serverEnv().adminsUnlimited) return { kind: "unlimited", reason: "admin", label: "admin_unlimited", plan: sub.plan, periodStart: sub.periodStart };
+  return { kind: "plan", plan: sub.plan, limits: PLANS[sub.plan], label: `plan:${sub.plan}`, periodStart: sub.periodStart };
 }
 
 /** The user's plan: Pro only while a subscription is active or trialing; everyone else is Free. */
 export async function userPlan(auth: AuthContext & { mode: "authenticated" }): Promise<PlanId> {
-  const { data } = await auth.supabase.from("subscriptions").select("plan, status").eq("user_id", auth.user.id).maybeSingle();
-  const row = data as { plan: PlanId; status: string } | null;
-  return row && row.plan === "pro" && ["active", "trialing"].includes(row.status) ? "pro" : "free";
+  return (await subscriptionOf(auth)).plan;
+}
+
+async function subscriptionOf(auth: AuthContext & { mode: "authenticated" }): Promise<{ plan: PlanId; periodStart: number | null }> {
+  const { data } = await auth.supabase.from("subscriptions").select("*").eq("user_id", auth.user.id).maybeSingle();
+  const row = data as { plan: PlanId; status: string; current_period_start?: string | null } | null;
+  const pro = !!row && row.plan === "pro" && ["active", "trialing"].includes(row.status);
+  return { plan: pro ? "pro" : "free", periodStart: pro && row?.current_period_start ? Date.parse(row.current_period_start) : null };
 }

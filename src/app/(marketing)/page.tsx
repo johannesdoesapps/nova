@@ -187,7 +187,7 @@ export default function HomePage() {
 
       {/* Pricing */}
       <section aria-labelledby="pricing-title" className="mx-auto max-w-6xl px-5 py-20 sm:px-8">
-        <SectionHeading id="pricing-title" eyebrow="Pricing" title="Free while NOVA grows" intro="Everyone starts on the Free plan. A paid plan with higher limits isn't on sale yet." />
+        <SectionHeading id="pricing-title" eyebrow="Pricing" title="Free to start, Pro when you need more" intro={`Everyone starts on the Free plan. Pro gives ten times the allowance for $${PRICING.pro.price} a month.`} />
         <div className="mt-12 grid gap-5 md:grid-cols-2">
           <div className="lux-card rounded-[22px] p-7">
             <div className="flex items-center justify-between">
@@ -208,10 +208,10 @@ export default function HomePage() {
           <div className="rounded-[22px] border border-border bg-panel p-7">
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-medium text-fg">{PRICING.pro.name}</h3>
-              <span className="rounded-full border border-border-strong px-2.5 py-0.5 text-[11.5px] text-muted">Not on sale yet</span>
+              <span className="rounded-full border border-border-strong px-2.5 py-0.5 text-[11.5px] text-muted">${PRICING.pro.price} / month</span>
             </div>
             <p className="mt-3 text-[15px] leading-relaxed text-muted">
-              Ten times the Free allowance — {PRICING.pro.window} units per 5-hour window and {PRICING.pro.weekly} per week. The price will be published here before it&rsquo;s available.
+              Ten times the Free allowance — {PRICING.pro.window} units per 5-hour window and {PRICING.pro.weekly} per week — for ${PRICING.pro.price} a month. Cancel any time.
             </p>
             <Link href="/pricing" className="mt-6 inline-flex items-center gap-1.5 text-sm text-fg underline-offset-4 hover:underline">
               How usage units work <ArrowRight className="h-3.5 w-3.5" aria-hidden />

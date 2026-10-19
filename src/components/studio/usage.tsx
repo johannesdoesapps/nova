@@ -1,11 +1,15 @@
 "use client";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { PLANS } from "@/lib/plans";
+import { BillingButton } from "@/components/common/billing-button";
 
 export interface UsageState {
   plan: "free" | "pro";
   window: { used: number; limit: number; resetsAt: number | null };
   week: { used: number; limit: number; resetsAt: number | null };
+  /** This month's AI budget: share used, and "economy" (lowest-cost model only) or "exhausted". */
+  budget?: { usedShare: number; state: "ok" | "economy" | "exhausted"; resetsAt: number } | null;
 }
 
 const PLAN_LABEL = { free: "Free", pro: "Pro" } as const;
@@ -18,8 +22,8 @@ export function useUsage(busy = false): UsageState | null {
     let alive = true;
     fetch("/api/usage", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((j: { usage: UsageState | null } | null) => {
-        if (alive) setUsage(j?.usage ?? null);
+      .then((j: { usage: UsageState | null; budget?: UsageState["budget"] } | null) => {
+        if (alive) setUsage(j?.usage ? { ...j.usage, budget: j.budget ?? null } : null);
       })
       .catch(() => {});
     return () => {
@@ -40,6 +44,16 @@ export function formatReset(at: number | null): string {
 /** One line under the composer when the allowance is running low or used up. */
 export function UsageNotice({ usage }: { usage: UsageState | null }) {
   if (!usage) return null;
+  if (usage.budget && usage.budget.state !== "ok") {
+    const renews = new Date(usage.budget.resetsAt).toLocaleDateString([], { month: "short", day: "numeric" });
+    return (
+      <p role="status" className={cn("s-in mt-2 px-3 text-[12.5px]", usage.budget.state === "exhausted" ? "text-s-danger" : "text-s-ink-3")}>
+        {usage.budget.state === "exhausted"
+          ? `You've used this month's AI budget. It renews on ${renews}.`
+          : `Most of this month's AI budget is used, so NOVA uses its lowest-cost model (Auto) until ${renews}.`}
+      </p>
+    );
+  }
   const weekLeft = usage.week.limit - usage.week.used;
   const windowLeft = usage.window.limit - usage.window.used;
   const weekly = weekLeft <= windowLeft;
@@ -74,14 +88,27 @@ function Meter({ label, used, limit, resetsAt, idle }: { label: string; used: nu
 }
 
 /** Plan allowance for the Settings dialog. */
-export function UsageMeters({ usage }: { usage: UsageState }) {
+export function UsageMeters({ usage, billing = false }: { usage: UsageState; billing?: boolean }) {
   return (
     <div className="space-y-3">
-      <p className="text-[12.5px] text-s-ink-3">
-        {PLAN_LABEL[usage.plan]} plan. Larger models like Sonnet use more of your allowance per message.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[12.5px] text-s-ink-3">
+          {PLAN_LABEL[usage.plan]} plan. Larger models like Sonnet use more of your allowance per message.
+        </p>
+        {billing && (
+          <BillingButton
+            action={usage.plan === "pro" ? "manage" : "upgrade"}
+            className="inline-flex h-8 items-center rounded-xl border border-s-line-strong px-3 text-[12.5px] font-medium transition hover:bg-s-hover"
+          >
+            {usage.plan === "pro" ? "Manage subscription" : `Upgrade to Pro · $${PLANS.pro.priceUsd}/month`}
+          </BillingButton>
+        )}
+      </div>
       <Meter label="Current 5-hour session" used={usage.window.used} limit={usage.window.limit} resetsAt={usage.window.resetsAt} idle="Starts with your next message" />
       <Meter label="This week" used={usage.week.used} limit={usage.week.limit} resetsAt={usage.week.resetsAt} idle="Nothing used in the last 7 days" />
+      {usage.budget && (
+        <Meter label="Monthly AI budget" used={usage.budget.usedShare * 100} limit={100} resetsAt={usage.budget.resetsAt} idle="" />
+      )}
     </div>
   );
 }
