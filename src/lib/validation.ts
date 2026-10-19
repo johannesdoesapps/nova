@@ -30,6 +30,8 @@ export const chatRequest = z.object({
   allowFallback: z.boolean().optional(),
   /** Used only for guests (no persistence); authenticated history is loaded from the DB. */
   history: z.array(historyMessage).max(30).optional(),
+  /** The browser's IANA time zone, so the model can answer "what time is it". */
+  timeZone: z.string().max(64).optional(),
   attachments: z
     .array(
       z.object({

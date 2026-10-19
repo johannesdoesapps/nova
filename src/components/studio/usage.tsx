@@ -53,7 +53,6 @@ export function UsageNotice({ usage }: { usage: UsageState | null }) {
       {left === 0
         ? `You've reached your ${weekly ? "weekly" : "5-hour"} limit${when ? `. It resets at ${when}` : ""}.`
         : `${left} message${left === 1 ? "" : "s"} left${when ? ` until ${when}` : ""}.`}
-      {usage.plan === "free" ? " Upgrade to Pro for more." : ""}
     </p>
   );
 }

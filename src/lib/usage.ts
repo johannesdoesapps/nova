@@ -1,4 +1,5 @@
 import "server-only";
+import { isAdmin } from "./admin";
 import type { AuthContext } from "./auth";
 import { getAllModels } from "./ai";
 import { getPlatformSettings } from "./ai/settings";
@@ -6,7 +7,7 @@ import { estimateCost } from "./ai/cost";
 import type { ModelInfo, Usage } from "./ai/types";
 import { serverEnv } from "./env";
 import { ApiError, clientIp } from "./http";
-import { PLANS, WEEK_MS, checkUsage, computeUsage, modelUnits, type PlanId, type UsageState } from "./plans";
+import { LARGE_MODEL_UNITS, PLANS, WEEK_MS, checkUsage, computeUsage, modelUnits, unitsLeft, type PlanId, type UsageState } from "./plans";
 import { limiter } from "./rate-limit";
 import { reportError } from "./observability";
 
@@ -54,9 +55,12 @@ export async function userPlan(auth: AuthContext & { mode: "authenticated" }): P
   return row && row.plan === "pro" && ["active", "trialing"].includes(row.status) ? "pro" : "free";
 }
 
-/** Current 5-hour window and weekly usage, from the user's successful model runs. Null if it can't be read. */
+/**
+ * Current 5-hour window and weekly usage, from the user's successful model runs.
+ * Null if it can't be read, and for administrators, who run the site and have no allowance.
+ */
 export async function planUsage(auth: AuthContext): Promise<UsageState | null> {
-  if (auth.mode !== "authenticated") return null;
+  if (auth.mode !== "authenticated" || (await isAdmin(auth))) return null;
   const now = Date.now();
   const settings = await getPlatformSettings();
   const [plan, runs, models] = await Promise.all([
@@ -77,6 +81,18 @@ export async function planUsage(auth: AuthContext): Promise<UsageState | null> {
     units: caps.has(r.model_id) ? modelUnits(caps.get(r.model_id), settings.modelUnits[r.model_id]) : 1,
   }));
   return computeUsage(unitRuns, now, PLANS[plan]);
+}
+
+/**
+ * Whether Auto and agent defaults should keep to low-cost models: once 80% of
+ * the allowance is used, or whenever fewer units are left than two messages to
+ * a larger model need (always the case on Free), so one message can't use up
+ * the whole allowance.
+ */
+export async function shouldSaveAllowance(auth: AuthContext): Promise<boolean> {
+  const u = await planUsage(auth);
+  if (!u) return false;
+  return u.window.used >= u.window.limit * 0.8 || u.week.used >= u.week.limit * 0.8 || unitsLeft(u) < LARGE_MODEL_UNITS * 2;
 }
 
 export interface RunRecord {

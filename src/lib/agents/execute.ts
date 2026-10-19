@@ -1,6 +1,7 @@
 import "server-only";
 import { withTimeout } from "../ai";
 import { streamWithFallback } from "../ai/fallback";
+import { clockLine } from "../ai/clock";
 import { estimateTokens } from "../ai/cost";
 import { ASSISTANT_BASE } from "../ai/modes";
 import { trimHistory } from "../ai/trim";
@@ -40,6 +41,8 @@ export interface AgentTurnInput {
   message: string;
   attachments: Attachment[];
   useWeb: boolean;
+  /** The browser's time zone, for the current-time line. */
+  timeZone?: string;
   signal: AbortSignal;
   send: (event: Record<string, unknown>) => void;
 }
@@ -102,7 +105,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
   const status = capabilityStatus();
   const can = (c: AgentCapability) => agent.capabilities.includes(c) && status[c].available;
   const tools: ToolRecord[] = [];
-  const extra: string[] = [];
+  const extra: string[] = ["", clockLine(input.timeZone)];
   let sources: SearchSource[] = [];
 
   // Tool: web search (only when the agent has it, it's configured, and the user asked).

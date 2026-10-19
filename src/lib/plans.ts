@@ -44,6 +44,11 @@ export interface UsageState {
   week: { used: number; limit: number; resetsAt: number | null };
 }
 
+/** Units left before either the 5-hour window or the weekly cap is reached. */
+export function unitsLeft(u: UsageState): number {
+  return Math.max(0, Math.min(u.window.limit - u.window.used, u.week.limit - u.week.used));
+}
+
 /**
  * A window opens with the first message after the previous one closed and
  * lasts five hours; the weekly cap counts everything in the last seven days.

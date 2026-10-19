@@ -13,7 +13,8 @@ import { reportError } from "@/lib/observability";
 import { stripInvalidCitations } from "@/lib/search/grounding";
 import type { SearchSource } from "@/lib/search/types";
 import { webSearch } from "@/lib/search/web";
-import { enforceLimits, planUsage, recordRun } from "@/lib/usage";
+import { clockLine } from "@/lib/ai/clock";
+import { enforceLimits, recordRun, shouldSaveAllowance } from "@/lib/usage";
 import { chatRequest } from "@/lib/validation";
 
 export const maxDuration = 60;
@@ -28,10 +29,6 @@ function escapeDoc(s: string) {
 }
 
 /** Auto mode saves the allowance when the user has used most of it. */
-async function nearLimit(auth: Awaited<ReturnType<typeof requireUserIfConfigured>>): Promise<boolean> {
-  const u = await planUsage(auth);
-  return !!u && (u.window.used >= u.window.limit * 0.8 || u.week.used >= u.week.limit * 0.8);
-}
 
 /**
  * POST /api/chat — streams NDJSON: meta → (sources) → delta… → done | error.
@@ -44,7 +41,7 @@ export async function POST(req: Request) {
     const choice = await resolveModelChoice(body.modelId, {
       prompt: body.message,
       mode: body.mode,
-      preferLowCost: isAutoId(body.modelId) ? await nearLimit(auth) : false,
+      preferLowCost: isAutoId(body.modelId) ? await shouldSaveAllowance(auth) : false,
     });
     let model = choice.model;
     await enforceLimits(req, auth, 1, [model]);
@@ -88,7 +85,7 @@ export async function POST(req: Request) {
         routing: choice.routing,
       });
 
-      let system = systemPromptFor(body.mode);
+      let system = `${systemPromptFor(body.mode)}\n\n${clockLine(body.timeZone)}`;
 
       // Optional web grounding in Research mode, or always when the Smart Router's Research mode is on.
       let sources: SearchSource[] = [];

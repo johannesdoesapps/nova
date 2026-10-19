@@ -39,6 +39,8 @@ export const agentChatRequest = z.object({
   message: z.string().trim().min(1).max(12_000),
   modelId: z.string().min(1).max(120).optional(),
   useWeb: z.boolean().optional(),
+  /** The browser's IANA time zone, so the model can answer "what time is it". */
+  timeZone: z.string().max(64).optional(),
   /** The user allows another compatible model to answer if the chosen one fails (also needs the admin setting). */
   allowFallback: z.boolean().optional(),
   /** Guests only: prior turns, since the server keeps no guest history. */

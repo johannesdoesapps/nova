@@ -11,7 +11,7 @@ NOVA talks to several AI providers through one server-side layer. Browsers never
 | Agent service | `src/lib/agents/*` | Agent instructions, tools, response style and memory; agents keep a capability preference, not a model name |
 | Tool registry | `src/lib/agents/capabilities.ts`, `execute.ts` | Web search, file analysis, data analysis; code execution is listed but needs a sandbox |
 | Conversations | `src/lib/db` | Saved per user and per agent, protected by row-level security |
-| Usage and cost | `src/lib/usage.ts`, `src/lib/plans.ts` | Token usage and cost per run (when the provider reports it), 5-hour and weekly allowances |
+| Usage and cost | `src/lib/usage.ts`, `src/lib/plans.ts` | Token usage and cost per run (when the provider reports it), 5-hour and weekly allowances (administrators have none) |
 
 ## Auto mode
 
@@ -19,7 +19,8 @@ Auto is a rule-based router, not a quality judge. It:
 
 - never chooses a model whose provider isn't configured or that lacks a required capability;
 - prefers low-cost models for everyday questions and summaries, reasoning models for analysis, and coding or writing models for those tasks;
-- switches to low-cost models when the user has used 80% of their allowance;
+- keeps to low-cost models once 80% of the allowance is used, or when fewer units are left than two larger-model messages need — always the case on Free, so one message can't use the whole 5-hour allowance (agents without a chosen model follow the same rule);
+- tells the model the current date and time, in the user's browser time zone;
 - tells the user which model answered and why (the "Auto" badge on the reply).
 
 ## Fallback

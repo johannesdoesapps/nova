@@ -11,7 +11,7 @@ import { addMessages, createConversation, getConversation } from "@/lib/db";
 import { conversationIsFor, getAgent } from "@/lib/db/agents";
 import { ApiError, errorResponse, ndjsonStream, parseJsonBody } from "@/lib/http";
 import { reportError } from "@/lib/observability";
-import { enforceLimits, recordRun } from "@/lib/usage";
+import { enforceLimits, recordRun, shouldSaveAllowance } from "@/lib/usage";
 
 export const maxDuration = 60;
 
@@ -46,7 +46,9 @@ export async function POST(req: Request) {
     // Model: the user's pick for this conversation, else the agent's saved model,
     // else a model with the agent's preferred capability, else the site default.
     // Instructions and tools don't change with the model.
-    const ctx = { prompt: body.message };
+    // Near the limit (and always on Free) Auto and agent defaults keep to low-cost models.
+    const preferLowCost = await shouldSaveAllowance(auth);
+    const ctx = { prompt: body.message, preferLowCost };
     let choice: ModelChoice;
     let modelNotice: string | null = null;
     if (body.modelId) choice = await resolveModelChoice(body.modelId, ctx);
@@ -59,7 +61,9 @@ export async function POST(req: Request) {
       }
     } else {
       choice = await resolveModelChoice(null, ctx);
-      const preferred = pickForCapability(await getModels(choice.settings), agent.modelPreference);
+      const all = await getModels(choice.settings);
+      const cheap = all.filter((m) => m.available && m.capabilities.includes("low-cost"));
+      const preferred = pickForCapability(preferLowCost && cheap.length ? cheap : all, agent.modelPreference);
       if (preferred) choice = { ...choice, model: await resolveModel(preferred.id, choice.settings) };
     }
     let model: ModelWithStatus = choice.model;
@@ -104,7 +108,7 @@ export async function POST(req: Request) {
       // 3–5. Shared execution service: tools, prompt, streaming.
       let result;
       try {
-        result = await runAgentTurn({ agent, model, fallbacks, history, message: body.message, attachments, useWeb: !!body.useWeb, signal, send });
+        result = await runAgentTurn({ agent, model, fallbacks, history, message: body.message, attachments, useWeb: !!body.useWeb, timeZone: body.timeZone, signal, send });
         model = result.model;
       } catch (err) {
         void recordRun(auth, {

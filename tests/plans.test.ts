@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { PLANS, WEEK_MS, WINDOW_MS, checkUsage, computeUsage, modelUnits } from "@/lib/plans";
+import { LARGE_MODEL_UNITS, PLANS, WEEK_MS, WINDOW_MS, checkUsage, computeUsage, modelUnits, unitsLeft } from "@/lib/plans";
+import { clockLine } from "@/lib/ai/clock";
 
 const H = 60 * 60 * 1000;
 const now = Date.UTC(2026, 9, 20, 12);
@@ -41,5 +42,23 @@ describe("5-hour windows", () => {
   it("charges larger models more of the allowance", () => {
     expect(modelUnits(["chat", "low-cost"])).toBe(1);
     expect(modelUnits(["chat", "reasoning"])).toBeGreaterThan(1);
+  });
+});
+
+describe("allowance left and the clock line", () => {
+  it("counts units left against the tighter of the window and the week", () => {
+    const u = { plan: "free" as const, window: { used: 3, limit: 15, resetsAt: null }, week: { used: 95, limit: 100, resetsAt: null } };
+    expect(unitsLeft(u)).toBe(5);
+    expect(unitsLeft({ ...u, week: { used: 120, limit: 100, resetsAt: null } })).toBe(0);
+    // On Free the whole window is less than two larger-model messages, so Auto keeps to low-cost models.
+    expect(PLANS.free.windowUnits).toBeLessThan(LARGE_MODEL_UNITS * 2);
+  });
+
+  it("tells the model the time, in the user's zone when it's valid", () => {
+    const now = new Date("2026-10-19T16:40:00Z");
+    expect(clockLine("America/New_York", now)).toContain("12:40");
+    expect(clockLine("America/New_York", now)).toContain("2026-10-19 16:40 UTC");
+    expect(clockLine("Not/AZone", now)).toBe(clockLine(undefined, now));
+    expect(clockLine(undefined, now)).toMatch(/^Current date and time: 2026-10-19 16:40 UTC\./);
   });
 });
