@@ -12,7 +12,7 @@ import { ApiError, clientIp, errorResponse, parseJsonBody } from "@/lib/http";
 import { reportError } from "@/lib/observability";
 import { limiter } from "@/lib/rate-limit";
 import { webSearch } from "@/lib/search/web";
-import { enforceLimits } from "@/lib/usage";
+import { enforceLimits, recordRun } from "@/lib/usage";
 import { SEARCH_MISSING, verifyRequest, type VerifyResult } from "@/lib/verify/schema";
 
 export const maxDuration = 60;
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
       return NextResponse.json(result);
     }
 
-    await enforceLimits(req, auth, 1);
+    await enforceLimits(req, auth, 1, undefined, { purpose: "verify" });
     const who = auth.mode === "authenticated" ? `u:${auth.user.id}` : `ip:${clientIp(req)}`;
     if (!limiter("search-minute", Math.max(2, Math.floor(env.ratePerMinute / 2)), 60_000).check(who, 1).ok) {
       throw new ApiError("rate_limited", "Too many checks. Please wait a moment.");
@@ -68,7 +68,15 @@ export async function POST(req: Request) {
           notices.push("No real AI model is configured, so only rule-based checks were applied.");
         } else {
           const messages = buildJudgeMessages(extracted, sources.map((s, i) => buildSource(s, i, now)));
-          const r = await getProvider(model.provider).generate({ model, messages, maxOutputTokens: 4000, temperature: 0, signal: withTimeout(40_000, req.signal) });
+          const started = performance.now();
+          let r;
+          try {
+            r = await getProvider(model.provider).generate({ model, messages, maxOutputTokens: 4000, temperature: 0, signal: withTimeout(40_000, req.signal) });
+          } catch (err) {
+            await recordRun(auth, { model, prompt: query, response: "", latencyMs: performance.now() - started, usage: { inputTokens: null, outputTokens: null, estimated: true }, status: "error", purpose: "verify", requestedModel: body.modelId ?? null, routingReason: "Truth Layer judge", tools: ["web_search"], error: err instanceof Error ? err.message : "failed" });
+            throw err;
+          }
+          await recordRun(auth, { model, prompt: query, response: r.text, latencyMs: performance.now() - started, usage: r.usage, status: "success", purpose: "verify", requestedModel: body.modelId ?? null, routingReason: "Truth Layer judge", tools: ["web_search"] });
           const parsed = parseJudgements(r.text);
           if (parsed.error) notices.push(parsed.error);
           modelJudgements = parsed.judgements;

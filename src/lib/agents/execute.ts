@@ -1,7 +1,7 @@
 import "server-only";
 import { withTimeout } from "../ai";
 import { streamWithFallback } from "../ai/fallback";
-import { clockLine } from "../ai/clock";
+import { buildTurnContext, type TurnTool } from "../ai/turn-context";
 import { estimateTokens } from "../ai/cost";
 import { ASSISTANT_BASE } from "../ai/modes";
 import { trimHistory } from "../ai/trim";
@@ -25,11 +25,8 @@ export interface Attachment {
   content: string;
 }
 
-export interface ToolRecord {
-  name: AgentCapability;
-  label: string;
-  status: "ok" | "error";
-  detail?: string;
+export interface ToolRecord extends TurnTool {
+  name: AgentCapability | "time";
 }
 
 export interface AgentTurnInput {
@@ -105,7 +102,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
   const status = capabilityStatus();
   const can = (c: AgentCapability) => agent.capabilities.includes(c) && status[c].available;
   const tools: ToolRecord[] = [];
-  const extra: string[] = ["", clockLine(input.timeZone)];
+  const extra: string[] = [];
   let sources: SearchSource[] = [];
 
   // Tool: web search (only when the agent has it, it's configured, and the user asked).
@@ -161,6 +158,15 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
         send({ type: "tool", tool: rec });
       }
     }
+  }
+
+  // Trusted context shared with the main chat: time, time tools, live-data honesty.
+  const turn = buildTurnContext(input.message, { timeZone: input.timeZone, liveSources: sources.length > 0 });
+  extra.push("", turn.system);
+  for (const t of turn.tools) {
+    const rec = t as ToolRecord;
+    tools.push(rec);
+    send({ type: "tool", tool: rec });
   }
 
   // File analysis: attached text becomes untrusted context for this turn.

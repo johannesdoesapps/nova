@@ -87,6 +87,8 @@ describe("POST /api/chat", () => {
     expect(events[0]).toMatchObject({ type: "meta", conversationId: null, persisted: false });
     const done = events.find((e) => e.type === "done")!;
     expect(done).toMatchObject({ simulated: true, assistantMessageId: null });
+    // The model shown while streaming is the one that answered.
+    expect((done.model as { id: string }).id).toBe((events[0]!.model as { id: string }).id);
     const deltas = events.filter((e) => e.type === "delta").map((e) => e.text).join("");
     expect(deltas).toBe(done.text);
   });

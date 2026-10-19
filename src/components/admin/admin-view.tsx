@@ -11,6 +11,7 @@ import { useApp } from "@/components/layout/app-context";
 import { StudioHeader } from "@/components/studio/frame";
 import { ProviderMark } from "@/components/studio/model-selector";
 import { Switch } from "@/components/studio/ui";
+import { RequestLog } from "./request-log";
 
 type ProviderRow = { id: Exclude<ProviderId, "demo">; label: string; envVar: string; keyUrl: string; steps: string; configured: boolean };
 type Snapshot = { settings: PlatformSettings; models: ModelWithStatus[]; providers: ProviderRow[] };
@@ -308,6 +309,8 @@ export function AdminView() {
                   })}
                 </ul>
               </section>
+
+              <RequestLog />
 
               {adding && (
                 <AddModel

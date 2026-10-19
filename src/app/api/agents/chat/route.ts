@@ -1,17 +1,17 @@
 import { fallbackChain, getModels, resolveModel, resolveModelChoice, type ModelChoice } from "@/lib/ai";
-import { pickForCapability } from "@/lib/ai/router";
+import { classifyTask, pickForCapability } from "@/lib/ai/router";
 import { estimateCost } from "@/lib/ai/cost";
 import type { ChatMessage, ModelWithStatus } from "@/lib/ai/types";
 import { builtinAgent } from "@/lib/agents/builtins";
 import { authorizeTurn, runAgentTurn } from "@/lib/agents/execute";
 import { agentChatRequest } from "@/lib/agents/schema";
 import { isBuiltinId, type AgentConfig } from "@/lib/agents/types";
-import { requireUserIfConfigured } from "@/lib/auth";
+import { requireUserIfConfigured, type AuthContext } from "@/lib/auth";
 import { addMessages, createConversation, getConversation } from "@/lib/db";
 import { conversationIsFor, getAgent } from "@/lib/db/agents";
 import { ApiError, errorResponse, ndjsonStream, parseJsonBody } from "@/lib/http";
 import { reportError } from "@/lib/observability";
-import { enforceLimits, recordRun, shouldSaveAllowance } from "@/lib/usage";
+import { enforceLimits, recordRun, releaseUsage, shouldSaveAllowance } from "@/lib/usage";
 
 export const maxDuration = 60;
 
@@ -27,9 +27,11 @@ function titleFrom(message: string): string {
  * the shared execution service (authorised tools only, streamed), 6. save.
  */
 export async function POST(req: Request) {
+  let caller: AuthContext | null = null;
   try {
     const body = await parseJsonBody(req, agentChatRequest, 240_000);
     const auth = await requireUserIfConfigured();
+    caller = auth;
 
     // 1–2. Identify the agent and load its configuration.
     let agent: AgentConfig;
@@ -61,13 +63,33 @@ export async function POST(req: Request) {
       }
     } else {
       choice = await resolveModelChoice(null, ctx);
+      // Same rules as Auto: the agent's preferred kind of model for demanding
+      // requests, a low-cost model for simple ones or when saving the allowance.
       const all = await getModels(choice.settings);
       const cheap = all.filter((m) => m.available && m.capabilities.includes("low-cost"));
-      const preferred = pickForCapability(preferLowCost && cheap.length ? cheap : all, agent.modelPreference);
-      if (preferred) choice = { ...choice, model: await resolveModel(preferred.id, choice.settings) };
+      const task = classifyTask(body.message);
+      const economical = preferLowCost || task.complexity === "simple";
+      const preferred =
+        pickForCapability(economical && cheap.length ? cheap : all, agent.modelPreference) ??
+        (economical && agent.modelPreference === "reasoning" ? pickForCapability(cheap, "chat") : null);
+      if (preferred) {
+        choice = {
+          ...choice,
+          model: await resolveModel(preferred.id, choice.settings),
+          routing: {
+            auto: true,
+            mode: "balanced",
+            reason: economical
+              ? `${preferred.displayName} answered: ${preferLowCost ? "saving your allowance" : "a simple request, so a low-cost model"}.`
+              : `${preferred.displayName} answered: ${agent.name} prefers ${agent.modelPreference} models for requests like this.`,
+          },
+        };
+      }
     }
     let model: ModelWithStatus = choice.model;
-    await enforceLimits(req, auth, 1, [model]);
+    const requestedModel = body.modelId ?? agent.modelId ?? `agent-default:${agent.modelPreference ?? "none"}`;
+    const routingReason = choice.routing?.reason ?? modelNotice ?? (body.modelId ? "Chosen by the user." : agent.modelId ? `${agent.name}'s saved model.` : "Site default model.");
+    await enforceLimits(req, auth, 1, [model], { requestId: body.requestId, purpose: "agent" });
     const fallbacks = await fallbackChain(model, choice.settings, !!body.allowFallback);
 
     // Conversation and history.
@@ -111,7 +133,7 @@ export async function POST(req: Request) {
         result = await runAgentTurn({ agent, model, fallbacks, history, message: body.message, attachments, useWeb: !!body.useWeb, timeZone: body.timeZone, signal, send });
         model = result.model;
       } catch (err) {
-        void recordRun(auth, {
+        await recordRun(auth, {
           model,
           prompt: body.message,
           response: "",
@@ -120,10 +142,13 @@ export async function POST(req: Request) {
           status: "error",
           conversationId,
           purpose: "agent",
+          requestedModel,
+          routingReason,
+          error: err instanceof Error ? err.message : "failed",
         });
         throw err;
       }
-      void recordRun(auth, {
+      await recordRun(auth, {
         model,
         prompt: body.message,
         response: result.text,
@@ -133,6 +158,9 @@ export async function POST(req: Request) {
         conversationId,
         purpose: "agent",
         servedModel: result.servedModel,
+        requestedModel,
+        routingReason: model.id === choice.model.id ? routingReason : `Fallback from ${choice.model.displayName}. ${routingReason}`,
+        tools: result.tools.map((t) => t.name),
       });
 
       // 6. Save both messages (signed-in users).
@@ -171,6 +199,8 @@ export async function POST(req: Request) {
       });
     }, req.signal);
   } catch (err) {
+    // The request failed before any model ran: give back its reservation.
+    if (caller) await releaseUsage(caller);
     return errorResponse(err);
   }
 }

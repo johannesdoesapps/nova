@@ -5,7 +5,7 @@ import { systemPromptFor } from "@/lib/ai/modes";
 import { trimHistory } from "@/lib/ai/trim";
 import { isAutoId } from "@/lib/ai/platform";
 import type { ChatMessage, Usage } from "@/lib/ai/types";
-import { requireUserIfConfigured } from "@/lib/auth";
+import { requireUserIfConfigured, type AuthContext } from "@/lib/auth";
 import { addMessages, createConversation, getConversation, updateConversation } from "@/lib/db";
 import { serverEnv } from "@/lib/env";
 import { ApiError, errorResponse, ndjsonStream, parseJsonBody } from "@/lib/http";
@@ -13,8 +13,8 @@ import { reportError } from "@/lib/observability";
 import { stripInvalidCitations } from "@/lib/search/grounding";
 import type { SearchSource } from "@/lib/search/types";
 import { webSearch } from "@/lib/search/web";
-import { clockLine } from "@/lib/ai/clock";
-import { enforceLimits, recordRun, shouldSaveAllowance } from "@/lib/usage";
+import { buildTurnContext } from "@/lib/ai/turn-context";
+import { enforceLimits, recordRun, releaseUsage, shouldSaveAllowance } from "@/lib/usage";
 import { chatRequest } from "@/lib/validation";
 
 export const maxDuration = 60;
@@ -28,23 +28,25 @@ function escapeDoc(s: string) {
   return s.replace(/<\/?\s*(document|source|system)\b[^>]*>/gi, "[tag removed]");
 }
 
-/** Auto mode saves the allowance when the user has used most of it. */
-
 /**
  * POST /api/chat — streams NDJSON: meta → (sources) → delta… → done | error.
  * Authenticated users get history persisted; guests send their own history.
  */
 export async function POST(req: Request) {
+  let caller: AuthContext | null = null;
   try {
     const body = await parseJsonBody(req, chatRequest, 220_000);
     const auth = await requireUserIfConfigured();
+    caller = auth;
     const choice = await resolveModelChoice(body.modelId, {
       prompt: body.message,
       mode: body.mode,
       preferLowCost: isAutoId(body.modelId) ? await shouldSaveAllowance(auth) : false,
     });
     let model = choice.model;
-    await enforceLimits(req, auth, 1, [model]);
+    await enforceLimits(req, auth, 1, [model], { requestId: body.requestId, purpose: "chat" });
+    const requestedModel = body.modelId ?? "default";
+    const routingReason = choice.routing?.reason ?? (body.modelId ? "Chosen by the user." : "Site default model.");
     const fallbacks = await fallbackChain(model, choice.settings, !!body.allowFallback);
 
     // Conversation + history
@@ -85,7 +87,8 @@ export async function POST(req: Request) {
         routing: choice.routing,
       });
 
-      let system = `${systemPromptFor(body.mode)}\n\n${clockLine(body.timeZone)}`;
+      let system = systemPromptFor(body.mode);
+      const turnTools: string[] = [];
 
       // Optional web grounding in Research mode, or always when the Smart Router's Research mode is on.
       let sources: SearchSource[] = [];
@@ -114,6 +117,12 @@ export async function POST(req: Request) {
         }
       }
 
+      // Fresh, trusted context for this turn: time, time-tool results, live-data honesty.
+      const turn = buildTurnContext(body.message, { timeZone: body.timeZone, liveSources: sources.length > 0 });
+      system += `\n\n${turn.system}`;
+      for (const tool of turn.tools) send({ type: "tool", tool });
+      turnTools.push(...turn.tools.map((t) => t.name));
+
       let userContent = body.message;
       if (body.attachments?.length) {
         const docs = body.attachments
@@ -128,6 +137,7 @@ export async function POST(req: Request) {
       let usage: Usage | null = null;
       let servedModel: string | null = null;
       let status: "success" | "error" = "success";
+      let failure: string | null = null;
       try {
         for await (const ev of streamWithFallback(model, fallbacks, { messages, maxOutputTokens: 2400 }, () => withTimeout(50_000, signal))) {
           if (ev.type === "delta") {
@@ -142,10 +152,11 @@ export async function POST(req: Request) {
         }
       } catch (err) {
         status = "error";
+        failure = err instanceof Error ? err.message : "failed";
         throw err;
       } finally {
         usage ??= { inputTokens: estimateTokens(messages), outputTokens: estimateTokens(text), estimated: true };
-        void recordRun(auth, {
+        await recordRun(auth, {
           model,
           prompt: body.message,
           response: text,
@@ -155,6 +166,10 @@ export async function POST(req: Request) {
           conversationId,
           purpose: "chat",
           servedModel,
+          requestedModel,
+          routingReason: model.id === choice.model.id ? routingReason : `Fallback from ${choice.model.displayName}. ${routingReason}`,
+          tools: [...turnTools, ...(sources.length ? ["web_search"] : [])],
+          error: failure,
         });
       }
 
@@ -178,6 +193,7 @@ export async function POST(req: Request) {
       send({
         type: "done",
         text,
+        model: { id: model.id, displayName: model.displayName, provider: model.provider },
         assistantMessageId,
         simulated: model.provider === "demo",
         usage,
@@ -185,6 +201,8 @@ export async function POST(req: Request) {
       });
     }, req.signal);
   } catch (err) {
+    // The request failed before any model ran: give back its reservation.
+    if (caller) await releaseUsage(caller);
     return errorResponse(err);
   }
 }

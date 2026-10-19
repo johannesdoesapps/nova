@@ -32,6 +32,8 @@ export const chatRequest = z.object({
   history: z.array(historyMessage).max(30).optional(),
   /** The browser's IANA time zone, so the model can answer "what time is it". */
   timeZone: z.string().max(64).optional(),
+  /** One id per submission, so a resend of the same message is never run or charged twice. */
+  requestId: z.uuid().optional(),
   attachments: z
     .array(
       z.object({

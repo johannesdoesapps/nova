@@ -6,44 +6,52 @@ export type TaskKind = "summary" | "analysis" | "coding" | "writing" | "long-doc
 
 export interface TaskSignal {
   kind: TaskKind;
+  /** Whether the request needs a stronger model; simple requests go to low-cost models. */
+  complexity: "simple" | "complex";
   reasons: string[];
   estimatedTokens: number;
 }
 
 const CODE_HINTS =
-  /```|\b(function|class|const|let|def|import|export|SELECT|INSERT|stack ?trace|TypeError|exception|compile|bug|debug|refactor|regex|typescript|javascript|python|rust|golang|sql|api endpoint)\b/i;
+  /```|\b(function|class|const|let|def|import|export|SELECT|INSERT|stack ?trace|TypeError|SyntaxError|exception|compile|compiler|bug|debug|refactor|regex|typescript|javascript|python|rust|golang|java|kotlin|swift|php|ruby|c\+\+|c#|html|css|react|next\.js|node(?:\.js)?|npm|git|docker|kubernetes|bash|shell script|sql|json|yaml|api endpoint|endpoint|variable|array|for loop|algorithm|unit tests?|code|codebase|repository|programming)\b/i;
+/** Signals that a request is genuinely hard, so a stronger model is worth its cost. */
+const COMPLEX_HINTS =
+  /\b(step[- ]by[- ]step|in[- ]depth|thorough(?:ly)?|rigorous|prove|proof|derive|derivation|architecture|system design|design a (?:system|service|database)|trade-?offs?|optimi[sz]e|race condition|deadlock|memory leak|concurrency|security (?:audit|review)|threat model|refactor (?:the|this|my) (?:whole|entire)|multi-?step|research report|literature review|complex|edge cases|strategy|business plan)\b/i;
 const SUMMARY_HINTS = /\b(summari[sz]e|summary|tl;?dr|shorten|key points|bullet points|recap|condense)\b/i;
 const WRITING_HINTS =
   /\b(write|draft|rewrite|redraft|proofread|edit (?:this|my)|essay|article|blog post|cover letter|email|newsletter|story|poem|tone|copywriting|press release)\b/i;
 const ANALYSIS_HINTS =
   /\b(analy[sz]e|compare|trade-?offs?|pros and cons|evaluate|strategy|why|reason|implications|assess|plan|decide|critique)\b/i;
 
-/** Transparent, rule-based task classification. No hidden scoring. */
+/** How hard a request is, from its length, the amount of code and explicit signals. No model call. */
+export function assessComplexity(prompt: string, estimatedTokens = estimateTokens(prompt)): { complexity: "simple" | "complex"; reason: string } {
+  const codeLines = (prompt.match(/```[\s\S]*?```/g) ?? []).reduce((n, b) => n + b.split("\n").length - 2, 0);
+  if (estimatedTokens > 1500) return { complexity: "complex", reason: "it's a long request" };
+  if (codeLines > 40) return { complexity: "complex", reason: "it includes a lot of code" };
+  const m = prompt.match(COMPLEX_HINTS);
+  if (m) return { complexity: "complex", reason: `it asks for ${m[0].toLowerCase()}` };
+  return { complexity: "simple", reason: "a fast, low-cost model can handle it" };
+}
+
+/**
+ * Transparent, rule-based task classification. No hidden scoring and no extra
+ * model call. The Coding chat mode makes code questions coding tasks, but a
+ * message that isn't about code is still classified by what it asks.
+ */
 export function classifyTask(prompt: string, mode?: string): TaskSignal {
   const estimatedTokens = estimateTokens(prompt);
   const reasons: string[] = [];
-  if (estimatedTokens > 24_000) {
-    reasons.push(`Prompt is long (~${estimatedTokens.toLocaleString()} tokens), so context window matters most.`);
-    return { kind: "long-document", reasons, estimatedTokens };
-  }
-  if (mode === "coding" || CODE_HINTS.test(prompt)) {
-    reasons.push(mode === "coding" ? "Coding mode is selected." : "The prompt contains code or programming terms.");
-    return { kind: "coding", reasons, estimatedTokens };
-  }
-  if (SUMMARY_HINTS.test(prompt)) {
-    reasons.push("The prompt asks for a summary, which a fast, inexpensive model usually handles well.");
-    return { kind: "summary", reasons, estimatedTokens };
-  }
-  if (WRITING_HINTS.test(prompt)) {
-    reasons.push("The prompt asks for writing or editing, which suits a model tagged for writing.");
-    return { kind: "writing", reasons, estimatedTokens };
-  }
-  if (mode === "analyst" || mode === "critic" || ANALYSIS_HINTS.test(prompt)) {
-    reasons.push("The prompt asks for analysis or comparison, which benefits from a reasoning model.");
-    return { kind: "analysis", reasons, estimatedTokens };
-  }
-  reasons.push("General question — defaulting to a balanced choice.");
-  return { kind: "general", reasons, estimatedTokens };
+  const { complexity, reason } = assessComplexity(prompt, estimatedTokens);
+  const done = (kind: TaskKind, why: string): TaskSignal => {
+    reasons.push(why, complexity === "complex" ? `Needs a stronger model: ${reason}.` : `Simple request: ${reason}.`);
+    return { kind, complexity: kind === "long-document" ? "complex" : complexity, reasons, estimatedTokens };
+  };
+  if (estimatedTokens > 24_000) return done("long-document", `Prompt is long (~${estimatedTokens.toLocaleString()} tokens), so context window matters most.`);
+  if (CODE_HINTS.test(prompt)) return done("coding", mode === "coding" ? "Coding mode is on and the message is about code." : "The prompt contains code or programming terms.");
+  if (SUMMARY_HINTS.test(prompt)) return done("summary", "The prompt asks for a summary, which a fast, inexpensive model usually handles well.");
+  if (WRITING_HINTS.test(prompt)) return done("writing", "The prompt asks for writing or editing, which suits a model tagged for writing.");
+  if (mode === "analyst" || mode === "critic" || ANALYSIS_HINTS.test(prompt)) return done("analysis", "The prompt asks for analysis or comparison.");
+  return done("general", mode === "coding" ? "Coding mode is on, but this message isn't about code." : "General question.");
 }
 
 export interface Recommendation {
@@ -90,11 +98,11 @@ export function recommendModel(
         if (has(m, "low-cost")) s += 3;
         break;
       case "analysis":
-        if (has(m, "reasoning")) s += 5;
+        if (has(m, "reasoning")) s += task.complexity === "complex" ? 5 : 1;
         break;
       case "coding":
         if (has(m, "coding")) s += 4;
-        if (has(m, "reasoning")) s += 2;
+        if (has(m, "reasoning") && task.complexity === "complex") s += 3;
         break;
       case "writing":
         if (has(m, "writing")) s += 4;
@@ -112,7 +120,8 @@ export function recommendModel(
         if (has(m, "chat")) s += 2;
         if (has(m, "fast")) s += 1;
     }
-    if (opts.costSensitive) {
+    // Simple requests (and cost-sensitive routing) go to low-cost models; complex ones may use stronger models.
+    if (opts.costSensitive || task.complexity === "simple") {
       if (has(m, "low-cost")) s += 4;
       if (Number.isFinite(knownCost(m))) s += 1;
     }
@@ -134,6 +143,7 @@ export function recommendModel(
 export interface AutoRoute {
   model: ModelWithStatus;
   task: TaskKind;
+  complexity: "simple" | "complex";
   /** Short, user-facing reason for the choice. */
   reason: string;
 }
@@ -179,15 +189,18 @@ export function autoRoute(
   opts: { mode?: string; needs?: Capability[]; preferLowCost?: boolean; routerMode?: RouterMode } = {},
 ): AutoRoute | null {
   const routerMode = opts.routerMode ?? "balanced";
-  // Each mode narrows the pool, then the usual rules choose within it.
-  const pool = routerPool(models, routerMode, opts.preferLowCost);
-  const task = routerMode === "coding" ? "coding" : classifyTask(prompt, opts.mode).kind;
-  const costSensitive = opts.preferLowCost || routerMode === "quick" || (routerMode === "balanced" && (task === "general" || task === "summary"));
+  // Each mode narrows the pool, then the usual rules choose within it. The
+  // Coding chat mode narrows to coding-capable models the same way.
+  const pool = routerPool(models, opts.mode === "coding" && routerMode === "balanced" ? "coding" : routerMode, opts.preferLowCost);
+  const signal = classifyTask(prompt, routerMode === "coding" ? "coding" : opts.mode);
+  const task = signal.kind;
+  const costSensitive = opts.preferLowCost || routerMode === "quick" || (routerMode === "balanced" && signal.complexity === "simple");
   const r = recommendModel(pool, prompt, { mode: routerMode === "coding" ? "coding" : opts.mode, costSensitive, needs: opts.needs });
   if (!r.model) return null;
+  const level = signal.complexity === "simple" ? "simple " : "";
   const why =
     routerMode === "balanced"
-      ? `for this ${TASK_LABEL[task]}`
+      ? `for this ${level}${TASK_LABEL[task]}${opts.mode === "coding" ? " (Coding mode)" : ""}`
       : routerMode === "quick"
         ? "for a fast reply (Quick mode)"
         : routerMode === "deep"
@@ -198,6 +211,7 @@ export function autoRoute(
   return {
     model: r.model,
     task,
+    complexity: signal.complexity,
     reason: `Auto chose ${r.model.displayName} ${why}${opts.preferLowCost ? ", saving your allowance" : ""}.`,
   };
 }

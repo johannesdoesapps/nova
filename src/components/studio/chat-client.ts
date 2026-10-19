@@ -80,11 +80,16 @@ export interface AgentChatRequest {
 
 /** One turn with an agent; the server runs it through the shared agent service. */
 export function streamAgentChat(req: AgentChatRequest, signal?: AbortSignal): AsyncGenerator<ChatEvent> {
-  return postNdjson<ChatEvent>("/api/agents/chat", { ...req, timeZone: browserTimeZone() }, signal);
+  return postNdjson<ChatEvent>("/api/agents/chat", { ...req, timeZone: browserTimeZone(), requestId: newRequestId() }, signal);
 }
 
 export function streamChat(req: ChatRequest, signal?: AbortSignal): AsyncGenerator<ChatEvent> {
-  return postNdjson<ChatEvent>("/api/chat", { ...req, timeZone: browserTimeZone() }, signal);
+  return postNdjson<ChatEvent>("/api/chat", { ...req, timeZone: browserTimeZone(), requestId: newRequestId() }, signal);
+}
+
+/** One id per submission: the server refuses to run or charge the same id twice. */
+function newRequestId(): string | undefined {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : undefined;
 }
 
 /** Sent with each turn so the model knows the user's local time. */

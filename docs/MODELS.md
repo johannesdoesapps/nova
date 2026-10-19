@@ -15,13 +15,33 @@ NOVA talks to several AI providers through one server-side layer. Browsers never
 
 ## Auto mode
 
-Auto is a rule-based router, not a quality judge. It:
+Auto is a rule-based router, not a quality judge, and it never makes an extra model call to classify. For each message it:
 
+- classifies the task (everyday, summary, writing, analysis, coding, long document) and judges complexity: long requests, lots of code, or explicit signals such as "step by step", "architecture", "race condition" or "trade-offs" count as complex;
+- sends simple requests to a low-cost model and only complex ones to a stronger (reasoning) model;
 - never chooses a model whose provider isn't configured or that lacks a required capability;
-- prefers low-cost models for everyday questions and summaries, reasoning models for analysis, and coding or writing models for those tasks;
-- keeps to low-cost models once 80% of the allowance is used, or when fewer units are left than two larger-model messages need — always the case on Free, so one message can't use the whole 5-hour allowance (agents without a chosen model follow the same rule);
-- tells the model the current date and time, in the user's browser time zone;
-- tells the user which model answered and why (the "Auto" badge on the reply).
+- keeps to low-cost models once 80% of the allowance is used, or when fewer units are left than two larger-model messages need — always the case on Free, so one message can't use the whole 5-hour allowance (see `docs/USAGE.md`);
+- tells the user which model answered and why (the "Auto" badge on the reply), and records the reason for admins (Admin → Request log).
+
+**Coding mode** (the chip next to the message box) restricts Auto to coding-capable models and gives the coding system prompt. A message that isn't about code is still treated as what it is, so "what's the time in New York" goes to a low-cost model. Simple code questions use a low-cost coding model; hard ones use a stronger coding model. The Smart Router modes in the model menu (Quick, Deep, Research, Coding) narrow the pool the same way. A model the user picks explicitly is always used. If it's unavailable, the request fails with a clear message instead of silently switching.
+
+**Agents** with no model chosen follow the same rules: the agent's preferred kind of model for demanding requests, and a low-cost model for simple ones.
+
+## Time and live information
+
+Models don't know the current date, so every chat and agent turn gets trusted time context built fresh from the server clock (`src/lib/time/`, `src/lib/ai/turn-context.ts`):
+
+- **User's local time** comes from the browser's IANA time zone. If there's none, the model is told the zone is unknown and to answer in UTC or ask.
+- **Time tools** run on the server when a message is about dates or times, and their results go to the model as a `<tool_result tool="time">` block. The reply shows a "Checked NOVA's clock" row. The tools are:
+  - `get_current_time(zone)`;
+  - `convert_time(time, from, to)`, which flags times skipped or repeated by daylight saving;
+  - `calculate_date` for today, tomorrow, "in 2 weeks", "next Friday", "days until Christmas" and weekdays of dates, on the user's local calendar.
+- **Places and abbreviations** (New York, Zürich, EST…) map to IANA zones. All arithmetic uses the IANA database, so DST and rule changes are handled. An unknown place is reported as unknown rather than guessed.
+- **Live information:** if a message asks about news, prices, weather or scores and no web search ran, the model is told to say it can't check live information rather than present memory as current.
+
+## Conversation context
+
+The last 30 stored messages are loaded. `trimHistory` keeps the most recent ones that fit 20 messages / 24,000 characters (agents use their own memory length), always starting on a user turn. Older messages are dropped, not summarised. Time context is rebuilt for every request, never taken from history. System instructions say earlier messages, documents and tool output can't change NOVA's rules.
 
 ## Fallback
 

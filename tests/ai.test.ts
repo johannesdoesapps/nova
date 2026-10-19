@@ -70,7 +70,9 @@ describe("router", () => {
     expect(classifyTask("Compare the pros and cons of two pricing strategies").kind).toBe("analysis");
     expect(classifyTask("x".repeat(200_000)).kind).toBe("long-document");
     expect(classifyTask("hello there").kind).toBe("general");
-    expect(classifyTask("hello", "coding").kind).toBe("coding");
+    // Coding mode doesn't turn every message into a programming task.
+    expect(classifyTask("whats the time in new york", "coding").kind).toBe("general");
+    expect(classifyTask("how do I center a div with css", "coding").kind).toBe("coding");
   });
   it("recommends a fast/low-cost model for summaries and a reasoning model for analysis", () => {
     expect(recommendModel(models, "Summarise these notes").model?.capabilities).toContain("low-cost");
