@@ -5,7 +5,7 @@ import type { ModelWithStatus } from "@/lib/ai/types";
 import { CHAT_MODES, MODE_LABELS, type ChatMode } from "@/lib/ai/modes";
 import { ALLOWED_ATTACHMENT_EXT, MAX_ATTACHMENT_CHARS } from "@/lib/limits";
 import { cn } from "@/lib/utils";
-import type { ChatAttachment } from "./chat-client";
+import { attachmentBytes, MAX_ATTACHMENTS_BYTES, type ChatAttachment } from "./chat-client";
 import { IconButton, iconButtonClass, Menu, MenuItem, MenuLabel, MenuSeparator, Switch } from "./ui";
 import { ModelSelector } from "./model-selector";
 import { UsageNotice, useUsage } from "./usage";
@@ -94,6 +94,10 @@ export function Composer(p: ComposerProps) {
       if (text.length > MAX_ATTACHMENT_CHARS) {
         text = text.slice(0, MAX_ATTACHMENT_CHARS);
         setFileError(`${f.name} was trimmed to the first ${MAX_ATTACHMENT_CHARS.toLocaleString()} characters.`);
+      }
+      if (attachmentBytes([...next, { content: text }]) > MAX_ATTACHMENTS_BYTES) {
+        setFileError(`${f.name} wasn’t added: a message’s files can total about ${Math.round(MAX_ATTACHMENTS_BYTES / 1000)} KB of text. Remove a file or attach a shorter one.`);
+        continue;
       }
       next.push({ name: f.name, content: text });
     }

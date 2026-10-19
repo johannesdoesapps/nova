@@ -73,8 +73,16 @@ export function ArenaView() {
   };
 
   const removeArena = async (id: string) => {
-    if (user) await fetch(`/api/claims/arenas/${id}`, { method: "DELETE" });
-    else localArenas.remove(id);
+    if (!window.confirm("Delete this arena? This can't be undone.")) return;
+    setError(null);
+    if (user) {
+      try {
+        await jsonFetch(`/api/claims/arenas/${id}`, { method: "DELETE" });
+      } catch (e) {
+        setError((e as Error).message);
+        return;
+      }
+    } else localArenas.remove(id);
     setArenas((xs) => xs.filter((x) => x.id !== id));
     if (arena?.id === id) setArena(null);
   };
@@ -126,7 +134,7 @@ export function ArenaView() {
                       <div className="truncate text-sm">{a.question}</div>
                       <div className="text-[11px] text-faint">{a.hypotheses.length} hypotheses · {relativeTime(a.updatedAt)}</div>
                     </button>
-                    <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100" onClick={() => removeArena(a.id)} aria-label="Delete arena"><Trash2 className="h-3.5 w-3.5" /></Button>
+                    <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100" onClick={() => void removeArena(a.id)} aria-label="Delete arena"><Trash2 className="h-3.5 w-3.5" /></Button>
                   </li>
                 ))}
               </ul>

@@ -4,7 +4,7 @@ import { entitlementFor } from "./entitlements";
 import type { AuthContext } from "./auth";
 import { getAllModels, getModels } from "./ai";
 import { getPlatformSettings } from "./ai/settings";
-import { budgetPeriod, checkModelAccess, checkSiteCap, economyModel, estimateRequestUsd, fallbackPrices, nextRenewal } from "./budget";
+import { budgetPeriod, budgetStatus, checkModelAccess, checkSiteCap, economyModel, estimateRequestUsd, fallbackPrices, nextRenewal } from "./budget";
 import { estimateCost } from "./ai/cost";
 import type { ModelInfo, Usage } from "./ai/types";
 import { serverEnv } from "./env";
@@ -32,6 +32,8 @@ export interface UsageTicket {
   entitlement: string | null;
   /** Worst-case cost held against the budget while the request runs (USD). */
   estCostUsd: number;
+  /** Set once the first run of this request is recorded. */
+  recorded?: boolean;
 }
 
 const tickets = new WeakMap<object, UsageTicket>();
@@ -93,7 +95,10 @@ export async function enforceLimits(
 
   // Plan access and the site-wide cap first, with a clear explanation.
   checkModelAccess(entitlement, models, available);
-  if (!unlimited) await checkSiteCap(all);
+  if (!unlimited) {
+    if (billing.aiPaused) throw new ApiError("quota_exceeded", "AI requests are paused on NOVA for a moment while we check something. Please try again later.", { scope: "paused" });
+    await checkSiteCap(all);
+  }
 
   // Worst-case cost of this request, held against the budget while it runs.
   const economy = economyModel(entitlement, available);
@@ -102,6 +107,9 @@ export async function enforceLimits(
   const maxOutputTokens = opts.maxOutputTokens ?? entitlement.limits.maxOutputTokens;
   const estCostUsd = estimateRequestUsd(priced, inputTokens, maxOutputTokens, all);
   const estTokens = priced.length * (inputTokens + maxOutputTokens);
+  if (!unlimited && billing.maxRequestCostUsd > 0 && estCostUsd > billing.maxRequestCostUsd) {
+    throw new ApiError("bad_request", `This request is too large: it could cost more than NOVA allows for one message. Shorten it, attach less, or choose a lower-cost model.`, { scope: "request", estimateUsd: Math.round(estCostUsd * 100) / 100 });
+  }
   const econ = unlimited ? null : planEconomics(billing, entitlement.plan, entitlement.interval);
   const premium = !!models?.some((m) => modelTier(m) !== "standard");
   const period = budgetPeriod(entitlement);
@@ -109,7 +117,7 @@ export async function enforceLimits(
   const plan = entitlement.limits;
 
   // Accounts without an allowance still reserve, with no limit, so duplicate submissions are refused for everyone.
-  const { data, error } = await auth.supabase.rpc("usage_reserve_v3", {
+  const { data, error } = await auth.supabase.rpc("usage_reserve_v4", {
     p_request_id: requestId,
     p_units: units,
     p_window_limit: unlimited ? NO_LIMIT : plan.windowUnits,
@@ -128,18 +136,20 @@ export async function enforceLimits(
     p_model: models?.map((m) => m.id).join(",") ?? null,
     // Calls without a model list are short checks; don't hold their units for long.
     p_ttl_seconds: models?.length ? 180 : 45,
+    p_daily_budget_usd: econ && plan.dailyBudgetPct > 0 ? Math.round(econ.aiBudgetUsd * plan.dailyBudgetPct) / 100 : null,
+    p_site_cap_usd: !unlimited && billing.siteMonthlyCapUsd > 0 ? billing.siteMonthlyCapUsd : null,
   });
   if (error) {
     // The allowance can't be checked (database unavailable). Fail closed for metered plans so spending can't
     // run unchecked; accounts without an allowance (administrators) carry on.
-    reportError(error, { where: "usage_reserve_v3" });
+    reportError(error, { where: "usage_reserve_v4" });
     if (!unlimited) throw new ApiError("upstream_error", "Usage limits can't be checked right now, so AI requests are paused for a moment. Please try again shortly.");
     return { requestId, units: 0, entitlement: entitlement.label, estCostUsd: 0 };
   }
   const r = data as {
     ok: boolean;
     reason?: "duplicate" | "limit" | "budget" | "tokens";
-    scope?: "window" | "week" | "day" | "exhausted" | "insufficient" | "premium";
+    scope?: "window" | "week" | "day" | "exhausted" | "insufficient" | "premium" | "daily" | "site";
     used?: number;
     limit?: number;
     resets_at?: string;
@@ -149,7 +159,7 @@ export async function enforceLimits(
   }
   if (!r.ok) {
     if (unlimited) {
-      reportError(new Error(`usage_reserve_v3 refused an unlimited account: ${r.reason}`), { where: "usage_reserve" });
+      reportError(new Error(`usage_reserve_v4 refused an unlimited account: ${r.reason}`), { where: "usage_reserve" });
       return { requestId, units: 0, entitlement: entitlement.label, estCostUsd: 0 };
     }
     const upgrade = nextPlan(entitlement.plan);
@@ -163,6 +173,13 @@ export async function enforceLimits(
     const optionNames = (sameProvider.length ? sameProvider : standard).map((m) => m.displayName).slice(0, 2).join(" or ");
     const details = { budget: true, resetsAt: new Date(period.end).toISOString(), plan: entitlement.plan, upgradeTo: upgrade, allowedModelId: economy?.id ?? null, alternatives: options };
     if (r.reason === "budget") {
+      if (r.scope === "site") {
+        reportError(new Error("Site-wide monthly AI spending limit reached"), { where: "usage.site_cap" });
+        throw new ApiError("quota_exceeded", "NOVA has reached its AI usage limit for this month. Please try again later.", { ...details, scope: "site" });
+      }
+      if (r.scope === "daily") {
+        throw new ApiError("quota_exceeded", `You've used today's share of your ${plan.label} plan's AI allowance. It resets at midnight UTC.${upgradeHint}`, { ...details, scope: "daily", resetsAt: r.resets_at ? new Date(r.resets_at).toISOString() : null });
+      }
       if (r.scope === "exhausted") throw new ApiError("quota_exceeded", `You've used this month's AI allowance on your ${plan.label} plan. It renews on ${renews}.${upgradeHint}`, { ...details, scope: "budget", state: "exhausted" });
       if (r.scope === "premium") {
         throw new ApiError(
@@ -243,7 +260,12 @@ export async function planUsage(auth: AuthContext): Promise<UsageState | null> {
 export async function shouldSaveAllowance(auth: AuthContext): Promise<boolean> {
   const u = await planUsage(auth);
   if (!u) return false;
-  return u.window.used >= u.window.limit * 0.8 || u.week.used >= u.week.limit * 0.8 || unitsLeft(u) < LARGE_MODEL_UNITS * 2;
+  if (u.window.used >= u.window.limit * 0.8 || u.week.used >= u.week.limit * 0.8 || unitsLeft(u) < LARGE_MODEL_UNITS * 2) return true;
+  // Also once most of the month's AI budget, or of its part for advanced models, is used.
+  const entitlement = await entitlementFor(auth);
+  const b = await budgetStatus(auth, entitlement, await getAllModels());
+  if (!b || b.limitUsd === null) return false;
+  return b.spentUsd >= b.limitUsd * 0.8 || (b.premiumLimitUsd !== null && b.premiumSpentUsd >= b.premiumLimitUsd * 0.8);
 }
 
 export interface RunRecord {
@@ -301,6 +323,8 @@ async function recordRunUnsafe(auth: AuthContext & { mode: "authenticated" }, ru
   const ticket = tickets.get(auth);
   const [entitlement, settings] = await Promise.all([entitlementFor(auth), getPlatformSettings()]);
   const refunded = run.status === "error" && !run.response;
+  const reserved = ticket && !ticket.recorded ? ticket.estCostUsd : null;
+  if (ticket) ticket.recorded = true;
   const units = refunded ? 0 : modelUnits(run.model, settings.modelUnits[run.model.id], entitlement?.billing.tierUnits);
   // Billable extras: each web search adds its cost to the run.
   const searches = run.tools?.filter((t) => t === "web_search").length ?? 0;
@@ -319,6 +343,8 @@ async function recordRunUnsafe(auth: AuthContext & { mode: "authenticated" }, ru
     cached_input_tokens: run.usage.cachedInputTokens ?? null,
     cache_write_input_tokens: run.usage.cacheWriteInputTokens ?? null,
     model_tier: modelTier(run.model),
+    // The pre-request estimate this run was held against (only on the run that settles it), for reconciliation.
+    reserved_cost_usd: reserved,
     estimated_cost: runCost,
     status: run.status,
     purpose: run.purpose ?? null,

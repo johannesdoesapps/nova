@@ -43,7 +43,8 @@ export function BillingButton({
         body: action === "manage" ? undefined : JSON.stringify({ plan, interval }),
       });
       if (res.status === 401) {
-        router.push(`/login?mode=signup&next=${encodeURIComponent(`/pricing?plan=${plan}`)}`);
+        // Upgrading may be a new customer; managing or changing a plan needs an existing account.
+        router.push(action === "upgrade" ? `/login?mode=signup&next=${encodeURIComponent(`/pricing?plan=${plan}`)}` : `/login?next=${encodeURIComponent("/pricing")}`);
         return;
       }
       const j = (await res.json().catch(() => null)) as { url?: string; message?: string; error?: { message?: string } } | null;
@@ -64,7 +65,7 @@ export function BillingButton({
   return (
     <div>
       <button type="button" onClick={() => void go()} disabled={busy} aria-busy={busy} className={cn("disabled:opacity-60", className)}>
-        {busy ? (action === "change" ? "Updating your plan…" : "Opening secure checkout…") : (children ?? label)}
+        {busy ? (action === "change" ? "Updating your plan…" : action === "manage" ? "Opening billing portal…" : "Opening secure checkout…") : (children ?? label)}
       </button>
       {error && (
         <p role="alert" className="mt-2 text-[13px] text-red-500">

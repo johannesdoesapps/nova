@@ -71,7 +71,7 @@ export function WorkspaceDetail({ id }: { id: string }) {
           {w.collections.length === 0 && <p className="text-sm text-faint">Knowledge collections group items (e.g. “Key evidence”, “Decisions log”) so they can be shared, published or used as workflow context.</p>}
           {w.collections.map((c) => (
             <Card key={c.id} className="p-3">
-              <div className="flex items-center gap-2"><span className="font-medium">{c.name}</span><Badge>{c.item_ids.length} items</Badge>{can("manage_collections") && <Button size="sm" variant="ghost" className="ml-auto" onClick={() => run(() => engine.del(`workspaces/${id}/collections/${c.id}`))}><Trash2 className="h-3.5 w-3.5" /></Button>}</div>
+              <div className="flex items-center gap-2"><span className="font-medium">{c.name}</span><Badge>{c.item_ids.length} items</Badge>{can("manage_collections") && <Button size="sm" variant="ghost" className="ml-auto" aria-label={`Delete collection ${c.name}`} onClick={() => window.confirm(`Delete the collection “${c.name}”? Its items are kept.`) && run(() => engine.del(`workspaces/${id}/collections/${c.id}`))}><Trash2 className="h-3.5 w-3.5" /></Button>}</div>
               <ul className="mt-1 text-xs text-muted">{c.item_ids.map((x) => <li key={x}>{w.items.find((i) => i.id === x)?.title ?? "(deleted item)"}</li>)}</ul>
             </Card>
           ))}
@@ -151,7 +151,7 @@ function ItemPanel({ wid, itemId, canEdit, canComment, onChanged, onDeleted }: {
   const fields = x.type === "task" ? ["status", "assignee", "due", "body"] : x.type === "decision" ? ["decision", "rationale", "status", "evidence"] : x.type === "link" ? ["url", "summary"] : ["body"];
   return (
     <Card className="space-y-3 p-4">
-      <div className="flex items-center gap-2"><Badge>{x.type}</Badge><span className="text-xs text-faint">version {x.current_version}</span>{canEdit && <Button size="sm" variant="ghost" className="ml-auto" onClick={async () => { if (window.confirm("Delete this item?")) { await engine.del(`workspaces/${wid}/items/${itemId}`); onDeleted(); } }}><Trash2 className="h-3.5 w-3.5" /></Button>}</div>
+      <div className="flex items-center gap-2"><Badge>{x.type}</Badge><span className="text-xs text-faint">version {x.current_version}</span>{canEdit && <Button size="sm" variant="ghost" className="ml-auto" aria-label="Delete item" onClick={async () => { if (!window.confirm("Delete this item?")) return; setErr(null); try { await engine.del(`workspaces/${wid}/items/${itemId}`); onDeleted(); } catch (e) { setErr((e as Error).message); } }}><Trash2 className="h-3.5 w-3.5" /></Button>}</div>
       {x.source?.untrusted ? <Notice tone="warning">This content came from outside NOVA AI ({String(x.source.connector ?? (x.source.imported ? "import" : "community"))}). Workflows treat it as untrusted data.</Notice> : null}
       <Input value={cur.title} onChange={(e) => setDraft({ ...cur, title: e.target.value })} disabled={!canEdit} className="h-9 font-medium" aria-label="Title" />
       {fields.map((f) => (
@@ -238,7 +238,7 @@ function Members({ w, run }: { w: Ws; run: (fn: () => Promise<unknown>) => Promi
             ) : (
               <Badge tone={m.role === "owner" ? "accent" : "default"}>{m.role}</Badge>
             )}
-            {canManage && m.role !== "owner" && <Button size="icon" variant="ghost" aria-label="Remove member" onClick={() => run(() => engine.del(`workspaces/${w.id}/members/${m.id}`))}><X className="h-4 w-4" /></Button>}
+            {canManage && m.role !== "owner" && <Button size="icon" variant="ghost" aria-label={`Remove ${m.email}`} onClick={() => window.confirm(`Remove ${m.email} from this workspace?`) && run(() => engine.del(`workspaces/${w.id}/members/${m.id}`))}><X className="h-4 w-4" /></Button>}
             {w.role === "owner" && m.role !== "owner" && m.status === "active" && <Button size="sm" variant="ghost" onClick={() => window.confirm(`Make ${m.email} the owner? You will become an admin.`) && run(() => engine.patch(`workspaces/${w.id}/members/${m.id}`, { transfer_ownership: true }))}>Make owner</Button>}
           </div>
         </Card>
@@ -283,7 +283,7 @@ function Sharing({ w, run }: { w: Ws; run: (fn: () => Promise<unknown>) => Promi
       {w.shares.map((s) => (
         <Card key={s.id} className="flex items-center gap-2 p-3 text-sm">
           <Badge>{s.role}</Badge><span className="text-xs text-faint">created {relativeTime(s.created_at)} · {s.expires_at ? `expires ${s.expires_at.slice(0, 10)}` : "no expiry"}</span>
-          <Button size="sm" variant="ghost" className="ml-auto" onClick={() => run(() => engine.del(`workspaces/${w.id}/shares/${s.id}`))}>Revoke</Button>
+          <Button size="sm" variant="ghost" className="ml-auto" onClick={() => window.confirm("Revoke this share link? Anyone using it loses access.") && run(() => engine.del(`workspaces/${w.id}/shares/${s.id}`))}>Revoke</Button>
         </Card>
       ))}
       <p className="text-xs text-faint">To publish templates or collections to everyone, use <Link href="/community" className="text-accent hover:underline">Community</Link> — publishing copies a snapshot and scans it for personal data first.</p>

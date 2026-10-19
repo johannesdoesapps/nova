@@ -40,6 +40,8 @@ const planSchema = z.object({
   dailyMessages: z.number().int().min(0).max(100_000).default(0),
   /** Input + output tokens per budget period; 0 = no token cap (the money budget still applies). */
   monthlyTokens: z.number().int().min(0).max(10_000_000_000).default(0),
+  /** Most of the monthly AI budget one day may use, in percent (0 = no daily money cap). */
+  dailyBudgetPct: z.number().min(0).max(100).default(0),
 });
 export type Plan = z.infer<typeof planSchema> & { id: PlanId };
 
@@ -64,6 +66,12 @@ export const billingSettingsSchema = z.object({
   refundRatePct: z.number().min(0).max(50).default(2),
   /** Fixed monthly overhead (salaries, tools, base hosting), shown separately from contribution margin, USD. */
   fixedOverheadMonthlyUsd: z.number().min(0).max(10_000_000).default(0),
+  /** Most one request may cost before it runs (its worst-case estimate), USD; 0 = no per-request cap. */
+  maxRequestCostUsd: z.number().min(0).max(100).default(1),
+  /** Site-wide emergency limit on AI spend per calendar month, USD; 0 = none. New requests stop when reached. */
+  siteMonthlyCapUsd: z.number().min(0).max(10_000_000).default(0),
+  /** Emergency stop: no new AI requests for anyone except administrators. */
+  aiPaused: z.boolean().default(false),
   /** Planning assumptions for the usage calculator (replaced by real averages once there's usage). */
   scenario: z
     .object({
@@ -104,6 +112,7 @@ export const DEFAULT_BILLING: BillingSettings = {
       premiumBudgetPct: 0,
       dailyMessages: 10,
       monthlyTokens: 400_000,
+      dailyBudgetPct: 0,
     },
     pro: {
       label: "Pro",
@@ -118,6 +127,7 @@ export const DEFAULT_BILLING: BillingSettings = {
       premiumBudgetPct: 60,
       dailyMessages: 0,
       monthlyTokens: 15_000_000,
+      dailyBudgetPct: 34,
     },
     max: {
       label: "Max",
@@ -132,6 +142,7 @@ export const DEFAULT_BILLING: BillingSettings = {
       premiumBudgetPct: 85,
       dailyMessages: 0,
       monthlyTokens: 60_000_000,
+      dailyBudgetPct: 34,
     },
   },
   targetMargin: 0.6,
@@ -144,6 +155,9 @@ export const DEFAULT_BILLING: BillingSettings = {
   taxIncludedPct: 0,
   refundRatePct: 2,
   fixedOverheadMonthlyUsd: 0,
+  maxRequestCostUsd: 1,
+  siteMonthlyCapUsd: 0,
+  aiPaused: false,
   scenario: { inputTokens: 2000, outputTokens: 800, callsPerMessage: 1.05, cachedInputPct: 0 },
   tierUnits: { standard: 1, advanced: 20, premium: 40 },
   modelTiers: {},

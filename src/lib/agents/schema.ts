@@ -38,6 +38,8 @@ export const agentChatRequest = z.object({
   conversationId: z.uuid().nullable().optional(),
   message: z.string().trim().min(1).max(12_000),
   modelId: z.string().min(1).max(120).optional(),
+  /** Regenerate the last reply: it is replaced, and the question isn't saved twice. */
+  regenerate: z.boolean().optional(),
   useWeb: z.boolean().optional(),
   /** The browser's IANA time zone, so the model can answer "what time is it". */
   timeZone: z.string().max(64).optional(),

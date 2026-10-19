@@ -203,10 +203,16 @@ export function StudioFrame({ children }: { children: ReactNode }) {
           activeId={activeChat}
           onNewChat={newChat}
           onRename={async (id, title) => {
-            await store.rename(id, title);
+            try {
+              await store.rename(id, title);
+            } catch (e) {
+              notify(`Couldn’t rename the chat: ${(e as Error).message}`);
+              throw e;
+            }
             emit("renamed", { id, title });
             await refresh();
           }}
+          onSearch={store.search}
           onRequestDelete={setToDelete}
           onOpenPrompts={() => {
             setMobileOpen(false);

@@ -115,14 +115,14 @@ export function SaveToProject({ onSave, label = "Save", disabled }: { onSave: (p
                   void create();
                 }}
               >
-                <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New project name" maxLength={120} className="h-8 text-xs" />
+                <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New project name" aria-label="New project name" maxLength={120} className="h-8 text-xs" />
                 <Button size="sm" type="submit" loading={busy === "new"} disabled={!newName.trim()} aria-label="Create project">
                   <Plus className="h-3.5 w-3.5" />
                 </Button>
               </form>
             </>
           )}
-          {error && <p className="px-2 pt-2 text-xs text-danger">{error}</p>}
+          {error && <p role="alert" className="px-2 pt-2 text-xs text-danger">{error}</p>}
         </div>
       )}
     </div>

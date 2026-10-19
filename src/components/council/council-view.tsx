@@ -4,7 +4,7 @@ import { ArrowUp, ChevronDown, ExternalLink, Globe, RotateCcw, Square, Trash2, U
 import { useCatalog } from "@/components/common/model-picker";
 import { Markdown } from "@/components/common/markdown";
 import { useApp } from "@/components/layout/app-context";
-import { StudioHeader } from "@/components/studio/frame";
+import { StudioHeader, useStudio } from "@/components/studio/frame";
 import { Segmented, Switch } from "@/components/studio/ui";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import type { ModelWithStatus } from "@/lib/ai/types";
@@ -35,6 +35,7 @@ function defaultChair(pool: ModelWithStatus[], ids: string[]): string | undefine
 
 export function CouncilView() {
   const { user, integrations } = useApp();
+  const { notify } = useStudio();
   const catalog = useCatalog();
   const pool = useMemo(() => participantPool(catalog?.models ?? null), [catalog]);
   const [picked, setPicked] = useState<string[] | null>(null);
@@ -239,11 +240,14 @@ export function CouncilView() {
   };
 
   const removeSession = async (id: string) => {
+    if (!window.confirm("Delete this council session? This can't be undone.")) return;
     try {
       await jsonFetch(`/api/council/sessions/${id}`, { method: "DELETE" });
       setSessions((s) => s?.filter((x) => x.id !== id) ?? null);
-    } catch {
-      /* keep it listed */
+      notify("Session deleted");
+    } catch (e) {
+      // Keep it listed, and say why.
+      notify(`Couldn’t delete the session: ${(e as Error).message}`);
     }
   };
 

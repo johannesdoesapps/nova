@@ -79,7 +79,7 @@ export function DirectoryView() {
                     <div>Zero retention: {tri(m.privacy.zeroRetentionAvailable, "Available", "No")}</div>
                     {m.privacy.verifiedAt && <div className="text-faint">Checked {m.privacy.verifiedAt}</div>}
                     <div className="mt-1 text-[11px] text-faint">{m.privacy.notes}</div>
-                    {m.policyPage && <a href={m.policyPage} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-[11px] text-accent hover:underline">Provider policy <ExternalLink className="h-3 w-3" /></a>}
+                    {isSafeHttpUrl(m.policyPage) && <a href={m.policyPage} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-[11px] text-accent hover:underline">Provider policy <ExternalLink className="h-3 w-3" /></a>}
                   </td>
                   <td className="px-3 py-3 font-mono text-[11px] text-muted">{versions.get(m.id)?.size ? [...versions.get(m.id)!].map((v) => <div key={v}>{v}</div>) : <span className="font-sans text-faint">None observed yet</span>}</td>
                   <td className="px-3 py-3">{m.available ? <Badge tone="success">Available</Badge> : <Badge tone="warning" title={m.unavailableReason}>Needs key</Badge>}</td>

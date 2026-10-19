@@ -4,7 +4,7 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 /**
- * Email-confirmation and Google (OAuth) callback. Supabase has already
+ * Email-confirmation, password-reset and Google (OAuth) callback. Supabase has already
  * validated the provider response (state, nonce); here the one-time code is
  * exchanged for a session using the PKCE verifier stored in this browser.
  */
@@ -34,5 +34,5 @@ export async function GET(req: Request) {
   }
   // The exchange fails when the code was used already, expired, or the flow
   // was started in another browser (no PKCE verifier here).
-  return toLogin(exchangeFailureCode(via));
+  return toLogin(exchangeFailureCode(via, Boolean(code), next));
 }

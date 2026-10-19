@@ -40,7 +40,7 @@ export function CommunityView() {
       {publishing && <Publish signedIn={Boolean(user)} onClose={() => setPublishing(false)} onDone={(t) => { setPublishing(false); setMsg({ tone: "success", text: t }); void list.reload(); }} />}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Kind"><option value="">Everything</option>{Object.entries(KIND_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>
-        <form onSubmit={(e) => { e.preventDefault(); setQuery(q); }} className="flex gap-2"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" className="h-9" aria-label="Search" /><Button variant="secondary" type="submit"><Search className="h-4 w-4" /></Button></form>
+        <form onSubmit={(e) => { e.preventDefault(); setQuery(q); }} className="flex gap-2"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" className="h-9" aria-label="Search" /><Button variant="secondary" type="submit" aria-label="Search community"><Search className="h-4 w-4" /></Button></form>
       </div>
       {list.data?.posts.length === 0 && <EmptyState title="Nothing found" />}
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">

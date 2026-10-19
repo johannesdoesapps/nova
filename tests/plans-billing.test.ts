@@ -443,3 +443,31 @@ describe("prompt caching only where it pays", () => {
     expect(shouldCache([{ role: "system", content: "x".repeat(8000) }, { role: "user", content: "y".repeat(8000) }])).toBe(true);
   });
 });
+
+describe("usage_reserve_v4 (daily money cap, site-wide emergency cap)", () => {
+  const reserve4 = (user: string, id: string, o: { est?: number; daily?: number | null; site?: number | null } = {}) =>
+    as(user, async () =>
+      (
+        await db.query<{ r: { ok: boolean; reason?: string; scope?: string } }>(
+          "select public.usage_reserve_v4($1, 1, 200, 1100, $2, 1000, 30, null, false, 0, 0, date_trunc('month', now()), 4, 20, 'chat', 'm', 180, $3, $4) as r",
+          [id, o.est ?? 0.01, o.daily ?? null, o.site ?? null],
+        )
+      ).rows[0]!.r,
+    );
+
+  it("caps one day's spend, and yesterday's spend doesn't count", async () => {
+    await spendTier(ALICE, 0.9, "standard");
+    expect(await reserve4(ALICE, rid(301), { daily: 1, est: 0.2 })).toMatchObject({ ok: false, reason: "budget", scope: "daily" });
+    await db.exec("update public.model_runs set created_at = now() - interval '1 day'");
+    expect(await reserve4(ALICE, rid(302), { daily: 1, est: 0.2 })).toMatchObject({ ok: true });
+  });
+
+  it("stops everyone once the site-wide monthly cap is reached, counting all users and requests in flight", async () => {
+    await spendTier(ALICE, 6, "standard");
+    await spendTier(BOB, 3, "standard");
+    // Bob alone spent 3; the site spent 9.
+    expect(await reserve4(BOB, rid(303), { site: 10, est: 0.5 })).toMatchObject({ ok: true });
+    expect(await reserve4(BOB, rid(304), { site: 10, est: 0.6 })).toMatchObject({ ok: false, scope: "site" });
+    expect(await reserve4(ALICE, rid(305), { site: null, est: 0.6 })).toMatchObject({ ok: true }); // no cap configured
+  });
+});

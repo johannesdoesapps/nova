@@ -155,14 +155,22 @@ export function ApprovalCard({ a, kinds, stepName, onDecide, busy }: { a: Approv
   );
 }
 
-export function RunsList() {
-  const runs = useEngine<{ runs: { id: string; workflow_name: string; version: number; status: string; mode: string; created_at: string; usage: Run["state"]["usage"] | null; error: string | null }[] }>("lab/runs");
+export function RunsList({ workflowId }: { workflowId?: string } = {}) {
+  const runs = useEngine<{ runs: { id: string; workflow_name: string; version: number; status: string; mode: string; created_at: string; usage: Run["state"]["usage"] | null; error: string | null }[] }>(
+    workflowId ? `lab/runs?workflow_id=${encodeURIComponent(workflowId)}` : "lab/runs",
+  );
   return (
     <div className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6">
       <PageHeader title="Runs" description="Every workflow run with its status, mode and usage. Open one to see step-by-step logs." />
       <SectionTabs tabs={LAB_TABS} />
+      {workflowId && (
+        <p className="mb-3 text-sm text-muted">
+          Showing runs of {runs.data?.runs[0]?.workflow_name ? <span className="font-medium text-fg">{runs.data.runs[0].workflow_name}</span> : "one workflow"}.{" "}
+          <Link href="/lab/runs" className="text-accent hover:underline">Show all runs</Link>
+        </p>
+      )}
       {runs.error && <EngineError message={runs.error} />}
-      {runs.data?.runs.length === 0 && <p className="text-sm text-faint">No runs yet.</p>}
+      {runs.data?.runs.length === 0 && <p className="text-sm text-faint">{workflowId ? "This workflow hasn’t run yet." : "No runs yet."}</p>}
       <div className="space-y-2">
         {runs.data?.runs.map((r) => (
           <Link key={r.id} href={`/lab/runs/${r.id}`} className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-panel p-3 text-sm hover:border-border-strong">

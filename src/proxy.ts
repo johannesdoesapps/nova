@@ -1,8 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-/** Pages that require a signed-in user (only enforced when Supabase is configured). */
-const PROTECTED_PREFIXES = ["/projects", "/settings/account"];
+/**
+ * Pages that require a signed-in user (only enforced when Supabase is configured).
+ * /settings stays public: guests use it for appearance settings.
+ */
+const PROTECTED_PREFIXES = ["/projects"];
 
 /**
  * Refreshes the Supabase session cookie on navigation and gates private pages.
@@ -10,6 +13,7 @@ const PROTECTED_PREFIXES = ["/projects", "/settings/account"];
  * line of defence.
  */
 export async function proxy(request: NextRequest) {
+  if (request.nextUrl.pathname.startsWith("/api/")) return guardApi(request);
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const key =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
@@ -44,6 +48,34 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
+/** Endpoints other sites legitimately call (verified by their own signature). */
+const CROSS_SITE_OK = ["/api/stripe/webhook"];
+
+/**
+ * CSRF defence in depth for API routes (they do their own auth): a request
+ * that changes something must come from this site. Browsers send Origin and
+ * Sec-Fetch-Site on cross-site requests; non-browser clients send neither and
+ * carry no session cookie by default.
+ */
+export function guardApi(request: NextRequest): NextResponse {
+  const method = request.method.toUpperCase();
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") return NextResponse.next();
+  if (CROSS_SITE_OK.includes(request.nextUrl.pathname)) return NextResponse.next();
+  const origin = request.headers.get("origin");
+  const site = request.headers.get("sec-fetch-site");
+  let sameOrigin = true;
+  if (origin && origin !== "null") {
+    try {
+      sameOrigin = new URL(origin).host === request.headers.get("host") || new URL(origin).host === request.nextUrl.host;
+    } catch {
+      sameOrigin = false;
+    }
+  } else if (origin === "null") sameOrigin = false;
+  if (site === "cross-site") sameOrigin = false;
+  if (sameOrigin) return NextResponse.next();
+  return NextResponse.json({ error: { code: "forbidden", message: "Cross-site requests aren't allowed." } }, { status: 403 });
+}
+
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|opengraph-image|twitter-image|apple-icon|icon|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml)$).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|opengraph-image|twitter-image|apple-icon|icon|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml)$).*)"],
 };

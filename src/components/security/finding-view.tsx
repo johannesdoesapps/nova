@@ -5,7 +5,7 @@ import { ArrowLeft, Check, CircleAlert, Copy, ExternalLink, Loader2, RefreshCw }
 import { highlight } from "@/components/common/highlight";
 import { StudioHeader, useStudio } from "@/components/studio/frame";
 import { jsonFetch } from "@/hooks/use-ndjson";
-import { cn } from "@/lib/utils";
+import { cn, isSafeHttpUrl } from "@/lib/utils";
 import {
   AGENT_NAME,
   AgentBadge,
@@ -237,9 +237,14 @@ export function FindingView({ id }: { id: string }) {
                 <ul className="space-y-1">
                   {f.refs.map((r) => (
                     <li key={r}>
-                      <a href={r} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 break-all text-[13px] text-s-ink-2 underline-offset-2 hover:text-s-ink hover:underline">
-                        <ExternalLink className="h-3.5 w-3.5 shrink-0" /> {r}
-                      </a>
+                      {/* References come from scanners and models: only http(s) links are clickable. */}
+                      {isSafeHttpUrl(r) ? (
+                        <a href={r} target="_blank" rel="noopener noreferrer nofollow" className="inline-flex items-center gap-1.5 break-all text-[13px] text-s-ink-2 underline-offset-2 hover:text-s-ink hover:underline">
+                          <ExternalLink className="h-3.5 w-3.5 shrink-0" /> {r}
+                        </a>
+                      ) : (
+                        <span className="break-all text-[13px] text-s-ink-2">{r}</span>
+                      )}
                     </li>
                   ))}
                 </ul>

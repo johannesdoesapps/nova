@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { browserSupabase } from "@/lib/supabase/client";
-import { LOGIN_MESSAGES, oauthErrorCode, oauthRedirectTo } from "@/lib/auth-flow";
+import { friendlyAuthError, LOGIN_MESSAGES, oauthErrorCode, oauthRedirectTo, RESET_PASSWORD_PATH } from "@/lib/auth-flow";
 import { Button, Input, Notice } from "@/components/ui/primitives";
 
 type Mode = "signin" | "signup";
@@ -35,6 +35,7 @@ export function LoginForm({
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
   // Blocks a second click before React re-renders the button as busy.
   const googleStarted = useRef(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +115,29 @@ export function LoginForm({
     }
   };
 
+  // Emails a password reset link. The reply is the same whether or not an
+  // account exists, so the form can't be used to discover who has signed up.
+  const forgotPassword = async () => {
+    setError(null);
+    setInfo(null);
+    if (!email.trim()) {
+      setError("Enter your email above, then choose “Forgot password?” again.");
+      return;
+    }
+    setResetBusy(true);
+    try {
+      const { error } = await browserSupabase(url, supabaseKey).auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${origin()}/auth/callback?next=${encodeURIComponent(RESET_PASSWORD_PATH)}`,
+      });
+      if (error) throw error;
+      setInfo("If an account exists for that email, we’ve sent a link to reset your password.");
+    } catch (e) {
+      setError(friendlyAuthError((e as Error)?.message, "reset"));
+    } finally {
+      setResetBusy(false);
+    }
+  };
+
   return (
     <div>
       <h1 className="font-serif text-[34px] leading-[1.05] tracking-[-0.01em]">{copy.title}</h1>
@@ -153,6 +177,18 @@ export function LoginForm({
           <span className="mb-1 block text-xs text-muted">Password</span>
           <Input type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "signin" ? "current-password" : "new-password"} />
         </label>
+        {mode === "signin" && (
+          <div className="-mt-1 text-right text-xs">
+            <button
+              type="button"
+              onClick={() => void forgotPassword()}
+              disabled={resetBusy || busy}
+              className="rounded text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
+            >
+              {resetBusy ? "Sending link…" : "Forgot password?"}
+            </button>
+          </div>
+        )}
         {error && <Notice tone="danger">{error}</Notice>}
         {info && <Notice tone="success">{info}</Notice>}
         <Button type="submit" className="w-full" loading={busy} disabled={googleBusy}>{mode === "signin" ? "Sign in" : "Create account"}</Button>
@@ -202,16 +238,4 @@ function GoogleLogo() {
       <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
     </svg>
   );
-}
-
-function friendlyAuthError(message: string | undefined, mode: Mode): string {
-  const m = (message ?? "").toLowerCase();
-  if (m.includes("invalid login credentials"))
-    return "Wrong email or password. If you signed up with Google, use “Continue with Google”. New to NOVA? Choose “Sign up” below.";
-  if (m.includes("email not confirmed")) return "Confirm your email first: open the link we sent you, then sign in.";
-  if (m.includes("already registered")) return "An account with this email already exists. Sign in instead.";
-  if (m.includes("rate limit") || m.includes("too many"))
-    return "Too many attempts. Wait a few minutes and try again.";
-  if (m.includes("fetch") || m.includes("network")) return "Couldn't reach the sign-in service. Check your connection and try again.";
-  return message || (mode === "signin" ? "Sign-in failed. Please try again." : "Sign-up failed. Please try again.");
 }

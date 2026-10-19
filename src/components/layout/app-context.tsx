@@ -37,7 +37,8 @@ interface AppState {
   supabasePublic: { url: string; key: string } | null;
   /** The signed-in user's saved model choice (null when they haven't chosen). */
   modelChoice: string | null;
-  setModelChoice: (id: string) => void;
+  /** Resolves false when the choice couldn't be saved to the account (it still applies on this device). */
+  setModelChoice: (id: string) => Promise<boolean>;
 }
 
 const Ctx = createContext<AppState | null>(null);
@@ -78,12 +79,16 @@ export function AppProvider({
   // The model choice is saved on the account, so it follows the user to other devices.
   const [modelChoice, setChoice] = useState<string | null>(user?.preferredModel ?? null);
   const setModelChoice = useCallback(
-    (id: string) => {
+    async (id: string) => {
       setChoice(id);
-      if (!user) return;
-      void fetch("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preferredModel: id }) }).catch(() => {
-        /* kept on this device; saved again on the next change */
-      });
+      if (!user) return true;
+      try {
+        const res = await fetch("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preferredModel: id }) });
+        return res.ok;
+      } catch {
+        // Kept on this device; saved again on the next change.
+        return false;
+      }
     },
     [user],
   );

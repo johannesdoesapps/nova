@@ -22,6 +22,11 @@ export interface FinanceSummary {
   messages_by_plan?: Record<string, number>;
   ledger?: Partial<Record<"payment" | "refund" | "failed_payment", { count: number; amount: number | string; tax: number | string }>>;
   revenue_by_plan?: Record<string, number | string>;
+  /** From admin_finance_summary_v3. */
+  active_users?: { d1: number; d7: number; d30: number };
+  health?: { provider: string; calls: number; errors: number; p50_ms: number | null; p95_ms: number | null; reserved: number | string | null; actual: number | string | null }[];
+  top_errors?: { error: string; count: number }[];
+  heavy_users_24h?: { email: string | null; calls: number; cost: number | string }[];
 }
 
 export interface PlanFinance {
@@ -70,6 +75,13 @@ export interface FinanceReport {
     byProvider: Record<string, number>;
     byTier: Record<string, number>;
     messagesByPlan: Record<string, number>;
+  };
+  /** System health, only from recorded data (null when the database doesn't provide it yet). */
+  health: {
+    activeUsers: { d1: number; d7: number; d30: number } | null;
+    providers: { provider: string; calls: number; errorRate: number; p50Ms: number | null; p95Ms: number | null; estimateToActual: number | null }[];
+    topErrors: { error: string; count: number }[];
+    heavyUsers24h: { email: string | null; calls: number; costUsd: number }[];
   };
   alerts: FinanceAlert[];
 }
@@ -181,8 +193,30 @@ export function financeReport(s: FinanceSummary, billing: BillingSettings, perio
   }
   if (collected.failedPayments > 0) alerts.push({ level: "warning", text: `${collected.failedPayments} payment attempt${collected.failedPayments === 1 ? "" : "s"} failed in the last ${periodDays} days ($${collected.failedUsd.toFixed(2)}).` });
 
+  const providers = (s.health ?? []).map((h) => ({
+    provider: h.provider,
+    calls: h.calls,
+    errorRate: h.calls ? round(h.errors / h.calls, 3) : 0,
+    p50Ms: h.p50_ms,
+    p95Ms: h.p95_ms,
+    // How the pre-request estimates compare with recorded costs (estimates are worst cases, so > 1 is expected).
+    estimateToActual: n(h.actual) > 0 ? round(n(h.reserved) / n(h.actual), 2) : null,
+  }));
+  for (const p of providers) {
+    if (p.calls >= 20 && p.errorRate > 0.1) alerts.push({ level: p.errorRate > 0.3 ? "critical" : "warning", text: `${p.provider} requests are failing ${Math.round(p.errorRate * 100)}% of the time in the last ${periodDays} days.` });
+  }
+  for (const u of s.heavy_users_24h ?? []) {
+    alerts.push({ level: "warning", text: `${u.email ?? "A user"} made ${u.calls} model calls in the last 24 hours (possible automated use).` });
+  }
+
   return {
     periodDays,
+    health: {
+      activeUsers: s.active_users ?? null,
+      providers,
+      topErrors: s.top_errors ?? [],
+      heavyUsers24h: (s.heavy_users_24h ?? []).map((u) => ({ email: u.email, calls: u.calls, costUsd: round(n(u.cost), 4) })),
+    },
     collected,
     contribution: {
       revenueUsd: round(periodRevenue),

@@ -6,7 +6,7 @@ import { trimHistory } from "@/lib/ai/trim";
 import { isAutoId } from "@/lib/ai/platform";
 import type { ChatMessage, Usage } from "@/lib/ai/types";
 import { requireUserIfConfigured, type AuthContext } from "@/lib/auth";
-import { addMessages, createConversation, getConversation, updateConversation } from "@/lib/db";
+import { addMessages, createConversation, deleteMessage, getConversation, regeneratedReply, updateConversation } from "@/lib/db";
 import { serverEnv } from "@/lib/env";
 import { ApiError, errorResponse, ndjsonStream, parseJsonBody } from "@/lib/http";
 import { reportError } from "@/lib/observability";
@@ -61,6 +61,8 @@ export async function POST(req: Request) {
     // Conversation + history
     let conversationId: string | null = null;
     let history: ChatMessage[] = [];
+    // Regenerate: the saved reply this turn replaces (its question is reused, not saved again).
+    let replacing: string | null = null;
     if (auth.mode === "authenticated") {
       if (body.conversationId) {
         const { conversation, messages } = await getConversation(auth.supabase, auth.user.id, body.conversationId);
@@ -68,8 +70,10 @@ export async function POST(req: Request) {
           throw new ApiError("bad_request", "This conversation belongs to an agent. Continue it from the Agents workspace.");
         }
         conversationId = conversation.id;
-        history = messages
-          .filter((m) => m.role !== "system")
+        const turns = messages.filter((m) => m.role !== "system");
+        replacing = body.regenerate ? regeneratedReply(turns, body.message) : null;
+        // The model sees neither the old answer nor the question twice.
+        history = (replacing ? turns.slice(0, -2) : turns)
           .slice(-30)
           .map((m) => ({ role: m.role, content: m.content }));
         if (conversation.mode !== body.mode) {
@@ -193,10 +197,12 @@ export async function POST(req: Request) {
         try {
           const usageMeta = { ...usage, estimatedCost: estimateCost(model, usage), sources: sources.map(({ index, url, title }) => ({ index, url, title })), attachments: body.attachments?.map((a) => a.name) ?? [] };
           const rows = await addMessages(auth.supabase, conversationId, [
-            { role: "user", content: body.message, usage_metadata: { attachments: body.attachments?.map((a) => a.name) ?? [] } },
+            ...(replacing ? [] : [{ role: "user" as const, content: body.message, usage_metadata: { attachments: body.attachments?.map((a) => a.name) ?? [] } }]),
             { role: "assistant", content: text, model_id: model.id, usage_metadata: usageMeta },
           ]);
           assistantMessageId = rows.find((r) => r.role === "assistant")?.id ?? null;
+          // Regenerate: the old reply goes only once the new one is saved after it.
+          if (replacing) await deleteMessage(auth.supabase, conversationId, replacing).catch((err) => reportError(err, { where: "chat.regenerate" }));
         } catch (err) {
           reportError(err, { where: "chat.addMessages" });
           send({ type: "notice", level: "warning", message: "The reply could not be saved to your history." });

@@ -133,6 +133,7 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
           allowFallback: req.allowFallback,
           history: req.history,
           attachments: req.attachments,
+          regenerate: req.regenerate,
           agent: agent.kind === "custom" && persistence === "local" ? toInput(agent) : undefined,
         },
         signal,

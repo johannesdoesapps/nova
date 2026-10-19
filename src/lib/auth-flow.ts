@@ -44,6 +44,8 @@ export const LOGIN_MESSAGES = {
   google_failed: { tone: "danger", text: "Google sign-in couldn't be completed. Please try again, or use your email instead." },
   signup_closed: { tone: "danger", text: "New sign-ups are closed right now." },
   email_confirmed: { tone: "success", text: "Your email is confirmed. Sign in with your password to continue." },
+  link_invalid: { tone: "danger", text: "That link is invalid or has expired. Sign in, or request a new link." },
+  reset_expired: { tone: "danger", text: "That password reset link expired or was opened in another browser. Request a new one below." },
 } as const satisfies Record<string, { tone: "danger" | "success"; text: string }>;
 export type LoginMessageCode = keyof typeof LOGIN_MESSAGES;
 
@@ -66,11 +68,42 @@ export function oauthErrorCode(error: string | null | undefined, errorCode?: str
   return "google_failed";
 }
 
-/** Message code when exchanging the callback code for a session fails. */
-export function exchangeFailureCode(via: string | null): LoginMessageCode {
+/** The page a password reset link opens, signed in with the recovery session. */
+export const RESET_PASSWORD_PATH = "/reset-password";
+
+/**
+ * Message code when the callback couldn't sign the user in. `hadCode` is false
+ * when the link carried no code at all, so nothing was confirmed.
+ */
+export function exchangeFailureCode(via: string | null, hadCode = true, next = "/"): LoginMessageCode {
+  if (via === "google") return "google_expired";
+  if (next === RESET_PASSWORD_PATH) return "reset_expired";
   // Email confirmation links: Supabase confirmed the address before redirecting,
   // so the user only needs to sign in normally.
-  return via === "google" ? "google_expired" : "email_confirmed";
+  return hadCode ? "email_confirmed" : "link_invalid";
+}
+
+/**
+ * Words an email/password sign-in or sign-up error for people. Known Supabase
+ * errors get specific advice; anything else (e.g. "Database error querying
+ * schema") gets a generic message, since raw errors can carry internal details.
+ */
+export function friendlyAuthError(message: string | undefined, mode: "signin" | "signup" | "reset"): string {
+  const m = (message ?? "").toLowerCase();
+  if (m.includes("invalid login credentials"))
+    return "Wrong email or password. If you signed up with Google, use “Continue with Google”. New to NOVA? Choose “Sign up” below.";
+  if (m.includes("email not confirmed")) return "Confirm your email first: open the link we sent you, then sign in.";
+  if (m.includes("already registered")) return "An account with this email already exists. Sign in instead.";
+  if (m.includes("rate limit") || m.includes("too many"))
+    return "Too many attempts. Wait a few minutes and try again.";
+  if (m.includes("fetch") || m.includes("network")) return "Couldn't reach the sign-in service. Check your connection and try again.";
+  if (m.includes("signups not allowed") || m.includes("signup is disabled")) return LOGIN_MESSAGES.signup_closed.text;
+  if (m.includes("password") && (m.includes("at least") || m.includes("weak") || m.includes("should contain")))
+    return "Choose a stronger password: at least 8 characters, ideally a mix of letters, numbers and symbols.";
+  if (m.includes("same_password") || m.includes("different from the old")) return "Choose a password you haven't used before.";
+  if (m.includes("invalid format") || (m.includes("email address") && m.includes("invalid"))) return "Enter a valid email address.";
+  const what = mode === "signin" ? "Sign-in" : mode === "signup" ? "Sign-up" : "Password reset";
+  return `${what} isn't available right now. Please try again in a minute.`;
 }
 
 /** Name for a new account from the profile data Supabase stores (email sign-up or Google). */

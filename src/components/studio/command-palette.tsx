@@ -174,6 +174,8 @@ function Palette({
               }
             }}
             role="combobox"
+            aria-label="Search commands, chats, missions and models"
+            aria-autocomplete="list"
             aria-expanded="true"
             aria-controls="palette-list"
             aria-activedescendant={results[index] ? `palette-${results[index].id}` : undefined}
@@ -182,7 +184,7 @@ function Palette({
           />
           <kbd className="rounded-md border border-s-line px-1.5 py-0.5 text-[11px] text-s-ink-3">Esc</kbd>
         </div>
-        <ul id="palette-list" ref={listRef} role="listbox" className="s-scroll max-h-[min(60vh,440px)] overflow-y-auto p-2">
+        <ul id="palette-list" ref={listRef} role="listbox" aria-label="Results" className="s-scroll max-h-[min(60vh,440px)] overflow-y-auto p-2">
           {results.length === 0 && <li className="px-3 py-6 text-center text-[13.5px] text-s-ink-3">No matches</li>}
           {results.map((c, i) => {
             const header = c.group !== lastGroup ? c.group : null;

@@ -28,7 +28,7 @@ afterAll(() => {
 
 type FakeRun = { estimated_cost: number | null; input_tokens: number | null; output_tokens: number | null; model_tier?: string };
 
-/** The budget rules of usage_reserve_v3, over the fake's recorded runs (the SQL itself is tested in plans-billing.test.ts). */
+/** The budget rules of usage_reserve_v4, over the fake's recorded runs (the SQL itself is tested in plans-billing.test.ts). */
 function fakeReserveV3(a: Record<string, unknown>, runs: FakeRun[]) {
   if (a.p_budget_usd === null) return { ok: true };
   const fin = Number(a.p_fallback_in);
@@ -67,7 +67,7 @@ function fakeAuth(opts: { admin?: boolean; plan?: Record<string, unknown> | null
     },
     rpc: async (fn: string, args: Record<string, unknown>) => {
       rpc.push([fn, args]);
-      if (fn === "usage_reserve_v3") return { data: opts.reserve ? opts.reserve(args) : fakeReserveV3(args, opts.runs ?? []), error: null };
+      if (fn === "usage_reserve_v4") return { data: opts.reserve ? opts.reserve(args) : fakeReserveV3(args, opts.runs ?? []), error: null };
       if (fn === "usage_status") return { data: [{ window_used: 3, window_start: "2026-10-19T10:00:00Z", week_used: 20, week_oldest: "2026-10-15T08:00:00Z" }], error: null };
       return { data: null, error: null };
     },
@@ -100,7 +100,7 @@ describe("usage policy", () => {
     const t = await enforceLimits(req(), auth, 1, [haiku], { requestId: "00000000-0000-4000-8000-000000000001", purpose: "chat" });
     expect(t).toMatchObject({ units: 1, entitlement: "plan:free", requestId: "00000000-0000-4000-8000-000000000001" });
     expect(rpc[0]).toEqual([
-      "usage_reserve_v3",
+      "usage_reserve_v4",
       expect.objectContaining({ p_units: 1, p_window_limit: 10, p_week_limit: 30, p_purpose: "chat", p_budget_usd: 0.1, p_premium: false, p_daily_limit: 10, p_token_limit: 400_000 }),
     ]);
     // Tokens held for the request: its input plus the longest reply Free allows.
@@ -157,7 +157,7 @@ describe("usage policy", () => {
     const t = await enforceLimits(req(), auth, 1, [opus]);
     expect(t).toMatchObject({ units: 40, entitlement: "admin_unlimited" });
     // Still reserved (so duplicates are refused), but with no limit.
-    expect(rpc[0]).toEqual(["usage_reserve_v3", expect.objectContaining({ p_window_limit: 1_000_000_000, p_week_limit: 1_000_000_000, p_budget_usd: null, p_daily_limit: 0, p_token_limit: 0 })]);
+    expect(rpc[0]).toEqual(["usage_reserve_v4", expect.objectContaining({ p_window_limit: 1_000_000_000, p_week_limit: 1_000_000_000, p_budget_usd: null, p_daily_limit: 0, p_token_limit: 0 })]);
     expect(await planUsage(auth)).toBeNull();
     await recordRun(auth, run(sonnet));
     expect(inserts[0]).toMatchObject({ entitlement: "admin_unlimited", units: 20 });
@@ -280,6 +280,25 @@ describe("AI budget guard", () => {
     await enforceLimits(req(), auth, 2, [terra, terra], { inputTokens: 2000, maxOutputTokens: 2400 });
     expect(rpc[0]![1].p_est_cost_usd).toBeCloseTo(2 * ((2000 * 2.5 + 2400 * 12) / 1e6), 6);
     expect(rpc[0]![1].p_est_tokens).toBe(2 * (2000 + 2400));
+  });
+
+  it("refuses a single request that could cost more than the per-request cap, before reserving", async () => {
+    const { auth, rpc } = fakeAuth({ plan: MAX });
+    // Opus with a huge prompt: 300,000 input tokens at $4 + 4,800 output at $20 per 1M ≈ $1.30 > $1.
+    const err = await fail(enforceLimits(req(), auth, 1, [opus], { inputTokens: 300_000 }));
+    expect(err.message).toMatch(/too large/);
+    expect(err.details).toMatchObject({ scope: "request" });
+    expect(rpc).toHaveLength(0);
+  });
+
+  it("passes the daily share of the budget and the site-wide cap to the reservation", async () => {
+    const { auth, rpc } = fakeAuth({ plan: PRO });
+    await enforceLimits(req(), auth, 1, [haiku]);
+    expect(rpc[0]![1]).toMatchObject({ p_daily_budget_usd: Math.round(planEconomics(DEFAULT_BILLING, "pro").aiBudgetUsd * 34) / 100, p_site_cap_usd: null });
+    const daily = fakeAuth({ plan: PRO, reserve: () => ({ ok: false, reason: "budget", scope: "daily", resets_at: "2026-10-20T00:00:00Z" }) });
+    expect((await fail(enforceLimits(req(), daily.auth, 1, [haiku]))).message).toMatch(/today's share/);
+    const site = fakeAuth({ plan: PRO, reserve: () => ({ ok: false, reason: "budget", scope: "site" }) });
+    expect((await fail(enforceLimits(req(), site.auth, 1, [haiku]))).message).toMatch(/NOVA has reached its AI usage limit/);
   });
 
   it("doesn't apply to administrators", async () => {

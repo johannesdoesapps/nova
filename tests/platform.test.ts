@@ -21,12 +21,13 @@ const configured = (p: Partial<Record<string, boolean>>) =>
 describe("Auto mode routing", () => {
   const models = configured({ anthropic: true, openai: true });
 
-  it("uses the lowest-cost available model for every kind of request, and says so", () => {
-    for (const q of ["What's a good name for a cat?", "Evaluate the trade-offs of raising prices for our SaaS"]) {
-      const r = autoRoute(models, q)!;
-      expect(r.model.id).toBe("anthropic:claude-haiku-5-5");
-      expect(r.reason).toMatch(/lowest-cost available model \(\$0\.1 in \/ \$0\.5 out per 1M tokens\)/);
-    }
+  it("uses the lowest-cost model for everyday requests and a reasoning model only for hard ones, and says so", () => {
+    const r = autoRoute(models, "What's a good name for a cat?")!;
+    expect(r.model.id).toBe("anthropic:claude-haiku-5-5");
+    expect(r.reason).toMatch(/lowest-cost available model \(\$0\.1 in \/ \$0\.5 out per 1M tokens\)/);
+    const hard = autoRoute(models, "Evaluate the trade-offs of raising prices for our SaaS")!;
+    expect(hard.model.capabilities).toContain("reasoning");
+    expect(hard.reason).toMatch(/lowest-cost reasoning model/);
     // The Deep mode the user picks still uses a reasoning model.
     expect(autoRoute(models, "Evaluate the trade-offs", { routerMode: "deep" })!.model.capabilities).toContain("reasoning");
   });

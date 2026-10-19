@@ -7,7 +7,7 @@
 import { jsonFetch } from "@/hooks/use-ndjson";
 import type { ChatMode } from "@/lib/ai/modes";
 import type { SearchSource } from "@/lib/search/types";
-import type { ToolRecord } from "./chat-client";
+import type { ChatAttachment, ToolRecord } from "./chat-client";
 
 export interface ConvSummary {
   id: string;
@@ -30,6 +30,8 @@ export interface Msg {
   tools?: ToolRecord[];
   notices?: string[];
   attachments?: string[];
+  /** User messages, this session only: the attached files, so a regenerate can resend them. */
+  files?: ChatAttachment[];
   cost?: number | null;
 }
 
@@ -44,6 +46,8 @@ export interface HistoryStore {
   load(id: string): Promise<LoadedConversation>;
   rename(id: string, title: string): Promise<void>;
   remove(id: string): Promise<void>;
+  /** Server store only: every chat whose title contains `q`, beyond the recent ones `list` returns. */
+  search?(q: string): Promise<ConvSummary[]>;
   /** Local store only: persist a guest conversation after each turn. */
   save?(conv: ConvSummary, messages: Msg[]): void;
   clear?(): void;
@@ -61,13 +65,16 @@ type ServerMessage = {
 
 /** Signed-in history. `listUrl` selects ordinary chats or one agent's conversations. */
 export function makeServerHistory(listUrl: string): HistoryStore {
-  return { ...serverHistory, list: async () => (await jsonFetch<{ conversations: ConvSummary[] }>(listUrl)).conversations };
+  return { ...serverHistory, search: undefined, list: async () => (await jsonFetch<{ conversations: ConvSummary[] }>(listUrl)).conversations };
 }
 
 export const serverHistory: HistoryStore = {
   kind: "server",
   async list() {
     return (await jsonFetch<{ conversations: ConvSummary[] }>("/api/conversations")).conversations;
+  },
+  async search(q) {
+    return (await jsonFetch<{ conversations: ConvSummary[] }>(`/api/conversations?q=${encodeURIComponent(q.slice(0, 200))}`)).conversations;
   },
   async load(id) {
     const r = await jsonFetch<{ conversation: ConvSummary; messages: ServerMessage[] }>(`/api/conversations/${id}`);
@@ -146,7 +153,7 @@ export function makeLocalHistory(KEY: string): HistoryStore {
     save(conv, messages) {
       const done = messages
         .filter((m) => m.status !== "streaming")
-        .map((m) => ({ ...m, content: m.content.slice(0, 40_000) }));
+        .map((m) => ({ ...m, files: undefined, content: m.content.slice(0, 40_000) }));
       const rest = readLocal(KEY).filter((c) => c.id !== conv.id);
       writeLocal(KEY, [{ ...conv, messages: done }, ...rest]);
     },

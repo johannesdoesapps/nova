@@ -7,7 +7,7 @@ import { authorizeTurn, runAgentTurn } from "@/lib/agents/execute";
 import { agentChatRequest } from "@/lib/agents/schema";
 import { isBuiltinId, type AgentConfig } from "@/lib/agents/types";
 import { requireUserIfConfigured, type AuthContext } from "@/lib/auth";
-import { addMessages, createConversation, getConversation } from "@/lib/db";
+import { addMessages, createConversation, deleteMessage, getConversation, regeneratedReply } from "@/lib/db";
 import { conversationIsFor, getAgent } from "@/lib/db/agents";
 import { ApiError, errorResponse, ndjsonStream, parseJsonBody } from "@/lib/http";
 import { reportError } from "@/lib/observability";
@@ -84,15 +84,16 @@ export async function POST(req: Request) {
     // Conversation and history.
     let conversationId: string | null = null;
     let history: ChatMessage[] = [];
+    let replacing: string | null = null;
     if (auth.mode === "authenticated") {
       if (body.conversationId) {
         const { conversation, messages } = await getConversation(auth.supabase, auth.user.id, body.conversationId);
         if (!conversationIsFor(conversation, agent.id)) throw new ApiError("not_found", "Conversation not found for this agent.");
         conversationId = conversation.id;
-        history = messages
-          .filter((m) => m.role !== "system")
-          .slice(-30)
-          .map((m) => ({ role: m.role, content: m.content }));
+        const turns = messages.filter((m) => m.role !== "system");
+        replacing = body.regenerate ? regeneratedReply(turns, body.message) : null;
+        // The model sees neither the old answer nor the question twice.
+        history = (replacing ? turns.slice(0, -2) : turns).slice(-30).map((m) => ({ role: m.role, content: m.content }));
       } else {
         const c = await createConversation(auth.supabase, auth.user.id, {
           title: titleFrom(body.message),
@@ -169,7 +170,7 @@ export async function POST(req: Request) {
       if (auth.mode === "authenticated" && conversationId) {
         try {
           const rows = await addMessages(auth.supabase, conversationId, [
-            { role: "user", content: body.message, usage_metadata: { attachments: attachments.map((a) => a.name) } },
+            ...(replacing ? [] : [{ role: "user" as const, content: body.message, usage_metadata: { attachments: attachments.map((a) => a.name) } }]),
             {
               role: "assistant",
               content: result.text,
@@ -184,6 +185,8 @@ export async function POST(req: Request) {
             },
           ]);
           assistantMessageId = rows.find((r) => r.role === "assistant")?.id ?? null;
+          // Regenerate: the old reply goes only once the new one is saved after it.
+          if (replacing) await deleteMessage(auth.supabase, conversationId, replacing).catch((err) => reportError(err, { where: "agents.chat.regenerate" }));
         } catch (err) {
           reportError(err, { where: "agents.chat.addMessages" });
           send({ type: "notice", level: "warning", message: "The reply could not be saved to this agent's history." });

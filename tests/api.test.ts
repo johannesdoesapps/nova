@@ -177,3 +177,17 @@ describe("request body limits", () => {
     await expect(parseJsonBody(ok, z.object({ t: z.string() }), 1000)).resolves.toEqual({ t: "é".repeat(10) });
   });
 });
+
+describe("CSRF guard for API changes", () => {
+  it("refuses cross-site changes, allows same-site and the signed Stripe webhook", async () => {
+    const { guardApi } = await import("@/proxy");
+    const { NextRequest } = await import("next/server");
+    const make = (path: string, method: string, headers: Record<string, string>) => new NextRequest(`https://nova.example${path}`, { method, headers: { host: "nova.example", ...headers } });
+    expect(guardApi(make("/api/chat", "POST", { origin: "https://evil.example", "sec-fetch-site": "cross-site" })).status).toBe(403);
+    expect(guardApi(make("/api/conversations/x", "DELETE", { origin: "null" })).status).toBe(403);
+    expect(guardApi(make("/api/chat", "POST", { origin: "https://nova.example", "sec-fetch-site": "same-origin" })).headers.get("x-middleware-next")).toBe("1");
+    expect(guardApi(make("/api/chat", "GET", { origin: "https://evil.example" })).headers.get("x-middleware-next")).toBe("1");
+    expect(guardApi(make("/api/stripe/webhook", "POST", { "sec-fetch-site": "cross-site" })).headers.get("x-middleware-next")).toBe("1");
+    expect(guardApi(make("/api/chat", "POST", {})).headers.get("x-middleware-next")).toBe("1"); // non-browser client
+  });
+});

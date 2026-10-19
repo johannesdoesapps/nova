@@ -380,3 +380,20 @@ describe("workforce (operators only)", () => {
     });
   });
 });
+
+describe("message order", () => {
+  it("numbers messages in insert order, so a question sorts before its reply even with the same created_at", async () => {
+    await as(ALICE, async () => {
+      const c = await db.query<{ id: string }>("insert into public.conversations (title) values ('Order') returning id");
+      const conv = c.rows[0]!.id;
+      // One statement, one transaction time: both rows share created_at.
+      await db.query("insert into public.messages (conversation_id, role, content) values ($1, 'user', 'q1'), ($1, 'assistant', 'a1'), ($1, 'user', 'q2'), ($1, 'assistant', 'a2')", [conv]);
+      const same = await db.query<{ n: number }>("select count(distinct created_at)::int as n from public.messages where conversation_id = $1", [conv]);
+      expect(same.rows[0]!.n).toBe(1);
+      // Newest first with a limit, then reversed — how getConversation reads them.
+      const r = await db.query<{ content: string }>("select content from public.messages where conversation_id = $1 order by created_at desc, seq desc limit 3", [conv]);
+      expect(r.rows.map((x) => x.content).reverse()).toEqual(["a1", "q2", "a2"]);
+      await expect(db.query("insert into public.messages (conversation_id, role, content, seq) values ($1, 'user', 'x', 1)", [conv])).rejects.toThrow();
+    });
+  });
+});

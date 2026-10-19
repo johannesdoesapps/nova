@@ -89,6 +89,19 @@ describe("OAuth callback", () => {
     expect(r.params.msg).toBe("google_expired");
   });
 
+  it("doesn't claim the email is confirmed when an email link carried no code", async () => {
+    const r = await callback("next=%2Fchat");
+    expect(exchange).not.toHaveBeenCalled();
+    expect(r.params).toEqual({ msg: "link_invalid", next: "/chat" });
+  });
+
+  it("sends a working password reset link to the reset page, and a stale one back to sign-in", async () => {
+    exchange.mockResolvedValue({ error: null });
+    expect((await callback("code=abc&next=%2Freset-password")).path).toBe("/reset-password");
+    exchange.mockResolvedValue({ error: { message: "code verifier missing" } });
+    expect((await callback("code=abc&next=%2Freset-password")).params).toEqual({ msg: "reset_expired", next: "/reset-password" });
+  });
+
   it("keeps the email-confirmation behaviour for email links", async () => {
     exchange.mockResolvedValue({ error: { message: "code verifier missing" } });
     const r = await callback("code=abc&next=%2Fchat");

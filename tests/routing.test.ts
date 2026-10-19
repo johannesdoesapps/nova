@@ -20,9 +20,32 @@ describe("Auto routing", () => {
     }
   });
 
-  it("uses the lowest-cost model even for demanding requests (cost-first default)", () => {
-    const r = autoRoute(models, "Evaluate the trade-offs of event sourcing versus CRUD for our billing system architecture, step by step")!;
-    expect(r.model.id).toBe("anthropic:claude-haiku-5-5");
+  it("uses the lowest-cost model for everyday requests", () => {
+    for (const p of ["hi", "What is the capital of France?", "Summarise this article in three bullets", "Write a short thank-you email to my landlord"]) {
+      expect(autoRoute(models, p)!.model.id, p).toBe("anthropic:claude-haiku-5-5");
+    }
+  });
+
+  it("escalates hard coding and reasoning tasks to the lowest-cost reasoning model, and says why", () => {
+    const hard = autoRoute(models, "Evaluate the trade-offs of event sourcing versus CRUD for our billing system architecture, step by step")!;
+    expect(hard.model.id).toBe("anthropic:claude-sonnet-5-5");
+    expect(hard.reason).toMatch(/lowest-cost reasoning model.*harder/);
+    const code = autoRoute(models, "Find the race condition in this Go worker pool and fix the deadlock")!;
+    expect(code.model.capabilities).toContain("reasoning");
+    // A plan without reasoning models (Free) stays on the cheapest model.
+    const free = models.filter((m) => m.capabilities.includes("low-cost"));
+    expect(autoRoute(free, "Prove that there are infinitely many primes, step by step")!.model.id).toBe("anthropic:claude-haiku-5-5");
+  });
+
+  it("doesn't escalate when the allowance is running low", () => {
+    expect(autoRoute(models, "Design a system architecture for a payments platform, step by step", { preferLowCost: true })!.model.id).toBe("anthropic:claude-haiku-5-5");
+  });
+
+  it("keeps long documents on a model whose context fits, without escalating a summary", () => {
+    const long = "word ".repeat(30_000);
+    const r = autoRoute(models, `Summarise this: ${long}`)!;
+    expect(r.model.contextWindow!).toBeGreaterThanOrEqual(Math.ceil((long.length / 4) * 1.3));
+    expect(r.model.capabilities).toContain("low-cost");
   });
 
   it("with the Coding chip on, a non-code question still gets a low-cost model (the reported bug)", () => {

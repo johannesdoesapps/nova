@@ -154,15 +154,21 @@ export async function deleteNote(db: ServerSupabase, userId: string, id: string)
 }
 
 // ─── conversations ───────────────────────────────────────────────────────────
-export async function listConversations(db: ServerSupabase, userId: string, limit = 50): Promise<ConversationRow[]> {
-  const { data, error } = await db
+/** Escapes LIKE wildcards so a search for "50%" or "a_b" matches those characters literally. */
+export function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/** The user's recent chats; with `query`, every chat whose title contains it (case-insensitive). */
+export async function listConversations(db: ServerSupabase, userId: string, limit = 50, query?: string): Promise<ConversationRow[]> {
+  let q = db
     .from("conversations")
     .select("id,project_id,title,mode,created_at,updated_at")
     .eq("user_id", userId)
     .is("agent_id", null)
-    .is("builtin_agent", null)
-    .order("updated_at", { ascending: false })
-    .limit(limit);
+    .is("builtin_agent", null);
+  if (query?.trim()) q = q.ilike("title", `%${escapeLike(query.trim())}%`);
+  const { data, error } = await q.order("updated_at", { ascending: false }).limit(limit);
   if (error) fail(error, "Conversations");
   return data as ConversationRow[];
 }
@@ -176,14 +182,17 @@ export async function getConversation(db: ServerSupabase, userId: string, id: st
     .maybeSingle();
   if (error) fail(error, "Conversation");
   if (!data) throw new ApiError("not_found", "Conversation not found.");
+  // The newest 500 messages, oldest first. A question and its reply are saved
+  // in one insert and share created_at, so `seq` (insert order) breaks the tie.
   const { data: messages, error: mErr } = await db
     .from("messages")
     .select("id,conversation_id,role,content,model_id,usage_metadata,created_at")
     .eq("conversation_id", id)
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })
+    .order("seq", { ascending: false })
     .limit(500);
   if (mErr) fail(mErr, "Messages");
-  return { conversation: data as ConversationRow, messages: (messages ?? []) as MessageRow[] };
+  return { conversation: data as ConversationRow, messages: ((messages ?? []) as MessageRow[]).reverse() };
 }
 
 export async function createConversation(
@@ -231,6 +240,22 @@ export async function deleteConversation(db: ServerSupabase, userId: string, id:
   const { data, error } = await db.from("conversations").delete().eq("id", id).eq("user_id", userId).select("id");
   if (error) fail(error, "Conversation");
   if (!data?.length) throw new ApiError("not_found", "Conversation not found.");
+}
+
+/**
+ * The id of the saved reply a regenerate replaces: the conversation must end
+ * with this question and its answer. Otherwise (e.g. the failed turn was never
+ * saved) the turn is saved as a new one.
+ */
+export function regeneratedReply(turns: { id: string; role: string; content: string }[], question: string): string | null {
+  const [user, reply] = turns.slice(-2);
+  return user?.role === "user" && reply?.role === "assistant" && user.content.trim() === question.trim() ? reply.id : null;
+}
+
+/** Removes one message of a conversation (RLS limits this to the user's own conversations). */
+export async function deleteMessage(db: ServerSupabase, conversationId: string, id: string) {
+  const { error } = await db.from("messages").delete().eq("id", id).eq("conversation_id", conversationId);
+  if (error) fail(error, "Message");
 }
 
 export async function addMessages(

@@ -338,7 +338,7 @@ export function ArenaView() {
               {anyDone && (
                 <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-s-ink-3">
                   <span>Improve with</span>
-                  <select value={improveBy} onChange={(e) => setImproveBy(e.target.value)} className="h-8 rounded-lg border border-s-line bg-transparent px-2 text-[12.5px] text-s-ink outline-none">
+                  <select value={improveBy} onChange={(e) => setImproveBy(e.target.value)} aria-label="Model that improves an answer" className="h-8 rounded-lg border border-s-line bg-transparent px-2 text-[12.5px] text-s-ink outline-none">
                     <option value="" className="bg-s-bg">
                       another participant
                     </option>
@@ -349,7 +349,7 @@ export function ArenaView() {
                     ))}
                   </select>
                   <span>· Summary by</span>
-                  <select value={summaryBy} onChange={(e) => setSummaryBy(e.target.value)} className="h-8 rounded-lg border border-s-line bg-transparent px-2 text-[12.5px] text-s-ink outline-none">
+                  <select value={summaryBy} onChange={(e) => setSummaryBy(e.target.value)} aria-label="Model that writes the summary" className="h-8 rounded-lg border border-s-line bg-transparent px-2 text-[12.5px] text-s-ink outline-none">
                     <option value="" className="bg-s-bg">
                       a reasoning model
                     </option>

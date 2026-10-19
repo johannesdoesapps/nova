@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useApp } from "@/components/layout/app-context";
 import { localBenchmarks, localTrials } from "@/components/research/local-store";
+import { jsonFetch } from "@/hooks/use-ndjson";
 import type { BenchmarkRun, TrialRecord, UsageRow } from "@/lib/intel/types";
 
 export interface IntelHistory {
@@ -14,6 +15,7 @@ export interface IntelHistory {
   reload: () => Promise<void>;
   addTrial: (t: TrialRecord, savedOnServer: boolean) => void;
   addBenchmark: (r: BenchmarkRun, savedOnServer: boolean) => void;
+  /** Asks for confirmation, then deletes; a failure is reported in `error`. */
   remove: (kind: "trial" | "benchmark", id: string) => Promise<void>;
 }
 
@@ -51,9 +53,16 @@ export function useIntelHistory(): IntelHistory {
   }, []);
   const remove = useCallback(
     async (kind: "trial" | "benchmark", id: string) => {
-      if (user) await fetch(`/api/intel/history?kind=${kind}&id=${encodeURIComponent(id)}`, { method: "DELETE" });
-      else (kind === "trial" ? localTrials : localBenchmarks).remove(id);
-      setState((s) => (kind === "trial" ? { ...s, trials: s.trials.filter((x) => x.id !== id) } : { ...s, benchmarks: s.benchmarks.filter((x) => x.id !== id) }));
+      if (!window.confirm(`Delete this ${kind === "trial" ? "trial" : "benchmark run"}? This can't be undone.`)) return;
+      if (user) {
+        try {
+          await jsonFetch(`/api/intel/history?kind=${kind}&id=${encodeURIComponent(id)}`, { method: "DELETE" });
+        } catch (e) {
+          setState((s) => ({ ...s, error: (e as Error).message }));
+          return;
+        }
+      } else (kind === "trial" ? localTrials : localBenchmarks).remove(id);
+      setState((s) => ({ ...s, error: null, ...(kind === "trial" ? { trials: s.trials.filter((x) => x.id !== id) } : { benchmarks: s.benchmarks.filter((x) => x.id !== id) }) }));
     },
     [user],
   );

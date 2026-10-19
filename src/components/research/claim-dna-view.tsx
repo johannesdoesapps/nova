@@ -134,8 +134,16 @@ export function ClaimDnaView() {
   };
 
   const removeReport = async (id: string) => {
-    if (user) await fetch(`/api/claims/reports/${id}`, { method: "DELETE" });
-    else localReports.remove(id);
+    if (!window.confirm("Delete this report? This can't be undone.")) return;
+    setError(null);
+    if (user) {
+      try {
+        await jsonFetch(`/api/claims/reports/${id}`, { method: "DELETE" });
+      } catch (e) {
+        setError((e as Error).message);
+        return;
+      }
+    } else localReports.remove(id);
     setHistory((h) => h.filter((x) => x.id !== id));
     if (report?.id === id) setReport(null);
   };
@@ -240,7 +248,7 @@ function HistoryList({ items, onOpen, onRemove, guest }: { items: { id: string; 
                 <div className="truncate text-sm">{r.question || "Untitled analysis"}</div>
                 <div className="text-[11px] text-faint">{relativeTime(r.created_at)}</div>
               </button>
-              <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100" aria-label="Delete report" onClick={() => onRemove(r.id)}>
+              <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100" aria-label="Delete report" onClick={() => onRemove(r.id)}>
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
             </li>

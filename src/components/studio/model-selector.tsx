@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Check, ChevronDown, Search, Sparkles } from "lucide-react";
 import { MODEL_CATEGORIES, inCategory, modelTags, priceLabel, recommendedIds, type ModelCategory } from "@/lib/ai/catalog";
-import { ROUTER_MODES, autoIdFor, isAutoId, routerModeOf } from "@/lib/ai/platform";
+import { ROUTER_MODES, autoIdFor, isAutoId, routerModeOf, type RouterMode } from "@/lib/ai/platform";
 import { routerPool } from "@/lib/ai/router";
 import { PROVIDER_INFO, providerLabel } from "@/lib/ai/provider-info";
 import type { ModelWithStatus, ProviderId } from "@/lib/ai/types";
@@ -26,6 +26,16 @@ export function ProviderMark({ provider, className }: { provider: ProviderId | "
       {provider === "auto" ? <Sparkles className="h-3.5 w-3.5" /> : provider === "demo" ? "D" : PROVIDER_INFO[provider].short}
     </span>
   );
+}
+
+/**
+ * Names of the models an Auto mode can use for this user: never a model their
+ * plan locks. Empty when none is usable, so the row shows only its blurb.
+ */
+export function autoPoolNames(models: ModelWithStatus[], mode: RouterMode): string[] {
+  return routerPool(models, mode)
+    .filter((x) => x.available && !x.locked)
+    .map((x) => x.displayName);
 }
 
 const planName = (p: ModelWithStatus["requiredPlan"]) => (p === "max" ? "Max" : p === "pro" ? "Pro" : "Free");
@@ -65,10 +75,7 @@ export function ModelSelector({
   const isAuto = isAutoId(value);
   const autoMode = ROUTER_MODES.find((m) => m.id === routerModeOf(value))!;
   // The models each Smart Router mode chooses from, named in its title.
-  const modePools = useMemo(
-    () => Object.fromEntries(ROUTER_MODES.map((m) => [m.id, routerPool(models ?? [], m.id).filter((x) => x.available).map((x) => x.displayName)])),
-    [models],
-  );
+  const modePools = useMemo(() => Object.fromEntries(ROUTER_MODES.map((m) => [m.id, autoPoolNames(models ?? [], m.id)])), [models]);
 
   const q = query.trim().toLowerCase();
   const filtered = available.filter(

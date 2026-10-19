@@ -94,6 +94,7 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
                 <Num label="Advanced-model share %" value={p.premiumBudgetPct} onChange={(v) => setPlan(id, { premiumBudgetPct: v })} hint="of the AI budget" />
                 <Num label="Messages / day (0 = no cap)" value={p.dailyMessages} onChange={(v) => setPlan(id, { dailyMessages: v })} />
                 <Num label="Tokens / month (0 = no cap)" value={p.monthlyTokens} step={100000} onChange={(v) => setPlan(id, { monthlyTokens: v })} />
+                <Num label="Daily share of budget % (0 = none)" value={p.dailyBudgetPct} onChange={(v) => setPlan(id, { dailyBudgetPct: v })} />
               </div>
               <fieldset className="mt-3">
                 <legend className="text-[12px] text-s-ink-3">Model tiers included</legend>
@@ -192,6 +193,19 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
         <Num label="Refunds %" value={b.refundRatePct} step={0.5} onChange={(v) => set({ refundRatePct: v })} hint="of revenue" />
         <Num label="Fixed overhead / month $" value={b.fixedOverheadMonthlyUsd} step={10} onChange={(v) => set({ fixedOverheadMonthlyUsd: v })} hint="shown apart from contribution" />
       </div>
+
+      <h3 className="mt-5 text-[13.5px] font-semibold">Spending protection</h3>
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Num label="Max cost of one request $" value={b.maxRequestCostUsd} step={0.1} onChange={(v) => set({ maxRequestCostUsd: v })} hint="0 = no cap" />
+        <Num label="Site-wide monthly cap $" value={b.siteMonthlyCapUsd} step={10} onChange={(v) => set({ siteMonthlyCapUsd: v })} hint="0 = none; stops new requests" />
+      </div>
+      <label className="mt-3 flex items-start gap-2 text-[13px]">
+        <input type="checkbox" checked={b.aiPaused} onChange={(e) => set({ aiPaused: e.target.checked })} className="mt-0.5" />
+        <span>
+          <span className="font-medium">Emergency stop</span>
+          <span className="block text-[12px] text-s-ink-3">Pause all new AI requests for everyone except administrators. Users see that AI is paused for a moment.</span>
+        </span>
+      </label>
 
       <h3 className="mt-5 text-[13.5px] font-semibold">Usage units per message, by tier</h3>
       <div className="mt-2 grid grid-cols-3 gap-2 sm:max-w-md">

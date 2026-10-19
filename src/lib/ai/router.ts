@@ -166,9 +166,11 @@ export function blendedPrice(m: Pick<ModelWithStatus, "inputPrice" | "outputPric
  * unpriced ones, models tagged low-cost are preferred. Demo models only when
  * nothing real is configured.
  */
-export function cheapestModel(models: ModelWithStatus[], opts: { needs?: Capability[]; minContext?: number } = {}): ModelWithStatus | null {
+export function cheapestModel(models: ModelWithStatus[], opts: { needs?: Capability[]; minContext?: number; strict?: boolean } = {}): ModelWithStatus | null {
   const available = models.filter((m) => m.available);
   const real = available.filter((m) => m.provider !== "demo");
+  // strict: only real models that have every needed capability (no demo stand-ins).
+  if (opts.strict && !real.some((m) => (opts.needs ?? []).every((c) => m.capabilities.includes(c)))) return null;
   let pool = (real.length ? real : available).filter((m) => (opts.needs ?? []).every((c) => m.capabilities.includes(c)));
   if (opts.minContext) {
     const fits = pool.filter((m) => m.contextWindow !== null && m.contextWindow >= opts.minContext!);
@@ -207,10 +209,11 @@ export function routerPool(models: ModelWithStatus[], routerMode: RouterMode = "
     if (sub.length) pool = sub;
   };
   const has = (c: Capability) => (m: ModelWithStatus) => m.capabilities.includes(c);
-  // Plain Auto is cost-first: the menu names the one model it will use.
+  // Plain Auto is cost-first: the menu names the model it uses, and the reasoning model it escalates to for hard tasks.
   if (routerMode === "balanced" && !preferLowCost) {
     const cheapest = cheapestModel(pool);
-    return cheapest ? [cheapest] : pool;
+    const strong = cheapestModel(pool, { needs: ["reasoning"], strict: true });
+    return cheapest ? [cheapest, ...(strong && strong.id !== cheapest.id ? [strong] : [])] : pool;
   }
   if (routerMode === "quick") narrow((m) => has("fast")(m) || has("low-cost")(m));
   if (routerMode === "deep" || routerMode === "research") narrow(has("reasoning"));
@@ -225,21 +228,24 @@ export function autoRoute(
   opts: { mode?: string; needs?: Capability[]; preferLowCost?: boolean; routerMode?: RouterMode } = {},
 ): AutoRoute | null {
   const routerMode = opts.routerMode ?? "balanced";
-  // Plain Auto (the default for everyone): the cheapest available model that
-  // can do the job. With the Coding chip on, the cheapest coding-capable one.
-  // Long prompts still need a model whose context window fits them.
+  // Plain Auto (the default for everyone): the least expensive model that can
+  // reasonably do the job. Everyday requests get the cheapest model; a request
+  // that is genuinely hard (complex coding, analysis or reasoning) gets the
+  // cheapest model tagged for reasoning — unless the allowance is running low.
+  // Long prompts still need a model whose context window fits them. The pool
+  // is already limited to the user's plan.
   if (routerMode === "balanced") {
     const signal = classifyTask(prompt, opts.mode);
     const needs = [...(opts.needs ?? []), ...(opts.mode === "coding" ? (["coding"] as Capability[]) : [])];
     const minContext = signal.kind === "long-document" ? Math.ceil(signal.estimatedTokens * 1.3) : undefined;
-    const model = cheapestModel(models, { needs, minContext }) ?? (opts.mode === "coding" ? cheapestModel(models, { needs: opts.needs, minContext }) : null);
+    const hard = signal.complexity === "complex" && signal.kind !== "long-document" && signal.kind !== "summary" && !opts.preferLowCost;
+    const strong = hard ? cheapestModel(models, { needs: [...needs, "reasoning"], minContext, strict: true }) : null;
+    const model = strong ?? cheapestModel(models, { needs, minContext }) ?? (opts.mode === "coding" ? cheapestModel(models, { needs: opts.needs, minContext }) : null);
     if (!model) return null;
-    return {
-      model,
-      task: signal.kind,
-      complexity: signal.complexity,
-      reason: `Auto chose ${model.displayName}, the lowest-cost available model${opts.mode === "coding" && model.capabilities.includes("coding") ? " for coding" : ""}${minContext ? " with a large enough context window" : ""}${priceNote(model)}.`,
-    };
+    const reason = strong
+      ? `Auto chose ${model.displayName}, the lowest-cost reasoning model, because this looks like a harder ${signal.kind === "coding" ? "coding" : "reasoning"} task (${signal.reasons.at(-1)?.replace(/^Needs a stronger model: /, "").replace(/\.$/, "")})${priceNote(model)}.`
+      : `Auto chose ${model.displayName}, the lowest-cost available model${opts.mode === "coding" && model.capabilities.includes("coding") ? " for coding" : ""}${minContext ? " with a large enough context window" : ""}${hard === false && signal.complexity === "complex" && opts.preferLowCost ? " (saving your allowance)" : ""}${priceNote(model)}.`;
+    return { model, task: signal.kind, complexity: signal.complexity, reason };
   }
   // The Smart Router modes the user picks (Quick, Deep, Research, Coding) narrow
   // the pool, then the usual rules choose within it.

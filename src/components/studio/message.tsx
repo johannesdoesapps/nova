@@ -134,23 +134,28 @@ export const MessageView = memo(function MessageView({
         <div role="alert" className="s-in mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-s-line bg-s-hover px-4 py-3 text-[14px]">
           <CircleAlert className="h-4 w-4 shrink-0 text-s-danger" />
           <span className="min-w-0 flex-1 text-s-ink-2">{m.error ?? "Something went wrong."}</span>
-          <button
-            type="button"
-            onClick={() => onRetry(m.id)}
-            disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-full border border-s-line-strong px-3 py-1 text-[13px] transition hover:bg-s-hover disabled:opacity-40"
-          >
-            <RefreshCw className="h-3.5 w-3.5" /> Try again
-          </button>
+          {isLast && (
+            <button
+              type="button"
+              onClick={() => onRetry(m.id)}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-full border border-s-line-strong px-3 py-1 text-[13px] transition hover:bg-s-hover disabled:opacity-40"
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> Try again
+            </button>
+          )}
         </div>
       )}
 
       {m.status === "done" && m.content && (
         <div className="s-actions mt-3 flex items-center gap-0.5" data-pinned={isLast}>
           <CopyAction text={m.content} />
-          <IconButton size="sm" label="Regenerate" onClick={() => onRetry(m.id)} disabled={busy}>
-            <RefreshCw />
-          </IconButton>
+          {/* Only the latest reply can be regenerated in place. */}
+          {isLast && (
+            <IconButton size="sm" label="Regenerate" onClick={() => onRetry(m.id)} disabled={busy}>
+              <RefreshCw />
+            </IconButton>
+          )}
           <IconButton
             size="sm"
             label="Good response"

@@ -44,6 +44,8 @@ export interface SidebarProps {
   activeId: string | null;
   onNewChat: () => void;
   onRename: (id: string, title: string) => Promise<void>;
+  /** Searches all of the user's chats on the server (signed in); otherwise only the loaded list is filtered. */
+  onSearch?: (q: string) => Promise<ConvSummary[]>;
   onRequestDelete: (c: ConvSummary) => void;
   onOpenPrompts: () => void;
   onOpenSettings: () => void;
@@ -64,11 +66,35 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
     () => false,
   );
 
+  // The loaded list holds only recent chats; signed-in searches also ask the server (debounced).
+  const [found, setFound] = useState<{ q: string; items: ConvSummary[] } | null>(null);
+  const onSearch = p.onSearch;
+  useEffect(() => {
+    const q = query.trim();
+    if (!q || !onSearch) return;
+    let alive = true;
+    const t = setTimeout(() => {
+      onSearch(q)
+        .then((items) => alive && setFound({ q, items }))
+        .catch(() => {
+          /* the local filter still shows matches among recent chats */
+        });
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [query, onSearch, p.conversations]);
+
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = (p.conversations ?? []).filter((c) => !q || c.title.toLowerCase().includes(q));
-    return groupByDate(list);
-  }, [p.conversations, query]);
+    if (!q || found?.q.toLowerCase() !== q) return groupByDate(list);
+    const seen = new Set(list.map((c) => c.id));
+    const merged = [...list, ...found.items.filter((c) => !seen.has(c.id))].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+    return groupByDate(merged);
+  }, [p.conversations, query, found]);
+  const searching = !!onSearch && !!query.trim() && found?.q.toLowerCase() !== query.trim().toLowerCase();
 
   const rail = p.collapsed;
   const expandAndSearch = () => {
@@ -194,7 +220,7 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
               {p.historyKind === "local" && " As a guest, your chats are kept in this browser only."}
             </p>
           ) : groups.length === 0 ? (
-            <p className="px-3 py-3 text-[13px] text-s-ink-3">No chats match “{query}”.</p>
+            <p className="px-3 py-3 text-[13px] text-s-ink-3">{searching ? "Searching…" : `No chats match “${query}”.`}</p>
           ) : (
             groups.map((g) => (
               <section key={g.label} className="mt-3 first:mt-1">
@@ -269,14 +295,20 @@ function HistoryItem({
     if (editing) inputRef.current?.select();
   }, [editing]);
 
+  // Enter submits and the input's blur follows: only the first commit renames.
+  const committing = useRef(false);
   const commit = async () => {
+    if (committing.current) return;
+    committing.current = true;
     setEditing(false);
     const t = title.trim();
-    if (!t || t === conv.title) return setTitle(conv.title);
     try {
+      if (!t || t === conv.title) return setTitle(conv.title);
       await onRename(conv.id, t.slice(0, 200));
     } catch {
       setTitle(conv.title);
+    } finally {
+      committing.current = false;
     }
   };
 

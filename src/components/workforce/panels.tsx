@@ -274,8 +274,14 @@ function ProjectCard({ p, onChanged }: { p: ProjectRow; onChanged: () => void })
                 type="button"
                 aria-label="Forget this memory"
                 onClick={async () => {
-                  await jsonFetch(`/api/workforce/memory/${m.id}`, { method: "DELETE" });
-                  setVersion((v) => v + 1);
+                  if (!confirm("Forget this memory? Future tasks in this project won't see it.")) return;
+                  try {
+                    await jsonFetch(`/api/workforce/memory/${m.id}`, { method: "DELETE" });
+                    setError(null);
+                    setVersion((v) => v + 1);
+                  } catch (e) {
+                    setError((e as Error).message);
+                  }
                 }}
                 className="rounded-lg p-1 text-s-ink-3 hover:bg-s-hover hover:text-s-ink"
               >

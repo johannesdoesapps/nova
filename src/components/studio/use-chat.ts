@@ -116,11 +116,14 @@ export function useStudioChat({
       if (!content || busy) return false;
       const turnMode = opts.mode ?? mode;
       if (opts.mode) setMode(opts.mode);
+      // A regenerate replaces the last reply: everything before it stays, in place.
+      const retryIdx = opts.retryOf ? messages.findIndex((m) => m.id === opts.retryOf) : -1;
+      if (opts.retryOf && (retryIdx < 0 || retryIdx !== messages.length - 1)) return false;
       const ac = new AbortController();
       abortRef.current = ac;
-      const files = opts.retryOf ? [] : (opts.attachments ?? []);
-      const prior = opts.retryOf ? messages.filter((m) => m.id !== opts.retryOf) : messages;
-      const userMsg: Msg = { id: crypto.randomUUID(), role: "user", content, status: "done", attachments: files.map((f) => f.name) };
+      const files = opts.attachments ?? [];
+      const prior = opts.retryOf ? messages.slice(0, retryIdx) : messages;
+      const userMsg: Msg = { id: crypto.randomUUID(), role: "user", content, status: "done", attachments: files.map((f) => f.name), files };
       const asst: Msg = { id: crypto.randomUUID(), role: "assistant", content: "", status: "streaming", notices: [] };
       setMessages(opts.retryOf ? [...prior, asst] : [...prior, userMsg, asst]);
       const patch = (fn: (m: Msg) => Msg) => setMessages((ms) => ms.map((m) => (m.id === asst.id ? fn(m) : m)));
@@ -161,6 +164,7 @@ export function useStudioChat({
             allowFallback,
             history,
             attachments: files,
+            regenerate: opts.retryOf ? true : undefined,
           },
           ac.signal,
         )) {
@@ -183,7 +187,6 @@ export function useStudioChat({
         }
         // A stream that ends without "done" (dropped connection) is an error, not a silent stop.
         patch((m) => (m.status === "streaming" ? { ...m, status: "error", error: "The response ended unexpectedly." } : m));
-        if (!local) onHistoryChanged();
       } catch (e) {
         const aborted = (e as Error).name === "AbortError";
         patch((m) =>
@@ -193,6 +196,9 @@ export function useStudioChat({
               ? { ...m, status: m.content ? "done" : "error", error: m.content ? undefined : "Stopped before a reply arrived." }
               : { ...m, status: "error", error: (e as Error).message || "Something went wrong." },
         );
+      } finally {
+        // Signed in: the server may have created or touched the conversation even if the turn was stopped or failed.
+        if (!local) onHistoryChanged();
       }
       return true;
     },
@@ -201,11 +207,13 @@ export function useStudioChat({
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
 
+  // Only the latest reply can be regenerated: an earlier one would need the turns after it rewritten.
   const retry = useCallback(
     (assistantId: string) => {
       const idx = messages.findIndex((m) => m.id === assistantId);
+      if (idx < 0 || idx !== messages.length - 1) return;
       const prevUser = messages.slice(0, idx).reverse().find((m) => m.role === "user");
-      if (prevUser) void send(prevUser.content, { retryOf: assistantId });
+      if (prevUser) void send(prevUser.content, { retryOf: assistantId, attachments: prevUser.files });
     },
     [messages, send],
   );

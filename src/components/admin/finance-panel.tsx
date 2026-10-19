@@ -136,6 +136,52 @@ export function FinancePanel() {
             </dl>
           </div>
 
+          <div>
+            <h3 className="text-[13px] font-medium">System health ({report.periodDays} days)</h3>
+            <p className="mt-1 text-[12px] text-s-ink-3">
+              Active users: {report.health.activeUsers ? `${report.health.activeUsers.d1} today · ${report.health.activeUsers.d7} this week · ${report.health.activeUsers.d30} this month` : "—"}
+            </p>
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full min-w-[520px] text-left text-[12.5px] tabular-nums">
+                <thead className="text-[11.5px] text-s-ink-3">
+                  <tr>
+                    {["Provider", "Calls", "Failed", "Latency p50", "p95", "Estimate ÷ actual"].map((h) => (
+                      <th key={h} className="py-1 pr-2 font-medium">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.health.providers.map((p) => (
+                    <tr key={p.provider} className="border-t border-s-line">
+                      <td className="py-1.5 pr-2">{p.provider === "anthropic" ? "Claude (Anthropic)" : p.provider === "openai" ? "OpenAI" : p.provider}</td>
+                      <td className="py-1.5 pr-2">{p.calls.toLocaleString("en-US")}</td>
+                      <td className={cn("py-1.5 pr-2", p.errorRate > 0.1 && "text-s-danger")}>{Math.round(p.errorRate * 1000) / 10}%</td>
+                      <td className="py-1.5 pr-2">{p.p50Ms === null ? "—" : `${(p.p50Ms / 1000).toFixed(1)} s`}</td>
+                      <td className="py-1.5 pr-2">{p.p95Ms === null ? "—" : `${(p.p95Ms / 1000).toFixed(1)} s`}</td>
+                      <td className="py-1.5 pr-2">{p.estimateToActual === null ? "—" : `${p.estimateToActual}×`}</td>
+                    </tr>
+                  ))}
+                  {!report.health.providers.length && (
+                    <tr>
+                      <td className="py-2 text-s-ink-3">No requests in this period.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {report.health.topErrors.length > 0 && (
+              <ul className="mt-2 space-y-0.5 text-[12px] text-s-ink-3">
+                {report.health.topErrors.map((e) => (
+                  <li key={e.error} className="truncate" title={e.error}>
+                    {e.count}× {e.error}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-[13px] tabular-nums">
               <thead className="text-[12px] text-s-ink-3">

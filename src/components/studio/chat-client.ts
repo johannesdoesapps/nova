@@ -20,6 +20,19 @@ export interface ChatAttachment {
   content: string;
 }
 
+/**
+ * Most a message's attachments may add to the request, as sent (JSON-escaped,
+ * UTF-8). The chat endpoints cap the whole body, so this leaves room for the
+ * message itself.
+ */
+export const MAX_ATTACHMENTS_BYTES = 150_000;
+
+/** Bytes these attachment contents take up in the request body. */
+export function attachmentBytes(files: Pick<ChatAttachment, "content">[]): number {
+  const enc = new TextEncoder();
+  return files.reduce((n, f) => n + enc.encode(JSON.stringify(f.content)).length, 0);
+}
+
 export interface ChatRequest {
   conversationId?: string | null;
   message: string;
@@ -30,6 +43,8 @@ export interface ChatRequest {
   /** Guests only: prior turns, since the server keeps no guest history. */
   history?: { role: "user" | "assistant"; content: string }[];
   attachments?: ChatAttachment[];
+  /** Signed in: this replaces the conversation's last reply (same question, new answer). */
+  regenerate?: boolean;
 }
 
 type ModelRef = { id: string; displayName: string; provider: string };
@@ -62,6 +77,8 @@ export interface TurnRequest {
   allowFallback: boolean;
   history?: { role: "user" | "assistant"; content: string }[];
   attachments: ChatAttachment[];
+  /** The turn regenerates the last reply rather than asking something new. */
+  regenerate?: boolean;
 }
 export type ChatTransport = (req: TurnRequest, signal: AbortSignal) => AsyncGenerator<ChatEvent>;
 
@@ -74,6 +91,8 @@ export interface AgentChatRequest {
   allowFallback?: boolean;
   history?: { role: "user" | "assistant"; content: string }[];
   attachments?: ChatAttachment[];
+  /** Regenerates the last reply (the server replaces it instead of saving the question again). */
+  regenerate?: boolean;
   /** Guests only: a custom agent stored in this browser. */
   agent?: unknown;
 }

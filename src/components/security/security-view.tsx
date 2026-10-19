@@ -298,8 +298,13 @@ export function SecurityView() {
                             type="button"
                             aria-label={`Remove ${t.hostname}`}
                             onClick={async () => {
-                              await jsonFetch(`/api/security/targets/${t.id}`, { method: "DELETE" });
-                              await refreshTargets();
+                              if (!window.confirm(`Remove ${t.hostname}? You'll need to verify it again to scan it.`)) return;
+                              try {
+                                await jsonFetch(`/api/security/targets/${t.id}`, { method: "DELETE" });
+                                await refreshTargets();
+                              } catch (e) {
+                                setError((e as Error).message);
+                              }
                             }}
                             className="rounded-lg p-1.5 text-s-ink-3 hover:bg-s-hover hover:text-s-ink"
                           >

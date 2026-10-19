@@ -34,6 +34,8 @@ export const chatRequest = z.object({
   timeZone: z.string().max(64).optional(),
   /** One id per submission, so a resend of the same message is never run or charged twice. */
   requestId: z.uuid().optional(),
+  /** Regenerate: the new reply replaces the conversation's last one instead of adding a turn. */
+  regenerate: z.boolean().optional(),
   attachments: z
     .array(
       z.object({
@@ -48,6 +50,9 @@ export const chatRequest = z.object({
     .max(3)
     .optional(),
 });
+
+/** GET /api/conversations?q= — an optional title search. */
+export const conversationSearch = z.object({ q: z.string().trim().max(200).optional() });
 
 export const compareRequest = z.object({
   prompt: z.string().trim().min(1).max(8_000),
