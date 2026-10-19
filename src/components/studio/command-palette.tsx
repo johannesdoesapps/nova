@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Bookmark, Bot, Cpu, Flag, ListPlus, MessageSquare, MessagesSquare, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, SquarePen, Swords, Users } from "lucide-react";
 import { useCatalog } from "@/components/common/model-picker";
-import { useLocalStorage } from "@/hooks/use-local-storage";
+import { useModelChoice } from "./use-model-choice";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import { autoIdFor, ROUTER_MODES } from "@/lib/ai/platform";
 import { cn } from "@/lib/utils";
@@ -68,7 +68,7 @@ function Palette({
 }: Omit<Parameters<typeof CommandPalette>[0], "open">) {
   const router = useRouter();
   const catalog = useCatalog();
-  const [, setModel] = useLocalStorage("nova:studio:model");
+  const [, setModel] = useModelChoice();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [missions, setMissions] = useState<{ id: string; name: string }[]>([]);

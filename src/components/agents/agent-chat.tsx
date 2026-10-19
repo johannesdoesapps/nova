@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowUpRight, ChevronLeft, Clock, Copy, Ellipsis, Pencil, SquarePen, Trash2 } from "lucide-react";
 import { defaultModelId, useCatalog } from "@/components/common/model-picker";
 import { AUTO_MODEL_ID, isAutoId } from "@/lib/ai/platform";
-import { pickForCapability } from "@/lib/ai/router";
 import { useApp } from "@/components/layout/app-context";
 import type { ChatAttachment, ChatTransport } from "@/components/studio/chat-client";
 import { streamAgentChat } from "@/components/studio/chat-client";
@@ -119,7 +118,7 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
         : undefined;
   // With no model chosen the server routes each message (preferred kind for demanding requests,
   // low-cost for simple ones), so the menu shows Auto rather than a model that may not answer.
-  const modelId = picked ?? saved ?? (catalog?.auto.enabled ? AUTO_MODEL_ID : (models ? pickForCapability(models, agent.modelPreference)?.id : undefined) ?? defaultModelId(models));
+  const modelId = picked ?? saved ?? (catalog?.auto.enabled ? AUTO_MODEL_ID : defaultModelId(models));
 
   // Guests' custom agents live in the browser, so their config travels with each request.
   const transport = useCallback<ChatTransport>(

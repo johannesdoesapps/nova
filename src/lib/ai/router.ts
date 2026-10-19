@@ -148,14 +148,45 @@ export interface AutoRoute {
   reason: string;
 }
 
-const TASK_LABEL: Record<TaskKind, string> = {
-  summary: "summary",
-  analysis: "analysis",
-  coding: "coding",
-  writing: "writing",
-  "long-document": "long document",
-  general: "everyday question",
-};
+
+/**
+ * Expected price of a typical message, in USD per 1M tokens: chats resend their
+ * history, so input outweighs output about 3 to 1. Null when either price is
+ * unknown (unverified prices are never guessed).
+ */
+export function blendedPrice(m: Pick<ModelWithStatus, "inputPrice" | "outputPrice">): number | null {
+  if (m.inputPrice === null || m.outputPrice === null) return null;
+  return (3 * m.inputPrice + m.outputPrice) / 4;
+}
+
+/**
+ * The cheapest available model that has the required capabilities and enough
+ * context, compared on the current registry prices (admin overrides and the
+ * model_registry table included). Models with a known price come first; among
+ * unpriced ones, models tagged low-cost are preferred. Demo models only when
+ * nothing real is configured.
+ */
+export function cheapestModel(models: ModelWithStatus[], opts: { needs?: Capability[]; minContext?: number } = {}): ModelWithStatus | null {
+  const available = models.filter((m) => m.available);
+  const real = available.filter((m) => m.provider !== "demo");
+  let pool = (real.length ? real : available).filter((m) => (opts.needs ?? []).every((c) => m.capabilities.includes(c)));
+  if (opts.minContext) {
+    const fits = pool.filter((m) => m.contextWindow !== null && m.contextWindow >= opts.minContext!);
+    if (fits.length) pool = fits;
+  }
+  if (!pool.length) return null;
+  return [...pool].sort((a, b) => {
+    const pa = blendedPrice(a);
+    const pb = blendedPrice(b);
+    if (pa !== null && pb !== null && pa !== pb) return pa - pb;
+    if (pa !== null && pb === null) return -1;
+    if (pa === null && pb !== null) return 1;
+    return Number(b.capabilities.includes("low-cost")) - Number(a.capabilities.includes("low-cost"));
+  })[0]!;
+}
+
+const priceNote = (m: ModelWithStatus) =>
+  m.inputPrice !== null && m.outputPrice !== null ? ` ($${m.inputPrice} in / $${m.outputPrice} out per 1M tokens)` : "";
 
 /**
  * Auto mode: route one message with the published rules above. Everyday and
@@ -176,6 +207,11 @@ export function routerPool(models: ModelWithStatus[], routerMode: RouterMode = "
     if (sub.length) pool = sub;
   };
   const has = (c: Capability) => (m: ModelWithStatus) => m.capabilities.includes(c);
+  // Plain Auto is cost-first: the menu names the one model it will use.
+  if (routerMode === "balanced" && !preferLowCost) {
+    const cheapest = cheapestModel(pool);
+    return cheapest ? [cheapest] : pool;
+  }
   if (routerMode === "quick") narrow((m) => has("fast")(m) || has("low-cost")(m));
   if (routerMode === "deep" || routerMode === "research") narrow(has("reasoning"));
   if (routerMode === "coding") narrow(has("coding"));
@@ -189,19 +225,32 @@ export function autoRoute(
   opts: { mode?: string; needs?: Capability[]; preferLowCost?: boolean; routerMode?: RouterMode } = {},
 ): AutoRoute | null {
   const routerMode = opts.routerMode ?? "balanced";
-  // Each mode narrows the pool, then the usual rules choose within it. The
-  // Coding chat mode narrows to coding-capable models the same way.
-  const pool = routerPool(models, opts.mode === "coding" && routerMode === "balanced" ? "coding" : routerMode, opts.preferLowCost);
+  // Plain Auto (the default for everyone): the cheapest available model that
+  // can do the job. With the Coding chip on, the cheapest coding-capable one.
+  // Long prompts still need a model whose context window fits them.
+  if (routerMode === "balanced") {
+    const signal = classifyTask(prompt, opts.mode);
+    const needs = [...(opts.needs ?? []), ...(opts.mode === "coding" ? (["coding"] as Capability[]) : [])];
+    const minContext = signal.kind === "long-document" ? Math.ceil(signal.estimatedTokens * 1.3) : undefined;
+    const model = cheapestModel(models, { needs, minContext }) ?? (opts.mode === "coding" ? cheapestModel(models, { needs: opts.needs, minContext }) : null);
+    if (!model) return null;
+    return {
+      model,
+      task: signal.kind,
+      complexity: signal.complexity,
+      reason: `Auto chose ${model.displayName}, the lowest-cost available model${opts.mode === "coding" && model.capabilities.includes("coding") ? " for coding" : ""}${minContext ? " with a large enough context window" : ""}${priceNote(model)}.`,
+    };
+  }
+  // The Smart Router modes the user picks (Quick, Deep, Research, Coding) narrow
+  // the pool, then the usual rules choose within it.
+  const pool = routerPool(models, routerMode, opts.preferLowCost);
   const signal = classifyTask(prompt, routerMode === "coding" ? "coding" : opts.mode);
   const task = signal.kind;
-  const costSensitive = opts.preferLowCost || routerMode === "quick" || (routerMode === "balanced" && signal.complexity === "simple");
+  const costSensitive = opts.preferLowCost || routerMode === "quick";
   const r = recommendModel(pool, prompt, { mode: routerMode === "coding" ? "coding" : opts.mode, costSensitive, needs: opts.needs });
   if (!r.model) return null;
-  const level = signal.complexity === "simple" ? "simple " : "";
   const why =
-    routerMode === "balanced"
-      ? `for this ${level}${TASK_LABEL[task]}${opts.mode === "coding" ? " (Coding mode)" : ""}`
-      : routerMode === "quick"
+    routerMode === "quick"
         ? "for a fast reply (Quick mode)"
         : routerMode === "deep"
           ? "for deeper reasoning (Deep mode)"

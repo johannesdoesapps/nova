@@ -13,18 +13,22 @@ export const loadShellData = cache(async function loadShellData() {
 
   let conversations: { id: string; title: string; updated_at: string }[] = [];
   let projects: { id: string; name: string; updated_at: string }[] = [];
+  let preferredModel: string | null = null;
   if (auth.mode === "authenticated") {
-    const [c, p] = await Promise.all([
+    const [c, p, prof] = await Promise.all([
       listConversations(auth.supabase, auth.user.id, 8).catch(() => []),
       listProjects(auth.supabase, auth.user.id, 6).catch(() => []),
+      auth.supabase.from("profiles").select("preferences").eq("id", auth.user.id).maybeSingle(),
     ]);
     conversations = c;
     projects = p;
+    const chatModel = (prof.data?.preferences as { chatModel?: unknown } | null)?.chatModel;
+    preferredModel = typeof chatModel === "string" ? chatModel : null;
   }
 
   return {
     auth,
-    user: auth.user ? { ...auth.user, isAdmin: await isAdmin(auth) } : null,
+    user: auth.user ? { ...auth.user, isAdmin: await isAdmin(auth), preferredModel } : null,
     integrations: {
       supabase: isSupabaseConfigured(),
       anthropic: flag("anthropic"),

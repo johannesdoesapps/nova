@@ -234,7 +234,7 @@ export function AdminView() {
                       onChange={(e) => patch({ defaultModelId: e.target.value || null })}
                       className={cn(field, "w-auto min-w-[220px] bg-s-bg")}
                     >
-                      <option value="">First available</option>
+                      <option value="">Lowest-cost available (recommended)</option>
                       {models
                         .filter((m) => enabled(m.id))
                         .map((m) => (

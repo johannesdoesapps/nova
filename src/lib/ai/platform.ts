@@ -39,7 +39,7 @@ export const AUTO_MODEL_ID = "auto";
  * "auto:<mode>" in the model selector.
  */
 export const ROUTER_MODES = [
-  { id: "balanced", label: "Auto", blurb: "Picks a model per message by task type." },
+  { id: "balanced", label: "Auto", blurb: "The lowest-cost available model, by current prices." },
   { id: "quick", label: "Quick", blurb: "Fast, economical models first." },
   { id: "deep", label: "Deep", blurb: "Reasoning models for complex problems." },
   { id: "research", label: "Research", blurb: "Reasoning model plus web sources when search is set up." },

@@ -1,5 +1,4 @@
-import { fallbackChain, getModels, resolveModel, resolveModelChoice, type ModelChoice } from "@/lib/ai";
-import { classifyTask, pickForCapability } from "@/lib/ai/router";
+import { fallbackChain, resolveModelChoice, type ModelChoice } from "@/lib/ai";
 import { estimateCost } from "@/lib/ai/cost";
 import type { ChatMessage, ModelWithStatus } from "@/lib/ai/types";
 import { builtinAgent } from "@/lib/agents/builtins";
@@ -62,29 +61,9 @@ export async function POST(req: Request) {
         modelNotice = `${agent.name}'s preferred model isn't available, so ${choice.model.displayName} answered instead.`;
       }
     } else {
+      // No model chosen by the user or the agent's owner: the site default, which is the lowest-cost available model.
       choice = await resolveModelChoice(null, ctx);
-      // Same rules as Auto: the agent's preferred kind of model for demanding
-      // requests, a low-cost model for simple ones or when saving the allowance.
-      const all = await getModels(choice.settings);
-      const cheap = all.filter((m) => m.available && m.capabilities.includes("low-cost"));
-      const task = classifyTask(body.message);
-      const economical = preferLowCost || task.complexity === "simple";
-      const preferred =
-        pickForCapability(economical && cheap.length ? cheap : all, agent.modelPreference) ??
-        (economical && agent.modelPreference === "reasoning" ? pickForCapability(cheap, "chat") : null);
-      if (preferred) {
-        choice = {
-          ...choice,
-          model: await resolveModel(preferred.id, choice.settings),
-          routing: {
-            auto: true,
-            mode: "balanced",
-            reason: economical
-              ? `${preferred.displayName} answered: ${preferLowCost ? "saving your allowance" : "a simple request, so a low-cost model"}.`
-              : `${preferred.displayName} answered: ${agent.name} prefers ${agent.modelPreference} models for requests like this.`,
-          },
-        };
-      }
+      choice = { ...choice, routing: { auto: true, mode: "balanced", reason: choice.model.isDefault ? `${choice.model.displayName} answered: the site's default model.` : `${choice.model.displayName} answered: the lowest-cost available model (the default when no model is chosen).` } };
     }
     let model: ModelWithStatus = choice.model;
     const requestedModel = body.modelId ?? agent.modelId ?? `agent-default:${agent.modelPreference ?? "none"}`;

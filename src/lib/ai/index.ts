@@ -7,7 +7,7 @@ import { AnthropicProvider } from "./providers/anthropic";
 import { OpenAICompatibleProvider } from "./providers/openai-compatible";
 import { isAutoId, routerModeOf, type PlatformSettings, type RouterMode } from "./platform";
 import { DEFAULT_MODELS, RETIRED_MODELS, parseModelsOverride, withStatus } from "./registry";
-import { autoRoute } from "./router";
+import { autoRoute, cheapestModel } from "./router";
 import { getPlatformSettings } from "./settings";
 import type { AIProvider, Capability, ModelInfo, ModelWithStatus, ProviderId } from "./types";
 
@@ -138,7 +138,8 @@ export async function resolveModel(modelId?: string | null, settings?: PlatformS
     if (!m.available) throw new ApiError("not_configured", `${m.displayName} is unavailable: ${m.unavailableReason}.`);
     return m;
   }
-  const first = models.find((m) => m.available && m.provider !== "demo") ?? models.find((m) => m.available);
+  // No choice made: the administrator's default if one is set, otherwise the cheapest available model.
+  const first = models.find((m) => m.isDefault && m.available) ?? cheapestModel(models);
   if (!first) throw new ApiError("not_configured", "No AI model is available.");
   return first;
 }

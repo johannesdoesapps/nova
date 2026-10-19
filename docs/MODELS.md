@@ -13,21 +13,21 @@ NOVA talks to several AI providers through one server-side layer. Browsers never
 | Conversations | `src/lib/db` | Saved per user and per agent, protected by row-level security |
 | Usage and cost | `src/lib/usage.ts`, `src/lib/plans.ts` | Token usage and cost per run (when the provider reports it), 5-hour and weekly allowances (administrators have none) |
 
-## Auto mode
+## Default model and Auto mode
 
-Auto is a rule-based router, not a quality judge, and it never makes an extra model call to classify. For each message it:
+**Everyone starts on Auto, and Auto uses the lowest-cost available model.** It is compared on the current prices in the registry (`DEFAULT_MODELS`, the `model_registry` table, `NOVA_MODELS` or admin-added models), so a price change or a newly connected provider changes the default automatically.
 
-- classifies the task (everyday, summary, writing, analysis, coding, long document) and judges complexity: long requests, lots of code, or explicit signals such as "step by step", "architecture", "race condition" or "trade-offs" count as complex;
-- sends simple requests to a low-cost model and only complex ones to a stronger (reasoning) model;
-- never chooses a model whose provider isn't configured or that lacks a required capability;
-- keeps to low-cost models once 80% of the allowance is used, or when fewer units are left than two larger-model messages need — always the case on Free, so one message can't use the whole 5-hour allowance (see `docs/USAGE.md`);
-- tells the user which model answered and why (the "Auto" badge on the reply), and records the reason for admins (Admin → Request log).
+- **Ranking:** the expected price of a typical message, (3 × input + output) ÷ 4 per 1M tokens, because chats resend their history. Models with an unverified price rank after priced ones and are never assumed to be cheap.
+- **Requirements always win:** Auto only considers configured models with the capabilities the request needs. If the prompt is too long for the cheapest model's context window, it picks the cheapest model that fits.
+- **No extra model call** is made to decide, and every reply says which model answered and its price (the "Auto" badge; Admin → Request log).
+- **The user's choice is kept.** Picking a model, or a Smart Router mode (Quick, Deep, Research, Coding), is used until the user changes it. Signed-in users keep it on their account (`profiles.preferences.chatModel`), so it follows them to other devices; guests keep it on the device. Choosing Auto again returns to the lowest-cost model.
+- **Requests with no model** (API calls without a `modelId`, agents with no saved model, Mission Control plans) use the same default. If an administrator picks a specific default model in Admin, that replaces "lowest-cost" for everyone who hasn't chosen.
 
-**Coding mode** (the chip next to the message box) restricts Auto to coding-capable models and gives the coding system prompt. A message that isn't about code is still treated as what it is, so "what's the time in New York" goes to a low-cost model. Simple code questions use a low-cost coding model; hard ones use a stronger coding model. The Smart Router modes in the model menu (Quick, Deep, Research, Coding) narrow the pool the same way. A model the user picks explicitly is always used. If it's unavailable, the request fails with a clear message instead of silently switching.
+**Coding mode** (the chip next to the message box) makes Auto use the lowest-cost *coding-capable* model, and gives the coding system prompt. The Smart Router modes in the model menu (Quick, Deep, Research, Coding) narrow the pool the same way. A model the user picks explicitly is always used. If it's unavailable, the request fails with a clear message instead of silently switching.
 
-**Mission Control** plans default to Deep (a reasoning model), and task runs default to Auto. Both use low-cost models when the allowance must be saved (always on Free).
+**Mission Control** plans and task runs default to Auto.
 
-**Agents** with no model chosen follow the same rules: the agent's preferred kind of model for demanding requests, and a low-cost model for simple ones.
+**Agents** with no model chosen use the same default; an agent's saved model is the owner's choice and is kept.
 
 ## Time and live information
 

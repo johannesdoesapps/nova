@@ -7,6 +7,8 @@ export interface AppUser {
   displayName: string | null;
   /** Site administrator (can open Admin). Checked again on the server for every admin request. */
   isAdmin?: boolean;
+  /** The chat model the user chose ("auto" or a model id), saved on their account. */
+  preferredModel?: string | null;
 }
 
 export interface Recents {
@@ -31,6 +33,9 @@ interface AppState {
   recents: Recents;
   refreshRecents: () => Promise<void>;
   supabasePublic: { url: string; key: string } | null;
+  /** The signed-in user's saved model choice (null when they haven't chosen). */
+  modelChoice: string | null;
+  setModelChoice: (id: string) => void;
 }
 
 const Ctx = createContext<AppState | null>(null);
@@ -68,7 +73,20 @@ export function AppProvider({
     }
   }, [user]);
 
-  return <Ctx value={{ user, integrations, recents, refreshRecents, supabasePublic }}>{children}</Ctx>;
+  // The model choice is saved on the account, so it follows the user to other devices.
+  const [modelChoice, setChoice] = useState<string | null>(user?.preferredModel ?? null);
+  const setModelChoice = useCallback(
+    (id: string) => {
+      setChoice(id);
+      if (!user) return;
+      void fetch("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preferredModel: id }) }).catch(() => {
+        /* kept on this device; saved again on the next change */
+      });
+    },
+    [user],
+  );
+
+  return <Ctx value={{ user, integrations, recents, refreshRecents, supabasePublic, modelChoice, setModelChoice }}>{children}</Ctx>;
 }
 
 export function useApp(): AppState {

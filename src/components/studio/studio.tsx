@@ -3,9 +3,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Info } from "lucide-react";
 import { defaultModelId, useCatalog } from "@/components/common/model-picker";
-import { isAutoId } from "@/lib/ai/platform";
+import { AUTO_MODEL_ID, isAutoId } from "@/lib/ai/platform";
+import { useModelChoice } from "./use-model-choice";
 import { useApp } from "@/components/layout/app-context";
-import { useLocalStorage } from "@/hooks/use-local-storage";
 import type { ChatMode } from "@/lib/ai/modes";
 import type { ChatAttachment } from "./chat-client";
 import { Composer } from "./composer";
@@ -25,16 +25,19 @@ export function Studio() {
   const { store, refresh } = studio.history;
   const blockedGuest = integrations.supabase && !user;
 
-  // Models: remember the last choice if it is still available.
+  // Models: the user's choice while it's available; otherwise Auto (the lowest-cost
+  // available model), or that model directly when the admin has turned Auto off.
   const catalog = useCatalog();
   const models = catalog?.models ?? null;
-  const [storedModel, setStoredModel] = useLocalStorage("nova:studio:model");
+  const [storedModel, setStoredModel] = useModelChoice();
   const modelId =
     isAutoId(storedModel) && catalog?.auto.enabled
       ? storedModel!
       : models?.some((m) => m.id === storedModel && m.available)
         ? storedModel!
-        : defaultModelId(models);
+        : catalog?.auto.enabled
+          ? AUTO_MODEL_ID
+          : defaultModelId(models);
 
   const chat = useStudioChat({
     store,

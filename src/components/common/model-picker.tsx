@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import type { ModelWithStatus } from "@/lib/ai/types";
 import { Select } from "@/components/ui/primitives";
+import { cheapestModel } from "@/lib/ai/router";
 
 export interface ModelCatalog {
   models: ModelWithStatus[];
@@ -43,10 +44,10 @@ export function useModels() {
   return useCatalog()?.models ?? null;
 }
 
-/** The admin's default when set (it comes first), else the first available real model. */
+/** The admin's default when set, else the lowest-cost available model (same rule as the server). */
 export function defaultModelId(models: ModelWithStatus[] | null): string | undefined {
   if (!models) return undefined;
-  return (models.find((m) => m.available && m.isDefault) ?? models.find((m) => m.available && m.provider !== "demo") ?? models.find((m) => m.available))?.id;
+  return (models.find((m) => m.available && m.isDefault) ?? cheapestModel(models))?.id;
 }
 
 export function ModelPicker({

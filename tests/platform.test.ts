@@ -21,11 +21,14 @@ const configured = (p: Partial<Record<string, boolean>>) =>
 describe("Auto mode routing", () => {
   const models = configured({ anthropic: true, openai: true });
 
-  it("sends everyday questions to a low-cost model and analysis to a reasoning model", () => {
-    expect(autoRoute(models, "What's a good name for a cat?")!.model.capabilities).toContain("low-cost");
-    const analysis = autoRoute(models, "Evaluate the trade-offs of raising prices for our SaaS")!;
-    expect(analysis.model.capabilities).toContain("reasoning");
-    expect(analysis.reason).toMatch(/Auto chose .+ for this analysis/);
+  it("uses the lowest-cost available model for every kind of request, and says so", () => {
+    for (const q of ["What's a good name for a cat?", "Evaluate the trade-offs of raising prices for our SaaS"]) {
+      const r = autoRoute(models, q)!;
+      expect(r.model.id).toBe("anthropic:claude-haiku-5-5");
+      expect(r.reason).toMatch(/lowest-cost available model \(\$0\.1 in \/ \$0\.5 out per 1M tokens\)/);
+    }
+    // The Deep mode the user picks still uses a reasoning model.
+    expect(autoRoute(models, "Evaluate the trade-offs", { routerMode: "deep" })!.model.capabilities).toContain("reasoning");
   });
 
   it("routes writing requests to a writing model and explains the choice", () => {
@@ -34,8 +37,8 @@ describe("Auto mode routing", () => {
     expect(r.model.capabilities).toContain("writing");
   });
 
-  it("prefers low-cost models when the user's allowance is nearly used", () => {
-    const r = autoRoute(models, "Evaluate the trade-offs of raising prices", { preferLowCost: true })!;
+  it("keeps a chosen Smart Router mode to low-cost models when the allowance is nearly used", () => {
+    const r = autoRoute(models, "Evaluate the trade-offs of raising prices", { routerMode: "quick", preferLowCost: true })!;
     expect(r.model.capabilities).toContain("low-cost");
     expect(r.reason).toContain("saving your allowance");
   });

@@ -13,7 +13,8 @@ describe("Smart Router pools", () => {
   it("narrows each mode to suitable models", () => {
     expect(names(routerPool(models, "quick"))).toEqual(["Claude Haiku 5.5", "GPT-5.6 Luna"]);
     expect(names(routerPool(models, "deep"))).toEqual(["Claude Sonnet 5.5", "GPT-5.6 Terra"]);
-    expect(names(routerPool(models, "balanced"))).toHaveLength(4);
+    // Plain Auto names the single lowest-cost model it will use.
+    expect(names(routerPool(models, "balanced"))).toEqual(["Claude Haiku 5.5"]);
   });
 
   it("only ever routes to a model named for that mode", () => {

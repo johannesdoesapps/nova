@@ -4,7 +4,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DEFAULT_MODELS, withStatus } from "@/lib/ai/registry";
-import { autoRoute, classifyTask, recommendModel } from "@/lib/ai/router";
+import { autoRoute, blendedPrice, cheapestModel, classifyTask, recommendModel } from "@/lib/ai/router";
 import type { ModelWithStatus } from "@/lib/ai/types";
 
 const configured = { anthropic: true, openai: true, google: false, xai: false, deepseek: false, huggingface: false, demo: true };
@@ -20,31 +20,42 @@ describe("Auto routing", () => {
     }
   });
 
-  it("uses a stronger model only for demanding requests", () => {
+  it("uses the lowest-cost model even for demanding requests (cost-first default)", () => {
     const r = autoRoute(models, "Evaluate the trade-offs of event sourcing versus CRUD for our billing system architecture, step by step")!;
-    expect(r.model.capabilities).toContain("reasoning");
-    expect(r.complexity).toBe("complex");
+    expect(r.model.id).toBe("anthropic:claude-haiku-5-5");
   });
 
   it("with the Coding chip on, a non-code question still gets a low-cost model (the reported bug)", () => {
     const r = autoRoute(models, "whats the time in new york", { mode: "coding" })!;
     expect(lowCost(r.model)).toBe(true);
     expect(r.model.capabilities).toContain("coding");
-    expect(r.reason).toMatch(/Coding mode/);
   });
 
-  it("with the Coding chip on, picks coding models: low-cost for simple code, stronger for hard code", () => {
-    const simple = autoRoute(models, "How do I reverse an array in JavaScript?", { mode: "coding" })!;
-    expect(simple.model.capabilities).toContain("coding");
-    expect(lowCost(simple.model)).toBe(true);
-    const hard = autoRoute(models, "Find the race condition in this Go worker pool and refactor the whole scheduler for concurrency safety", { mode: "coding" })!;
-    expect(hard.model.capabilities).toEqual(expect.arrayContaining(["coding", "reasoning"]));
+  it("with the Coding chip on, picks the lowest-cost coding-capable model", () => {
+    const pricier = models.map((m) => (m.id === "anthropic:claude-haiku-5-5" ? { ...m, capabilities: m.capabilities.filter((c) => c !== "coding") } : m));
+    const r = autoRoute(pricier, "Fix this TypeError in my React component", { mode: "coding" })!;
+    expect(r.model.id).toBe("openai:gpt-5.6-luna");
+    expect(r.reason).toMatch(/for coding/);
   });
 
-  it("keeps to low-cost models when the allowance must be saved, even for hard requests", () => {
-    const r = autoRoute(models, "Prove this step by step and compare the trade-offs in depth", { preferLowCost: true })!;
-    expect(lowCost(r.model)).toBe(true);
-    expect(r.reason).toMatch(/saving your allowance/);
+  it("follows current prices: a price change changes the default", () => {
+    const repriced = models.map((m) => (m.id === "openai:gpt-5.6-luna" ? { ...m, inputPrice: 0.01, outputPrice: 0.05 } : m));
+    expect(autoRoute(repriced, "hi")!.model.id).toBe("openai:gpt-5.6-luna");
+    expect(cheapestModel(repriced)!.id).toBe("openai:gpt-5.6-luna");
+  });
+
+  it("picks a model whose context window fits a long prompt, cheapest first", () => {
+    const small = models.map((m) => (m.id === "anthropic:claude-haiku-5-5" ? { ...m, contextWindow: 8000 } : m));
+    const r = autoRoute(small, "word ".repeat(30_000))!;
+    expect(r.model.contextWindow).toBeGreaterThan(30_000);
+    expect(r.reason).toMatch(/large enough context window/);
+  });
+
+  it("ranks by expected price, with unpriced models last", () => {
+    expect(blendedPrice({ inputPrice: 0.1, outputPrice: 0.5 })).toBeCloseTo(0.2);
+    expect(blendedPrice({ inputPrice: null, outputPrice: 0.5 })).toBeNull();
+    const unpricedCheapLooking = models.map((m) => (m.id === "anthropic:claude-haiku-5-5" ? { ...m, inputPrice: null } : m));
+    expect(cheapestModel(unpricedCheapLooking)!.id).toBe("openai:gpt-5.6-luna");
   });
 
   it("respects the Deep and Coding Smart Router modes", () => {
