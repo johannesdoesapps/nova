@@ -100,22 +100,25 @@ verifying → completed, plus failed, blocked, cancelled, needs attention and pa
 
 ## Production run (2026-10-19)
 
-A real task ("add a clamp utility with tests") was run on the live deployment against
-`johannesdoesapps/nova`:
+A real task ("add a clamp utility with tests", Collaborate mode, $3 budget) was run on the
+live deployment against `johannesdoesapps/nova`, with Claude models:
 
-- Verified: project registration detected the real checks (typecheck, lint, test, build);
-  Nova DevOps created a Vercel Sandbox (deny-all network after install) and cloned the repo
-  at `c74c190` in about 19 s; the Archaeologist listed 456 files and searched them; the
-  budget gate blocked the unpriced model as designed; Retry recreated the workspace; the
-  failed task stopped its sandbox. Every step is in the task's audit log.
-- Not reached: every model call failed because the deployment's `OPENAI_API_KEY` contains
-  spaces or invalid characters (ordinary chat fails the same way). No plan, edit or
-  verification was produced, and none is claimed. After re-pasting the key, run a task again.
-- Found and fixed: Retry/Rework left the previous workspace running when the task had been
-  blocked rather than failed; it is now stopped first (covered by a test).
+- **Result: completed and verified** in about 5 minutes for $0.06 (32,513 tokens).
+  Archaeologist (Claude Haiku 5.5) mapped the code; Architect (Claude Sonnet 5.5) planned
+  2 files at low risk; the plan was approved; Builder wrote `clamp()` in `src/lib/utils.ts`
+  and `tests/clamp.test.ts` (below-min, above-max, in-range, NaN); Sentinel and Reviewer
+  reviewed it; typecheck, lint, tests (before and after the change) and the production
+  build all passed (exit 0) in a Vercel Sandbox; the workspace was stopped afterwards.
+  Nothing was pushed: the diff stays on the task for a person to apply.
+- The first attempts failed honestly: the OpenAI key in the deployment is malformed, and
+  OpenAI models are unpriced (see below). They also exposed three bugs, now fixed and covered
+  by tests: Retry left the old workspace running; Retry reused steps still marked running
+  from the first attempt (their timeout counted from then); after an approval expired, the
+  plan gate asked again on every tick. Approvals for finished tasks are now refused.
 - OpenAI prices are not in the model registry, so Workforce refuses OpenAI models unless
   **Allow unpriced models** is turned on in Workforce → Settings (budgets then count tokens
-  and calls, not dollars).
+  and calls, not dollars). While the OpenAI key is broken, pick Claude models per agent in
+  Workforce → Settings so Auto mode cannot route to OpenAI.
 
 ## Setup
 
