@@ -25,6 +25,8 @@ Auto is a rule-based router, not a quality judge, and it never makes an extra mo
 
 **Coding mode** (the chip next to the message box) restricts Auto to coding-capable models and gives the coding system prompt. A message that isn't about code is still treated as what it is, so "what's the time in New York" goes to a low-cost model. Simple code questions use a low-cost coding model; hard ones use a stronger coding model. The Smart Router modes in the model menu (Quick, Deep, Research, Coding) narrow the pool the same way. A model the user picks explicitly is always used. If it's unavailable, the request fails with a clear message instead of silently switching.
 
+**Mission Control** plans default to Deep (a reasoning model), and task runs default to Auto. Both use low-cost models when the allowance must be saved (always on Free).
+
 **Agents** with no model chosen follow the same rules: the agent's preferred kind of model for demanding requests, and a low-cost model for simple ones.
 
 ## Time and live information
@@ -37,6 +39,7 @@ Models don't know the current date, so every chat and agent turn gets trusted ti
   - `convert_time(time, from, to)`, which flags times skipped or repeated by daylight saving;
   - `calculate_date` for today, tomorrow, "in 2 weeks", "next Friday", "days until Christmas" and weekdays of dates, on the user's local calendar.
 - **Places and abbreviations** (New York, Zürich, EST…) map to IANA zones. All arithmetic uses the IANA database, so DST and rule changes are handled. An unknown place is reported as unknown rather than guessed.
+- **Every feature gets the same time context.** The browser sends its time zone with every API call (`X-Nova-Time-Zone`), and `withTimeContext()` adds the trusted time block to the prompts of Council, Arena, Mission Control (plans and task runs) and search answers too.
 - **Live information:** if a message asks about news, prices, weather or scores and no web search ran, the model is told to say it can't check live information rather than present memory as current.
 
 ## Conversation context

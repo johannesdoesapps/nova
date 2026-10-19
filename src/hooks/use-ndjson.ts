@@ -26,7 +26,7 @@ export async function* postNdjson<T = Record<string, unknown>>(
 ): AsyncGenerator<T> {
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...timeZoneHeader() },
     body: JSON.stringify(body),
     signal,
   });
@@ -51,9 +51,19 @@ export async function* postNdjson<T = Record<string, unknown>>(
 export async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: { "Content-Type": "application/json", ...timeZoneHeader(), ...(init?.headers ?? {}) },
   });
   if (!res.ok) throw new Error(await readApiError(res));
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+/** The browser's IANA time zone, sent with every API call so server-side prompts can use the user's local time. */
+function timeZoneHeader(): Record<string, string> {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return tz ? { "X-Nova-Time-Zone": tz } : {};
+  } catch {
+    return {};
+  }
 }

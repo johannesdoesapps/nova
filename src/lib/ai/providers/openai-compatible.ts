@@ -100,7 +100,7 @@ export class OpenAICompatibleProvider implements AIProvider {
     const j = (await res.json()) as {
       model?: string;
       choices?: { message?: { content?: string | null } }[];
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
+      usage?: OpenAIUsage;
     };
     return {
       text: j.choices?.[0]?.message?.content ?? "",
@@ -119,7 +119,7 @@ export class OpenAICompatibleProvider implements AIProvider {
       let j: {
         model?: string;
         choices?: { delta?: { content?: string | null } }[];
-        usage?: { prompt_tokens?: number; completion_tokens?: number } | null;
+        usage?: OpenAIUsage | null;
       };
       try {
         j = JSON.parse(data);
@@ -137,11 +137,15 @@ export class OpenAICompatibleProvider implements AIProvider {
   }
 }
 
-function toUsage(u?: { prompt_tokens?: number; completion_tokens?: number } | null): Usage {
+/** OpenAI-style usage; DeepSeek reports cache hits as prompt_cache_hit_tokens. */
+type OpenAIUsage = { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } | null; prompt_cache_hit_tokens?: number };
+
+function toUsage(u?: OpenAIUsage | null): Usage {
   return {
     inputTokens: u?.prompt_tokens ?? null,
     outputTokens: u?.completion_tokens ?? null,
     estimated: false,
+    cachedInputTokens: u?.prompt_tokens_details?.cached_tokens ?? u?.prompt_cache_hit_tokens ?? null,
   };
 }
 

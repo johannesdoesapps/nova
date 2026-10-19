@@ -213,6 +213,7 @@ export async function recordRun(auth: AuthContext, run: RunRecord): Promise<void
     latency_ms: Math.round(run.latencyMs),
     input_tokens: run.usage.inputTokens,
     output_tokens: run.usage.outputTokens,
+    cached_input_tokens: run.usage.cachedInputTokens ?? null,
     estimated_cost: estimateCost(run.model, run.usage),
     status: run.status,
     purpose: run.purpose ?? null,

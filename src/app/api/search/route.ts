@@ -11,6 +11,7 @@ import type { SearchSource } from "@/lib/search/types";
 import { webSearch } from "@/lib/search/web";
 import { enforceLimits, recordRun } from "@/lib/usage";
 import { searchRequest } from "@/lib/validation";
+import { withTimeContext } from "@/lib/ai/turn-context";
 
 export const maxDuration = 60;
 
@@ -55,7 +56,7 @@ export async function POST(req: Request) {
       }
 
       // 2. Generate a grounded answer.
-      const messages = buildSearchMessages(body.query, sources, body.history);
+      const messages = withTimeContext(buildSearchMessages(body.query, sources, body.history), req);
       const provider = getProvider(model.provider);
       const started = performance.now();
       let raw = "";

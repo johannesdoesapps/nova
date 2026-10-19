@@ -6,8 +6,10 @@ import { finishRun, getMission, getTask, startRun, updateTask } from "@/lib/db/m
 import { ApiError, errorResponse, ndjsonStream, parseJsonBody } from "@/lib/http";
 import { taskRunMessages } from "@/lib/missions/prompts";
 import { taskRunRequest } from "@/lib/missions/schema";
-import { enforceLimits, recordRun } from "@/lib/usage";
+import { enforceLimits, recordRun, shouldSaveAllowance } from "@/lib/usage";
 import { uuid } from "@/lib/validation";
+import { withTimeContext } from "@/lib/ai/turn-context";
+import { isAutoId } from "@/lib/ai/platform";
 
 export const maxDuration = 60;
 
@@ -29,18 +31,22 @@ export async function POST(req: Request, ctx: RouteContext<"/api/missions/tasks/
     if (mission.status === "archived") throw new ApiError("bad_request", "This mission is archived.");
     if (task.status === "cancelled") throw new ApiError("bad_request", "This task is cancelled.");
 
-    const { model, routing } = await resolveModelChoice(body.modelId ?? "auto", { prompt: `${task.title}\n${task.description}` });
+    const requested = body.modelId ?? "auto";
+    const { model, routing } = await resolveModelChoice(requested, {
+      prompt: `${task.title}\n${task.description}`,
+      preferLowCost: isAutoId(requested) ? await shouldSaveAllowance(auth) : false,
+    });
     if (model.provider === "demo") throw new ApiError("not_configured", "Running tasks needs a real AI provider. An administrator can add one in Admin.");
-    await enforceLimits(req, auth, 1, [model]);
+    await enforceLimits(req, auth, 1, [model], { purpose: "mission-task" });
 
-    const messages = taskRunMessages({
+    const messages = withTimeContext(taskRunMessages({
       missionName: mission.name,
       goal: mission.goal ?? "",
       task: { title: task.title, description: task.description, milestone: task.milestone },
       siblings: tasks.filter((t) => t.id !== task.id).map((t) => ({ title: t.title, status: t.status })),
       completedOutputs: tasks.filter((t) => t.id !== task.id && t.status === "completed" && t.output).map((t) => ({ title: t.title, output: t.output! })),
       instruction: body.instruction,
-    });
+    }), req);
     const runId = await startRun(auth.supabase, auth.user.id, task, model.id);
 
     return ndjsonStream(async (send, signal) => {

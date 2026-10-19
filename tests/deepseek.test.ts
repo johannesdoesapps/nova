@@ -47,7 +47,7 @@ describe("DeepSeek provider", () => {
     }
     expect(text).toBe("你好, hello!");
     expect(served).toBe("deepseek-flash");
-    expect(usage).toEqual({ inputTokens: 12, outputTokens: 4, estimated: false });
+    expect(usage).toEqual({ inputTokens: 12, outputTokens: 4, estimated: false, cachedInputTokens: null });
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://api.deepseek.com/v1/chat/completions");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer sk-ds-test");

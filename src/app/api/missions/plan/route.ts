@@ -5,7 +5,8 @@ import { requireUser } from "@/lib/auth";
 import { errorResponse, parseJsonBody, ApiError } from "@/lib/http";
 import { parsePlan, planMessages } from "@/lib/missions/prompts";
 import { planRequest } from "@/lib/missions/schema";
-import { enforceLimits, recordRun } from "@/lib/usage";
+import { enforceLimits, recordRun, shouldSaveAllowance } from "@/lib/usage";
+import { withTimeContext } from "@/lib/ai/turn-context";
 
 export const maxDuration = 60;
 
@@ -17,10 +18,13 @@ export async function POST(req: Request) {
   try {
     const body = await parseJsonBody(req, planRequest);
     const auth = await requireUser();
-    const { model, routing } = await resolveModelChoice(body.modelId ?? "auto:deep", { prompt: body.goal });
-    await enforceLimits(req, auth, 1, [model]);
+    // Planning defaults to Deep (a reasoning model), except when the user's allowance must be
+    // saved (always on Free): then Auto picks a low-cost model, as everywhere else.
+    const save = await shouldSaveAllowance(auth);
+    const { model, routing } = await resolveModelChoice(body.modelId ?? (save ? "auto" : "auto:deep"), { prompt: body.goal, preferLowCost: save });
+    await enforceLimits(req, auth, 1, [model], { purpose: "mission-plan" });
     if (model.provider === "demo") throw new ApiError("not_configured", "Planning needs a real AI provider. An administrator can add one in Admin.");
-    const messages = planMessages(body.goal);
+    const messages = withTimeContext(planMessages(body.goal), req);
     const started = performance.now();
     const r = await getProvider(model.provider).generate({ model, messages, maxOutputTokens: 3000, signal: withTimeout(55_000, req.signal) });
     void recordRun(auth, {

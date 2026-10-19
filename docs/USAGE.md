@@ -18,6 +18,7 @@ Every signed-in user also has the per-minute rate limit (`NOVA_RATE_LIMIT_PER_MI
 ## What a request costs
 
 - **Units by model:** 1 for models tagged `low-cost`, 15 for larger ones. Admins can override per model in Admin → Models. This is a message allowance, not a money budget. Estimated cost in USD is recorded separately for each run (`estimated_cost`, from provider-reported tokens where available).
+- **Tokens:** input and output tokens are provider-reported where available (`estimated = false`), otherwise estimated locally. Prompt-cache hits are recorded separately as `cached_input_tokens`. They're included in the input count, so the estimated cost is a slight over-estimate when the cache is used.
 - **The model that actually answered is charged.** If Sonnet fails and a backup model answers, the backup's units are charged.
 - **Refunds:** a call that failed before producing any output is charged 0 units. A reply cut off part-way is charged, because the provider bills it.
 - **Not charged:** requests refused before a model ran (validation, limits, duplicates).

@@ -113,7 +113,7 @@ describe("OpenAI-compatible provider", () => {
     const sse = [
       { choices: [{ delta: { content: "Hel" } }] },
       { choices: [{ delta: { content: "lo" } }] },
-      { choices: [], usage: { prompt_tokens: 7, completion_tokens: 2 } },
+      { choices: [], usage: { prompt_tokens: 7, completion_tokens: 2, prompt_tokens_details: { cached_tokens: 4 } } },
     ]
       .map((j) => `data: ${JSON.stringify(j)}\n\n`)
       .join("") + "data: [DONE]\n\n";
@@ -127,7 +127,7 @@ describe("OpenAI-compatible provider", () => {
       else if (ev.type === "usage") usage = ev.usage;
     }
     expect(text).toBe("Hello");
-    expect(usage).toEqual({ inputTokens: 7, outputTokens: 2, estimated: false });
+    expect(usage).toEqual({ inputTokens: 7, outputTokens: 2, estimated: false, cachedInputTokens: 4 });
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://example.test/v1/chat/completions");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer sk-test");

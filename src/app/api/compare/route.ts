@@ -8,6 +8,7 @@ import { serverEnv } from "@/lib/env";
 import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
 import { enforceLimits, recordRun } from "@/lib/usage";
 import { compareRequest } from "@/lib/validation";
+import { withTimeContext } from "@/lib/ai/turn-context";
 
 export const maxDuration = 60;
 
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
     await enforceLimits(req, auth, ids.length);
 
     const registry = await getModels();
-    const messages: ChatMessage[] = [
+    const messages: ChatMessage[] = withTimeContext([
       {
         role: "system",
         content:
@@ -51,7 +52,7 @@ export async function POST(req: Request) {
           "You are a helpful assistant. Answer accurately and concisely. Do not invent facts, citations or numbers.",
       },
       { role: "user", content: body.prompt },
-    ];
+    ], req);
 
     const results = await Promise.all(
       ids.map(async (id): Promise<CompareResult> => {

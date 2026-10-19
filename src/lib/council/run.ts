@@ -4,6 +4,7 @@ import { estimateCost, estimateTokens } from "../ai/cost";
 import { isAutoId } from "../ai/platform";
 import type { ChatMessage, Usage } from "../ai/types";
 import { requireUserIfConfigured } from "../auth";
+import { withTimeContext } from "../ai/turn-context";
 import { ApiError, ndjsonStream } from "../http";
 import { enforceLimits, recordRun } from "../usage";
 
@@ -20,7 +21,8 @@ export async function streamStep(
   if (isAutoId(opts.modelId)) throw new ApiError("bad_request", "Choose specific models for Council and Arena.");
   const auth = await requireUserIfConfigured();
   const model = await resolveModel(opts.modelId);
-  await enforceLimits(req, auth, 1, [model]);
+  await enforceLimits(req, auth, 1, [model], { purpose: opts.purpose });
+  const messages = withTimeContext(opts.messages, req);
 
   return ndjsonStream(async (send, signal) => {
     send({ type: "meta", model: { id: model.id, displayName: model.displayName, provider: model.provider } });
@@ -32,7 +34,7 @@ export async function streamStep(
     try {
       for await (const ev of getProvider(model.provider).stream({
         model,
-        messages: opts.messages,
+        messages,
         maxOutputTokens: opts.maxOutputTokens,
         signal: withTimeout(55_000, signal),
       })) {
@@ -46,7 +48,7 @@ export async function streamStep(
       status = "error";
       throw err;
     } finally {
-      usage ??= { inputTokens: estimateTokens(opts.messages), outputTokens: estimateTokens(text), estimated: true };
+      usage ??= { inputTokens: estimateTokens(messages), outputTokens: estimateTokens(text), estimated: true };
       void recordRun(auth, {
         model,
         prompt: opts.prompt.slice(0, 4000),

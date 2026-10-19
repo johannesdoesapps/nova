@@ -47,6 +47,8 @@ export interface Usage {
   outputTokens: number | null;
   /** True when tokens were estimated locally rather than reported by the provider. */
   estimated: boolean;
+  /** Input tokens served from the provider's prompt cache (included in inputTokens), when reported. */
+  cachedInputTokens?: number | null;
 }
 
 export interface GenerateParams {

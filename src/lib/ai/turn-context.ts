@@ -3,7 +3,8 @@
  * time-tool results for this message, and an honest note when the message
  * asks for live information that no tool fetched. Built fresh per request.
  */
-import { timeContext, timePrompt } from "../time/context";
+import { timeContext, timePrompt, timeSystemBlock } from "../time/context";
+import type { ChatMessage } from "./types";
 
 /** A tool NOVA ran on the server for this turn, as shown under the reply. */
 export interface TurnTool {
@@ -46,4 +47,21 @@ export function buildTurnContext(message: string, opts: { timeZone?: string | nu
     );
   }
   return { system: parts.join("\n\n"), tools };
+}
+
+/** The user's time zone as their browser reported it (body field first, then the X-Nova-Time-Zone header). */
+export function requestTimeZone(req: Request, bodyTimeZone?: string | null): string | null {
+  return bodyTimeZone ?? req.headers.get("x-nova-time-zone");
+}
+
+/**
+ * Add trusted time context to a feature's own prompt (Council, Arena, Mission
+ * Control, search answers…), so every model call knows today's date. Appended
+ * to the first system message, or added as one.
+ */
+export function withTimeContext(messages: ChatMessage[], req: Request, now?: Date): ChatMessage[] {
+  const block = timeSystemBlock(timeContext(requestTimeZone(req), now));
+  const i = messages.findIndex((m) => m.role === "system");
+  if (i === -1) return [{ role: "system", content: block }, ...messages];
+  return messages.map((m, j) => (j === i ? { ...m, content: `${m.content}\n\n${block}` } : m));
 }

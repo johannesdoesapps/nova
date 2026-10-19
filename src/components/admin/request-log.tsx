@@ -18,6 +18,7 @@ interface RequestRow {
   error_code: string | null;
   latency_ms: number | null;
   input_tokens: number | null;
+  cached_input_tokens: number | null;
   output_tokens: number | null;
   units: number | string | null;
   entitlement: string | null;
@@ -103,7 +104,7 @@ export function RequestLog() {
               </p>
               {r.routing_reason && <p className="mt-0.5 text-s-ink-3">{r.routing_reason}</p>}
               <p className="mt-0.5 text-s-ink-3">
-                {r.latency_ms != null ? `${(r.latency_ms / 1000).toFixed(1)} s` : "—"} · {r.input_tokens ?? "?"} in / {r.output_tokens ?? "?"} out tokens
+                {r.latency_ms != null ? `${(r.latency_ms / 1000).toFixed(1)} s` : "—"} · {r.input_tokens ?? "?"} in{r.cached_input_tokens ? ` (${r.cached_input_tokens} cached)` : ""} / {r.output_tokens ?? "?"} out tokens
                 {r.estimated_cost != null ? ` · $${Number(r.estimated_cost).toFixed(5)}` : ""}
                 {r.request_id ? ` · request ${r.request_id.slice(0, 8)}` : ""}
               </p>
