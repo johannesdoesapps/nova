@@ -374,13 +374,17 @@ describe("Commander: limits, approvals and control", () => {
   });
 
   it("holds new assignments for a disabled agent and resumes after Retry", async () => {
-    const { rt, store } = setup({ settings: { disabledAgents: ["architect"] } });
+    const { rt, store, ws } = setup({ settings: { disabledAgents: ["architect"] } });
     const t = await newTask(rt, store);
     const r = await run(rt, t.id);
     expect(r.status).toBe("needs_attention");
     expect(r.status_reason).toMatch(/Nova Architect is disabled/);
     store.settings = parseSettings({ maxAutonomy: "execute" });
+    const first = ws();
+    expect(first.stopped).toBe(false);
     await retryTask(rt, t.id);
+    // The retry recreates the workspace, so the one kept alive while blocked must be stopped.
+    expect(first.stopped).toBe(true);
     expect((await run(rt, t.id)).status).toBe("awaiting_approval");
   });
 

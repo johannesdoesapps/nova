@@ -514,8 +514,9 @@ export async function retryTask(rt: Runtime, taskId: string) {
   for (const s of retryable) await rt.store.updateStep(s.id, { status: "pending", attempt: 0, error: null, state: {} });
   const prep = steps.find((s) => s.key === "prepare");
   if (prep?.status === "succeeded" && task.status !== "blocked") {
-    // The workspace was stopped when the task finished; recreate it with the stored diff.
+    // Stop the old workspace (a blocked task keeps it running) and recreate it from the stored diff.
     await rt.store.updateStep(prep.id, { status: "pending", attempt: 0, output: null, state: {} });
+    await finalize(rt, taskId, { stop: true });
     const n = Number((task.sandbox_name ?? "-1").split("-").pop()) + 1;
     await rt.store.updateTask(taskId, { sandbox_name: `wf-${taskId.slice(0, 8)}-${n}` });
   }
@@ -536,6 +537,7 @@ export async function reworkTask(rt: Runtime, taskId: string, note: string) {
   await rt.store.updateStep(build.id, { status: "pending", attempt: 0, output: null, state: { feedback } });
   const prep = steps.find((s) => s.key === "prepare")!;
   await rt.store.updateStep(prep.id, { status: "pending", attempt: 0, output: null, state: {} });
+  await finalize(rt, taskId, { stop: true });
   const n = Number((task.sandbox_name ?? "-1").split("-").pop()) + 1;
   await rt.store.updateTask(taskId, { status: "running", status_reason: null, verification: null, report: null, finished_at: null, sandbox_name: `wf-${taskId.slice(0, 8)}-${n}` });
   await rt.store.addEvent({ task_id: taskId, level: "audit", type: "task.rework", message: `Rework requested${note ? `: ${note}` : ""}` });

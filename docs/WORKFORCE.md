@@ -98,6 +98,25 @@ verifying → completed, plus failed, blocked, cancelled, needs attention and pa
 - Only npm projects on GitHub; private repositories need `GITHUB_TOKEN`.
 - Costs are estimates; sandbox time is reported as minutes, not dollars.
 
+## Production run (2026-10-19)
+
+A real task ("add a clamp utility with tests") was run on the live deployment against
+`johannesdoesapps/nova`:
+
+- Verified: project registration detected the real checks (typecheck, lint, test, build);
+  Nova DevOps created a Vercel Sandbox (deny-all network after install) and cloned the repo
+  at `c74c190` in about 19 s; the Archaeologist listed 456 files and searched them; the
+  budget gate blocked the unpriced model as designed; Retry recreated the workspace; the
+  failed task stopped its sandbox. Every step is in the task's audit log.
+- Not reached: every model call failed because the deployment's `OPENAI_API_KEY` contains
+  spaces or invalid characters (ordinary chat fails the same way). No plan, edit or
+  verification was produced, and none is claimed. After re-pasting the key, run a task again.
+- Found and fixed: Retry/Rework left the previous workspace running when the task had been
+  blocked rather than failed; it is now stopped first (covered by a test).
+- OpenAI prices are not in the model registry, so Workforce refuses OpenAI models unless
+  **Allow unpriced models** is turned on in Workforce → Settings (budgets then count tokens
+  and calls, not dollars).
+
 ## Setup
 
 1. Apply `supabase/migrations/20261019100000_workforce.sql`.
