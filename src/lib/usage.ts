@@ -76,7 +76,10 @@ export async function enforceLimits(
     extraCostUsd?: number;
     /** How long the hold lasts if the request never records a run, in seconds. */
     ttlSeconds?: number;
-    /** False for requests that aren't chat messages (code runs): the daily message cap doesn't apply. */
+    /**
+     * False for requests that aren't model calls (code runs): the daily message cap, the 5-hour and weekly
+     * units and the token cap don't apply. Duplicates, money budgets and caps still do.
+     */
     countsAsMessage?: boolean;
   } = {},
 ): Promise<UsageTicket> {
@@ -126,20 +129,21 @@ export async function enforceLimits(
   const period = budgetPeriod(entitlement);
   const fb = fallbackPrices(all);
   const plan = entitlement.limits;
+  const noModelCaps = unlimited || opts.countsAsMessage === false;
 
   // Accounts without an allowance still reserve, with no limit, so duplicate submissions are refused for everyone.
   const { data, error } = await auth.supabase.rpc("usage_reserve_v4", {
     p_request_id: requestId,
     p_units: units,
-    p_window_limit: unlimited ? NO_LIMIT : plan.windowUnits,
-    p_week_limit: unlimited ? NO_LIMIT : plan.weeklyUnits,
+    p_window_limit: noModelCaps ? NO_LIMIT : plan.windowUnits,
+    p_week_limit: noModelCaps ? NO_LIMIT : plan.weeklyUnits,
     p_est_cost_usd: Math.round(estCostUsd * 1_000_000) / 1_000_000,
     p_est_tokens: estTokens,
     p_budget_usd: econ ? econ.aiBudgetUsd : null,
     p_premium_budget_usd: econ ? econ.premiumBudgetUsd : null,
     p_premium: premium,
-    p_daily_limit: unlimited || opts.countsAsMessage === false ? 0 : plan.dailyMessages,
-    p_token_limit: unlimited ? 0 : plan.monthlyTokens,
+    p_daily_limit: noModelCaps ? 0 : plan.dailyMessages,
+    p_token_limit: noModelCaps ? 0 : plan.monthlyTokens,
     p_period_start: new Date(period.start).toISOString(),
     p_fallback_in: fb.input,
     p_fallback_out: fb.output,

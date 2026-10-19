@@ -108,11 +108,11 @@ describe("usage policy", () => {
     expect(t.estCostUsd).toBeGreaterThan(0);
   });
 
-  it("reserves a code run without units or the daily message cap, holding its sandbox cost", async () => {
+  it("reserves a code run without the message, unit or token caps, holding its sandbox cost against the budget", async () => {
     const { auth, rpc } = fakeAuth();
     const t = await enforceLimits(req(), auth, 0, undefined, { purpose: "code_run", inputTokens: 0, maxOutputTokens: 0, extraCostUsd: 0.0016, ttlSeconds: 120, countsAsMessage: false });
     expect(t).toMatchObject({ units: 0, estCostUsd: 0.0016 });
-    expect(rpc[0]![1]).toMatchObject({ p_units: 0, p_daily_limit: 0, p_est_cost_usd: 0.0016, p_est_tokens: 0, p_purpose: "code_run", p_ttl_seconds: 120, p_budget_usd: 0.1 });
+    expect(rpc[0]![1]).toMatchObject({ p_units: 0, p_daily_limit: 0, p_token_limit: 0, p_window_limit: 1_000_000_000, p_week_limit: 1_000_000_000, p_est_cost_usd: 0.0016, p_est_tokens: 0, p_purpose: "code_run", p_ttl_seconds: 120, p_budget_usd: 0.1 });
   });
 
   it("uses Pro and Max limits only for an active subscription", async () => {
