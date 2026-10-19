@@ -68,7 +68,8 @@ describe("POST /api/code/run", () => {
     const res = await post({ language: "py", code: "print(2 + 3)", requestId: RID });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ stdout: "5\n", exitCode: 0, runsLeft: DEFAULT_BILLING.plans.pro.codeRunsPerPeriod - 1, timeLimitSeconds: 30 });
-    expect(vi.mocked(enforceLimits).mock.calls[0]![4]).toMatchObject({ requestId: RID, purpose: "code_run", extraCostUsd: expect.any(Number) });
+    // A run isn't a chat message: Free's daily message cap doesn't apply to it.
+    expect(vi.mocked(enforceLimits).mock.calls[0]![4]).toMatchObject({ requestId: RID, purpose: "code_run", extraCostUsd: expect.any(Number), countsAsMessage: false });
     expect(state.run).toHaveBeenCalledWith(expect.objectContaining({ language: "python", code: "print(2 + 3)", seconds: 30 }));
     expect(state.inserts[0]).toMatchObject({ model_id: "vercel:sandbox", purpose: "code_run", tools: ["code_run"], units: 0, request_id: RID, prompt: "Python code run" });
     expect(Number(state.inserts[0]!.estimated_cost)).toBeGreaterThan(0);

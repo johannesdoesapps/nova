@@ -76,6 +76,8 @@ export async function enforceLimits(
     extraCostUsd?: number;
     /** How long the hold lasts if the request never records a run, in seconds. */
     ttlSeconds?: number;
+    /** False for requests that aren't chat messages (code runs): the daily message cap doesn't apply. */
+    countsAsMessage?: boolean;
   } = {},
 ): Promise<UsageTicket> {
   const env = serverEnv();
@@ -136,7 +138,7 @@ export async function enforceLimits(
     p_budget_usd: econ ? econ.aiBudgetUsd : null,
     p_premium_budget_usd: econ ? econ.premiumBudgetUsd : null,
     p_premium: premium,
-    p_daily_limit: unlimited ? 0 : plan.dailyMessages,
+    p_daily_limit: unlimited || opts.countsAsMessage === false ? 0 : plan.dailyMessages,
     p_token_limit: unlimited ? 0 : plan.monthlyTokens,
     p_period_start: new Date(period.start).toISOString(),
     p_fallback_in: fb.input,

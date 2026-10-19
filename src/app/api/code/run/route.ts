@@ -45,6 +45,7 @@ export async function POST(req: Request) {
       maxOutputTokens: 0,
       extraCostUsd: maxCodeRunCostUsd(billing.codeRunSeconds),
       ttlSeconds: billing.codeRunSeconds + 90,
+      countsAsMessage: false,
     });
     const allowance = await checkRunAllowance(auth, ticket.requestId);
 
