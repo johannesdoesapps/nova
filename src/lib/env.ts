@@ -34,6 +34,8 @@ export function serverEnv() {
     openaiBaseUrl: clean(process.env.OPENAI_BASE_URL) ?? "https://api.openai.com/v1",
     geminiKey: clean(process.env.GEMINI_API_KEY),
     geminiBaseUrl: clean(process.env.GEMINI_BASE_URL) ?? "https://generativelanguage.googleapis.com/v1beta/openai",
+    xaiKey: clean(process.env.XAI_API_KEY),
+    xaiBaseUrl: clean(process.env.XAI_BASE_URL) ?? "https://api.x.ai/v1",
     deepseekKey: clean(process.env.DEEPSEEK_API_KEY),
     deepseekBaseUrl: clean(process.env.DEEPSEEK_BASE_URL) ?? "https://api.deepseek.com/v1",
     huggingfaceKey: clean(process.env.HUGGINGFACE_API_KEY),
@@ -55,7 +57,7 @@ export function serverEnv() {
 }
 
 export type IntegrationStatus = {
-  id: "supabase" | "anthropic" | "openai" | "google" | "deepseek" | "huggingface" | "search" | "sentry" | "engine";
+  id: "supabase" | "anthropic" | "openai" | "google" | "xai" | "deepseek" | "huggingface" | "search" | "sentry" | "engine";
   label: string;
   configured: boolean;
   envVars: string[];
@@ -93,6 +95,13 @@ export function integrationStatus(): IntegrationStatus[] {
       configured: Boolean(env.geminiKey),
       envVars: ["GEMINI_API_KEY"],
       purpose: "Gemini models for chat and agents",
+    },
+    {
+      id: "xai",
+      label: "xAI (Grok)",
+      configured: Boolean(env.xaiKey),
+      envVars: ["XAI_API_KEY"],
+      purpose: "Grok models for chat and agents",
     },
     {
       id: "deepseek",

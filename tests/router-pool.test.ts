@@ -11,8 +11,8 @@ const PROMPTS = ["hi", "Summarise this article in three bullets", "Prove that th
 
 describe("Smart Router pools", () => {
   it("narrows each mode to suitable models", () => {
-    expect(names(routerPool(models, "quick"))).toEqual(["Claude Haiku 5.5", "GPT-5 mini"]);
-    expect(names(routerPool(models, "deep"))).toEqual(["Claude Sonnet 5.5", "GPT-5"]);
+    expect(names(routerPool(models, "quick"))).toEqual(["Claude Haiku 5.5", "GPT-5.6 Luna"]);
+    expect(names(routerPool(models, "deep"))).toEqual(["Claude Sonnet 5.5", "GPT-5.6 Terra"]);
     expect(names(routerPool(models, "balanced"))).toHaveLength(4);
   });
 

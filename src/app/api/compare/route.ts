@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getModels, getProvider, withTimeout } from "@/lib/ai";
 import { estimateCost, estimateTokens } from "@/lib/ai/cost";
+import { RETIRED_MODELS } from "@/lib/ai/registry";
 import type { ChatMessage, ModelWithStatus } from "@/lib/ai/types";
 import { requireUserIfConfigured } from "@/lib/auth";
 import { serverEnv } from "@/lib/env";
@@ -54,7 +55,8 @@ export async function POST(req: Request) {
 
     const results = await Promise.all(
       ids.map(async (id): Promise<CompareResult> => {
-        const model: ModelWithStatus | undefined = registry.find((m) => m.id === id);
+        const current = registry.some((m) => m.id === id) ? id : (RETIRED_MODELS[id]?.replacement ?? id);
+        const model: ModelWithStatus | undefined = registry.find((m) => m.id === current);
         if (!model) {
           return blank(id, id, "unknown", `Unknown model "${id}".`);
         }

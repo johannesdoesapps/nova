@@ -62,6 +62,7 @@ Total time is about 30–45 minutes the first time.
    | `ANTHROPIC_API_KEY` | your Anthropic key (Claude Haiku 5.5 becomes the default model) |
 | `OPENAI_API_KEY` | your OpenAI key (optional) |
    | `GEMINI_API_KEY` | your Google Gemini key (optional) |
+   | `XAI_API_KEY` | your xAI key for Grok (optional) |
    | `DEEPSEEK_API_KEY` | your DeepSeek key (optional) |
    | `NOVA_DAILY_REQUEST_LIMIT` | `30` (guest requests per day; signed-in users follow the plan limits in `src/lib/plans.ts`) |
    | `NOVA_RATE_LIMIT_PER_MINUTE` | `10` |

@@ -79,7 +79,7 @@ The app starts with zero configuration. Add keys incrementally:
 | `NOVA_ENGINE_URL`, `NOVA_ENGINE_SECRET` | Web ↔ engine connection; the secret signs short-lived user identities and **must match on both services** | `openssl rand -base64 32` |
 | `NOVA_TOKEN_KEYS` (engine) | Encrypts OAuth tokens at rest (`kid:base64key`, newest first for rotation) | `kid1:$(openssl rand -base64 32)` |
 | `NOVA_ENGINE_DATABASE_URL` (engine) | Engine database; SQLite by default, Postgres (Supabase pooler) in production | `postgresql+psycopg://…` |
-| `NOVA_MODEL_PRICES` (engine) | Verified prices for workflow cost limits | `{"openai:gpt-5-mini":[0.25,2.0]}` (example only) |
+| `NOVA_MODEL_PRICES` (engine) | Verified prices for workflow cost limits | `{"openai:gpt-5.6-luna":[0.2,1.2]}` (example only) |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` (engine) | GitHub OAuth for issue creation (public mirroring works without) | GitHub → Developer settings → OAuth Apps |
 | `NOVA_PRIVACY_PROFILES` | Verified provider data-handling facts used by the Model Directory and privacy-constrained routing | JSON keyed by provider, see `.env.example` |
 
@@ -102,10 +102,10 @@ In Supabase → Authentication → URL Configuration, add `<your-site>/auth/call
 
 ### Models and prices
 
-Default models are defined in `src/lib/ai/registry.ts`: GPT-5 mini and GPT-5 (OpenAI) and gpt-oss-120b and Llama 3.3 70B Instruct (via Hugging Face Inference Providers). **Prices ship as `null`** — NOVA shows "n/a" rather than inventing numbers. Check the model IDs against your provider accounts, then set verified prices (USD per 1M tokens) either by inserting rows into `model_registry` (which takes priority) or with:
+Default models are defined in `src/lib/ai/registry.ts` (Claude, GPT-5.6, Gemini, Grok, DeepSeek and Hugging Face models — see `docs/MODELS.md`). Prices are filled in only where they were verified on the provider's page; the rest ship as `null` and NOVA shows "n/a" rather than inventing numbers. To set or correct prices (USD per 1M tokens) either by inserting rows into `model_registry` (which takes priority) or with:
 
 ```bash
-NOVA_MODELS='[{"id":"openai:gpt-5-mini","provider":"openai","providerModelId":"gpt-5-mini","displayName":"GPT-5 mini","capabilities":["chat","fast","low-cost"],"contextWindow":400000,"inputPrice":0.25,"outputPrice":2,"lastVerifiedAt":"2026-10-18"}]'
+NOVA_MODELS='[{"id":"openai:gpt-5.6-luna","provider":"openai","providerModelId":"gpt-5.6-luna","displayName":"GPT-5.6 Luna","capabilities":["chat","fast","low-cost"],"contextWindow":1050000,"inputPrice":0.2,"outputPrice":1.2,"lastVerifiedAt":"2026-10-19"}]'
 ```
 
 (Example values only — copy real figures from the provider's pricing page.) Any OpenAI-compatible endpoint works through `OPENAI_BASE_URL`.

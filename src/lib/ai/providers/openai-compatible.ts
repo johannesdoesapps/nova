@@ -32,7 +32,7 @@ export class OpenAICompatibleProvider implements AIProvider {
     }
     if (params.temperature !== undefined && this.id !== "openai") body.temperature = params.temperature;
     // OpenAI and DeepSeek report token usage in the final stream chunk when asked.
-    if (stream && (this.id === "openai" || this.id === "deepseek")) body.stream_options = { include_usage: true };
+    if (stream && (this.id === "openai" || this.id === "deepseek" || this.id === "xai")) body.stream_options = { include_usage: true };
     return body;
   }
 

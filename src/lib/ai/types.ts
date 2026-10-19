@@ -1,4 +1,4 @@
-export type ProviderId = "anthropic" | "openai" | "google" | "deepseek" | "huggingface" | "demo";
+export type ProviderId = "anthropic" | "openai" | "google" | "xai" | "deepseek" | "huggingface" | "demo";
 
 export type Capability =
   | "chat"

@@ -105,7 +105,7 @@ describe("model picker catalog", () => {
   it("shows prices only when both are known, and never for demo models", () => {
     const haiku = models.find((m) => m.id === "anthropic:claude-haiku-5-5")!;
     expect(priceLabel(haiku)).toBe("$0.10 in / $0.50 out per 1M tokens");
-    expect(priceLabel(models.find((m) => m.id === "google:gemini-3.8-flash")!)).toBeNull();
+    expect(priceLabel(models.find((m) => m.id === "deepseek:deepseek-flash")!)).toBeNull();
     expect(modelTags(haiku)).toContain("Fast");
   });
 });

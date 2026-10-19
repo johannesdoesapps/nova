@@ -392,6 +392,7 @@ function AddModel({ initial, existing, onCancel, onAdd }: { initial: Partial<Mod
             <option value="anthropic">Anthropic</option>
             <option value="openai">OpenAI</option>
             <option value="google">Google</option>
+            <option value="xai">xAI</option>
             <option value="deepseek">DeepSeek</option>
             <option value="huggingface">Hugging Face</option>
           </select>

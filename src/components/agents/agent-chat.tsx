@@ -77,7 +77,7 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
   const router = useRouter();
   const { user, integrations } = useApp();
   const studio = useStudio();
-  const demo = !integrations.anthropic && !integrations.openai && !integrations.google && !integrations.deepseek && !integrations.huggingface;
+  const demo = !integrations.anthropic && !integrations.openai && !integrations.google && !integrations.xai && !integrations.deepseek && !integrations.huggingface;
   const basePath = `/agents/${agent.id}`;
 
   // This agent's own conversation history, separate from ordinary chats.

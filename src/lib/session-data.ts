@@ -30,6 +30,7 @@ export const loadShellData = cache(async function loadShellData() {
       anthropic: flag("anthropic"),
       openai: flag("openai"),
       google: flag("google"),
+      xai: flag("xai"),
       deepseek: flag("deepseek"),
       huggingface: flag("huggingface"),
       search: flag("search"),

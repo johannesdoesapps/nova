@@ -101,7 +101,9 @@ describe("benchmarks, routing, directory", () => {
     const { GET } = await import("@/app/api/intel/directory/route");
     const j = await (await GET()).json();
     const real = j.models.find((m: { provider: string }) => m.provider === "openai");
-    expect(real.priceValidation.status).toBe("unverified");
+    expect(real.priceValidation.status).toBe("verified");
+    const unpriced = j.models.find((m: { provider: string }) => m.provider === "deepseek");
+    expect(unpriced.priceValidation.status).toBe("unverified");
     expect(real.privacy.trainsOnApiData).toBeNull();
   });
 });

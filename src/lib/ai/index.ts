@@ -6,7 +6,7 @@ import { demoProvider } from "./providers/demo";
 import { AnthropicProvider } from "./providers/anthropic";
 import { OpenAICompatibleProvider } from "./providers/openai-compatible";
 import { isAutoId, routerModeOf, type PlatformSettings, type RouterMode } from "./platform";
-import { DEFAULT_MODELS, parseModelsOverride, withStatus } from "./registry";
+import { DEFAULT_MODELS, RETIRED_MODELS, parseModelsOverride, withStatus } from "./registry";
 import { autoRoute } from "./router";
 import { getPlatformSettings } from "./settings";
 import type { AIProvider, Capability, ModelInfo, ModelWithStatus, ProviderId } from "./types";
@@ -22,6 +22,11 @@ const providers: Record<ProviderId, AIProvider> = {
     baseUrl: serverEnv().geminiBaseUrl,
     apiKey: () => serverEnv().geminiKey,
     envVar: "GEMINI_API_KEY",
+  }),
+  xai: new OpenAICompatibleProvider("xai", {
+    baseUrl: serverEnv().xaiBaseUrl,
+    apiKey: () => serverEnv().xaiKey,
+    envVar: "XAI_API_KEY",
   }),
   deepseek: new OpenAICompatibleProvider("deepseek", {
     baseUrl: serverEnv().deepseekBaseUrl,
@@ -45,6 +50,7 @@ export function providerConfiguredMap(): Record<ProviderId, boolean> {
     anthropic: providers.anthropic.isConfigured(),
     openai: providers.openai.isConfigured(),
     google: providers.google.isConfigured(),
+    xai: providers.xai.isConfigured(),
     deepseek: providers.deepseek.isConfigured(),
     huggingface: providers.huggingface.isConfigured(),
     demo: true,
@@ -124,6 +130,8 @@ export async function getModels(settings?: PlatformSettings): Promise<ModelWithS
 
 export async function resolveModel(modelId?: string | null, settings?: PlatformSettings): Promise<ModelWithStatus> {
   const models = await getModels(settings);
+  // A retired model (saved choice, agent default, setting) runs on its replacement.
+  if (modelId && RETIRED_MODELS[modelId] && !models.some((x) => x.id === modelId)) modelId = RETIRED_MODELS[modelId].replacement;
   if (modelId) {
     const m = models.find((x) => x.id === modelId);
     if (!m) throw new ApiError("bad_request", `"${modelId}" isn't an available model. Choose another model.`);

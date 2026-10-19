@@ -314,10 +314,10 @@ export const PRICING = {
 
 export const FAQ: { q: string; a: string }[] = [
   { q: "What is NOVA?", a: "NOVA is a web workspace for working with AI: a multi-model assistant, specialised and custom agents, tools to compare models, a planner that turns goals into tasks, and security agents for checking your own site and code." },
-  { q: "Which AI models does NOVA use?", a: "This site currently offers Claude models from Anthropic and GPT models from OpenAI. Each reply shows which model answered." },
+  { q: "Which AI models does NOVA use?", a: "This site offers Claude models from Anthropic and GPT models from OpenAI, and can add Gemini (Google) and Grok (xAI). Each reply shows which model answered." },
   { q: "Is NOVA free?", a: `Yes. The Free plan includes ${PLANS.free.windowUnits} usage units per 5-hour window and ${PLANS.free.weeklyUnits} per week. A message to a low-cost model uses 1 unit; larger models use more. A paid plan with higher limits isn't on sale yet.` },
   { q: "Do I need a credit card to sign up?", a: "No. You sign up with an email address and password and start on the Free plan." },
-  { q: "What happens to my conversations?", a: "They're saved to your account so you can come back to them, and only you can read them. Your messages are sent to the AI provider that answers them (Anthropic or OpenAI). See Security & data for details." },
+  { q: "What happens to my conversations?", a: "They're saved to your account so you can come back to them, and only you can read them. Your messages are sent to the AI provider of the model that answers them, which each reply names. See Security & data for details." },
   { q: "Can NOVA's agents take actions for me?", a: "No. NOVA's assistants and agents write, explain, plan and review. They don't send emails, make purchases or change your systems. The Autonomous Developer writes code changes in an isolated sandbox and never pushes them for you." },
   { q: "Is the Autonomous Developer available?", a: "Not yet for everyone. It's a private preview used by the site's administrators while it matures." },
 ];

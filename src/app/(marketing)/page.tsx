@@ -40,7 +40,7 @@ const STEPS = [
 
 const TRUST = [
   { icon: Lock, title: "Private to your account", text: "Conversations, agents and missions are stored per account with database row-level security; other users can't read them." },
-  { icon: MessagesSquare, title: "Clear about where data goes", text: "Your messages are sent to the provider of the model that answers — Anthropic or OpenAI — and each reply names that model." },
+  { icon: MessagesSquare, title: "Clear about where data goes", text: "Your messages are sent to the provider of the model that answers — such as Anthropic or OpenAI — and each reply names that model." },
   { icon: ShieldCheck, title: "Agents don't act on their own", text: "Assistants and agents write, explain, plan and review. They don't send emails, buy things or change your systems." },
   { icon: ServerCog, title: "Isolated code execution", text: "The Autonomous Developer (private preview) runs code in a sandbox that loses network access after setup and never pushes changes for you." },
 ];

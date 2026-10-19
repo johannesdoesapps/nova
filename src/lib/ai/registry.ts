@@ -43,46 +43,97 @@ export const DEFAULT_MODELS: ModelInfo[] = [
     lastVerifiedAt: "2026-10-06",
     priceSourceUrl: "https://www.anthropic.com/pricing",
   },
+  // OpenAI GPT-5.6 replaces GPT-5 / GPT-5 mini, which OpenAI shuts down on
+  // Dec 11, 2026 (see RETIRED_MODELS). Prices verified on OpenAI's model pages.
   {
-    id: "openai:gpt-5-mini",
+    id: "openai:gpt-5.6-luna",
     provider: "openai",
-    providerModelId: "gpt-5-mini",
-    displayName: "GPT-5 mini",
-    description: "Fast, lower-cost OpenAI model for everyday questions and summaries.",
-    capabilities: ["chat", "fast", "low-cost", "coding", "long-context", "vision"],
-    contextWindow: 400_000,
-    inputPrice: null,
-    outputPrice: null,
+    providerModelId: "gpt-5.6-luna",
+    displayName: "GPT-5.6 Luna",
+    description: "OpenAI's low-cost GPT-5.6 model for everyday questions, summaries and quick drafts.",
+    capabilities: ["chat", "fast", "low-cost", "coding", "writing", "long-context", "vision"],
+    contextWindow: 1_050_000,
+    inputPrice: 0.2,
+    outputPrice: 1.2,
     isEnabled: true,
-    lastVerifiedAt: null,
+    lastVerifiedAt: "2026-10-19",
+    priceSourceUrl: "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
   },
   {
-    id: "openai:gpt-5",
+    id: "openai:gpt-5.6-terra",
     provider: "openai",
-    providerModelId: "gpt-5",
-    displayName: "GPT-5",
-    description: "OpenAI's more capable reasoning model for complex analysis and coding.",
+    providerModelId: "gpt-5.6-terra",
+    displayName: "GPT-5.6 Terra",
+    description: "OpenAI's balanced GPT-5.6 reasoning model for analysis, writing and coding.",
     capabilities: ["chat", "reasoning", "coding", "writing", "long-context", "vision"],
-    contextWindow: 400_000,
-    inputPrice: null,
-    outputPrice: null,
+    contextWindow: 1_050_000,
+    inputPrice: 2,
+    outputPrice: 12,
     isEnabled: true,
-    lastVerifiedAt: null,
+    lastVerifiedAt: "2026-10-19",
+    priceSourceUrl: "https://developers.openai.com/api/docs/models/gpt-5.6-terra",
   },
   {
     // Google's OpenAI-compatible Gemini endpoint. Admins can add other Gemini
     // models (listed by "Test connection" in Admin) without a code change.
+    // Price: $0.75 / $3.75 through Dec 31, 2026, then $1.50 / $7.50 — update on Jan 1, 2027.
     id: "google:gemini-3.8-flash",
     provider: "google",
     providerModelId: "gemini-3.8-flash",
     displayName: "Gemini 3.8 Flash",
-    description: "Google's fast Gemini model for everyday questions, summaries and quick drafts.",
+    description: "Google's fast Gemini model for everyday questions, summaries, drafts and code.",
     capabilities: ["chat", "fast", "low-cost", "coding", "writing", "vision"],
     contextWindow: null,
-    inputPrice: null,
-    outputPrice: null,
+    inputPrice: 0.75,
+    outputPrice: 3.75,
     isEnabled: true,
-    lastVerifiedAt: null,
+    lastVerifiedAt: "2026-10-19",
+    priceSourceUrl: "https://ai.google.dev/gemini-api/docs/pricing",
+  },
+  {
+    // Not on Google's free tier. Price: $2 / $10 through Nov 30, 2026, then $4 / $20 — update on Dec 1, 2026.
+    id: "google:gemini-4-argon",
+    provider: "google",
+    providerModelId: "gemini-4-argon",
+    displayName: "Gemini 4 Argon",
+    description: "Google's flagship reasoning model for complex analysis, maths and software engineering.",
+    capabilities: ["chat", "reasoning", "coding", "writing", "long-context"],
+    contextWindow: null,
+    inputPrice: 2,
+    outputPrice: 10,
+    isEnabled: true,
+    lastVerifiedAt: "2026-10-19",
+    priceSourceUrl: "https://ai.google.dev/gemini-api/docs/pricing",
+  },
+  {
+    // xAI's OpenAI-compatible API (https://api.x.ai/v1). Prices are for prompts under
+    // 200k tokens; longer prompts are billed at double the rate.
+    id: "xai:grok-4.3",
+    provider: "xai",
+    providerModelId: "grok-4.3",
+    displayName: "Grok 4.3",
+    description: "xAI's economical Grok model with a 1M-token context for chat, writing and code.",
+    capabilities: ["chat", "coding", "writing", "long-context"],
+    contextWindow: 1_000_000,
+    inputPrice: 1.25,
+    outputPrice: 2.5,
+    isEnabled: true,
+    lastVerifiedAt: "2026-10-19",
+    priceSourceUrl: "https://docs.x.ai/developers/models",
+  },
+  {
+    id: "xai:grok-4.7",
+    provider: "xai",
+    providerModelId: "grok-4.7",
+    displayName: "Grok 4.7",
+    description: "xAI's most capable Grok model for reasoning, analysis and coding.",
+    capabilities: ["chat", "reasoning", "coding", "writing", "long-context"],
+    contextWindow: 500_000,
+    inputPrice: 2,
+    outputPrice: 6,
+    isEnabled: true,
+    lastVerifiedAt: "2026-10-19",
+    priceSourceUrl: "https://docs.x.ai/developers/models",
   },
   {
     // DeepSeek's OpenAI-compatible API. Model IDs change between releases: use
@@ -167,12 +218,22 @@ export const DEFAULT_MODELS: ModelInfo[] = [
   },
 ];
 
+/**
+ * Models the provider has shut down or announced for shutdown, mapped to their
+ * replacement. Requests naming them (saved choices, agents, settings) use the
+ * replacement; saved replies keep showing the original name.
+ */
+export const RETIRED_MODELS: Record<string, { displayName: string; replacement: string }> = {
+  "openai:gpt-5-mini": { displayName: "GPT-5 mini", replacement: "openai:gpt-5.6-luna" },
+  "openai:gpt-5": { displayName: "GPT-5", replacement: "openai:gpt-5.6-terra" },
+};
+
 export const CAPABILITIES = ["chat", "reasoning", "coding", "writing", "long-context", "fast", "low-cost", "vision"] as const;
 const capability = z.enum(CAPABILITIES);
 
 export const modelInfoSchema = z.object({
   id: z.string().min(1).max(120),
-  provider: z.enum(["anthropic", "openai", "google", "deepseek", "huggingface", "demo"]),
+  provider: z.enum(["anthropic", "openai", "google", "xai", "deepseek", "huggingface", "demo"]),
   providerModelId: z.string().min(1).max(200),
   displayName: z.string().min(1).max(120),
   description: z.string().max(500).default(""),
@@ -205,6 +266,7 @@ export const KEY_VARS: Record<ProviderId, string> = {
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
   google: "GEMINI_API_KEY",
+  xai: "XAI_API_KEY",
   deepseek: "DEEPSEEK_API_KEY",
   huggingface: "HUGGINGFACE_API_KEY",
   demo: "",
@@ -214,7 +276,7 @@ export function withStatus(
   models: ModelInfo[],
   configured: Record<ProviderId, boolean>,
 ): ModelWithStatus[] {
-  const anyReal = configured.anthropic || configured.openai || configured.google || configured.deepseek || configured.huggingface;
+  const anyReal = configured.anthropic || configured.openai || configured.google || configured.xai || configured.deepseek || configured.huggingface;
   return models
     .filter((m) => m.isEnabled)
     // Demo models are only offered when no real provider is configured.

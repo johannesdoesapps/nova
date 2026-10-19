@@ -32,7 +32,7 @@ const SECTIONS: { id: string; title: string; points: React.ReactNode[] }[] = [
     id: "providers",
     title: "Where your messages go",
     points: [
-      "To answer you, your message and the conversation so far are sent to the provider of the model that replies: Anthropic for Claude models, OpenAI for GPT models. Their own terms and data policies apply to that processing.",
+      "To answer you, your message and the conversation so far are sent to the provider of the model that replies: Anthropic for Claude, OpenAI for GPT, Google for Gemini and xAI for Grok (Gemini and Grok only when the site has them switched on). Their own terms and data policies apply to that processing.",
       "Every reply names the model that wrote it, so you always know which provider received your message.",
       "Live web search isn't enabled on this site yet. When it is, search queries will be sent to the search provider.",
     ],

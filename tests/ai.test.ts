@@ -1,12 +1,12 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { estimateCost, estimateTokens } from "@/lib/ai/cost";
-import { DEFAULT_MODELS, parseModelsOverride, withStatus } from "@/lib/ai/registry";
+import { DEFAULT_MODELS, parseModelsOverride, RETIRED_MODELS, withStatus } from "@/lib/ai/registry";
 import { classifyTask, recommendModel } from "@/lib/ai/router";
 import { OpenAICompatibleProvider, sseData } from "@/lib/ai/providers/openai-compatible";
 import { demoProvider, DEMO_NOTICE } from "@/lib/ai/providers/demo";
 import type { ModelWithStatus } from "@/lib/ai/types";
 
-const all = { anthropic: false, openai: true, google: false, deepseek: false, huggingface: true, demo: true };
+const all = { anthropic: false, openai: true, google: false, xai: false, deepseek: false, huggingface: true, demo: true };
 
 describe("cost", () => {
   it("estimates ~4 chars per token", () => {
@@ -30,18 +30,27 @@ describe("registry", () => {
     }
   });
   it("defaults to the low-cost Claude model when an Anthropic key is set", () => {
-    const models = withStatus(DEFAULT_MODELS, { anthropic: true, openai: true, google: false, deepseek: false, huggingface: false, demo: true });
+    const models = withStatus(DEFAULT_MODELS, { anthropic: true, openai: true, google: false, xai: false, deepseek: false, huggingface: false, demo: true });
     expect(models.find((m) => m.available)?.id).toBe("anthropic:claude-haiku-5-5");
-    const noClaude = withStatus(DEFAULT_MODELS, { anthropic: false, openai: true, google: false, deepseek: false, huggingface: false, demo: true });
+    const noClaude = withStatus(DEFAULT_MODELS, { anthropic: false, openai: true, google: false, xai: false, deepseek: false, huggingface: false, demo: true });
     expect(noClaude.find((m) => m.available)?.provider).toBe("openai");
     expect(noClaude.find((m) => m.provider === "anthropic")?.unavailableReason).toContain("ANTHROPIC_API_KEY");
   });
   it("offers demo models only when no real provider is configured", () => {
-    const none = withStatus(DEFAULT_MODELS, { anthropic: false, openai: false, google: false, deepseek: false, huggingface: false, demo: true });
+    const none = withStatus(DEFAULT_MODELS, { anthropic: false, openai: false, google: false, xai: false, deepseek: false, huggingface: false, demo: true });
     expect(none.some((m) => m.provider === "demo" && m.available)).toBe(true);
     expect(none.filter((m) => m.provider === "openai").every((m) => !m.available && m.unavailableReason?.includes("OPENAI_API_KEY"))).toBe(true);
-    const some = withStatus(DEFAULT_MODELS, { anthropic: false, openai: true, google: false, deepseek: false, huggingface: false, demo: true });
+    const some = withStatus(DEFAULT_MODELS, { anthropic: false, openai: true, google: false, xai: false, deepseek: false, huggingface: false, demo: true });
     expect(some.some((m) => m.provider === "demo")).toBe(false);
+    const grokOnly = withStatus(DEFAULT_MODELS, { anthropic: false, openai: false, google: false, xai: true, deepseek: false, huggingface: false, demo: true });
+    expect(grokOnly.some((m) => m.provider === "demo")).toBe(false);
+    expect(grokOnly.filter((m) => m.provider === "xai").every((m) => m.available)).toBe(true);
+  });
+  it("maps every retired model to a current one", () => {
+    for (const [id, r] of Object.entries(RETIRED_MODELS)) {
+      expect(DEFAULT_MODELS.some((m) => m.id === id)).toBe(false);
+      expect(DEFAULT_MODELS.some((m) => m.id === r.replacement)).toBe(true);
+    }
   });
   it("parses a valid NOVA_MODELS override and ignores invalid JSON", () => {
     const parsed = parseModelsOverride(JSON.stringify([{ id: "x", provider: "openai", providerModelId: "m", displayName: "X", inputPrice: 1, outputPrice: 2 }]));
@@ -72,7 +81,7 @@ describe("router", () => {
     expect(r.model?.contextWindow ?? 0).toBeGreaterThan(150_000 * 1.25);
   });
   it("never recommends unavailable models and always explains itself", () => {
-    const none = withStatus(DEFAULT_MODELS.filter((m) => m.provider !== "demo"), { anthropic: false, openai: false, google: false, deepseek: false, huggingface: false, demo: true });
+    const none = withStatus(DEFAULT_MODELS.filter((m) => m.provider !== "demo"), { anthropic: false, openai: false, google: false, xai: false, deepseek: false, huggingface: false, demo: true });
     const r = recommendModel(none, "anything");
     expect(r.model).toBeNull();
     expect(r.explanation.length).toBeGreaterThan(0);
@@ -82,7 +91,7 @@ describe("router", () => {
 
 describe("OpenAI-compatible provider", () => {
   afterEach(() => vi.unstubAllGlobals());
-  const model = { ...DEFAULT_MODELS.find((m) => m.id === "openai:gpt-5-mini")! };
+  const model = { ...DEFAULT_MODELS.find((m) => m.id === "openai:gpt-5.6-luna")! };
 
   it("parses SSE across chunk boundaries", async () => {
     const enc = new TextEncoder();
@@ -121,7 +130,7 @@ describe("OpenAI-compatible provider", () => {
     expect(url).toBe("https://example.test/v1/chat/completions");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer sk-test");
     const sent = JSON.parse(init.body as string);
-    expect(sent).toMatchObject({ model: "gpt-5-mini", stream: true, max_completion_tokens: 50, stream_options: { include_usage: true } });
+    expect(sent).toMatchObject({ model: "gpt-5.6-luna", stream: true, max_completion_tokens: 50, stream_options: { include_usage: true } });
   });
 
   it("surfaces provider errors with the status code", async () => {
