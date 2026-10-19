@@ -6,6 +6,7 @@ import { cn, formatUsd } from "@/lib/utils";
 import type { Msg } from "./history";
 import type { Feedback } from "./prefs";
 import { IconButton, iconButtonClass, Menu, MenuItem, NovaMark } from "./ui";
+import { useVerify, VerifyButton, VerifyPanel } from "./verify-panel";
 
 export const MessageView = memo(function MessageView({
   m,
@@ -19,6 +20,7 @@ export const MessageView = memo(function MessageView({
   onSaveToProject,
   assistantName,
   assistantAvatar,
+  question = "",
 }: {
   m: Msg;
   isLast: boolean;
@@ -32,7 +34,10 @@ export const MessageView = memo(function MessageView({
   /** Agent conversations show the agent's own name and avatar. */
   assistantName?: string;
   assistantAvatar?: ReactNode;
+  /** The user message this reply answers; used by the Truth Layer. */
+  question?: string;
 }) {
+  const verify = useVerify(question, m.content);
   if (m.role === "user") {
     return (
       <div className="group/msg s-in flex flex-col items-end">
@@ -164,6 +169,7 @@ export const MessageView = memo(function MessageView({
           >
             <ThumbsDown className={cn(feedback === "down" && "fill-current")} />
           </IconButton>
+          {!m.simulated && <VerifyButton loading={verify.state.status === "loading"} onClick={verify.run} />}
           {onSaveToProject && (
             <Menu label="More actions" side="auto" buttonLabel="More actions" buttonClassName={iconButtonClass("sm")} button={<Ellipsis />}>
               <MenuItem icon={<FolderPlus />} onClick={() => onSaveToProject(m)}>
@@ -174,6 +180,7 @@ export const MessageView = memo(function MessageView({
           {typeof m.cost === "number" && m.cost > 0 && <span className="ml-2 text-[11.5px] text-s-ink-3">≈ {formatUsd(m.cost)}</span>}
         </div>
       )}
+      {m.status === "done" && <VerifyPanel state={verify.state} onClose={verify.close} onRetry={verify.run} />}
     </div>
   );
 });

@@ -5,7 +5,7 @@ import { createServerSupabase } from "../supabase/server";
 import { demoProvider } from "./providers/demo";
 import { AnthropicProvider } from "./providers/anthropic";
 import { OpenAICompatibleProvider } from "./providers/openai-compatible";
-import { AUTO_MODEL_ID, type PlatformSettings } from "./platform";
+import { isAutoId, routerModeOf, type PlatformSettings, type RouterMode } from "./platform";
 import { DEFAULT_MODELS, parseModelsOverride, withStatus } from "./registry";
 import { autoRoute } from "./router";
 import { getPlatformSettings } from "./settings";
@@ -138,7 +138,7 @@ export async function resolveModel(modelId?: string | null, settings?: PlatformS
 export interface ModelChoice {
   model: ModelWithStatus;
   /** Present when Auto picked the model. */
-  routing: { auto: true; reason: string } | null;
+  routing: { auto: true; mode: RouterMode; reason: string } | null;
   settings: PlatformSettings;
 }
 
@@ -148,13 +148,14 @@ export async function resolveModelChoice(
   ctx: { prompt: string; mode?: string; needs?: Capability[]; preferLowCost?: boolean },
 ): Promise<ModelChoice> {
   const settings = await getPlatformSettings();
-  if (modelId !== AUTO_MODEL_ID) return { model: await resolveModel(modelId, settings), routing: null, settings };
+  if (!isAutoId(modelId)) return { model: await resolveModel(modelId, settings), routing: null, settings };
   if (!settings.autoEnabled) {
     throw new ApiError("bad_request", "Auto mode is turned off on this site. Choose a model from the model menu.");
   }
-  const route = autoRoute(await getModels(settings), ctx.prompt, ctx);
+  const routerMode = routerModeOf(modelId);
+  const route = autoRoute(await getModels(settings), ctx.prompt, { ...ctx, routerMode });
   if (!route) throw new ApiError("not_configured", "Auto mode has no configured model to choose from. Choose a model manually.");
-  return { model: route.model, routing: { auto: true, reason: route.reason }, settings };
+  return { model: route.model, routing: { auto: true, mode: routerMode, reason: route.reason }, settings };
 }
 
 /**

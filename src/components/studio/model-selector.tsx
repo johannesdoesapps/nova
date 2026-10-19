@@ -3,7 +3,7 @@ import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type K
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search, Sparkles } from "lucide-react";
 import { MODEL_CATEGORIES, inCategory, modelTags, priceLabel, recommendedIds, type ModelCategory } from "@/lib/ai/catalog";
-import { AUTO_MODEL_ID } from "@/lib/ai/platform";
+import { ROUTER_MODES, autoIdFor, isAutoId, routerModeOf } from "@/lib/ai/platform";
 import { PROVIDER_INFO, providerLabel } from "@/lib/ai/provider-info";
 import type { ModelWithStatus, ProviderId } from "@/lib/ai/types";
 import { cn } from "@/lib/utils";
@@ -57,7 +57,8 @@ export function ModelSelector({
   const recommended = useMemo(() => recommendedIds(available), [available]);
   const categories = MODEL_CATEGORIES.filter((c) => available.some((m) => inCategory(m, c.id, recommended)));
   const selected = available.find((m) => m.id === value);
-  const isAuto = value === AUTO_MODEL_ID;
+  const isAuto = isAutoId(value);
+  const autoMode = ROUTER_MODES.find((m) => m.id === routerModeOf(value))!;
 
   const q = query.trim().toLowerCase();
   const filtered = available.filter(
@@ -65,10 +66,10 @@ export function ModelSelector({
       (category === "all" || inCategory(m, category, recommended)) &&
       (!q || `${m.displayName} ${providerLabel(m.provider)} ${m.description} ${m.capabilities.join(" ")}`.toLowerCase().includes(q)),
   );
-  const showAuto = !!auto && category === "all" && (!q || "auto automatic".includes(q));
+  const showAuto = !!auto && category === "all" && (!q || `auto automatic smart router ${ROUTER_MODES.map((m) => m.label).join(" ")}`.toLowerCase().includes(q));
   const groups = PROVIDER_ORDER.map((p) => ({ provider: p, models: filtered.filter((m) => m.provider === p) })).filter((g) => g.models.length);
   const options: Option[] = [
-    ...(showAuto && auto?.enabled ? [{ id: AUTO_MODEL_ID, kind: "auto" as const }] : []),
+    ...(showAuto && auto?.enabled ? ROUTER_MODES.map((m) => ({ id: autoIdFor(m.id), kind: "auto" as const })) : []),
     ...groups.flatMap((g) => g.models.map((m) => ({ id: m.id, kind: "model" as const, model: m }))),
   ];
   const activeIndex = Math.min(active, Math.max(0, options.length - 1));
@@ -100,7 +101,7 @@ export function ModelSelector({
     }
     setQuery("");
     setCategory("all");
-    const i = Math.max(0, [...(auto?.enabled ? [AUTO_MODEL_ID] : []), ...PROVIDER_ORDER.flatMap((p) => available.filter((m) => m.provider === p).map((m) => m.id))].indexOf(value ?? ""));
+    const i = Math.max(0, [...(auto?.enabled ? ROUTER_MODES.map((m) => autoIdFor(m.id)) : []), ...PROVIDER_ORDER.flatMap((p) => available.filter((m) => m.provider === p).map((m) => m.id))].indexOf(value ?? ""));
     setActive(i);
     setOpen(true);
   };
@@ -155,7 +156,7 @@ export function ModelSelector({
       indexOf.get(id) === activeIndex ? "bg-s-hover" : "hover:bg-s-hover",
     );
 
-  const label = isAuto ? "Auto" : (selected?.displayName ?? (models ? "Choose model" : "Loading…"));
+  const label = isAuto ? (autoMode.id === "balanced" ? "Auto" : `Auto · ${autoMode.label}`) : (selected?.displayName ?? (models ? "Choose model" : "Loading…"));
 
   const panel = (
     <div
@@ -218,22 +219,36 @@ export function ModelSelector({
       <div id={listId} role="listbox" aria-label="Models" className="s-scroll min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
         {showAuto &&
           (auto?.enabled ? (
-            <div
-              id={`${listId}-${indexOf.get(AUTO_MODEL_ID)}`}
-              role="option"
-              aria-selected={isAuto}
-              onPointerEnter={() => setActive(indexOf.get(AUTO_MODEL_ID) ?? 0)}
-              onClick={() => choose(AUTO_MODEL_ID)}
-              className={rowClass(AUTO_MODEL_ID)}
-            >
-              <ProviderMark provider="auto" />
-              <div className="min-w-0 flex-1">
-                <div className="text-[13.5px] font-medium">Auto</div>
-                <p className="mt-0.5 text-[12.5px] leading-snug text-s-ink-3">
-                  Picks a configured model for each message by task type: low-cost for everyday questions, reasoning models for analysis and code.
-                </p>
-              </div>
-              {isAuto && <Check className="mt-1 h-4 w-4 shrink-0 text-s-accent" />}
+            <div role="group" aria-label="Smart Router">
+              <div className="px-2.5 pb-1 pt-1.5 text-[11.5px] font-medium uppercase tracking-[0.08em] text-s-ink-3">Smart Router</div>
+              {ROUTER_MODES.map((mode) => {
+                const id = autoIdFor(mode.id);
+                return (
+                  <div
+                    key={id}
+                    id={`${listId}-${indexOf.get(id)}`}
+                    role="option"
+                    aria-selected={value === id}
+                    onPointerEnter={() => setActive(indexOf.get(id) ?? 0)}
+                    onClick={() => choose(id)}
+                    className={cn(rowClass(id), "items-center py-1.5")}
+                  >
+                    <ProviderMark provider="auto" className={cn(mode.id !== "balanced" && "bg-transparent text-s-ink-2")} />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13.5px] font-medium">{mode.id === "balanced" ? "Auto" : `Auto · ${mode.label}`}</div>
+                      <p className="text-[12px] leading-snug text-s-ink-3">{mode.blurb}</p>
+                    </div>
+                    {value === id && <Check className="h-4 w-4 shrink-0 text-s-accent" />}
+                  </div>
+                );
+              })}
+              <a
+                href="/council"
+                className="mx-2.5 mt-1 flex items-center justify-between rounded-lg px-0 py-1.5 text-[12.5px] text-s-ink-3 transition hover:text-s-ink"
+              >
+                <span>Council: ask several models at once</span>
+                <span aria-hidden>→</span>
+              </a>
             </div>
           ) : (
             <div className="flex items-start gap-3 rounded-xl px-2.5 py-2 opacity-60" aria-disabled>

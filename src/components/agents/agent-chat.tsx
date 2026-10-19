@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowUpRight, ChevronLeft, Clock, Copy, Ellipsis, Pencil, SquarePen, Trash2 } from "lucide-react";
 import { defaultModelId, useCatalog } from "@/components/common/model-picker";
-import { AUTO_MODEL_ID } from "@/lib/ai/platform";
+import { isAutoId } from "@/lib/ai/platform";
 import { pickForCapability } from "@/lib/ai/router";
 import { useApp } from "@/components/layout/app-context";
 import type { ChatAttachment, ChatTransport } from "@/components/studio/chat-client";
@@ -110,9 +110,9 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
   const models = catalog?.models ?? null;
   const [picked, setPicked] = useState<string | null>(null);
   const saved =
-    agent.modelId === AUTO_MODEL_ID
+    isAutoId(agent.modelId)
       ? catalog?.auto.enabled
-        ? AUTO_MODEL_ID
+        ? agent.modelId!
         : undefined
       : agent.modelId && models?.some((m) => m.id === agent.modelId && m.available)
         ? agent.modelId

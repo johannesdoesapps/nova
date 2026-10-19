@@ -35,7 +35,7 @@ export interface ChatRequest {
 type ModelRef = { id: string; displayName: string; provider: string };
 
 export type ChatEvent =
-  | { type: "meta"; conversationId: string | null; persisted: boolean; model: ModelRef; routing?: { auto: true; reason: string } | null }
+  | { type: "meta"; conversationId: string | null; persisted: boolean; model: ModelRef; routing?: { auto: true; mode: string; reason: string } | null }
   | { type: "model"; model: ModelRef }
   | { type: "sources"; sources: SearchSource[] }
   | { type: "notice"; level?: string; message: string }

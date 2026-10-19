@@ -3,7 +3,7 @@ import { streamWithFallback } from "@/lib/ai/fallback";
 import { estimateCost, estimateTokens } from "@/lib/ai/cost";
 import { systemPromptFor } from "@/lib/ai/modes";
 import { trimHistory } from "@/lib/ai/trim";
-import { AUTO_MODEL_ID } from "@/lib/ai/platform";
+import { isAutoId } from "@/lib/ai/platform";
 import type { ChatMessage, Usage } from "@/lib/ai/types";
 import { requireUserIfConfigured } from "@/lib/auth";
 import { addMessages, createConversation, getConversation, updateConversation } from "@/lib/db";
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     const choice = await resolveModelChoice(body.modelId, {
       prompt: body.message,
       mode: body.mode,
-      preferLowCost: body.modelId === AUTO_MODEL_ID ? await nearLimit(auth) : false,
+      preferLowCost: isAutoId(body.modelId) ? await nearLimit(auth) : false,
     });
     let model = choice.model;
     await enforceLimits(req, auth, 1, [model]);
@@ -90,9 +90,14 @@ export async function POST(req: Request) {
 
       let system = systemPromptFor(body.mode);
 
-      // Optional web grounding in Research mode
+      // Optional web grounding in Research mode, or always when the Smart Router's Research mode is on.
       let sources: SearchSource[] = [];
-      if (body.mode === "research" && body.useWeb) {
+      const routerResearch = choice.routing?.mode === "research";
+      const searchReady = !!serverEnv().searchKey && ["tavily", "brave"].includes(serverEnv().searchProvider);
+      if (routerResearch && !searchReady) {
+        send({ type: "notice", level: "info", message: "Research mode uses web sources when search is set up. It isn't on this site, so this answer comes from the model's own knowledge and may be out of date." });
+      }
+      if ((body.mode === "research" && body.useWeb) || (routerResearch && searchReady)) {
         const env = serverEnv();
         try {
           const r = await webSearch(body.message.slice(0, 400), { provider: env.searchProvider, apiKey: env.searchKey }, withTimeout(15_000, signal));

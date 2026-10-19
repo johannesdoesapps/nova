@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
   // exist in src/app/(app); remove an entry here to bring one back.
   async redirects() {
     const legacy = [
-      "/", "/dashboard", "/search", "/battle", "/models", "/discover", "/community", "/graph",
+      "/", "/dashboard", "/search", "/models", "/discover", "/community", "/graph",
       "/integrations", "/radar", "/simulator", "/settings/:path*", "/projects/:path*", "/claims/:path*",
       "/intel/:path*", "/lab/:path*", "/workspaces/:path*",
     ];
@@ -17,6 +17,7 @@ const nextConfig: NextConfig = {
       // Supabase falls back to the bare Site URL with ?code= when a redirect
       // address isn't allow-listed; finish the sign-in instead of dropping it.
       { source: "/", has: [{ type: "query" as const, key: "code" }], destination: "/auth/callback", permanent: false },
+      { source: "/battle", destination: "/arena", permanent: false },
       ...legacy.map((source) => ({ source, destination: "/chat", permanent: false })),
     ];
   },

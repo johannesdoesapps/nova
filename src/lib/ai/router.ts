@@ -1,4 +1,5 @@
 import { estimateTokens } from "./cost";
+import type { RouterMode } from "./platform";
 import type { Capability, ModelWithStatus } from "./types";
 
 export type TaskKind = "summary" | "analysis" | "coding" | "writing" | "long-document" | "general";
@@ -155,21 +156,40 @@ const TASK_LABEL: Record<TaskKind, string> = {
 export function autoRoute(
   models: ModelWithStatus[],
   prompt: string,
-  opts: { mode?: string; needs?: Capability[]; preferLowCost?: boolean } = {},
+  opts: { mode?: string; needs?: Capability[]; preferLowCost?: boolean; routerMode?: RouterMode } = {},
 ): AutoRoute | null {
   const real = models.filter((m) => m.provider !== "demo");
   let pool = real.some((m) => m.available) ? real : models;
+  const narrow = (pred: (m: ModelWithStatus) => boolean) => {
+    const sub = pool.filter((m) => m.available && pred(m));
+    if (sub.length) pool = sub;
+  };
+  const has = (c: Capability) => (m: ModelWithStatus) => m.capabilities.includes(c);
+  const routerMode = opts.routerMode ?? "balanced";
+  // Each mode narrows the pool when it can, then the usual rules choose within it.
+  if (routerMode === "quick") narrow((m) => has("fast")(m) || has("low-cost")(m));
+  if (routerMode === "deep" || routerMode === "research") narrow(has("reasoning"));
+  if (routerMode === "coding") narrow(has("coding"));
   // Near the usage limit, only low-cost models are considered (when any are available).
-  const cheap = pool.filter((m) => m.available && m.capabilities.includes("low-cost"));
-  if (opts.preferLowCost && cheap.length) pool = cheap;
-  const task = classifyTask(prompt, opts.mode).kind;
-  const costSensitive = opts.preferLowCost || task === "general" || task === "summary";
-  const r = recommendModel(pool, prompt, { mode: opts.mode, costSensitive, needs: opts.needs });
+  if (opts.preferLowCost) narrow(has("low-cost"));
+  const task = routerMode === "coding" ? "coding" : classifyTask(prompt, opts.mode).kind;
+  const costSensitive = opts.preferLowCost || routerMode === "quick" || (routerMode === "balanced" && (task === "general" || task === "summary"));
+  const r = recommendModel(pool, prompt, { mode: routerMode === "coding" ? "coding" : opts.mode, costSensitive, needs: opts.needs });
   if (!r.model) return null;
+  const why =
+    routerMode === "balanced"
+      ? `for this ${TASK_LABEL[task]}`
+      : routerMode === "quick"
+        ? "for a fast reply (Quick mode)"
+        : routerMode === "deep"
+          ? "for deeper reasoning (Deep mode)"
+          : routerMode === "research"
+            ? "for research (Research mode)"
+            : "for programming (Coding mode)";
   return {
     model: r.model,
     task,
-    reason: `Auto chose ${r.model.displayName} for this ${TASK_LABEL[task]}${opts.preferLowCost ? " (saving your allowance)" : ""}.`,
+    reason: `Auto chose ${r.model.displayName} ${why}${opts.preferLowCost ? ", saving your allowance" : ""}.`,
   };
 }
 

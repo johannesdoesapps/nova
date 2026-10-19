@@ -6,6 +6,7 @@ import {
   Bookmark,
   Bot,
   Ellipsis,
+  Flag,
   LayoutGrid,
   LogIn,
   LogOut,
@@ -20,7 +21,9 @@ import {
   SlidersHorizontal,
   SquarePen,
   Sun,
+  Swords,
   Trash2,
+  Users,
   X,
 } from "lucide-react";
 import type { AppUser } from "@/components/layout/app-context";
@@ -35,7 +38,7 @@ export interface SidebarProps {
   mobileOpen: boolean;
   onCloseMobile: () => void;
   /** Which workspace is open, for the nav's active state. */
-  section: "chats" | "agents" | "admin";
+  section: "chats" | "agents" | "admin" | "council" | "arena" | "missions";
   conversations: ConvSummary[] | null;
   listError: string | null;
   activeId: string | null;
@@ -158,6 +161,9 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
         <nav aria-label="Main" className={cn("shrink-0 px-3 pb-2", rail && "md:px-0")}>
           <ul className={cn("flex flex-col gap-0.5", rail && "md:items-center")}>
             <NavItem rail={rail} icon={<MessagesSquare />} label="Chats" href="/chat" active={p.section === "chats"} onClick={p.onCloseMobile} />
+            <NavItem rail={rail} icon={<Users />} label="Council" href="/council" active={p.section === "council"} onClick={p.onCloseMobile} />
+            <NavItem rail={rail} icon={<Swords />} label="Arena" href="/arena" active={p.section === "arena"} onClick={p.onCloseMobile} />
+            <NavItem rail={rail} icon={<Flag />} label="Missions" href="/missions" active={p.section === "missions"} onClick={p.onCloseMobile} />
             <NavItem rail={rail} icon={<Bot />} label="Agents" href="/agents" active={p.section === "agents"} onClick={p.onCloseMobile} />
             {p.user?.isAdmin && (
               <NavItem rail={rail} icon={<SlidersHorizontal />} label="Admin" href="/admin" active={p.section === "admin"} onClick={p.onCloseMobile} />

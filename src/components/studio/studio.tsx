@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Info } from "lucide-react";
 import { defaultModelId, useCatalog } from "@/components/common/model-picker";
-import { AUTO_MODEL_ID } from "@/lib/ai/platform";
+import { isAutoId } from "@/lib/ai/platform";
 import { useApp } from "@/components/layout/app-context";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import type { ChatMode } from "@/lib/ai/modes";
@@ -30,8 +30,8 @@ export function Studio() {
   const models = catalog?.models ?? null;
   const [storedModel, setStoredModel] = useLocalStorage("nova:studio:model");
   const modelId =
-    storedModel === AUTO_MODEL_ID && catalog?.auto.enabled
-      ? AUTO_MODEL_ID
+    isAutoId(storedModel) && catalog?.auto.enabled
+      ? storedModel!
       : models?.some((m) => m.id === storedModel && m.available)
         ? storedModel!
         : defaultModelId(models);

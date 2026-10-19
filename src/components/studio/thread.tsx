@@ -108,7 +108,7 @@ export function ConversationPane({
             </div>
           ) : (
             <div className="flex flex-col gap-10" aria-live="polite" aria-busy={busy}>
-              {messages.map((m) => (
+              {messages.map((m, i) => (
                 <MessageView
                   key={m.id}
                   m={m}
@@ -122,6 +122,7 @@ export function ConversationPane({
                   onSaveToProject={onSaveToProject}
                   assistantName={assistantName}
                   assistantAvatar={assistantAvatar}
+                  question={m.role === "assistant" ? questionBefore(messages, i) : undefined}
                 />
               ))}
             </div>
@@ -171,4 +172,10 @@ function ThreadSkeleton() {
       </div>
     </div>
   );
+}
+
+/** The closest user message before index i. */
+function questionBefore(messages: { role: string; content: string }[], i: number): string {
+  for (let j = i - 1; j >= 0; j--) if (messages[j].role === "user") return messages[j].content.slice(0, 4000);
+  return "";
 }

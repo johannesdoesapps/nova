@@ -251,3 +251,39 @@ describe("platform settings", () => {
     });
   });
 });
+
+describe("council sessions and missions", () => {
+  it("keeps Council and Arena sessions private to their owner", async () => {
+    await as(ALICE, async () => {
+      await db.query(`insert into public.council_sessions (kind, question, mode, models, result) values ('council', 'Q?', 'quick', array['a','b'], '{}')`);
+      await expect(db.query(`insert into public.council_sessions (kind, question, mode, models, result) values ('arena', 'Q?', 'blind', array[]::text[], '{}')`)).rejects.toThrow(/check/);
+    });
+    await as(BOB, async () => {
+      expect((await db.query("select * from public.council_sessions")).rows).toHaveLength(0);
+      expect((await db.query("update public.council_sessions set question = 'x'")).affectedRows).toBe(0);
+      await expect(db.query(`insert into public.council_sessions (user_id, kind, question, mode, models, result) values ('${ALICE}', 'council', 'Q', 'quick', array['a'], '{}')`)).rejects.toThrow(/row-level security/);
+    });
+  });
+
+  it("keeps mission tasks and runs private and tied to the owner's own mission", async () => {
+    const { project, task } = await as(ALICE, async () => {
+      const p = await db.query<{ id: string; status: string }>("insert into public.projects (name, goal) values ('Mission', 'Ship it') returning id, status");
+      expect(p.rows[0].status).toBe("active");
+      const t = await db.query<{ id: string }>(`insert into public.project_tasks (project_id, title) values ('${p.rows[0].id}', 'Task 1') returning id`);
+      await db.query(`insert into public.task_runs (task_id, project_id, model_id) values ('${t.rows[0].id}', '${p.rows[0].id}', 'openai:x')`);
+      return { project: p.rows[0].id, task: t.rows[0].id };
+    });
+    await as(BOB, async () => {
+      expect((await db.query("select * from public.project_tasks")).rows).toHaveLength(0);
+      expect((await db.query("select * from public.task_runs")).rows).toHaveLength(0);
+      await expect(db.query(`insert into public.project_tasks (project_id, title) values ('${project}', 'Sneaky')`)).rejects.toThrow(/row-level security/);
+      await expect(db.query(`insert into public.task_runs (task_id, project_id, model_id) values ('${task}', '${project}', 'openai:x')`)).rejects.toThrow(/row-level security/);
+      expect((await db.query(`update public.project_tasks set status = 'completed' where id = '${task}'`)).affectedRows).toBe(0);
+    });
+    await as(ALICE, async () => {
+      await expect(db.query(`update public.project_tasks set status = 'done' where id = '${task}'`)).rejects.toThrow(/check/);
+      await db.query(`delete from public.projects where id = '${project}'`);
+      expect((await db.query("select * from public.task_runs")).rows).toHaveLength(0);
+    });
+  });
+});

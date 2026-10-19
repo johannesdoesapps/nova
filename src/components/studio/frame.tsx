@@ -5,6 +5,7 @@ import { Menu as MenuIcon, Moon, SquarePen, Sun } from "lucide-react";
 import { useApp } from "@/components/layout/app-context";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { cn } from "@/lib/utils";
+import { CommandPalette } from "./command-palette";
 import { DeleteDialog, PromptsDialog, SettingsDialog } from "./dialogs";
 import { localHistory, serverHistory, type ConvSummary, type HistoryStore } from "./history";
 import { useFeedback, useSavedPrompts, useSettings, useTheme, type Feedback, type StudioSettings } from "./prefs";
@@ -103,6 +104,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
   // Dialogs and toasts
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [promptsOpen, setPromptsOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [toDelete, setToDelete] = useState<ConvSummary | null>(null);
   const [toast, setToast] = useState<{ text: string; key: number } | null>(null);
   const notify = useCallback((text: string) => setToast({ text, key: Date.now() }), []);
@@ -151,10 +153,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
       const desktop = window.matchMedia("(min-width: 768px)").matches;
       if (k === "k" && !e.shiftKey) {
         e.preventDefault();
-        if (desktop && !collapsed) return searchRef.current?.focus();
-        if (desktop) setRailStored("0");
-        else setMobileOpen(true);
-        requestAnimationFrame(() => searchRef.current?.focus());
+        setPaletteOpen((o) => !o);
       } else if (k === "o" && e.shiftKey) {
         e.preventDefault();
         newChat();
@@ -198,7 +197,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
           onToggleCollapsed={() => setRailStored(collapsed ? "0" : "1")}
           mobileOpen={mobileOpen}
           onCloseMobile={() => setMobileOpen(false)}
-          section={pathname.startsWith("/agents") ? "agents" : pathname.startsWith("/admin") ? "admin" : "chats"}
+          section={(["agents", "admin", "council", "arena", "missions"] as const).find((s) => pathname.startsWith(`/${s}`)) ?? "chats"}
           conversations={conversations}
           listError={listError}
           activeId={activeChat}
@@ -267,6 +266,16 @@ export function StudioFrame({ children }: { children: ReactNode }) {
               router.push("/chat?new=1");
             }
           }}
+        />
+        <CommandPalette
+          open={paletteOpen}
+          onClose={() => setPaletteOpen(false)}
+          conversations={conversations}
+          isAdmin={Boolean(user?.isAdmin)}
+          signedIn={Boolean(user)}
+          onNewChat={newChat}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenPrompts={() => setPromptsOpen(true)}
         />
         <DeleteDialog
           conv={toDelete}
