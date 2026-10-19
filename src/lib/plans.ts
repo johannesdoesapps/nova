@@ -131,7 +131,7 @@ export const DEFAULT_BILLING: BillingSettings = {
     },
     max: {
       label: "Max",
-      priceUsd: 110,
+      priceUsd: 100,
       annualDiscountPct: 10,
       windowUnits: 2000,
       weeklyUnits: 10_000,

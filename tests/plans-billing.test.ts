@@ -85,8 +85,8 @@ describe("plan economics (60% contribution margin)", () => {
     for (const [id, interval, budget] of [
       ["pro", "month", 4.522],
       ["pro", "year", 4.151],
-      ["max", "month", 31.756],
-      ["max", "year", 28.661],
+      ["max", "month", 28.73],
+      ["max", "year", 25.938],
     ] as const) {
       const e = planEconomics(B, id, interval);
       expect(e.aiBudgetUsd).toBeCloseTo(budget, 2);
@@ -106,7 +106,7 @@ describe("plan economics (60% contribution margin)", () => {
 
   it("charges yearly plans 12 months less the discount, in whole dollars", () => {
     expect(chargeUsd(planOf(B, "pro"), "year")).toBe(216);
-    expect(chargeUsd(planOf(B, "max"), "year")).toBe(1188);
+    expect(chargeUsd(planOf(B, "max"), "year")).toBe(1080);
     expect(chargeUsd(planOf(B, "free"), "year")).toBe(0);
   });
 

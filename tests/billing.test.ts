@@ -237,8 +237,8 @@ describe("POST /api/billing/checkout", () => {
     const create = vi.spyOn(s.checkout.sessions, "create").mockResolvedValue({ url: "https://checkout.stripe.com/c/pay_2" } as never);
     const { POST } = await import("@/app/api/billing/checkout/route");
     await POST(post({ plan: "max", interval: "year" }));
-    // $110 × 12 × (1 − 10%) = $1,188 a year.
-    expect(list).toHaveBeenCalledWith(expect.objectContaining({ lookup_keys: ["nova_max_year_usd_118800"] }));
+    // $100 × 12 × (1 − 10%) = $1,080 a year.
+    expect(list).toHaveBeenCalledWith(expect.objectContaining({ lookup_keys: ["nova_max_year_usd_108000"] }));
     expect(createPrice).not.toHaveBeenCalled();
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ line_items: [{ price: "price_max_year", quantity: 1 }] }));
   });
@@ -271,7 +271,7 @@ describe("POST /api/billing/change", () => {
     const { update, POST } = await setup({});
     const res = await POST(post({ plan: "max", interval: "month" }));
     expect(res.status).toBe(200);
-    expect(update).toHaveBeenCalledWith("sub_123", { items: [{ id: "si_1", price: "price_nova_max_month_usd_11000" }], proration_behavior: "always_invoice", payment_behavior: "pending_if_incomplete" });
+    expect(update).toHaveBeenCalledWith("sub_123", { items: [{ id: "si_1", price: "price_nova_max_month_usd_10000" }], proration_behavior: "always_invoice", payment_behavior: "pending_if_incomplete" });
     expect(update).toHaveBeenCalledWith("sub_123", expect.objectContaining({ cancel_at_period_end: false, metadata: expect.objectContaining({ nova_plan: "max" }) }));
     expect(upserts.length).toBeGreaterThan(0); // allowance updated immediately
   });

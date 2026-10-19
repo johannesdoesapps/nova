@@ -2,7 +2,7 @@
 
 ## Plans
 
-Free ($0), **Pro ($20/month)** and **Max ($110/month)**, in USD, plus tax where it applies. Yearly billing is 10% off ($216 and $1,188).
+Free ($0), **Pro ($20/month)** and **Max ($100/month)**, in USD, plus tax where it applies. Yearly billing is 10% off ($216 and $1,080).
 
 The numbers behind these prices, the 60% margin and the allowances are in **docs/PRICING.md**. Admins change prices, allowances, model tiers, costs and the margin in **Admin → Plans & pricing**, without code.
 
