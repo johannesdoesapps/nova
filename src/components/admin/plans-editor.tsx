@@ -20,13 +20,22 @@ import { cn } from "@/lib/utils";
 const input =
   "h-9 w-full rounded-xl border border-s-line-strong bg-transparent px-2.5 text-[13.5px] tabular-nums text-s-ink outline-none transition focus:border-[color-mix(in_srgb,var(--s-accent)_45%,transparent)]";
 const TIER_LABEL: Record<ModelTier, string> = { standard: "Standard", advanced: "Advanced", premium: "Premium" };
-const usd = (x: number, d = 2) => `$${x.toFixed(d)}`;
+const usd = (x: number, d = 2) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: d, maximumFractionDigits: d }).format(x);
 
 function Num({ label, value, onChange, step = 1, hint }: { label: string; value: number; onChange: (v: number) => void; step?: number; hint?: string }) {
   return (
     <label className="block text-[12px] text-s-ink-3">
       {label}
-      <input type="number" step={step} value={Number.isFinite(value) ? value : 0} onChange={(e) => onChange(Number(e.target.value))} className={cn(input, "mt-1")} />
+      <input
+        type="number"
+        name={label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}
+        autoComplete="off"
+        inputMode={Number.isInteger(step) ? "numeric" : "decimal"}
+        step={step}
+        value={Number.isFinite(value) ? value : 0}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className={cn(input, "mt-1")}
+      />
       {hint && <span className="mt-0.5 block text-[11px]">{hint}</span>}
     </label>
   );
@@ -66,7 +75,7 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
           const warn = id !== "free" && month.aiBudgetUsd <= 0;
           return (
             <div key={id} className="rounded-2xl border border-s-line p-4">
-              <input aria-label="Plan name" value={p.label} onChange={(e) => setPlan(id, { label: e.target.value })} className={cn(input, "font-semibold")} />
+              <input aria-label="Plan name" name={`${id}-label`} autoComplete="off" value={p.label} onChange={(e) => setPlan(id, { label: e.target.value })} className={cn(input, "font-semibold")} />
               <div className="mt-3 grid grid-cols-2 gap-2">
                 {id !== "free" ? (
                   <>
@@ -189,7 +198,7 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
                   aria-label={`Tier for ${m.displayName}`}
                   value={tierOf(m)}
                   onChange={(e) => set({ modelTiers: { ...b.modelTiers, [m.id]: e.target.value as ModelTier } })}
-                  className="h-8 rounded-lg border border-s-line-strong bg-transparent px-2 text-[12.5px]"
+                  className="h-8 rounded-lg border border-s-line-strong bg-s-bg px-2 text-[12.5px] text-s-ink"
                 >
                   {MODEL_TIERS.map((t) => (
                     <option key={t} value={t}>

@@ -52,6 +52,14 @@ export function AdminView() {
 
   const dirty = useMemo(() => !!snap && !!draft && JSON.stringify(snap.settings) !== JSON.stringify(draft), [snap, draft]);
 
+  // Warn before leaving with unsaved changes.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
   if (!user?.isAdmin) {
     return (
       <>

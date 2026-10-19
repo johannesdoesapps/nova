@@ -5,7 +5,9 @@ import { jsonFetch } from "@/hooks/use-ndjson";
 import type { FinanceReport } from "@/lib/billing/finance";
 import { cn } from "@/lib/utils";
 
-const usd = (x: number, d = 2) => `$${x.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d })}`;
+const usd = (x: number, d = 2) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: d, maximumFractionDigits: d }).format(x);
+const dayLabel = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const day = (iso: string) => dayLabel.format(new Date(`${iso.slice(0, 10)}T00:00:00Z`));
 const pct = (x: number | null) => (x === null ? "—" : `${Math.round(x * 100)}%`);
 
 /** Admin finance: revenue, AI costs, margins, model usage, heavy users, projections and alerts. */
@@ -49,20 +51,24 @@ export function FinancePanel() {
           <p className="mt-1 text-[13px] text-s-ink-3">Estimates from recorded usage at official API prices and your fee and hosting assumptions. Stripe is the record for money received.</p>
         </div>
         <div className="flex items-center gap-2">
-          <select value={days} onChange={(e) => load(Number(e.target.value))} aria-label="Period" className="h-9 rounded-xl border border-s-line-strong bg-transparent px-2 text-[13px]">
+          <select value={days} onChange={(e) => load(Number(e.target.value))} aria-label="Period" className="h-9 rounded-xl border border-s-line-strong bg-s-bg px-2 text-[13px] text-s-ink">
             {[7, 30, 90].map((d) => (
               <option key={d} value={d}>
                 Last {d} days
               </option>
             ))}
           </select>
-          <button type="button" onClick={() => load(days)} aria-label="Refresh" className="grid h-9 w-9 place-items-center rounded-xl hover:bg-s-hover">
-            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+          <button type="button" onClick={() => load(days)} aria-label="Refresh finance figures" aria-busy={loading} className="grid h-9 w-9 place-items-center rounded-xl hover:bg-s-hover">
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} aria-hidden />
           </button>
         </div>
       </div>
 
-      {error && <p className="mt-3 text-[13px] text-s-danger">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-3 text-[13px] text-s-danger">
+          {error} Use refresh to try again.
+        </p>
+      )}
       {report && (
         <div className="mt-4 space-y-5">
           {report.alerts.length > 0 && (
@@ -127,9 +133,13 @@ export function FinancePanel() {
           {report.daily.length > 0 && (
             <div>
               <h3 className="text-[13px] font-medium">Daily AI cost (30 days)</h3>
-              <div className="mt-2 flex h-24 items-end gap-[3px]" role="img" aria-label="Daily AI cost chart">
+              <div
+                className="mt-2 flex h-24 items-end gap-[3px]"
+                role="img"
+                aria-label={`Daily AI cost from ${day(report.daily[0]!.day)} to ${day(report.daily.at(-1)!.day)}, highest ${usd(maxDaily)}`}
+              >
                 {report.daily.map((d) => (
-                  <div key={d.day} title={`${d.day}: ${usd(d.costUsd, 4)}, ${d.runs} requests`} className="min-w-[4px] flex-1 rounded-t bg-s-accent/70" style={{ height: `${Math.max(2, (d.costUsd / maxDaily) * 100)}%` }} />
+                  <div key={d.day} title={`${day(d.day)}: ${usd(d.costUsd, 4)}, ${d.runs} requests`} className="min-w-[4px] flex-1 rounded-t bg-s-accent/70" style={{ height: `${Math.max(2, (d.costUsd / maxDaily) * 100)}%` }} />
                 ))}
               </div>
             </div>
@@ -142,7 +152,9 @@ export function FinancePanel() {
                 <tbody>
                   {report.models.slice(0, 12).map((m) => (
                     <tr key={m.model} className="border-t border-s-line">
-                      <td className="max-w-[180px] truncate py-1.5 pr-2">{m.model}</td>
+                      <td className="max-w-[180px] truncate py-1.5 pr-2" title={m.model} translate="no">
+                        {m.model}
+                      </td>
                       <td className="py-1.5 pr-2 text-s-ink-3">{m.runs.toLocaleString("en-US")} req</td>
                       <td className="py-1.5 text-right">{usd(m.costUsd, 4)}</td>
                     </tr>
@@ -161,7 +173,9 @@ export function FinancePanel() {
                 <tbody>
                   {report.topUsers.slice(0, 12).map((u, i) => (
                     <tr key={i} className="border-t border-s-line">
-                      <td className="max-w-[170px] truncate py-1.5 pr-2">{u.email ?? "—"}</td>
+                      <td className="max-w-[170px] truncate py-1.5 pr-2" title={u.email ?? undefined}>
+                        {u.email ?? "—"}
+                      </td>
                       <td className="py-1.5 pr-2 text-s-ink-3">{u.admin ? "admin" : u.plan}</td>
                       <td className="py-1.5 pr-2 text-right">{usd(u.costUsd, 4)}</td>
                       <td className={cn("py-1.5 text-right", (u.budgetShare ?? 0) >= 0.8 ? "text-s-danger" : "text-s-ink-3")}>{u.budgetShare === null ? "—" : `${Math.round(u.budgetShare * 100)}%`}</td>

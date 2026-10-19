@@ -14,10 +14,13 @@ export function BillingButton({
   action,
   plan = "pro",
   interval = "month",
+  confirm,
   className,
   children,
 }: {
   action: Action;
+  /** Asked before a change that cancels or charges right away. */
+  confirm?: string;
   plan?: "free" | "pro" | "max";
   interval?: "month" | "year";
   className?: string;
@@ -28,6 +31,7 @@ export function BillingButton({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const go = async () => {
+    if (confirm && !window.confirm(confirm)) return;
     setBusy(true);
     setError(null);
     setDone(null);

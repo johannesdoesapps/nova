@@ -23,7 +23,10 @@ const BLURBS: Record<PricingPlan["id"], string> = {
   max: "For heavy use, with the most capable models and longer replies.",
 };
 
-export default async function PricingPage() {
+export default async function PricingPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const sp = await searchParams;
+  const highlight = (["free", "pro", "max"] as const).find((id) => id === sp.plan) ?? null;
+  const initialInterval = sp.interval === "year" || sp.interval === "month" ? sp.interval : null;
   const onSale = billingConfigured();
   const settings = await getPlatformSettings();
   const billing = resolveBilling(settings.billing);
@@ -68,7 +71,7 @@ export default async function PricingPage() {
 
       <section aria-labelledby="plans" className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
         <h2 id="plans" className="sr-only">Plans</h2>
-        <PricingPlans plans={plans} onSale={onSale} current={current} signedIn={auth.mode === "authenticated"} />
+        <PricingPlans plans={plans} onSale={onSale} current={current} signedIn={auth.mode === "authenticated"} highlight={highlight} initialInterval={initialInterval} />
         <p className="mx-auto mt-6 max-w-3xl text-center text-[13px] leading-relaxed text-muted">
           Fair use: each plan includes a monthly AI budget. If heavy use of larger models uses most of it, NOVA continues on the plan&rsquo;s lowest-cost model, and
           pauses when the budget is used, until your billing month renews. Upgrades are charged pro-rata right away; downgrades are credited to your next invoice.
