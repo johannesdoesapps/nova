@@ -8,7 +8,7 @@ All accounting happens on the server and in the database; nothing the browser se
 | --- | --- |
 | Guest (not signed in) | Per-IP daily cap (`NOVA_DAILY_REQUEST_LIMIT`) |
 | Free | 10 units per 5-hour window, 30 per week, 10 messages a day, 400k tokens and a $0.10 AI budget a month, standard models (`src/lib/plans.ts`) |
-| Pro (active or trialing subscription) | 200 per 5 hours, 1,100 per week, 15M tokens and a $3.01 AI budget a month ($1.81 of it for advanced models), standard and advanced models |
+| Pro (active or trialing subscription) | 200 per 5 hours, 1,100 per week, 15M tokens and a $4.52 AI budget a month ($2.71 of it for advanced models), standard and advanced models |
 | Max (active or trialing subscription) | 2,000 per 5 hours, 10,000 per week, 60M tokens and a $31.76 AI budget a month ($26.99 for advanced and premium models), all models |
 | Administrator (row in `public.admins`) | No allowance while `NOVA_ADMINS_UNLIMITED` isn't `false`. Runs are still recorded with `entitlement = admin_unlimited`, and duplicate submissions are still refused. |
 

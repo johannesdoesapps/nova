@@ -83,8 +83,8 @@ describe("usage scenarios (2,000 in / 800 out per call, 1.05 calls per message, 
 describe("plan economics (60% contribution margin)", () => {
   it("derives each paid plan's AI budget so 60% of revenue remains after every variable cost", () => {
     for (const [id, interval, budget] of [
-      ["pro", "month", 3.009],
-      ["pro", "year", 2.789],
+      ["pro", "month", 4.522],
+      ["pro", "year", 4.151],
       ["max", "month", 31.756],
       ["max", "year", 28.661],
     ] as const) {
@@ -99,19 +99,19 @@ describe("plan economics (60% contribution margin)", () => {
 
   it("excludes taxes collected for authorities from revenue", () => {
     const e = planEconomics({ ...B, taxIncludedPct: 20, refundRatePct: 0 }, "pro");
-    expect(e.taxUsd).toBeCloseTo(15 - 15 / 1.2, 6);
-    expect(e.revenueUsd).toBeCloseTo(12.5, 6);
+    expect(e.taxUsd).toBeCloseTo(20 - 20 / 1.2, 3);
+    expect(e.revenueUsd).toBeCloseTo(20 / 1.2, 3);
     expect(e.aiBudgetUsd).toBeLessThan(planEconomics(B, "pro").aiBudgetUsd);
   });
 
   it("charges yearly plans 12 months less the discount, in whole dollars", () => {
-    expect(chargeUsd(planOf(B, "pro"), "year")).toBe(162);
+    expect(chargeUsd(planOf(B, "pro"), "year")).toBe(216);
     expect(chargeUsd(planOf(B, "max"), "year")).toBe(1188);
     expect(chargeUsd(planOf(B, "free"), "year")).toBe(0);
   });
 
   it("inverts: the price needed for a given AI budget", () => {
-    expect(priceForBudget(B, planEconomics(B, "pro").aiBudgetUsd)).toBeCloseTo(15, 0);
+    expect(priceForBudget(B, planEconomics(B, "pro").aiBudgetUsd)).toBeCloseTo(20, 0);
     expect(priceForBudget({ ...B, targetMargin: 0.97 }, 5)).toBeNull();
   });
 
@@ -399,7 +399,7 @@ describe("finance report alerts", () => {
         ],
         cost_by_plan: { "plan:pro": 20 },
         daily_cost: [...days, { day: today, cost: 5, runs: 50 }],
-        top_users: [{ user_id: "a", email: "a@example.com", plan: "pro", status: "active", interval: "month", cost: 2.709, runs: 300, admin: false }],
+        top_users: [{ user_id: "a", email: "a@example.com", plan: "pro", status: "active", interval: "month", cost: 4.07, runs: 300, admin: false }],
         users_total: 10,
       },
       DEFAULT_BILLING,

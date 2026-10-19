@@ -207,7 +207,7 @@ describe("POST /api/stripe/webhook", () => {
 });
 
 describe("POST /api/billing/checkout", () => {
-  it("opens a $15/month USD Pro checkout tied to the user", async () => {
+  it("opens a $20/month USD Pro checkout tied to the user", async () => {
     const { stripeClient } = await import("@/lib/billing/stripe");
     const s = stripeClient()!;
     vi.spyOn(s.prices, "list").mockResolvedValue({ data: [] } as never);
@@ -216,7 +216,7 @@ describe("POST /api/billing/checkout", () => {
     const { POST } = await import("@/app/api/billing/checkout/route");
     const res = await POST(post({ plan: "pro", interval: "month" }));
     expect(await res.json()).toEqual({ url: "https://checkout.stripe.com/c/pay_1" });
-    expect(createPrice).toHaveBeenCalledWith(expect.objectContaining({ currency: "usd", unit_amount: 1500, recurring: { interval: "month" }, lookup_key: "nova_pro_month_usd_1500" }));
+    expect(createPrice).toHaveBeenCalledWith(expect.objectContaining({ currency: "usd", unit_amount: 2000, recurring: { interval: "month" }, lookup_key: "nova_pro_month_usd_2000" }));
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: "subscription",

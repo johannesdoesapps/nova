@@ -116,7 +116,7 @@ export const DEFAULT_BILLING: BillingSettings = {
     },
     pro: {
       label: "Pro",
-      priceUsd: 15,
+      priceUsd: 20,
       annualDiscountPct: 10,
       windowUnits: 200,
       weeklyUnits: 1100,

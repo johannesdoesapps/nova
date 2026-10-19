@@ -96,18 +96,18 @@ Fixed overhead isn't a variable cost, so it isn't in this formula. It's shown se
 
 | | Pro monthly | Pro yearly | Max monthly | Max yearly |
 | --- | --- | --- | --- | --- |
-| Price | **$15 / month** | $162 / year (10% off) | **$110 / month** | $1,188 / year (10% off) |
-| Revenue / month (excl. tax, after refunds) | $14.70 | $13.23 | $107.80 | $97.02 |
-| Allowed costs (40%) | $5.88 | $5.29 | $43.12 | $38.81 |
-| Payment fees | $0.84 | $0.51 | $4.26 | $3.59 |
+| Price | **$20 / month** | $216 / year (10% off) | **$110 / month** | $1,188 / year (10% off) |
+| Revenue / month (excl. tax, after refunds) | $19.60 | $17.64 | $107.80 | $97.02 |
+| Allowed costs (40%) | $7.84 | $7.06 | $43.12 | $38.81 |
+| Payment fees | $1.02 | $0.67 | $4.26 | $3.59 |
 | Hosting + Free users' share | $1.50 | $1.50 | $1.50 | $1.50 |
-| Safety buffer | $0.53 | $0.49 | $5.60 | $5.06 |
-| **AI budget / month** | **$3.01** | **$2.79** | **$31.76** | **$28.66** |
-| … of which advanced/premium models | $1.81 (60%) | $1.67 | $26.99 (85%) | $24.36 |
-| Required profit (60%) | $8.82 | $7.94 | $64.68 | $58.21 |
-| Contribution if the whole budget is used | $9.35 (63.6%) | $8.43 (63.7%) | $70.28 (65.2%) | $63.27 (65.2%) |
+| Safety buffer | $0.80 | $0.73 | $5.60 | $5.06 |
+| **AI budget / month** | **$4.52** | **$4.15** | **$31.76** | **$28.66** |
+| … of which advanced/premium models | $2.71 (60%) | $2.49 | $26.99 (85%) | $24.36 |
+| Required profit (60%) | $11.76 | $10.58 | $64.68 | $58.21 |
+| Contribution if the whole budget is used | $12.56 (64.1%) | $11.32 (64.2%) | $70.28 (65.2%) | $63.27 (65.2%) |
 
-**Verdict: the proposed prices, Pro $15 and Max $110, both sustain at least 60% contribution margin, so they don't need to change.**
+**Verdict: Pro $20 and Max $110 both sustain at least 60% contribution margin.** (Pro was $15 until 2026-10-19; the owner raised it to $20. Pro's AI budget is derived from the price, so it rose from $3.01 to $4.52.)
 
 The margin holds because the server stops usage at the AI budget. Without that guard, no flat price would be safe: a Max user on Opus at 300 messages a day would cost $227 a month.
 
@@ -117,17 +117,17 @@ These run 10, 50, 100 and 300 messages a day on each model the plan includes, wi
 
 | Plan | Model | 10/day | 50/day | 100/day | 300/day |
 | --- | --- | --- | --- | --- | --- |
-| Pro | Claude Haiku | 82.8% | 77.7% | 71.2% | 63.6% (capped) |
-| Pro | GPT Luna | 81.0% | 68.4% | 63.6% (capped) | 63.6% (capped) |
-| Pro | Claude Sonnet | 71.8% (capped at the advanced part) | 71.8% | 71.8% | 71.8% |
-| Pro | GPT Terra | 71.9% (capped) | 71.9% | 71.9% | 71.9% |
+| Pro | Claude Haiku | 86.2% | 82.3% | 77.5% | 72.0% (capped) |
+| Pro | GPT Luna | 84.8% | 75.4% | 64.1% (capped) | 64.1% (capped) |
+| Pro | Claude Sonnet | 73.3% (capped at the advanced part) | 73.3% | 73.3% | 73.3% |
+| Pro | GPT Terra | 73.4% (capped) | 73.4% | 73.4% | 73.4% |
 | Max | Claude Haiku | 94.5% | 93.8% | 92.9% | 89.4% |
 | Max | Claude Sonnet | 91.2% | 77.1% | 69.6% (capped) | 69.6% (capped) |
 | Max | Claude Opus (premium only) | 87.6% | 69.6% (capped) | 69.6% | 69.6% |
 | Max | GPT Sol (premium only) | 87.1% | 69.6% (capped) | 69.6% | 69.6% |
 
-- Yearly plans give at least 63% in every scenario.
-- The lowest result anywhere is **63.6%**: a Pro user sending 300 messages a day.
+- Yearly plans give at least 64% in every scenario.
+- The lowest result anywhere is **64.1%**: a Pro user sending 100 or more GPT Luna messages a day.
 - All of these are checked in a test.
 
 **Average cost per subscriber** depends on the mix of light, normal and heavy users. As an illustration only (not data): with 50% light (15/day), 35% normal (45/day) and 15% heavy (200/day) users, all on Auto (Haiku), it's about **$0.89 a month on Pro** and **$1.01 on Max**.
@@ -136,16 +136,16 @@ Use the real "AI cost per paying subscriber" in Finance after launch.
 
 ## 5. Recommended allowances
 
-| | Free | Pro ($15) | Max ($110) |
+| | Free | Pro ($20) | Max ($110) |
 | --- | --- | --- | --- |
 | Models | Standard: Haiku, Luna | + Advanced: Sonnet, Terra | + Premium: Opus, Sol |
-| Monthly AI budget | $0.10 | $3.01 | $31.76 |
-| Advanced-model part | — | $1.81 | $26.99 |
+| Monthly AI budget | $0.10 | $4.52 | $31.76 |
+| Advanced-model part | — | $2.71 | $26.99 |
 | Messages / month, Auto (Haiku) | about 128 (weekly cap) | about 4,714 (157/day) | about 20,400 (680/day; token cap) |
-| Messages / month, GPT Luna | about 65 | about 1,962 | about 20,400 |
-| Messages / month, advanced models | — | about 117 (Terra) – 143 (Sonnet) | about 1,760 (Terra) – 2,142 (Sonnet) |
+| Messages / month, GPT Luna | about 65 | about 2,949 | about 20,400 |
+| Messages / month, advanced models | — | about 176 (Terra) – 215 (Sonnet) | about 1,760 (Terra) – 2,142 (Sonnet) |
 | Messages / month, premium models | — | — | about 988 (Sol) – 1,071 (Opus) |
-| Mix: 80% Auto, 20% top model | — | about 588 | about 4,870 |
+| Mix: 80% Auto, 20% top model | — | about 884 | about 4,870 |
 | Messages / day | 10 | no daily cap | no daily cap |
 | Tokens / month | 400,000 | 15,000,000 | 60,000,000 |
 | 5-hour / weekly units | 10 / 30 | 200 / 1,100 | 2,000 / 10,000 |
