@@ -129,9 +129,9 @@ describe("usage ledger", () => {
 
   it("shows request diagnostics to administrators only, without prompts", async () => {
     await as(ALICE, () => db.query("insert into public.model_runs (model_id, status, units, prompt, routing_reason, request_id) values ('m', 'success', 1, 'secret prompt', 'Auto chose m', $1)", [rid(70)]));
-    await expect(as(BOB, () => db.query("select * from public.admin_request_log(10, null)"))).rejects.toThrow(/Administrators only/);
+    await expect(as(BOB, () => db.query("select * from public.admin_request_log_v2(10, null)"))).rejects.toThrow(/Administrators only/);
     await db.exec(`insert into public.admins (user_id) values ('${BOB}')`);
-    const rows = (await as(BOB, () => db.query<Record<string, unknown>>("select * from public.admin_request_log(10, null)"))).rows;
+    const rows = (await as(BOB, () => db.query<Record<string, unknown>>("select * from public.admin_request_log_v2(10, null)"))).rows;
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ user_email: "alice@example.com", routing_reason: "Auto chose m", request_id: rid(70) });
     expect(JSON.stringify(rows[0])).not.toContain("secret prompt");

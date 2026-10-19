@@ -14,7 +14,7 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit")) || 100));
     const email = url.searchParams.get("email")?.trim().slice(0, 200) || null;
-    const { data, error } = await auth.supabase.rpc("admin_request_log", { p_limit: limit, p_email: email });
+    const { data, error } = await auth.supabase.rpc("admin_request_log_v2", { p_limit: limit, p_email: email });
     if (error) throw new ApiError("internal", "Couldn't load the request log.");
     return NextResponse.json({ requests: data ?? [] }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {

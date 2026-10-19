@@ -1,11 +1,12 @@
 -- NOVA AI — record prompt-cache hits separately (they're billed at a lower rate),
--- and show them in the admin request log.
+-- and show them in the admin request log. The log function gets a new name
+-- (admin_request_log_v2) because its result columns changed; the old one is
+-- left in place, unused.
 alter table public.model_runs add column if not exists cached_input_tokens integer
   check (cached_input_tokens is null or cached_input_tokens >= 0);
 comment on column public.model_runs.cached_input_tokens is 'Input tokens served from the provider prompt cache (included in input_tokens), when the provider reports them.';
 
-drop function if exists public.admin_request_log(integer, text);
-create function public.admin_request_log(p_limit integer default 100, p_email text default null)
+create or replace function public.admin_request_log_v2(p_limit integer default 100, p_email text default null)
 returns table (
   created_at timestamptz,
   request_id uuid,
@@ -45,5 +46,5 @@ begin
     limit least(greatest(coalesce(p_limit, 100), 1), 500);
 end;
 $$;
-revoke all on function public.admin_request_log(integer, text) from public, anon;
-grant execute on function public.admin_request_log(integer, text) to authenticated;
+revoke all on function public.admin_request_log_v2(integer, text) from public, anon;
+grant execute on function public.admin_request_log_v2(integer, text) to authenticated;

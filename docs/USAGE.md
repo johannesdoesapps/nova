@@ -42,15 +42,15 @@ On Free that second condition always holds, so one Free message can never use th
 
 ## Diagnostics
 
-Admin → **Request log** (`/api/admin/diagnostics`, SQL `admin_request_log`, admins only) shows, for each request:
+Admin → **Request log** (`/api/admin/diagnostics`, SQL `admin_request_log_v2`, admins only) shows, for each request:
 - time, user, feature, and status;
 - the model requested, the model that answered, and why (routing reason);
 - tools used, fallbacks, latency, tokens, units, estimated cost and the redacted error.
 
 It never shows prompts or replies.
 
-The Supabase security advisor lists `usage_reserve`, `usage_finish`, `usage_status` and `admin_request_log` as SECURITY DEFINER functions signed-in users can call. That is intentional:
+The Supabase security advisor lists `usage_reserve`, `usage_finish`, `usage_status` and `admin_request_log_v2` as SECURITY DEFINER functions signed-in users can call. That is intentional:
 - the usage functions only act on the caller's own rows (`auth.uid()`);
-- `admin_request_log` refuses anyone who isn't in `admins`.
+- `admin_request_log_v2` refuses anyone who isn't in `admins`.
 
 `tests/usage-ledger.test.ts` covers both.
