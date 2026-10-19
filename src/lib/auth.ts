@@ -1,4 +1,5 @@
 import "server-only";
+import { displayNameFrom } from "./auth-flow";
 import { isSupabaseConfigured, serverEnv } from "./env";
 import { ApiError } from "./http";
 import { createServerSupabase, type ServerSupabase } from "./supabase/server";
@@ -32,7 +33,7 @@ export async function getAuth(): Promise<AuthContext> {
     user: {
       id: data.user.id,
       email: data.user.email ?? null,
-      displayName: typeof meta.display_name === "string" ? meta.display_name : null,
+      displayName: displayNameFrom(meta),
     },
   };
 }

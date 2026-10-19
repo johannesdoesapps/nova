@@ -54,6 +54,20 @@ describe("schema", () => {
     const r = await db.query<{ id: string; display_name: string }>("select id, display_name from public.profiles order by display_name");
     expect(r.rows.map((x) => x.display_name)).toEqual(["Alice", "bob"]);
   });
+
+  it("names profiles from Google sign-ups (full_name / name), falling back to the email", async () => {
+    const G1 = "33333333-3333-4333-8333-333333333333", G2 = "44444444-4444-4444-8444-444444444444", G3 = "55555555-5555-4555-8555-555555555555";
+    await db.exec(`
+      insert into auth.users (id, email, raw_user_meta_data) values
+        ('${G1}', 'g1@gmail.com', '{"full_name":"Grace Hopper","name":"Grace H","avatar_url":"https://x/y.png"}'),
+        ('${G2}', 'g2@gmail.com', '{"display_name":"  ","name":"Ada"}'),
+        ('${G3}', 'g3@gmail.com', '{"iss":"https://accounts.google.com"}');
+    `);
+    const r = await db.query<{ id: string; display_name: string }>("select id, display_name from public.profiles where id in ($1, $2, $3)", [G1, G2, G3]);
+    const by = Object.fromEntries(r.rows.map((x) => [x.id, x.display_name]));
+    expect(by).toEqual({ [G1]: "Grace Hopper", [G2]: "Ada", [G3]: "g3" });
+    await db.exec(`delete from auth.users where id in ('${G1}', '${G2}', '${G3}')`);
+  });
 });
 
 describe("row level security", () => {
