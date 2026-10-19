@@ -17,19 +17,21 @@ Each paid plan's monthly AI budget is derived from its price, so 60% stays as pr
 
 Free has a fixed $0.10.
 
-Enforcement happens on the server, atomically, before every AI request (`usage_reserve_v3`, under a per-user lock). It covers chat, agents, Council, Arena, Mission Control, search and Truth Layer:
+Enforcement happens on the server, atomically, before every AI request (`usage_reserve_v4`, under a per-user lock). It covers chat, agents, Council, Arena, Mission Control, search and Truth Layer:
 
 1. **Plan access:** a model outside the plan is refused with an explanation. It is never switched silently.
 2. **Budget:** the request's worst-case cost is checked against the budget. That cost is its input plus the longest reply the plan allows. Requests in flight count toward the budget too.
    - Advanced and premium models have their own part of the budget (Pro 60%, Max 85%). When it's used, those models are refused with the choice to wait, upgrade or switch to a fast model; Auto keeps working.
    - At **100%**, AI requests stop until the billing month renews.
-3. **Caps:** messages per day (Free: 10), tokens per month, and 5-hour and weekly units.
+3. **Caps:** at most $1 per request, at most 34% of the monthly budget per day (Pro, Max), messages per day (Free: 10), tokens per month, and 5-hour and weekly units.
 
 The budget resets monthly on the billing date. Yearly plans also reset monthly. Free resets on the calendar month.
 
 A run without a verified price is counted at the most expensive verified price. Web searches are added at $0.01 each.
 
-`NOVA_MONTHLY_AI_BUDGET_USD` (optional) caps the whole site's monthly spend.
+`NOVA_MONTHLY_AI_BUDGET_USD` (optional) or Admin → Plans & pricing → Spending protection caps the whole site's monthly spend; the emergency stop there pauses AI for everyone but administrators.
+
+Stripe webhooks are processed once per event id (`stripe_events`); paid invoices and refunds are written to `billing_ledger`, which Finance uses for collected revenue.
 
 ## Stripe setup (one time)
 

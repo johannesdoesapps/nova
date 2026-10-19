@@ -26,10 +26,14 @@ Every signed-in user also has the per-minute rate limit (`NOVA_RATE_LIMIT_PER_MI
 
 ## How it's enforced (`src/lib/usage.ts`, migration `20261019130000_usage_ledger.sql`)
 
-1. **Reserve.** Before calling a model, `usage_reserve_v3()` takes a per-user lock, checks the monthly AI budget and its advanced-model part, daily messages and monthly tokens (spend plus in-flight estimates), counts charged runs plus requests still in flight, and refuses if the request would exceed the 5-hour or weekly limit. Otherwise it places a hold for the request's units. Concurrent requests can't both slip under the limit.
+1. **Reserve.** Before calling a model, `usage_reserve_v4()` (migration `20261019230000_cost_controls.sql`) takes a per-user lock, checks the monthly AI budget and its advanced-model part, the daily spending cap, the site-wide emergency cap, daily messages and monthly tokens (spend plus in-flight estimates), counts charged runs plus requests still in flight, and refuses if the request would exceed the 5-hour or weekly limit. Otherwise it places a hold for the request's units. Concurrent requests can't both slip under the limit.
 2. **Idempotency.** Each submission carries a `requestId` (generated in the browser). A request id can be reserved only once, so a resent or double-submitted message returns 409 and is never run or charged twice.
 3. **Charge.** `recordRun()` writes the run with its units, the requested model, the routing reason, tools used and the entitlement, then settles the hold.
 4. **Release.** If the request fails before any model runs, the hold is released. Holds also expire on their own (3 minutes; 45 s for short checks), so a crashed request can't block a user.
+
+**Fail closed:** if the reservation itself errors, signed-in requests are refused (502) rather than run unmetered.
+
+**Cross-site requests:** `src/proxy.ts` refuses any POST/PUT/PATCH/DELETE to `/api` whose `Origin` or `Sec-Fetch-Site` shows it came from another site (the Stripe webhook is exempt; it is verified by signature).
 
 **Tamper resistance:** users can insert their own `model_runs` rows (RLS), but negative units, costs and token counts are rejected and `created_at` is always set by the server, so a backdated row can't move a window. Holds can only change through the functions. Runs can't be updated or deleted by users.
 

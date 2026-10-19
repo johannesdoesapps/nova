@@ -160,15 +160,24 @@ The pricing page shows these as "about" figures. Nothing is advertised as unlimi
 
 ## 6. How the limits are enforced
 
-All of this runs on the server, in `usage_reserve_v3`, under a per-user database lock. Nothing in the browser can change a limit.
+All of this runs on the server, in `usage_reserve_v4`, under a per-user database lock. Nothing in the browser can change a limit. If the check itself fails (database error), paid and Free requests are refused rather than let through.
 
 1. **Plan access:** a model outside the plan is refused with the plan that includes it and same-provider alternatives.
 2. **Pre-request estimate:** the request's input plus the longest reply the plan allows, for every model call it makes.
 3. **Holds:** that estimate is held against the budget while the request runs, so concurrent requests can't overspend.
 4. **Monthly AI budget:** refuses a request when the budget is used up, or when its estimate exceeds what's left.
 5. **Advanced-model part:** when it's used up, those models are refused. The user gets three options: wait for the reset date, upgrade, or switch to a fast model of the same provider. Their choice is never switched silently, and Auto keeps working.
-6. **Daily messages and monthly tokens** (where set), then the 5-hour and weekly units.
-7. **Settlement:** the real cost is recorded from the provider's token counts and the hold is settled. A failed call with no output is released at no charge.
+6. **Per-request cap:** a single request whose estimate is above `maxRequestCostUsd` (default $1) is refused before any model runs.
+7. **Daily spending cap:** a user can spend at most `dailyBudgetPct` of the monthly AI budget in one UTC day (Pro and Max: 34%, so a burst can't use the whole month in a day; Free: none, it has 10 messages a day).
+8. **Site-wide emergency limit:** Admin → Plans & pricing → Spending protection. `siteMonthlyCapUsd` (0 = off) refuses everyone's AI requests once the site's recorded spend this month plus requests in flight would pass it. `NOVA_MONTHLY_AI_BUDGET_USD` does the same from the environment, but only once the Supabase service role key is set (it is not set today; use the admin setting). The **emergency stop** (`aiPaused`) pauses AI for everyone except administrators at once.
+9. **Daily messages and monthly tokens** (where set), then the 5-hour and weekly units.
+10. **Settlement:** the real cost is recorded from the provider's token counts and the hold is settled. A failed call with no output is released at no charge.
+
+The pre-request estimate is stored next to the actual cost (`reserved_cost_usd`), so Admin → Finance → Health can compare them per provider.
+
+### Auto routing
+
+Auto picks the lowest-cost model the plan allows. It moves to the lowest-cost model with reasoning ability (Sonnet today) only when the request looks like hard coding or reasoning work, and never for summaries or long documents. It stays on the lowest-cost model once a user has used 80% of their budget or of its advanced part. A model the user picks themselves is always respected (or refused with an explanation); it is never swapped silently. Each run records the routing reason, the estimate and the actual cost.
 
 **Alerts** appear in Admin → Finance. They cover:
 - users at 80% or more of their budget;
