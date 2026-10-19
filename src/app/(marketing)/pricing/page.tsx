@@ -61,6 +61,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
         names.length ? `Models: ${names.join(", ")}` : "Auto (the lowest-cost available model)",
         `Replies up to about ${Math.round((p.maxOutputTokens * 0.75) / 50) * 50} words`,
         p.webSearchesPerPeriod > 0 ? `${p.webSearchesPerPeriod} web searches per month (when search is enabled)` : null,
+        p.codeRunsPerPeriod > 0 ? `Run code in chat: ${p.codeRunsPerPeriod.toLocaleString("en-US")} runs a month (Python, JavaScript, TypeScript, Bash)` : null,
         "Assistant, agents, Council, Arena and Mission Control",
         id === "free" ? "No credit card needed" : "Cancel or change plan any time",
       ].filter((x): x is string => !!x),

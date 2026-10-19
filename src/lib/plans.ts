@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Capability, ModelInfo } from "./ai/types";
+import { maxCodeRunCostUsd } from "./code/pricing";
 
 /**
  * Plans and their economics. Free, Pro and Max, priced in USD. Usage is
@@ -42,6 +43,8 @@ const planSchema = z.object({
   monthlyTokens: z.number().int().min(0).max(10_000_000_000).default(0),
   /** Most of the monthly AI budget one day may use, in percent (0 = no daily money cap). */
   dailyBudgetPct: z.number().min(0).max(100).default(0),
+  /** Code runs (the Run button) per budget period; 0 = none. */
+  codeRunsPerPeriod: z.number().int().min(0).max(1_000_000).default(0),
 });
 export type Plan = z.infer<typeof planSchema> & { id: PlanId };
 
@@ -70,6 +73,10 @@ export const billingSettingsSchema = z.object({
   maxRequestCostUsd: z.number().min(0).max(100).default(1),
   /** Site-wide emergency limit on AI spend per calendar month, USD; 0 = none. New requests stop when reached. */
   siteMonthlyCapUsd: z.number().min(0).max(10_000_000).default(0),
+  /** Longest a code run may take, in seconds. Sets the most a run can cost, which each plan's margin counts. */
+  codeRunSeconds: z.number().int().min(5).max(120).default(30),
+  /** Site-wide code runs per calendar month (everyone together); 0 = no limit. */
+  codeRunsSiteMonthly: z.number().int().min(0).max(100_000_000).default(4000),
   /** Emergency stop: no new AI requests for anyone except administrators. */
   aiPaused: z.boolean().default(false),
   /** Planning assumptions for the usage calculator (replaced by real averages once there's usage). */
@@ -94,7 +101,9 @@ export type BillingSettings = z.infer<typeof billingSettingsSchema>;
  * Defaults, from docs/PRICING.md: official API prices (2026-10-19), a
  * conservative request mix, 60% margin, 3.6% + $0.30 per charge, $0.50
  * hosting and $1 free-user subsidy per subscriber, 15% safety buffer.
- * Pro $20 → $4.66/month AI budget; Max $100 → $29.41.
+ * Code runs: each plan's monthly runs at the most one run can cost are
+ * set aside before the AI budget. Pro $20 → $4.11/month AI budget; Max
+ * $100 → $26.69.
  */
 export const DEFAULT_BILLING: BillingSettings = {
   plans: {
@@ -113,6 +122,7 @@ export const DEFAULT_BILLING: BillingSettings = {
       dailyMessages: 10,
       monthlyTokens: 400_000,
       dailyBudgetPct: 0,
+      codeRunsPerPeriod: 20,
     },
     pro: {
       label: "Pro",
@@ -128,6 +138,7 @@ export const DEFAULT_BILLING: BillingSettings = {
       dailyMessages: 0,
       monthlyTokens: 15_000_000,
       dailyBudgetPct: 34,
+      codeRunsPerPeriod: 300,
     },
     max: {
       label: "Max",
@@ -143,6 +154,7 @@ export const DEFAULT_BILLING: BillingSettings = {
       dailyMessages: 0,
       monthlyTokens: 60_000_000,
       dailyBudgetPct: 34,
+      codeRunsPerPeriod: 1500,
     },
   },
   targetMargin: 0.6,
@@ -157,6 +169,8 @@ export const DEFAULT_BILLING: BillingSettings = {
   fixedOverheadMonthlyUsd: 0,
   maxRequestCostUsd: 1,
   siteMonthlyCapUsd: 0,
+  codeRunSeconds: 30,
+  codeRunsSiteMonthly: 4000,
   aiPaused: false,
   scenario: { inputTokens: 2000, outputTokens: 800, callsPerMessage: 1.05, cachedInputPct: 0 },
   tierUnits: { standard: 1, advanced: 20, premium: 40 },
@@ -228,7 +242,9 @@ export interface PlanEconomics {
   aiBudgetUsd: number;
   /** Part of the AI budget that advanced and premium models may use. */
   premiumBudgetUsd: number;
-  /** Contribution if the whole AI budget is used: revenue − variable costs. */
+  /** The plan's code runs at their most expensive (sandbox time), per month. */
+  codeRunsUsd: number;
+  /** Contribution if the whole AI budget and every code run are used: revenue − variable costs. */
   contributionUsd: number;
 }
 
@@ -236,15 +252,16 @@ export interface PlanEconomics {
  * The monthly AI budget that keeps the target contribution margin:
  *   revenue      = price ÷ (1 + tax included) × (1 − refunds)
  *   allowed cost = revenue × (1 − margin)
- *   AI budget    = (allowed cost − payment fees − hosting − Free users' share) × (1 − safety buffer)
+ *   AI budget    = (allowed cost − payment fees − hosting − Free users' share − code runs) × (1 − safety buffer)
  * Fixed overhead is not a variable cost and is shown separately.
  */
 export function planEconomics(billing: BillingSettings, id: PlanId, interval: BillingInterval = "month"): PlanEconomics {
   const plan = planOf(billing, id);
   const r = (n: number) => Math.round(n * 10_000) / 10_000;
+  const codeRunsUsd = plan.codeRunsPerPeriod * maxCodeRunCostUsd(billing.codeRunSeconds);
   if (plan.priceUsd === 0) {
     const ai = plan.aiBudgetUsd ?? 0;
-    return { revenueUsd: 0, taxUsd: 0, refundsUsd: 0, maxCostUsd: 0, feesUsd: 0, overheadUsd: 0, bufferUsd: 0, aiBudgetUsd: ai, premiumBudgetUsd: r((ai * plan.premiumBudgetPct) / 100), contributionUsd: -ai };
+    return { revenueUsd: 0, taxUsd: 0, refundsUsd: 0, maxCostUsd: 0, feesUsd: 0, overheadUsd: 0, bufferUsd: 0, aiBudgetUsd: ai, premiumBudgetUsd: r((ai * plan.premiumBudgetPct) / 100), codeRunsUsd: r(codeRunsUsd), contributionUsd: r(-ai - codeRunsUsd) };
   }
   const charge = chargeUsd(plan, interval);
   const perMonth = interval === "year" ? 1 / 12 : 1;
@@ -256,7 +273,7 @@ export function planEconomics(billing: BillingSettings, id: PlanId, interval: Bi
   // Stripe charges its fee on the full amount paid, tax included.
   const feesUsd = ((charge * billing.paymentFeePercent) / 100 + billing.paymentFeeFixedUsd) * perMonth;
   const overheadUsd = billing.overheadPerSubscriberUsd + billing.freeSubsidyPerSubscriberUsd;
-  const beforeBuffer = Math.max(0, maxCostUsd - feesUsd - overheadUsd);
+  const beforeBuffer = Math.max(0, maxCostUsd - feesUsd - overheadUsd - codeRunsUsd);
   const bufferUsd = (beforeBuffer * billing.safetyBufferPct) / 100;
   const aiBudgetUsd = beforeBuffer - bufferUsd;
   return {
@@ -269,18 +286,23 @@ export function planEconomics(billing: BillingSettings, id: PlanId, interval: Bi
     bufferUsd: r(bufferUsd),
     aiBudgetUsd: r(aiBudgetUsd),
     premiumBudgetUsd: r((aiBudgetUsd * plan.premiumBudgetPct) / 100),
-    contributionUsd: r(revenueUsd - feesUsd - overheadUsd - aiBudgetUsd),
+    codeRunsUsd: r(codeRunsUsd),
+    contributionUsd: r(revenueUsd - feesUsd - overheadUsd - codeRunsUsd - aiBudgetUsd),
   };
 }
 
-/** The monthly price needed for a given monthly AI budget at the target margin (inverse of planEconomics). */
-export function priceForBudget(billing: BillingSettings, aiBudgetUsd: number): number | null {
+/**
+ * The monthly price needed for a given monthly AI budget at the target margin
+ * (inverse of planEconomics). Pass the plan's code runs to set them aside too.
+ */
+export function priceForBudget(billing: BillingSettings, aiBudgetUsd: number, codeRunsPerPeriod = 0): number | null {
   // Inverse of planEconomics for a monthly plan: solve for the price P.
   const keep = (1 - billing.refundRatePct / 100) / (1 + billing.taxIncludedPct / 100);
   const denom = keep * (1 - billing.targetMargin) - billing.paymentFeePercent / 100;
   if (denom <= 0) return null;
   const beforeBuffer = aiBudgetUsd / (1 - billing.safetyBufferPct / 100);
-  return Math.round(((beforeBuffer + billing.paymentFeeFixedUsd + billing.overheadPerSubscriberUsd + billing.freeSubsidyPerSubscriberUsd) / denom) * 100) / 100;
+  const codeRunsUsd = codeRunsPerPeriod * maxCodeRunCostUsd(billing.codeRunSeconds);
+  return Math.round(((beforeBuffer + billing.paymentFeeFixedUsd + billing.overheadPerSubscriberUsd + billing.freeSubsidyPerSubscriberUsd + codeRunsUsd) / denom) * 100) / 100;
 }
 
 /** A model's tier: set in the registry, else premium never by default, advanced unless tagged low-cost. */

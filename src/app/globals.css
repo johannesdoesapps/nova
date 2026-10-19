@@ -173,3 +173,11 @@ body {
 /* Public site: one gentle entrance for hero content (disabled under reduced motion above). */
 @keyframes mk-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 .mk-rise { animation: mk-rise 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+/* Run button output under a code block (src/components/common/code-run.tsx). */
+.nova-run-out { border-top: 1px solid var(--border); padding: 0.6em 1em 0.7em; display: flex; flex-direction: column; gap: 0.45em; font-size: 12.5px; }
+.nova-run-out pre { margin: 0; padding: 0; border: 0; background: transparent; max-height: 22em; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 12.5px; }
+.nova-run-stderr, .nova-run-bad { color: var(--danger); }
+.nova-run-ok { color: var(--success); }
+.nova-run-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4em; color: var(--fg-faint); font-family: var(--font-sans, inherit); }
+.nova-run-link { text-decoration: underline; text-underline-offset: 2px; color: inherit; font-weight: 500; }

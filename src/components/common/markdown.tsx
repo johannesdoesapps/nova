@@ -2,24 +2,30 @@
 import { Fragment, useState, type ReactNode } from "react";
 import { Check, Copy } from "lucide-react";
 import { isSafeHttpUrl } from "@/lib/utils";
+import { codeLanguage } from "@/lib/code/languages";
+import { RunButton, RunOutput, useCodeRun } from "./code-run";
 import { highlight } from "./highlight";
 
 /**
  * Small, safe Markdown renderer. It builds React elements (never raw HTML),
  * so model or web text cannot inject markup. Supports headings, lists, code
  * blocks (with a language label and copy button), quotes, rules, inline code,
- * bold/italic, http(s) links and [n] citation chips.
+ * bold/italic, http(s) links and [n] citation chips. With `runnable`, code
+ * blocks in a supported language get a Run button (see /api/code/run).
  */
 export function Markdown({
   text,
   onCitation,
   validCitations,
   className = "nova-prose text-[15px]",
+  runnable = false,
 }: {
   text: string;
   onCitation?: (n: number) => void;
   validCitations?: Set<number>;
   className?: string;
+  /** Offer a Run button on code blocks NOVA can execute (not while the text is still streaming). */
+  runnable?: boolean;
 }) {
   const blocks = parseBlocks(text);
   return (
@@ -28,7 +34,9 @@ export function Markdown({
         const inl = (s: string) => inline(s, onCitation, validCitations);
         switch (b.type) {
           case "code":
-            return (
+            return runnable && codeLanguage(b.lang) && b.text.trim() ? (
+              <RunnableCode key={i} lang={b.lang} text={b.text} />
+            ) : (
               <div key={i} className="nova-code">
                 <div className="nova-code-head">
                   <span>{b.lang || "code"}</span>
@@ -184,6 +192,25 @@ function inline(s: string, onCitation?: (n: number) => void, valid?: Set<number>
   }
   if (last < s.length) parts.push(<Fragment key={k++}>{s.slice(last)}</Fragment>);
   return parts;
+}
+
+function RunnableCode({ lang, text }: { lang: string; text: string }) {
+  const { state, run, stop } = useCodeRun(lang, text);
+  return (
+    <div className="nova-code">
+      <div className="nova-code-head">
+        <span>{lang}</span>
+        <span className="flex items-center gap-1">
+          <RunButton running={state.status === "running"} onRun={run} onStop={stop} />
+          <CodeCopy text={text} />
+        </span>
+      </div>
+      <pre>
+        <code>{highlight(text, lang)}</code>
+      </pre>
+      <RunOutput state={state} />
+    </div>
+  );
 }
 
 function CodeCopy({ text }: { text: string }) {

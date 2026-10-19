@@ -51,7 +51,7 @@ for (const argv of spec.commands) {
 writeFileSync(dir + "/" + jobId + ".json", JSON.stringify({ exitCode: cancelled ? 143 : timedOut ? 124 : code, timedOut, cancelled, durationMs: Date.now() - started }));
 `;
 
-function credentials() {
+export function sandboxCredentials() {
   const token = process.env.NOVA_SANDBOX_TOKEN?.trim();
   const teamId = process.env.NOVA_SANDBOX_TEAM_ID?.trim();
   const projectId = process.env.NOVA_SANDBOX_PROJECT_ID?.trim();
@@ -65,7 +65,7 @@ class VercelSandboxWorkspace implements Workspace {
   private async get(): Promise<Sandbox | null> {
     if (this.sbx) return this.sbx;
     try {
-      this.sbx = await Sandbox.get({ name: this.name, ...credentials() });
+      this.sbx = await Sandbox.get({ name: this.name, ...sandboxCredentials() });
       return this.sbx;
     } catch {
       return null;
@@ -113,7 +113,7 @@ class VercelSandboxWorkspace implements Workspace {
         resources: { vcpus: Number(process.env.NOVA_SANDBOX_VCPUS ?? 2) === 4 ? 4 : 2 },
         timeout: 45 * 60_000,
         persistent: false,
-        ...credentials(),
+        ...sandboxCredentials(),
       } as Parameters<typeof Sandbox.create>[0]);
       this.sbx = s;
       const sb = s;

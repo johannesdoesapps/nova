@@ -141,7 +141,9 @@ export function planScenario(billing: BillingSettings, plan: PlanId, model: Pric
   const moneyCap = (tier === "standard" ? e.aiBudgetUsd : Math.min(e.aiBudgetUsd, e.premiumBudgetUsd)) / c;
   const allowed = Math.floor(Math.min(wanted, caps.daily, caps.tokens, caps.units / Math.max(billing.tierUnits[tier], 1e-9), moneyCap));
   const ai = allowed * c;
-  const contribution = e.revenueUsd - e.feesUsd - (plan === "free" ? 0 : e.overheadUsd) - ai;
+  // Other variable costs: hosting and Free users' share, plus every code run the plan allows (worst case).
+  const other = (plan === "free" ? 0 : e.overheadUsd) + e.codeRunsUsd;
+  const contribution = e.revenueUsd - e.feesUsd - other - ai;
   return {
     plan,
     perDay,
@@ -151,7 +153,7 @@ export function planScenario(billing: BillingSettings, plan: PlanId, model: Pric
     uncappedAiUsd: wanted * c,
     aiCostUsd: ai,
     feesUsd: e.feesUsd,
-    otherVariableUsd: plan === "free" ? 0 : e.overheadUsd,
+    otherVariableUsd: other,
     requiredProfitUsd: e.revenueUsd * billing.targetMargin,
     contributionUsd: contribution,
     marginPct: e.revenueUsd > 0 ? (contribution / e.revenueUsd) * 100 : null,

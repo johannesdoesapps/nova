@@ -67,7 +67,16 @@ export async function enforceLimits(
   auth: AuthContext,
   cost = 1,
   models?: ModelInfo[],
-  opts: { requestId?: string | null; purpose?: string; inputTokens?: number; maxOutputTokens?: number } = {},
+  opts: {
+    requestId?: string | null;
+    purpose?: string;
+    inputTokens?: number;
+    maxOutputTokens?: number;
+    /** Cost beyond model calls (e.g. a code run's sandbox time), held against the budget too. */
+    extraCostUsd?: number;
+    /** How long the hold lasts if the request never records a run, in seconds. */
+    ttlSeconds?: number;
+  } = {},
 ): Promise<UsageTicket> {
   const env = serverEnv();
   const who = auth.mode === "authenticated" ? `u:${auth.user.id}` : `ip:${clientIp(req)}`;
@@ -105,7 +114,7 @@ export async function enforceLimits(
   const priced = models?.length ? models : economy ? Array.from({ length: cost }, () => economy) : [];
   const inputTokens = opts.inputTokens ?? 3000;
   const maxOutputTokens = opts.maxOutputTokens ?? entitlement.limits.maxOutputTokens;
-  const estCostUsd = estimateRequestUsd(priced, inputTokens, maxOutputTokens, all);
+  const estCostUsd = estimateRequestUsd(priced, inputTokens, maxOutputTokens, all) + Math.max(0, opts.extraCostUsd ?? 0);
   const estTokens = priced.length * (inputTokens + maxOutputTokens);
   if (!unlimited && billing.maxRequestCostUsd > 0 && estCostUsd > billing.maxRequestCostUsd) {
     throw new ApiError("bad_request", `This request is too large: it could cost more than NOVA allows for one message. Shorten it, attach less, or choose a lower-cost model.`, { scope: "request", estimateUsd: Math.round(estCostUsd * 100) / 100 });
@@ -135,7 +144,7 @@ export async function enforceLimits(
     p_purpose: opts.purpose ?? null,
     p_model: models?.map((m) => m.id).join(",") ?? null,
     // Calls without a model list are short checks; don't hold their units for long.
-    p_ttl_seconds: models?.length ? 180 : 45,
+    p_ttl_seconds: opts.ttlSeconds ?? (models?.length ? 180 : 45),
     p_daily_budget_usd: econ && plan.dailyBudgetPct > 0 ? Math.round(econ.aiBudgetUsd * plan.dailyBudgetPct) / 100 : null,
     p_site_cap_usd: !unlimited && billing.siteMonthlyCapUsd > 0 ? billing.siteMonthlyCapUsd : null,
   });

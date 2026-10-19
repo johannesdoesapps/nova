@@ -94,6 +94,7 @@ export const MessageView = memo(function MessageView({
           <Markdown
             text={m.content}
             className="s-prose"
+            runnable={!streaming}
             validCitations={valid}
             onCitation={(n) => {
               const s = m.sources?.find((x) => x.index === n);

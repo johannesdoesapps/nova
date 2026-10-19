@@ -294,3 +294,6 @@ html.theming .studio * {
 }
 
 }
+.s-prose .nova-run-out { border-top: 1px solid var(--s-line); }
+.s-prose .nova-run-meta { color: var(--s-ink-3); }
+.s-prose .nova-run-stderr, .s-prose .nova-run-bad { color: var(--s-danger); }

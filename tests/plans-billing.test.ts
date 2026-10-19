@@ -83,14 +83,14 @@ describe("usage scenarios (2,000 in / 800 out per call, 1.05 calls per message, 
 describe("plan economics (60% contribution margin)", () => {
   it("derives each paid plan's AI budget so 60% of revenue remains after every variable cost", () => {
     for (const [id, interval, budget] of [
-      ["pro", "month", 4.522],
-      ["pro", "year", 4.151],
-      ["max", "month", 28.73],
-      ["max", "year", 25.938],
+      ["pro", "month", 4.123],
+      ["pro", "year", 3.752],
+      ["max", "month", 26.737],
+      ["max", "year", 23.945],
     ] as const) {
       const e = planEconomics(B, id, interval);
       expect(e.aiBudgetUsd).toBeCloseTo(budget, 2);
-      const costs = e.feesUsd + e.overheadUsd + e.aiBudgetUsd;
+      const costs = e.feesUsd + e.overheadUsd + e.codeRunsUsd + e.aiBudgetUsd;
       // Revenue excludes tax and expected refunds. Margin with the full AI budget used: at least 60%, the buffer on top.
       expect((e.revenueUsd - costs) / e.revenueUsd).toBeGreaterThanOrEqual(0.6);
       expect((e.revenueUsd - costs - e.bufferUsd) / e.revenueUsd).toBeCloseTo(0.6, 4);
@@ -111,7 +111,7 @@ describe("plan economics (60% contribution margin)", () => {
   });
 
   it("inverts: the price needed for a given AI budget", () => {
-    expect(priceForBudget(B, planEconomics(B, "pro").aiBudgetUsd)).toBeCloseTo(20, 0);
+    expect(priceForBudget(B, planEconomics(B, "pro").aiBudgetUsd, B.plans.pro.codeRunsPerPeriod)).toBeCloseTo(20, 0);
     expect(priceForBudget({ ...B, targetMargin: 0.97 }, 5)).toBeNull();
   });
 
@@ -399,7 +399,7 @@ describe("finance report alerts", () => {
         ],
         cost_by_plan: { "plan:pro": 20 },
         daily_cost: [...days, { day: today, cost: 5, runs: 50 }],
-        top_users: [{ user_id: "a", email: "a@example.com", plan: "pro", status: "active", interval: "month", cost: 4.07, runs: 300, admin: false }],
+        top_users: [{ user_id: "a", email: "a@example.com", plan: "pro", status: "active", interval: "month", cost: 3.711, runs: 300, admin: false }],
         users_total: 10,
       },
       DEFAULT_BILLING,
