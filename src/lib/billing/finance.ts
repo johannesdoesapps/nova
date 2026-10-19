@@ -15,6 +15,13 @@ export interface FinanceSummary {
   daily_cost: { day: string; cost: number | string; runs: number }[];
   top_users: { user_id: string; email: string | null; plan: string; status: string | null; interval: string | null; cost: number | string; runs: number; admin: boolean }[];
   users_total: number;
+  /** From admin_finance_summary_v2. */
+  usage?: { runs: number; messages: number; input_tokens: number | string; output_tokens: number | string; cached_input_tokens: number | string; failed_runs: number };
+  cost_by_provider?: Record<string, number | string>;
+  cost_by_tier?: Record<string, number | string>;
+  messages_by_plan?: Record<string, number>;
+  ledger?: Partial<Record<"payment" | "refund" | "failed_payment", { count: number; amount: number | string; tax: number | string }>>;
+  revenue_by_plan?: Record<string, number | string>;
 }
 
 export interface PlanFinance {
@@ -47,6 +54,23 @@ export interface FinanceReport {
   topUsers: { email: string | null; plan: string; costUsd: number; runs: number; budgetUsd: number | null; budgetShare: number | null; admin: boolean }[];
   pastDue: number;
   canceledRecently: number;
+  /** Money actually collected in the period (Stripe), excluding tax; refunds and failed payments. */
+  collected: { revenueUsd: number; taxUsd: number; refundsUsd: number; refunds: number; failedPayments: number; failedUsd: number; byPlan: Record<string, number> };
+  /** Contribution margin (revenue − variable costs) vs fixed overhead: they're different things. */
+  contribution: { revenueUsd: number; variableCostsUsd: number; contributionUsd: number; marginPct: number | null; fixedOverheadUsd: number; operatingResultUsd: number };
+  usage: {
+    messages: number;
+    modelCalls: number;
+    failedCalls: number;
+    avgInputTokens: number | null;
+    avgOutputTokens: number | null;
+    cachedInputShare: number | null;
+    costPer1000MessagesUsd: number | null;
+    aiCostPerPaidSubscriberUsd: number | null;
+    byProvider: Record<string, number>;
+    byTier: Record<string, number>;
+    messagesByPlan: Record<string, number>;
+  };
   alerts: FinanceAlert[];
 }
 
@@ -135,8 +159,52 @@ export function financeReport(s: FinanceSummary, billing: BillingSettings, perio
     alerts.push({ level: "warning", text: `Free users cost $${freeAi.toFixed(2)} in the last ${periodDays} days, more than the $${billing.freeSubsidyPerSubscriberUsd.toFixed(2)} per paying subscriber that prices assume.` });
   }
 
+  const led = s.ledger ?? {};
+  const collected = {
+    revenueUsd: round(n(led.payment?.amount)),
+    taxUsd: round(n(led.payment?.tax)),
+    refundsUsd: round(n(led.refund?.amount)),
+    refunds: led.refund?.count ?? 0,
+    failedPayments: led.failed_payment?.count ?? 0,
+    failedUsd: round(n(led.failed_payment?.amount)),
+    byPlan: Object.fromEntries(Object.entries(s.revenue_by_plan ?? {}).map(([k, v]) => [k, round(n(v))])),
+  };
+  // Contribution for the period: subscription revenue less refunds, minus variable costs (AI, fees, attributable hosting).
+  const periodRevenue = mrr * scale - collected.refundsUsd;
+  const variable = ai + (fees + overhead) * scale;
+  const fixed = billing.fixedOverheadMonthlyUsd * scale;
+  const u = s.usage;
+  const inTok = n(u?.input_tokens);
+  const paidAi = plans.filter((p) => p.plan !== "free").reduce((a, p) => a + p.aiCostUsd, 0);
+  if (collected.refunds > 0 && collected.revenueUsd > 0 && collected.refundsUsd / collected.revenueUsd > (billing.refundRatePct / 100) * 2) {
+    alerts.push({ level: "warning", text: `Refunds are ${Math.round((collected.refundsUsd / collected.revenueUsd) * 100)}% of collected revenue, above the ${billing.refundRatePct}% that prices assume.` });
+  }
+  if (collected.failedPayments > 0) alerts.push({ level: "warning", text: `${collected.failedPayments} payment attempt${collected.failedPayments === 1 ? "" : "s"} failed in the last ${periodDays} days ($${collected.failedUsd.toFixed(2)}).` });
+
   return {
     periodDays,
+    collected,
+    contribution: {
+      revenueUsd: round(periodRevenue),
+      variableCostsUsd: round(variable),
+      contributionUsd: round(periodRevenue - variable),
+      marginPct: periodRevenue > 0 ? round(((periodRevenue - variable) / periodRevenue) * 100, 1) : null,
+      fixedOverheadUsd: round(fixed),
+      operatingResultUsd: round(periodRevenue - variable - fixed),
+    },
+    usage: {
+      messages: u?.messages ?? 0,
+      modelCalls: u?.runs ?? 0,
+      failedCalls: u?.failed_runs ?? 0,
+      avgInputTokens: u?.runs ? Math.round(inTok / u.runs) : null,
+      avgOutputTokens: u?.runs ? Math.round(n(u.output_tokens) / u.runs) : null,
+      cachedInputShare: inTok > 0 ? round(n(u?.cached_input_tokens) / inTok, 3) : null,
+      costPer1000MessagesUsd: u?.messages ? round((ai / u.messages) * 1000, 4) : null,
+      aiCostPerPaidSubscriberUsd: paidSubs > 0 ? round(paidAi / paidSubs, 4) : null,
+      byProvider: Object.fromEntries(Object.entries(s.cost_by_provider ?? {}).map(([k, v]) => [k, round(n(v), 4)])),
+      byTier: Object.fromEntries(Object.entries(s.cost_by_tier ?? {}).map(([k, v]) => [k, round(n(v), 4)])),
+      messagesByPlan: s.messages_by_plan ?? {},
+    },
     plans,
     totals: { mrrUsd: round(mrr), arrUsd: round(mrr * 12), aiCostUsd: round(ai, 4), feesUsd: round(fees), overheadUsd: round(overhead), profitUsd: round(profit), margin: mrr > 0 ? round(profit / (mrr * scale), 4) : null, subscribers: paidSubs, users: s.users_total },
     projection: { aiCostUsd: round(projectedAi), profitUsd: round(projectedProfit), margin: mrr > 0 ? round(projectedProfit / mrr, 4) : null, basis: "last 7 days of AI spend × 30, current subscribers" },

@@ -34,6 +34,12 @@ const planSchema = z.object({
   webSearchesPerPeriod: z.number().int().min(0).max(100_000),
   /** Free only: fixed monthly AI budget in USD (paid plans derive theirs from the margin). */
   aiBudgetUsd: z.number().min(0).max(10_000).optional(),
+  /** Share of the AI budget that advanced and premium models may use, in percent (the rest is for standard models). */
+  premiumBudgetPct: z.number().min(0).max(100).default(0),
+  /** User messages per day (UTC); 0 = no daily cap. */
+  dailyMessages: z.number().int().min(0).max(100_000).default(0),
+  /** Input + output tokens per budget period; 0 = no token cap (the money budget still applies). */
+  monthlyTokens: z.number().int().min(0).max(10_000_000_000).default(0),
 });
 export type Plan = z.infer<typeof planSchema> & { id: PlanId };
 
@@ -52,8 +58,23 @@ export const billingSettingsSchema = z.object({
   safetyBufferPct: z.number().min(0).max(90).default(15),
   /** Cost of one web search, USD. */
   webSearchCostUsd: z.number().min(0).max(1).default(0.01),
-  /** Share of the AI budget after which only the lowest-cost model may be used. */
-  premiumBudgetShare: z.number().min(0.1).max(1).default(0.8),
+  /** Taxes collected for authorities that are included in the prices, in percent (0 = prices exclude tax; Stripe Tax adds it). */
+  taxIncludedPct: z.number().min(0).max(50).default(0),
+  /** Expected refunds and chargebacks, in percent of revenue. */
+  refundRatePct: z.number().min(0).max(50).default(2),
+  /** Fixed monthly overhead (salaries, tools, base hosting), shown separately from contribution margin, USD. */
+  fixedOverheadMonthlyUsd: z.number().min(0).max(10_000_000).default(0),
+  /** Planning assumptions for the usage calculator (replaced by real averages once there's usage). */
+  scenario: z
+    .object({
+      inputTokens: z.number().int().min(1).max(2_000_000).default(2000),
+      outputTokens: z.number().int().min(1).max(200_000).default(800),
+      /** Model calls per user message (agents, Council, retries and fallbacks add calls). */
+      callsPerMessage: z.number().min(1).max(20).default(1.05),
+      /** Share of input served from the prompt cache, in percent. */
+      cachedInputPct: z.number().min(0).max(100).default(0),
+    })
+    .default({ inputTokens: 2000, outputTokens: 800, callsPerMessage: 1.05, cachedInputPct: 0 }),
   /** Usage units per message by model tier (admins can still override single models). */
   tierUnits: z.object({ standard: z.number().min(0).max(1000), advanced: z.number().min(0).max(1000), premium: z.number().min(0).max(1000) }),
   /** Tier overrides by model id (which plans include a model). */
@@ -69,9 +90,49 @@ export type BillingSettings = z.infer<typeof billingSettingsSchema>;
  */
 export const DEFAULT_BILLING: BillingSettings = {
   plans: {
-    free: { label: "Free", priceUsd: 0, annualDiscountPct: 0, windowUnits: 10, weeklyUnits: 30, tiers: ["standard"], maxOutputTokens: 1200, historyChars: 12_000, webSearchesPerPeriod: 0, aiBudgetUsd: 0.1 },
-    pro: { label: "Pro", priceUsd: 20, annualDiscountPct: 10, windowUnits: 200, weeklyUnits: 1100, tiers: ["standard", "advanced"], maxOutputTokens: 2400, historyChars: 24_000, webSearchesPerPeriod: 100 },
-    max: { label: "Max", priceUsd: 100, annualDiscountPct: 10, windowUnits: 600, weeklyUnits: 3200, tiers: ["standard", "advanced", "premium"], maxOutputTokens: 4800, historyChars: 80_000, webSearchesPerPeriod: 500 },
+    free: {
+      label: "Free",
+      priceUsd: 0,
+      annualDiscountPct: 0,
+      windowUnits: 10,
+      weeklyUnits: 30,
+      tiers: ["standard"],
+      maxOutputTokens: 1200,
+      historyChars: 12_000,
+      webSearchesPerPeriod: 0,
+      aiBudgetUsd: 0.1,
+      premiumBudgetPct: 0,
+      dailyMessages: 10,
+      monthlyTokens: 400_000,
+    },
+    pro: {
+      label: "Pro",
+      priceUsd: 15,
+      annualDiscountPct: 10,
+      windowUnits: 200,
+      weeklyUnits: 1100,
+      tiers: ["standard", "advanced"],
+      maxOutputTokens: 2400,
+      historyChars: 24_000,
+      webSearchesPerPeriod: 50,
+      premiumBudgetPct: 60,
+      dailyMessages: 0,
+      monthlyTokens: 15_000_000,
+    },
+    max: {
+      label: "Max",
+      priceUsd: 110,
+      annualDiscountPct: 10,
+      windowUnits: 1200,
+      weeklyUnits: 6000,
+      tiers: ["standard", "advanced", "premium"],
+      maxOutputTokens: 4800,
+      historyChars: 80_000,
+      webSearchesPerPeriod: 500,
+      premiumBudgetPct: 85,
+      dailyMessages: 0,
+      monthlyTokens: 60_000_000,
+    },
   },
   targetMargin: 0.6,
   paymentFeePercent: 3.6,
@@ -80,18 +141,21 @@ export const DEFAULT_BILLING: BillingSettings = {
   freeSubsidyPerSubscriberUsd: 1,
   safetyBufferPct: 15,
   webSearchCostUsd: 0.01,
-  premiumBudgetShare: 0.8,
+  taxIncludedPct: 0,
+  refundRatePct: 2,
+  fixedOverheadMonthlyUsd: 0,
+  scenario: { inputTokens: 2000, outputTokens: 800, callsPerMessage: 1.05, cachedInputPct: 0 },
   tierUnits: { standard: 1, advanced: 20, premium: 40 },
   modelTiers: {},
 };
 
-/** Stored admin changes merged over the defaults (invalid stored values fall back to defaults). */
-export function resolveBilling(stored: unknown): BillingSettings {
+function mergeBilling(stored: unknown) {
   const s = (stored ?? {}) as Partial<BillingSettings> & { plans?: Partial<Record<PlanId, Partial<Plan>>> };
-  const merged = {
+  return {
     ...DEFAULT_BILLING,
     ...s,
     tierUnits: { ...DEFAULT_BILLING.tierUnits, ...(s.tierUnits ?? {}) },
+    scenario: { ...DEFAULT_BILLING.scenario, ...(s.scenario ?? {}) },
     modelTiers: { ...(s.modelTiers ?? {}) },
     plans: {
       free: { ...DEFAULT_BILLING.plans.free, ...(s.plans?.free ?? {}) },
@@ -99,24 +163,17 @@ export function resolveBilling(stored: unknown): BillingSettings {
       max: { ...DEFAULT_BILLING.plans.max, ...(s.plans?.max ?? {}) },
     },
   };
-  const parsed = billingSettingsSchema.safeParse(merged);
+}
+
+/** Stored admin changes merged over the defaults (invalid stored values fall back to defaults). */
+export function resolveBilling(stored: unknown): BillingSettings {
+  const parsed = billingSettingsSchema.safeParse(mergeBilling(stored));
   return parsed.success ? parsed.data : DEFAULT_BILLING;
 }
 
 /** Like resolveBilling, but reports what's invalid instead of falling back (for the admin editor). */
 export function validateBilling(stored: unknown): { ok: true; billing: BillingSettings } | { ok: false; error: string } {
-  const s = (stored ?? {}) as Partial<BillingSettings> & { plans?: Partial<Record<PlanId, Partial<Plan>>> };
-  const r = billingSettingsSchema.safeParse({
-    ...DEFAULT_BILLING,
-    ...s,
-    tierUnits: { ...DEFAULT_BILLING.tierUnits, ...(s.tierUnits ?? {}) },
-    modelTiers: { ...(s.modelTiers ?? {}) },
-    plans: {
-      free: { ...DEFAULT_BILLING.plans.free, ...(s.plans?.free ?? {}) },
-      pro: { ...DEFAULT_BILLING.plans.pro, ...(s.plans?.pro ?? {}) },
-      max: { ...DEFAULT_BILLING.plans.max, ...(s.plans?.max ?? {}) },
-    },
-  });
+  const r = billingSettingsSchema.safeParse(mergeBilling(stored));
   if (!r.success) {
     const i = r.error.issues[0]!;
     return { ok: false, error: `Plans & pricing: ${i.path.join(".")} — ${i.message}` };
@@ -141,54 +198,72 @@ export function chargeUsd(plan: Plan, interval: BillingInterval): number {
 }
 
 export interface PlanEconomics {
-  /** Revenue per month (annual plans spread over 12 months). */
+  /** Business revenue per month, excluding taxes collected for authorities and expected refunds (annual plans spread over 12 months). */
   revenueUsd: number;
-  /** Most the plan may cost per month and still keep the target margin. */
+  /** Taxes included in the price that are passed on to authorities, per month. */
+  taxUsd: number;
+  /** Expected refunds and chargebacks, per month. */
+  refundsUsd: number;
+  /** Most the plan may cost per month (variable costs) and still keep the target contribution margin. */
   maxCostUsd: number;
   feesUsd: number;
+  /** Attributable hosting and Free users' share, per subscriber per month. */
   overheadUsd: number;
   bufferUsd: number;
   /** What's left for AI usage per month. */
   aiBudgetUsd: number;
+  /** Part of the AI budget that advanced and premium models may use. */
+  premiumBudgetUsd: number;
+  /** Contribution if the whole AI budget is used: revenue − variable costs. */
+  contributionUsd: number;
 }
 
 /**
- * The monthly AI budget that keeps the target margin:
- * (revenue × (1 − margin) − payment fees − overheads) × (1 − safety buffer).
+ * The monthly AI budget that keeps the target contribution margin:
+ *   revenue      = price ÷ (1 + tax included) × (1 − refunds)
+ *   allowed cost = revenue × (1 − margin)
+ *   AI budget    = (allowed cost − payment fees − hosting − Free users' share) × (1 − safety buffer)
+ * Fixed overhead is not a variable cost and is shown separately.
  */
 export function planEconomics(billing: BillingSettings, id: PlanId, interval: BillingInterval = "month"): PlanEconomics {
   const plan = planOf(billing, id);
+  const r = (n: number) => Math.round(n * 10_000) / 10_000;
   if (plan.priceUsd === 0) {
     const ai = plan.aiBudgetUsd ?? 0;
-    return { revenueUsd: 0, maxCostUsd: 0, feesUsd: 0, overheadUsd: 0, bufferUsd: 0, aiBudgetUsd: ai };
+    return { revenueUsd: 0, taxUsd: 0, refundsUsd: 0, maxCostUsd: 0, feesUsd: 0, overheadUsd: 0, bufferUsd: 0, aiBudgetUsd: ai, premiumBudgetUsd: r((ai * plan.premiumBudgetPct) / 100), contributionUsd: -ai };
   }
   const charge = chargeUsd(plan, interval);
   const perMonth = interval === "year" ? 1 / 12 : 1;
-  const revenueUsd = charge * perMonth;
+  const gross = charge * perMonth;
+  const taxUsd = gross - gross / (1 + billing.taxIncludedPct / 100);
+  const refundsUsd = (gross - taxUsd) * (billing.refundRatePct / 100);
+  const revenueUsd = gross - taxUsd - refundsUsd;
   const maxCostUsd = revenueUsd * (1 - billing.targetMargin);
+  // Stripe charges its fee on the full amount paid, tax included.
   const feesUsd = ((charge * billing.paymentFeePercent) / 100 + billing.paymentFeeFixedUsd) * perMonth;
   const overheadUsd = billing.overheadPerSubscriberUsd + billing.freeSubsidyPerSubscriberUsd;
   const beforeBuffer = Math.max(0, maxCostUsd - feesUsd - overheadUsd);
   const bufferUsd = (beforeBuffer * billing.safetyBufferPct) / 100;
-  const r = (n: number) => Math.round(n * 10_000) / 10_000;
-  return { revenueUsd: r(revenueUsd), maxCostUsd: r(maxCostUsd), feesUsd: r(feesUsd), overheadUsd: r(overheadUsd), bufferUsd: r(bufferUsd), aiBudgetUsd: r(beforeBuffer - bufferUsd) };
-}
-
-/**
- * An average request in the default usage mix (docs/PRICING.md), retries
- * included: 5,000 input and 960 output tokens. Used for capacity estimates.
- */
-export const TYPICAL_REQUEST = { inputTokens: 5000, outputTokens: 960 } as const;
-
-/** Estimated cost of a typical request on a model, in USD (null without a verified price). */
-export function typicalRequestUsd(m: Pick<ModelInfo, "inputPrice" | "outputPrice">): number | null {
-  if (m.inputPrice === null || m.outputPrice === null) return null;
-  return (TYPICAL_REQUEST.inputTokens * m.inputPrice + TYPICAL_REQUEST.outputTokens * m.outputPrice) / 1_000_000;
+  const aiBudgetUsd = beforeBuffer - bufferUsd;
+  return {
+    revenueUsd: r(revenueUsd),
+    taxUsd: r(taxUsd),
+    refundsUsd: r(refundsUsd),
+    maxCostUsd: r(maxCostUsd),
+    feesUsd: r(feesUsd),
+    overheadUsd: r(overheadUsd),
+    bufferUsd: r(bufferUsd),
+    aiBudgetUsd: r(aiBudgetUsd),
+    premiumBudgetUsd: r((aiBudgetUsd * plan.premiumBudgetPct) / 100),
+    contributionUsd: r(revenueUsd - feesUsd - overheadUsd - aiBudgetUsd),
+  };
 }
 
 /** The monthly price needed for a given monthly AI budget at the target margin (inverse of planEconomics). */
 export function priceForBudget(billing: BillingSettings, aiBudgetUsd: number): number | null {
-  const denom = 1 - billing.targetMargin - billing.paymentFeePercent / 100;
+  // Inverse of planEconomics for a monthly plan: solve for the price P.
+  const keep = (1 - billing.refundRatePct / 100) / (1 + billing.taxIncludedPct / 100);
+  const denom = keep * (1 - billing.targetMargin) - billing.paymentFeePercent / 100;
   if (denom <= 0) return null;
   const beforeBuffer = aiBudgetUsd / (1 - billing.safetyBufferPct / 100);
   return Math.round(((beforeBuffer + billing.paymentFeeFixedUsd + billing.overheadPerSubscriberUsd + billing.freeSubsidyPerSubscriberUsd) / denom) * 100) / 100;

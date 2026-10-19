@@ -8,7 +8,7 @@ import { estimateCost } from "./ai/cost";
 import type { ModelInfo, Usage } from "./ai/types";
 import { serverEnv } from "./env";
 import { ApiError, clientIp } from "./http";
-import { LARGE_MODEL_UNITS, PLANS, WEEK_MS, WINDOW_MS, modelUnits, planEconomics, unitsLeft, type BillingSettings, type PlanId, type UsageState } from "./plans";
+import { LARGE_MODEL_UNITS, PLANS, WEEK_MS, WINDOW_MS, modelTier, modelUnits, planEconomics, unitsLeft, type BillingSettings, type PlanId, type UsageState } from "./plans";
 import { limiter } from "./rate-limit";
 import { reportError } from "./observability";
 
@@ -97,22 +97,30 @@ export async function enforceLimits(
   // Worst-case cost of this request, held against the budget while it runs.
   const economy = economyModel(entitlement, available);
   const priced = models?.length ? models : economy ? Array.from({ length: cost }, () => economy) : [];
-  const estCostUsd = estimateRequestUsd(priced, opts.inputTokens ?? 3000, opts.maxOutputTokens ?? entitlement.limits.maxOutputTokens, all);
-  const budgetUsd = unlimited ? null : planEconomics(billing, entitlement.plan, entitlement.interval).aiBudgetUsd;
+  const inputTokens = opts.inputTokens ?? 3000;
+  const maxOutputTokens = opts.maxOutputTokens ?? entitlement.limits.maxOutputTokens;
+  const estCostUsd = estimateRequestUsd(priced, inputTokens, maxOutputTokens, all);
+  const estTokens = priced.length * (inputTokens + maxOutputTokens);
+  const econ = unlimited ? null : planEconomics(billing, entitlement.plan, entitlement.interval);
+  const premium = !!models?.some((m) => modelTier(m) !== "standard");
   const period = budgetPeriod(entitlement);
   const fb = fallbackPrices(all);
+  const plan = entitlement.limits;
 
   // Accounts without an allowance still reserve, with no limit, so duplicate submissions are refused for everyone.
-  const { data, error } = await auth.supabase.rpc("usage_reserve_v2", {
+  const { data, error } = await auth.supabase.rpc("usage_reserve_v3", {
     p_request_id: requestId,
     p_units: units,
-    p_window_limit: unlimited ? NO_LIMIT : entitlement.limits.windowUnits,
-    p_week_limit: unlimited ? NO_LIMIT : entitlement.limits.weeklyUnits,
+    p_window_limit: unlimited ? NO_LIMIT : plan.windowUnits,
+    p_week_limit: unlimited ? NO_LIMIT : plan.weeklyUnits,
     p_est_cost_usd: Math.round(estCostUsd * 1_000_000) / 1_000_000,
-    p_budget_usd: budgetUsd,
+    p_est_tokens: estTokens,
+    p_budget_usd: econ ? econ.aiBudgetUsd : null,
+    p_premium_budget_usd: econ ? econ.premiumBudgetUsd : null,
+    p_premium: premium,
+    p_daily_limit: unlimited ? 0 : plan.dailyMessages,
+    p_token_limit: unlimited ? 0 : plan.monthlyTokens,
     p_period_start: new Date(period.start).toISOString(),
-    p_premium: !!models?.some((m) => m.id !== economy?.id),
-    p_premium_share: billing.premiumBudgetShare,
     p_fallback_in: fb.input,
     p_fallback_out: fb.output,
     p_purpose: opts.purpose ?? null,
@@ -122,13 +130,13 @@ export async function enforceLimits(
   });
   if (error) {
     // The allowance can't be checked (database unavailable): log it and let the request through rather than block everyone.
-    reportError(error, { where: "usage_reserve_v2" });
+    reportError(error, { where: "usage_reserve_v3" });
     return { requestId, units: 0, entitlement: entitlement.label, estCostUsd: 0 };
   }
   const r = data as {
     ok: boolean;
-    reason?: "duplicate" | "limit" | "budget";
-    scope?: "window" | "week" | "exhausted" | "insufficient" | "economy";
+    reason?: "duplicate" | "limit" | "budget" | "tokens";
+    scope?: "window" | "week" | "day" | "exhausted" | "insufficient" | "premium";
     used?: number;
     limit?: number;
     resets_at?: string;
@@ -138,31 +146,46 @@ export async function enforceLimits(
   }
   if (!r.ok) {
     if (unlimited) {
-      reportError(new Error(`usage_reserve_v2 refused an unlimited account: ${r.reason}`), { where: "usage_reserve" });
+      reportError(new Error(`usage_reserve_v3 refused an unlimited account: ${r.reason}`), { where: "usage_reserve" });
       return { requestId, units: 0, entitlement: entitlement.label, estCostUsd: 0 };
     }
-    const plan = entitlement.limits;
     const upgrade = nextPlan(entitlement.plan);
     const upgradeHint = upgrade ? ` ${billing.plans[upgrade].label} gives you more.` : "";
+    const renews = nextRenewal(period.end);
+    const name = models?.length === 1 ? models[0]!.displayName : null;
+    // What the user can do instead: lower-cost models of the same provider first. Never switched for them.
+    const standard = available.filter((m) => m.available && m.provider !== "demo" && modelTier(m) === "standard" && plan.tiers.includes("standard"));
+    const sameProvider = models?.length === 1 ? standard.filter((m) => m.provider === models[0]!.provider) : [];
+    const options = (sameProvider.length ? sameProvider : standard).map((m) => m.id);
+    const optionNames = (sameProvider.length ? sameProvider : standard).map((m) => m.displayName).slice(0, 2).join(" or ");
+    const details = { budget: true, resetsAt: new Date(period.end).toISOString(), plan: entitlement.plan, upgradeTo: upgrade, allowedModelId: economy?.id ?? null, alternatives: options };
     if (r.reason === "budget") {
-      const renews = nextRenewal(period.end);
-      const details = { scope: "budget", budget: true, state: r.scope, resetsAt: new Date(period.end).toISOString(), plan: entitlement.plan, upgradeTo: upgrade, allowedModelId: economy?.id ?? null };
-      if (r.scope === "exhausted") throw new ApiError("quota_exceeded", `You've used this month's AI budget on your ${plan.label} plan. It renews on ${renews}.${upgradeHint}`, details);
-      if (r.scope === "economy") {
-        throw new ApiError("quota_exceeded", `Most of this month's AI budget is used, so only the lowest-cost model${economy ? ` (${economy.displayName})` : ""} is available until ${renews}. Choose Auto to keep going.${upgradeHint}`, details);
+      if (r.scope === "exhausted") throw new ApiError("quota_exceeded", `You've used this month's AI allowance on your ${plan.label} plan. It renews on ${renews}.${upgradeHint}`, { ...details, scope: "budget", state: "exhausted" });
+      if (r.scope === "premium") {
+        throw new ApiError(
+          "quota_exceeded",
+          `${name ?? "This model"} has used this month's allowance for advanced models on your ${plan.label} plan. You can wait until ${renews}, ${upgrade ? `upgrade to ${billing.plans[upgrade].label}, ` : ""}or switch to ${optionNames || "Auto"}, which still has allowance left.`,
+          { ...details, scope: "budget", state: "economy" },
+        );
       }
-      throw new ApiError("quota_exceeded", `This request could cost more than what's left of this month's AI budget. Choose Auto (the lowest-cost model) or a shorter request.${upgradeHint}`, details);
+      throw new ApiError("quota_exceeded", `This request could cost more than what's left of this month's AI allowance. Try ${optionNames || "Auto"} or a shorter request.${upgradeHint}`, { ...details, scope: "budget", state: "insufficient" });
+    }
+    if (r.reason === "tokens") {
+      throw new ApiError("quota_exceeded", `You've used this month's ${Number(r.limit).toLocaleString("en-US")}-token allowance on your ${plan.label} plan. It renews on ${renews}.${upgradeHint}`, { ...details, scope: "tokens" });
+    }
+    const resetsAt = r.resets_at ? new Date(r.resets_at).toISOString() : null;
+    if (r.scope === "day") {
+      throw new ApiError("quota_exceeded", `You've sent today's ${r.limit} messages on the ${plan.label} plan. More are available tomorrow (UTC).${upgradeHint}`, { ...details, scope: "day", resetsAt });
     }
     const left = Math.max(0, Number(r.limit ?? 0) - Number(r.used ?? 0));
     const scope = r.scope === "week" ? "weekly" : "5-hour";
-    const name = models?.length === 1 ? models[0]!.displayName : "This request";
     const message =
       left > 0 && units > left
-        ? `${name} uses ${units} units per message, but only ${left} of your ${plan.label} plan's ${scope} allowance ${left === 1 ? "is" : "are"} left. Auto or a lighter model uses 1.${upgradeHint}`
+        ? `${name ?? "This request"} uses ${units} units per message, but only ${left} of your ${plan.label} plan's ${scope} allowance ${left === 1 ? "is" : "are"} left. Auto or a lighter model uses 1.${upgradeHint}`
         : `You've reached your ${plan.label} plan's ${scope} limit.${upgradeHint}`;
     throw new ApiError("quota_exceeded", message, {
       scope: r.scope,
-      resetsAt: r.resets_at ? new Date(r.resets_at).toISOString() : null,
+      resetsAt,
       plan: entitlement.plan,
       upgradeTo: upgrade,
       unitsNeeded: units,
@@ -270,6 +293,8 @@ export async function recordRun(auth: AuthContext, run: RunRecord): Promise<void
     input_tokens: run.usage.inputTokens,
     output_tokens: run.usage.outputTokens,
     cached_input_tokens: run.usage.cachedInputTokens ?? null,
+    cache_write_input_tokens: run.usage.cacheWriteInputTokens ?? null,
+    model_tier: modelTier(run.model),
     estimated_cost: runCost,
     status: run.status,
     purpose: run.purpose ?? null,

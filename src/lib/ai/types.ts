@@ -34,6 +34,17 @@ export interface ModelInfo {
   priceSourceUrl?: string | null;
   /** Plan tier: standard (every plan), advanced (Pro and Max), premium (Max). Derived when unset. */
   tier?: "standard" | "advanced" | "premium";
+  /** Price of input tokens read from the provider's prompt cache (USD per 1M); null/unset = input price. */
+  cachedInputPrice?: number | null;
+  /** Price of input tokens written to the prompt cache (USD per 1M); unset = input price. */
+  cacheWritePrice?: number | null;
+  /**
+   * The provider charges cache writes but doesn't report them separately, so
+   * uncached input is counted at the cache-write price (an upper bound).
+   */
+  cacheWritesUnreported?: boolean;
+  /** Higher prices for prompts above a size, when the provider has them. */
+  longContext?: { aboveInputTokens: number; inputPrice: number; outputPrice: number; cachedInputPrice?: number | null; cacheWritePrice?: number | null } | null;
 }
 
 /** ModelInfo plus runtime availability (does this deployment have credentials?). */
@@ -54,6 +65,8 @@ export interface Usage {
   estimated: boolean;
   /** Input tokens served from the provider's prompt cache (included in inputTokens), when reported. */
   cachedInputTokens?: number | null;
+  /** Input tokens written to the prompt cache (included in inputTokens), when reported. */
+  cacheWriteInputTokens?: number | null;
 }
 
 export interface GenerateParams {

@@ -11,35 +11,107 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DEFAULT_MODELS } from "@/lib/ai/registry";
 import { financeReport, type FinanceSummary } from "@/lib/billing/finance";
 import { budgetPeriod } from "@/lib/budget";
-import { DEFAULT_BILLING, chargeUsd, modelTier, planEconomics, planForTier, planOf, priceForBudget, resolveBilling, typicalRequestUsd, validateBilling } from "@/lib/plans";
+import { estimateCost } from "@/lib/ai/cost";
+import { DAYS_PER_MONTH, messageCostUsd, modelCostTable, planCapacity, planScenario } from "@/lib/billing/scenarios";
+import { DEFAULT_BILLING, chargeUsd, modelTier, planEconomics, planForTier, planOf, priceForBudget, resolveBilling, validateBilling } from "@/lib/plans";
 
 const B = DEFAULT_BILLING;
 
-describe("plan economics (60% margin)", () => {
-  it("derives each paid plan's AI budget so 60% of revenue remains after every cost", () => {
+const model = (id: string) => DEFAULT_MODELS.find((m) => m.id === id)!;
+const CONFIGURED = ["anthropic:claude-haiku-5-5", "openai:gpt-5.6-luna", "anthropic:claude-sonnet-5-5", "openai:gpt-5.6-terra", "anthropic:claude-opus-5-5", "openai:gpt-5.6-sol"].map(model);
+
+describe("request cost from token usage (verified prices, 2026-10-19)", () => {
+  it("uses (input × input price + output × output price) / 1,000,000", () => {
+    expect(estimateCost(model("anthropic:claude-haiku-5-5"), { inputTokens: 2000, outputTokens: 800 })).toBeCloseTo(0.0006, 10);
+    expect(estimateCost(model("anthropic:claude-opus-5-5"), { inputTokens: 2000, outputTokens: 800 })).toBeCloseTo(0.024, 10);
+    expect(estimateCost({ inputPrice: null, outputPrice: 1 }, { inputTokens: 1, outputTokens: 1 })).toBeNull();
+  });
+
+  it("prices cached input and cache writes at their own rates", () => {
+    // Sonnet: cache hits $0.10, 5-minute cache writes $2.50, input $2, output $10.
+    const c = estimateCost(model("anthropic:claude-sonnet-5-5"), { inputTokens: 10_000, outputTokens: 1000, cachedInputTokens: 8000, cacheWriteInputTokens: 1000 });
+    expect(c).toBeCloseTo((1000 * 2 + 1000 * 2.5 + 8000 * 0.1 + 1000 * 10) / 1e6, 10);
+    // OpenAI doesn't report cache writes: uncached input counts at the write price ($0.25 for Luna), an upper bound.
+    expect(estimateCost(model("openai:gpt-5.6-luna"), { inputTokens: 1000, outputTokens: 0, cachedInputTokens: 600 })).toBeCloseTo((400 * 0.25 + 600 * 0.02) / 1e6, 10);
+  });
+
+  it("switches to long-context prices above the provider's threshold", () => {
+    const haiku = model("anthropic:claude-haiku-5-5");
+    expect(estimateCost(haiku, { inputTokens: 100_000, outputTokens: 1000 })).toBeCloseTo((100_000 * 0.1 + 1000 * 0.5) / 1e6, 10);
+    expect(estimateCost(haiku, { inputTokens: 100_001, outputTokens: 1000 })).toBeCloseTo((100_001 * 0.5 + 1000 * 2.5) / 1e6, 10);
+    expect(estimateCost(model("openai:gpt-5.6-sol"), { inputTokens: 300_000, outputTokens: 0 })).toBeCloseTo((300_000 * 10) / 1e6, 8); // long-context write price
+  });
+});
+
+describe("usage scenarios (2,000 in / 800 out per call, 1.05 calls per message, 30 days)", () => {
+  const s = DEFAULT_BILLING.scenario;
+  it("costs a message on each model and scales it by volume", () => {
+    expect(messageCostUsd(model("anthropic:claude-haiku-5-5"), s)).toBeCloseTo(0.0006 * 1.05, 10);
+    const t = modelCostTable(CONFIGURED, s);
+    expect(t.map((r) => r.name)).toEqual(["Claude Haiku 5.5", "GPT-5.6 Luna", "Claude Sonnet 5.5", "GPT-5.6 Terra", "Claude Opus 5.5", "GPT-5.6 Sol"]);
+    const opus = t.find((r) => r.name === "Claude Opus 5.5")!;
+    expect(opus.per1000Usd).toBeCloseTo(25.2, 6);
+    expect(opus.byVolume.find((v) => v.perDay === 300)!.monthlyUsd).toBeCloseTo(0.0252 * 300 * DAYS_PER_MONTH, 6);
+  });
+
+  it("separates the advanced-model part of each plan's budget", () => {
+    const pro = planCapacity(DEFAULT_BILLING, "pro", CONFIGURED);
+    expect(pro.models.map((m) => m.name)).not.toContain("Claude Opus 5.5");
+    const sonnet = pro.models.find((m) => m.name === "Claude Sonnet 5.5")!;
+    expect(sonnet.perMonth).toBe(Math.floor(pro.premiumBudgetUsd / 0.0126));
+    expect(pro.mixed!.perMonth).toBeGreaterThan(sonnet.perMonth);
+  });
+
+  it("keeps at least 60% contribution margin on paid plans at 10–300 messages a day, even on the most expensive models", () => {
+    for (const plan of ["pro", "max"] as const) {
+      for (const m of CONFIGURED.filter((x) => DEFAULT_BILLING.plans[plan].tiers.includes(modelTier(x)))) {
+        for (const perDay of [10, 50, 100, 300]) {
+          const r = planScenario(DEFAULT_BILLING, plan, m, perDay)!;
+          expect(r.marginPct!, `${plan} ${m.displayName} ${perDay}/day`).toBeGreaterThanOrEqual(60);
+          for (const interval of ["year"] as const) expect(planScenario(DEFAULT_BILLING, plan, m, perDay, interval)!.marginPct!).toBeGreaterThanOrEqual(60);
+        }
+      }
+    }
+    // A heavy Max user on Opus is stopped by the guard rather than costing $226 a month.
+    const heavy = planScenario(DEFAULT_BILLING, "max", model("anthropic:claude-opus-5-5"), 300)!;
+    expect(heavy.uncappedAiUsd).toBeGreaterThan(200);
+    expect(heavy.capped).toBe(true);
+    expect(heavy.aiCostUsd).toBeLessThanOrEqual(planEconomics(DEFAULT_BILLING, "max").premiumBudgetUsd + 1e-9);
+  });
+});
+
+describe("plan economics (60% contribution margin)", () => {
+  it("derives each paid plan's AI budget so 60% of revenue remains after every variable cost", () => {
     for (const [id, interval, budget] of [
-      ["pro", "month", 4.66],
-      ["pro", "year", 4.27],
-      ["max", "month", 29.41],
-      ["max", "year", 26.55],
+      ["pro", "month", 3.009],
+      ["pro", "year", 2.789],
+      ["max", "month", 31.756],
+      ["max", "year", 28.661],
     ] as const) {
       const e = planEconomics(B, id, interval);
       expect(e.aiBudgetUsd).toBeCloseTo(budget, 2);
       const costs = e.feesUsd + e.overheadUsd + e.aiBudgetUsd;
-      // Profit after fees, hosting, Free users' share and the full AI budget: at least 60%, the buffer on top.
+      // Revenue excludes tax and expected refunds. Margin with the full AI budget used: at least 60%, the buffer on top.
       expect((e.revenueUsd - costs) / e.revenueUsd).toBeGreaterThanOrEqual(0.6);
       expect((e.revenueUsd - costs - e.bufferUsd) / e.revenueUsd).toBeCloseTo(0.6, 4);
     }
   });
 
+  it("excludes taxes collected for authorities from revenue", () => {
+    const e = planEconomics({ ...B, taxIncludedPct: 20, refundRatePct: 0 }, "pro");
+    expect(e.taxUsd).toBeCloseTo(15 - 15 / 1.2, 6);
+    expect(e.revenueUsd).toBeCloseTo(12.5, 6);
+    expect(e.aiBudgetUsd).toBeLessThan(planEconomics(B, "pro").aiBudgetUsd);
+  });
+
   it("charges yearly plans 12 months less the discount, in whole dollars", () => {
-    expect(chargeUsd(planOf(B, "pro"), "year")).toBe(216);
-    expect(chargeUsd(planOf(B, "max"), "year")).toBe(1080);
+    expect(chargeUsd(planOf(B, "pro"), "year")).toBe(162);
+    expect(chargeUsd(planOf(B, "max"), "year")).toBe(1188);
     expect(chargeUsd(planOf(B, "free"), "year")).toBe(0);
   });
 
   it("inverts: the price needed for a given AI budget", () => {
-    expect(priceForBudget(B, planEconomics(B, "pro").aiBudgetUsd)).toBeCloseTo(20, 0);
+    expect(priceForBudget(B, planEconomics(B, "pro").aiBudgetUsd)).toBeCloseTo(15, 0);
     expect(priceForBudget({ ...B, targetMargin: 0.97 }, 5)).toBeNull();
   });
 
@@ -49,12 +121,6 @@ describe("plan economics (60% margin)", () => {
     expect([tier("anthropic:claude-sonnet-5-5"), tier("openai:gpt-5.6-terra")]).toEqual(["advanced", "advanced"]);
     expect([tier("anthropic:claude-opus-5-5"), tier("openai:gpt-5.6-sol")]).toEqual(["premium", "premium"]);
     expect([planForTier(B, "standard"), planForTier(B, "advanced"), planForTier(B, "premium")]).toEqual(["free", "pro", "max"]);
-  });
-
-  it("estimates a typical request from official prices", () => {
-    const haiku = DEFAULT_MODELS.find((m) => m.id === "anthropic:claude-haiku-5-5")!;
-    expect(typicalRequestUsd(haiku)).toBeCloseTo(0.00098, 6);
-    expect(typicalRequestUsd({ inputPrice: null, outputPrice: 1 })).toBeNull();
   });
 
   it("merges admin changes over the defaults and rejects invalid ones", () => {
@@ -67,6 +133,8 @@ describe("plan economics (60% margin)", () => {
     expect(validateBilling({ plans: { max: { windowUnits: 5000, weeklyUnits: 100 } } })).toMatchObject({ ok: false });
     expect(validateBilling({ plans: { free: { tiers: ["advanced"] } } })).toMatchObject({ ok: false });
     expect(validateBilling({ plans: { max: { priceUsd: 120 } } })).toMatchObject({ ok: true });
+    expect(validateBilling({ plans: { pro: { premiumBudgetPct: 150 } } }).ok).toBe(false);
+    expect(resolveBilling({ scenario: { inputTokens: 4000 } }).scenario).toMatchObject({ inputTokens: 4000, outputTokens: 800 });
   });
 
   it("resets budgets monthly on the billing date, also on yearly plans", () => {
@@ -134,7 +202,7 @@ beforeAll(async () => {
 }, 60_000);
 
 beforeEach(async () => {
-  await db.exec("delete from public.usage_holds; delete from public.model_runs; delete from public.admins; delete from public.subscriptions;");
+  await db.exec("delete from public.usage_holds; delete from public.model_runs; delete from public.admins; delete from public.subscriptions; delete from public.billing_ledger;");
 });
 
 describe("usage_reserve_v2 (budget, atomically)", () => {
@@ -193,6 +261,75 @@ describe("usage_reserve_v2 (budget, atomically)", () => {
   });
 });
 
+type R3 = { ok: boolean; reason?: string; scope?: string; used?: number; limit?: number };
+const reserve3 = (
+  user: string,
+  id: string,
+  o: { units?: number; est?: number; tokens?: number; budget?: number | null; premiumBudget?: number | null; premium?: boolean; daily?: number; tokenLimit?: number; since?: string } = {},
+) =>
+  as(user, async () =>
+    (
+      await db.query<{ r: R3 }>(
+        "select public.usage_reserve_v3($1, $2, 200, 1100, $3, $4, $5, $6, $7, $8, $9, coalesce($10::timestamptz, date_trunc('month', now())), 4, 20, 'chat', 'm') as r",
+        [id, o.units ?? 1, o.est ?? 0.01, o.tokens ?? 1000, o.budget === undefined ? 3.0 : o.budget, o.premiumBudget === undefined ? 1.8 : o.premiumBudget, o.premium ?? false, o.daily ?? 0, o.tokenLimit ?? 0, o.since ?? null],
+      )
+    ).rows[0]!.r,
+  );
+const spendTier = (user: string, usd: number, tier: string, tokens: [number, number] = [1000, 500]) =>
+  as(user, () =>
+    db.query("insert into public.model_runs (model_id, status, units, estimated_cost, input_tokens, output_tokens, model_tier, request_id) values ('anthropic:m', 'success', 1, $1, $2, $3, $4, gen_random_uuid())", [usd, tokens[0], tokens[1], tier]),
+  );
+
+describe("usage_reserve_v3 (premium budget, daily and token caps, atomically)", () => {
+  it("limits advanced models to their part of the budget, leaving the rest for standard models", async () => {
+    await spendTier(ALICE, 1.75, "advanced");
+    expect(await reserve3(ALICE, rid(101), { premium: true, est: 0.1 })).toMatchObject({ ok: false, reason: "budget", scope: "premium" });
+    expect(await reserve3(ALICE, rid(102), { premium: false, est: 0.1 })).toMatchObject({ ok: true });
+  });
+
+  it("holds concurrent advanced requests against the premium budget", async () => {
+    expect(await reserve3(ALICE, rid(103), { premium: true, est: 1.0 })).toMatchObject({ ok: true });
+    expect(await reserve3(ALICE, rid(104), { premium: true, est: 1.0 })).toMatchObject({ ok: false, scope: "premium" });
+    await as(ALICE, () => db.query("select public.usage_finish($1, 'released')", [rid(103)]));
+    expect(await reserve3(ALICE, rid(104), { premium: true, est: 1.0 })).toMatchObject({ ok: true });
+  });
+
+  it("caps messages per day, counting each request once and requests in flight", async () => {
+    await spendTier(ALICE, 0.001, "standard");
+    await spendTier(ALICE, 0.001, "standard");
+    expect(await reserve3(ALICE, rid(105), { daily: 3 })).toMatchObject({ ok: true });
+    expect(await reserve3(ALICE, rid(106), { daily: 3 })).toMatchObject({ ok: false, reason: "limit", scope: "day", used: 3, limit: 3 });
+    // Yesterday's messages don't count.
+    await db.exec("update public.model_runs set created_at = now() - interval '1 day'");
+    expect(await reserve3(ALICE, rid(107), { daily: 3 })).toMatchObject({ ok: true });
+  });
+
+  it("caps tokens per period, including the request's own estimate", async () => {
+    await spendTier(ALICE, 0.01, "standard", [300_000, 50_000]);
+    expect(await reserve3(ALICE, rid(108), { tokenLimit: 400_000, tokens: 40_000 })).toMatchObject({ ok: true });
+    expect(await reserve3(ALICE, rid(109), { tokenLimit: 400_000, tokens: 40_000 })).toMatchObject({ ok: false, reason: "tokens", limit: 400_000 });
+  });
+
+  it("resets with the billing period", async () => {
+    await spendTier(ALICE, 3.5, "standard");
+    await db.exec("update public.model_runs set created_at = now() - interval '40 days'"); // runs are time-stamped by the server; backdate as the database owner
+
+    expect(await reserve3(ALICE, rid(110), { since: new Date(Date.now() - 60 * 86_400_000).toISOString() })).toMatchObject({ ok: false, scope: "exhausted" });
+    expect(await reserve3(ALICE, rid(111), { since: new Date(Date.now() - 10 * 86_400_000).toISOString() })).toMatchObject({ ok: true });
+  });
+
+  it("refuses duplicates and skips money checks for accounts without a budget", async () => {
+    expect(await reserve3(ALICE, rid(112))).toMatchObject({ ok: true });
+    expect(await reserve3(ALICE, rid(112))).toMatchObject({ ok: false, reason: "duplicate" });
+    await spendTier(ALICE, 50, "premium");
+    expect(await reserve3(ALICE, rid(113), { budget: null, premiumBudget: null, premium: true })).toMatchObject({ ok: true });
+  });
+
+  it("rejects negative costs, so recorded spending can't be lowered", async () => {
+    await expect(spendTier(ALICE, -5, "standard")).rejects.toThrow();
+  });
+});
+
 describe("admin finance summary", () => {
   it("is for administrators only and aggregates subscriptions and costs", async () => {
     await expect(as(ALICE, () => db.query("select public.admin_finance_summary(now() - interval '30 days')"))).rejects.toThrow(/Administrators only/);
@@ -213,6 +350,32 @@ describe("admin finance summary", () => {
     expect(r.totals.mrrUsd).toBe(20);
     expect(r.alerts).toEqual([]);
   });
+
+  it("v2 adds messages, tokens, provider costs and money collected excluding tax", async () => {
+    await db.exec(`insert into public.admins (user_id) values ('${BOB}')`);
+    await db.exec(`insert into public.subscriptions (user_id, plan, status, billing_interval, price_usd) values ('${ALICE}', 'pro', 'active', 'month', 15)`);
+    await spendTier(ALICE, 0.5, "advanced", [2000, 800]);
+    await as(ALICE, () => db.query("insert into public.model_runs (model_id, status, units, estimated_cost, input_tokens, output_tokens, cached_input_tokens, model_tier, entitlement) values ('openai:gpt-5.6-luna', 'success', 1, 0.25, 4000, 800, 1000, 'standard', 'plan:pro')"));
+    await db.exec(`
+      insert into public.billing_ledger (stripe_object_id, user_id, kind, plan, amount_usd, tax_usd) values
+        ('in_1', '${ALICE}', 'payment', 'pro', 15, 1.2), ('re_1', '${ALICE}', 'refund', null, 15, 0), ('failed:evt_1', '${ALICE}', 'failed_payment', 'pro', 16.2, 1.2);
+    `);
+    // Ledger and events are not readable by users.
+    expect((await as(ALICE, () => db.query("select * from public.billing_ledger"))).rows).toHaveLength(0);
+    await expect(as(ALICE, () => db.query("select public.admin_finance_summary_v2(now() - interval '30 days')"))).rejects.toThrow(/Administrators only/);
+    const s = await as(BOB, async () => (await db.query<{ s: FinanceSummary }>("select public.admin_finance_summary_v2(now() - interval '30 days') as s")).rows[0]!.s);
+    expect(s.usage).toMatchObject({ runs: 2, messages: 2 });
+    expect(Number(s.cost_by_provider!.anthropic)).toBeCloseTo(0.5);
+    expect(Number(s.cost_by_provider!.openai)).toBeCloseTo(0.25);
+    expect(Number(s.ledger!.payment!.amount)).toBe(15);
+    const r = financeReport(s, { ...DEFAULT_BILLING, fixedOverheadMonthlyUsd: 300 }, 30);
+    expect(r.collected).toMatchObject({ revenueUsd: 15, taxUsd: 1.2, refundsUsd: 15, refunds: 1, failedPayments: 1 });
+    expect(r.usage).toMatchObject({ messages: 2, modelCalls: 2, avgInputTokens: 3000, avgOutputTokens: 800, cachedInputShare: 0.167 });
+    expect(r.usage.costPer1000MessagesUsd).toBeCloseTo(375, 2);
+    expect(r.contribution.fixedOverheadUsd).toBe(300);
+    expect(r.contribution.operatingResultUsd).toBeCloseTo(r.contribution.contributionUsd - 300, 2);
+    expect(r.alerts.map((a) => a.text).join(" ")).toMatch(/payment attempt failed/);
+  });
 });
 
 describe("finance report alerts", () => {
@@ -230,7 +393,7 @@ describe("finance report alerts", () => {
         ],
         cost_by_plan: { "plan:pro": 20 },
         daily_cost: [...days, { day: today, cost: 5, runs: 50 }],
-        top_users: [{ user_id: "a", email: "a@example.com", plan: "pro", status: "active", interval: "month", cost: 4.2, runs: 300, admin: false }],
+        top_users: [{ user_id: "a", email: "a@example.com", plan: "pro", status: "active", interval: "month", cost: 2.709, runs: 300, admin: false }],
         users_total: 10,
       },
       DEFAULT_BILLING,

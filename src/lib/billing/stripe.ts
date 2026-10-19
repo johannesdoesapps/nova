@@ -135,3 +135,64 @@ export async function syncSubscription(stripe: Stripe, subscriptionId: string, u
   if (error) throw new Error(`Could not save subscription: ${error.message}`);
   return "saved";
 }
+
+/** The NOVA user for a Stripe customer, from the stored subscription. */
+export async function userForCustomer(customer: string | { id: string } | null | undefined): Promise<string | null> {
+  const id = typeof customer === "string" ? customer : customer?.id;
+  const db = serviceSupabase();
+  if (!id || !db) return null;
+  const { data } = await db.from("subscriptions").select("user_id").eq("stripe_customer_id", id).maybeSingle();
+  return (data?.user_id as string | undefined) ?? null;
+}
+
+export interface LedgerEntry {
+  stripe_object_id: string;
+  user_id: string | null;
+  kind: "payment" | "refund" | "failed_payment";
+  plan: string | null;
+  amount_usd: number;
+  tax_usd: number;
+  occurred_at: string;
+}
+
+/** Money collected (excluding tax), refunds and failed payments from a paid/failed invoice or a refund. Null when not relevant. */
+export function invoiceLedger(invoice: Stripe.Invoice, kind: "payment" | "failed_payment", userId: string | null, eventId: string): LedgerEntry | null {
+  if ((invoice.currency ?? "usd").toLowerCase() !== "usd") return null;
+  const tax = (invoice.total_taxes ?? []).reduce((t, x) => t + (x.amount ?? 0), 0) / 100;
+  const meta = invoice.parent?.subscription_details?.metadata ?? {};
+  const plan = (meta.nova_plan as string | undefined) ?? null;
+  if (kind === "payment") {
+    if (!invoice.amount_paid) return null;
+    return { stripe_object_id: invoice.id!, user_id: userId ?? (meta.user_id as string | undefined) ?? null, kind, plan, amount_usd: Math.round((invoice.amount_paid / 100 - tax) * 100) / 100, tax_usd: tax, occurred_at: new Date((invoice.status_transitions?.paid_at ?? invoice.created) * 1000).toISOString() };
+  }
+  // Every failed attempt is its own entry.
+  return { stripe_object_id: `failed:${eventId}`, user_id: userId ?? (meta.user_id as string | undefined) ?? null, kind, plan, amount_usd: invoice.amount_due / 100, tax_usd: tax, occurred_at: new Date().toISOString() };
+}
+
+export function refundLedger(refund: Stripe.Refund, userId: string | null): LedgerEntry | null {
+  if ((refund.currency ?? "usd").toLowerCase() !== "usd" || refund.status === "failed" || refund.status === "canceled") return null;
+  return { stripe_object_id: refund.id, user_id: userId, kind: "refund", plan: null, amount_usd: refund.amount / 100, tax_usd: 0, occurred_at: new Date(refund.created * 1000).toISOString() };
+}
+
+/** Store a ledger entry once (Stripe's object id is unique). */
+export async function recordLedger(entry: LedgerEntry | null): Promise<void> {
+  if (!entry) return;
+  const db = serviceSupabase();
+  if (!db) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
+  const { error } = await db.from("billing_ledger").upsert(entry, { onConflict: "stripe_object_id", ignoreDuplicates: true });
+  if (error) throw new Error(`Could not record billing entry: ${error.message}`);
+}
+
+/** Whether a webhook event was already handled; mark it after handling. */
+export async function eventSeen(id: string): Promise<boolean> {
+  const db = serviceSupabase();
+  if (!db) return false;
+  const { data } = await db.from("stripe_events").select("id").eq("id", id).maybeSingle();
+  return !!data;
+}
+export async function markEvent(id: string, type: string): Promise<void> {
+  const db = serviceSupabase();
+  if (!db) return;
+  const { error } = await db.from("stripe_events").upsert({ id, type }, { onConflict: "id", ignoreDuplicates: true });
+  if (error) throw new Error(`Could not record event: ${error.message}`);
+}

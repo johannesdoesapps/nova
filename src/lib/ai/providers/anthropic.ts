@@ -123,6 +123,7 @@ function toUsage(u: Anthropic.Beta.Messages.BetaUsage): Usage {
     outputTokens: u.output_tokens,
     estimated: false,
     cachedInputTokens: u.cache_read_input_tokens ?? null,
+    cacheWriteInputTokens: u.cache_creation_input_tokens ?? null,
   };
 }
 

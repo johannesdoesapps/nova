@@ -5,6 +5,7 @@ import { getPlatformSettings } from "@/lib/ai/settings";
 import { getAuth } from "@/lib/auth";
 import { billingConfigured } from "@/lib/billing/stripe";
 import { entitlementFor } from "@/lib/entitlements";
+import { planCapacity } from "@/lib/billing/scenarios";
 import { DEFAULT_BILLING, PLAN_IDS, chargeUsd, modelTier, planOf, resolveBilling, type ModelTier } from "@/lib/plans";
 import { pageMetadata } from "@/lib/seo";
 
@@ -39,6 +40,11 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
     const p = planOf(billing, id);
     const names = namesFor(p.tiers);
     const prev = id === "max" ? planOf(billing, "pro") : id === "pro" ? planOf(billing, "free") : null;
+    // What the plan's monthly AI allowance buys, at the planning assumptions (an estimate, shown as "about").
+    const cap = planCapacity(billing, id, live);
+    const cheapest = cap.models[0];
+    const advanced = cap.models.filter((m) => m.tier !== "standard");
+    const roundDown = (n: number) => (n >= 1000 ? Math.floor(n / 100) * 100 : n >= 100 ? Math.floor(n / 10) * 10 : n);
     return {
       id,
       label: p.label,
@@ -48,6 +54,9 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
       annualDiscountPct: p.priceUsd > 0 ? p.annualDiscountPct : 0,
       features: [
         prev ? `About ${Math.round(p.weeklyUnits / prev.weeklyUnits)}× the ${prev.label} allowance` : null,
+        cheapest ? `Up to about ${roundDown(cheapest.perMonth).toLocaleString("en-US")} messages a month with ${cheapest.name}` : null,
+        advanced.length ? `About ${roundDown(advanced.at(-1)!.perMonth).toLocaleString("en-US")}–${roundDown(advanced[0]!.perMonth).toLocaleString("en-US")} messages a month with advanced models` : null,
+        p.dailyMessages > 0 ? `${p.dailyMessages} messages a day` : null,
         `${p.windowUnits.toLocaleString("en-US")} usage units per 5-hour window, ${p.weeklyUnits.toLocaleString("en-US")} per week`,
         names.length ? `Models: ${names.join(", ")}` : "Auto (the lowest-cost available model)",
         `Replies up to about ${Math.round((p.maxOutputTokens * 0.75) / 50) * 50} words`,
@@ -65,7 +74,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
       <section className="mx-auto max-w-5xl px-5 pt-16 pb-6 text-center sm:px-8 sm:pt-20">
         <h1 className="text-balance font-serif text-[44px] leading-[1.05] tracking-[-0.01em] text-fg sm:text-[56px]">Pricing</h1>
         <p className="mx-auto mt-5 max-w-2xl text-[17px] leading-relaxed text-muted">
-          Start free. Upgrade for more usage and larger models. Prices in US dollars; no plan is unlimited.
+          Start free. Upgrade for more usage and larger models. Prices in US dollars, plus tax where it applies. No plan is unlimited.
         </p>
       </section>
 
@@ -73,8 +82,10 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
         <h2 id="plans" className="sr-only">Plans</h2>
         <PricingPlans plans={plans} onSale={onSale} current={current} signedIn={auth.mode === "authenticated"} highlight={highlight} initialInterval={initialInterval} />
         <p className="mx-auto mt-6 max-w-3xl text-center text-[13px] leading-relaxed text-muted">
-          Fair use: each plan includes a monthly AI budget. If heavy use of larger models uses most of it, NOVA continues on the plan&rsquo;s lowest-cost model, and
-          pauses when the budget is used, until your billing month renews. Upgrades are charged pro-rata right away; downgrades are credited to your next invoice.
+          Each plan includes a monthly AI allowance, with a part reserved for advanced models. Message counts are estimates for a typical message (about{" "}
+          {Math.round((billing.scenario.inputTokens * 0.75) / 100) * 100} words of context and a {Math.round((billing.scenario.outputTokens * 0.75) / 50) * 50}-word reply); longer
+          conversations use more. When the advanced-model part is used, Auto and the fast models keep working; when the whole
+          allowance is used, NOVA pauses until your billing month renews. Upgrades are charged pro-rata right away; downgrades are credited to your next invoice.
         </p>
       </section>
 

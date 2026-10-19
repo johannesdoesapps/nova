@@ -10,11 +10,11 @@ import {
   planOf,
   priceForBudget,
   resolveBilling,
-  typicalRequestUsd,
   type BillingSettings,
   type ModelTier,
   type PlanId,
 } from "@/lib/plans";
+import { MESSAGES_PER_DAY, messageCostUsd, modelCostTable } from "@/lib/billing/scenarios";
 import { cn } from "@/lib/utils";
 
 const input =
@@ -68,11 +68,12 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
           const p = b.plans[id];
           const month = planEconomics(b, id, "month");
           const year = planEconomics(b, id, "year");
-          const cheap = live.filter((m) => p.tiers.includes(tierOf(m))).map((m) => ({ m, c: typicalRequestUsd(m) })).filter((x) => x.c !== null) as { m: ModelWithStatus; c: number }[];
+          const cheap = live.filter((m) => p.tiers.includes(tierOf(m))).map((m) => ({ m: { ...m, tier: tierOf(m) }, c: messageCostUsd({ ...m, tier: tierOf(m) }, b.scenario) })).filter((x) => x.c !== null) as { m: ModelWithStatus; c: number }[];
           cheap.sort((a, z) => a.c - z.c);
           const lo = cheap[0];
           const hi = cheap.at(-1);
           const warn = id !== "free" && month.aiBudgetUsd <= 0;
+          const hiBudget = hi && tierOf(hi.m) !== "standard" ? Math.min(month.aiBudgetUsd, month.premiumBudgetUsd) : month.aiBudgetUsd;
           return (
             <div key={id} className="rounded-2xl border border-s-line p-4">
               <input aria-label="Plan name" name={`${id}-label`} autoComplete="off" value={p.label} onChange={(e) => setPlan(id, { label: e.target.value })} className={cn(input, "font-semibold")} />
@@ -90,6 +91,9 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
                 <Num label="Max reply tokens" value={p.maxOutputTokens} step={100} onChange={(v) => setPlan(id, { maxOutputTokens: v })} />
                 <Num label="History characters" value={p.historyChars} step={1000} onChange={(v) => setPlan(id, { historyChars: v })} />
                 <Num label="Web searches / month" value={p.webSearchesPerPeriod} onChange={(v) => setPlan(id, { webSearchesPerPeriod: v })} />
+                <Num label="Advanced-model share %" value={p.premiumBudgetPct} onChange={(v) => setPlan(id, { premiumBudgetPct: v })} hint="of the AI budget" />
+                <Num label="Messages / day (0 = no cap)" value={p.dailyMessages} onChange={(v) => setPlan(id, { dailyMessages: v })} />
+                <Num label="Tokens / month (0 = no cap)" value={p.monthlyTokens} step={100000} onChange={(v) => setPlan(id, { monthlyTokens: v })} />
               </div>
               <fieldset className="mt-3">
                 <legend className="text-[12px] text-s-ink-3">Model tiers included</legend>
@@ -111,7 +115,7 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
                 {id !== "free" && (
                   <>
                     <div className="flex justify-between">
-                      <dt>Revenue / month</dt>
+                      <dt>Revenue / month (ex. tax, refunds)</dt>
                       <dd>{usd(month.revenueUsd)}</dd>
                     </div>
                     <div className="flex justify-between">
@@ -133,16 +137,30 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
                     {id !== "free" ? ` (yearly ${usd(year.aiBudgetUsd)})` : ""}
                   </dd>
                 </div>
+                {month.premiumBudgetUsd > 0 && (
+                  <div className="flex justify-between">
+                    <dt>… of which advanced models</dt>
+                    <dd>{usd(month.premiumBudgetUsd)}</dd>
+                  </div>
+                )}
+                {id !== "free" && (
+                  <div className="flex justify-between">
+                    <dt>Contribution if fully used</dt>
+                    <dd>
+                      {usd(month.contributionUsd)} ({Math.round((month.contributionUsd / Math.max(month.revenueUsd, 0.01)) * 100)}%)
+                    </dd>
+                  </div>
+                )}
                 {lo && (
                   <div className="flex justify-between">
-                    <dt>≈ requests on {lo.m.displayName}</dt>
+                    <dt>≈ messages / month on {lo.m.displayName}</dt>
                     <dd>{Math.floor(month.aiBudgetUsd / lo.c).toLocaleString("en-US")}</dd>
                   </div>
                 )}
                 {hi && hi !== lo && (
                   <div className="flex justify-between">
-                    <dt>≈ requests on {hi.m.displayName}</dt>
-                    <dd>{Math.floor(month.aiBudgetUsd / hi.c).toLocaleString("en-US")}</dd>
+                    <dt>≈ messages / month on {hi.m.displayName}</dt>
+                    <dd>{Math.floor(hiBudget / hi.c).toLocaleString("en-US")}</dd>
                   </div>
                 )}
               </dl>
@@ -151,9 +169,9 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
                   This price leaves no AI budget at a {Math.round(b.targetMargin * 100)}% margin. Raise it to at least {usd(priceForBudget(b, 1) ?? 0)} for a $1 budget.
                 </p>
               )}
-              {!warn && hi && id !== "free" && month.aiBudgetUsd / hi.c < 50 && (
+              {!warn && hi && id !== "free" && hiBudget / hi.c < 50 && (
                 <p className="mt-2 text-[12px] text-s-ink-3">
-                  Few requests on {hi.m.displayName}. For 100, the price would be about {usd(priceForBudget(b, hi.c * 100) ?? 0)}; or leave the most expensive tier to a higher plan.
+                  Few messages on {hi.m.displayName}. Raise the advanced-model share or the price (about {usd(priceForBudget(b, (hi.c * 100) / Math.max(p.premiumBudgetPct / 100, 0.01)) ?? 0)} for 100), or leave this tier to a higher plan.
                 </p>
               )}
             </div>
@@ -170,7 +188,9 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
         <Num label="Hosting / subscriber $" value={b.overheadPerSubscriberUsd} step={0.1} onChange={(v) => set({ overheadPerSubscriberUsd: v })} />
         <Num label="Free users / subscriber $" value={b.freeSubsidyPerSubscriberUsd} step={0.1} onChange={(v) => set({ freeSubsidyPerSubscriberUsd: v })} />
         <Num label="Web search cost $" value={b.webSearchCostUsd} step={0.001} onChange={(v) => set({ webSearchCostUsd: v })} />
-        <Num label="Economy mode from %" value={Math.round(b.premiumBudgetShare * 100)} onChange={(v) => set({ premiumBudgetShare: v / 100 })} hint="of the AI budget" />
+        <Num label="Tax included in prices %" value={b.taxIncludedPct} step={0.5} onChange={(v) => set({ taxIncludedPct: v })} hint="0 = tax added at checkout" />
+        <Num label="Refunds %" value={b.refundRatePct} step={0.5} onChange={(v) => set({ refundRatePct: v })} hint="of revenue" />
+        <Num label="Fixed overhead / month $" value={b.fixedOverheadMonthlyUsd} step={10} onChange={(v) => set({ fixedOverheadMonthlyUsd: v })} hint="shown apart from contribution" />
       </div>
 
       <h3 className="mt-5 text-[13.5px] font-semibold">Usage units per message, by tier</h3>
@@ -180,13 +200,59 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
         ))}
       </div>
 
+      <h3 className="mt-5 text-[13.5px] font-semibold">Usage calculator</h3>
+      <p className="mt-1 text-[12px] text-s-ink-3">
+        Cost of a user message on each model from verified prices. One message can make several model calls (agents, Council, retries). After launch, compare with the real averages in Finance.
+      </p>
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Num label="Input tokens / call" value={b.scenario.inputTokens} step={100} onChange={(v) => set({ scenario: { ...b.scenario, inputTokens: v } })} />
+        <Num label="Output tokens / call" value={b.scenario.outputTokens} step={100} onChange={(v) => set({ scenario: { ...b.scenario, outputTokens: v } })} />
+        <Num label="Model calls / message" value={b.scenario.callsPerMessage} step={0.05} onChange={(v) => set({ scenario: { ...b.scenario, callsPerMessage: v } })} />
+        <Num label="Cached input %" value={b.scenario.cachedInputPct} onChange={(v) => set({ scenario: { ...b.scenario, cachedInputPct: v } })} />
+      </div>
+      <div className="mt-2 overflow-x-auto">
+        <table className="w-full min-w-[640px] text-left text-[12.5px] tabular-nums">
+          <thead className="text-[11.5px] text-s-ink-3">
+            <tr>
+              <th className="py-1.5 pr-2 font-medium">Model</th>
+              <th className="py-1.5 pr-2 font-medium">Per message</th>
+              <th className="py-1.5 pr-2 font-medium">Per 1,000</th>
+              {MESSAGES_PER_DAY.map((d) => (
+                <th key={d} className="py-1.5 pr-2 font-medium">
+                  {d}/day · month
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {modelCostTable(
+              live.map((m) => ({ ...m, tier: tierOf(m) })),
+              b.scenario,
+            ).map((r) => (
+              <tr key={r.id} className="border-t border-s-line">
+                <td className="py-1.5 pr-2">
+                  {r.name} <span className="text-s-ink-3">· {TIER_LABEL[r.tier as ModelTier]}</span>
+                </td>
+                <td className="py-1.5 pr-2">{usd(r.perMessageUsd, 5)}</td>
+                <td className="py-1.5 pr-2">{usd(r.per1000Usd)}</td>
+                {r.byVolume.map((v) => (
+                  <td key={v.perDay} className="py-1.5 pr-2">
+                    {usd(v.monthlyUsd)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       <h3 className="mt-5 text-[13.5px] font-semibold">Model tiers</h3>
-      <p className="mt-1 text-[12px] text-s-ink-3">Which plans include each model. Cost per typical request ({"5,000"} input + 960 output tokens) at official prices.</p>
+      <p className="mt-1 text-[12px] text-s-ink-3">Which plans include each model. Cost per message with the calculator&rsquo;s assumptions, at official prices.</p>
       <ul className="mt-2 divide-y divide-s-line rounded-xl border border-s-line">
         {models
           .filter((m) => m.provider !== "demo")
           .map((m) => {
-            const c = typicalRequestUsd(m);
+            const c = messageCostUsd({ ...m, tier: tierOf(m) }, b.scenario);
             return (
               <li key={m.id} className="flex items-center gap-3 px-3 py-2 text-[13px]">
                 <span className={cn("min-w-0 flex-1 truncate", !m.available && "text-s-ink-3")}>

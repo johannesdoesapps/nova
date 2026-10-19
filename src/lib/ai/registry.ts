@@ -25,6 +25,10 @@ export const DEFAULT_MODELS: ModelInfo[] = [
     contextWindow: 1_000_000,
     inputPrice: 0.1,
     outputPrice: 0.5,
+    cachedInputPrice: 0.01,
+    cacheWritePrice: 0.125,
+    // Prompts over 100,000 tokens are billed at higher rates.
+    longContext: { aboveInputTokens: 100_000, inputPrice: 0.5, outputPrice: 2.5, cachedInputPrice: 0.05, cacheWritePrice: 0.625 },
     isEnabled: true,
     lastVerifiedAt: "2026-10-19",
     priceSourceUrl: "https://platform.claude.com/docs/en/about-claude/pricing",
@@ -39,6 +43,8 @@ export const DEFAULT_MODELS: ModelInfo[] = [
     contextWindow: 1_000_000,
     inputPrice: 2,
     outputPrice: 10,
+    cachedInputPrice: 0.1,
+    cacheWritePrice: 2.5,
     isEnabled: true,
     lastVerifiedAt: "2026-10-19",
     priceSourceUrl: "https://platform.claude.com/docs/en/about-claude/pricing",
@@ -55,12 +61,14 @@ export const DEFAULT_MODELS: ModelInfo[] = [
     contextWindow: 1_000_000,
     inputPrice: 4,
     outputPrice: 20,
+    cachedInputPrice: 0.2,
+    cacheWritePrice: 5,
     isEnabled: true,
     lastVerifiedAt: "2026-10-19",
     priceSourceUrl: "https://platform.claude.com/docs/en/about-claude/pricing",
   },
   // OpenAI GPT-5.6 replaces GPT-5 / GPT-5 mini, which OpenAI shuts down on
-  // Dec 11, 2026 (see RETIRED_MODELS). Prices verified on OpenAI's model pages.
+  // Dec 11, 2026 (see RETIRED_MODELS). Prices (standard tier, incl. cached input and long-context rates) verified on OpenAI's pricing page, 2026-10-19.
   {
     id: "openai:gpt-5.6-luna",
     provider: "openai",
@@ -71,9 +79,13 @@ export const DEFAULT_MODELS: ModelInfo[] = [
     contextWindow: 1_050_000,
     inputPrice: 0.2,
     outputPrice: 1.2,
+    cachedInputPrice: 0.02,
+    cacheWritePrice: 0.25,
+    cacheWritesUnreported: true,
+    longContext: { aboveInputTokens: 272_000, inputPrice: 0.4, outputPrice: 1.8, cachedInputPrice: 0.04, cacheWritePrice: 0.5 },
     isEnabled: true,
     lastVerifiedAt: "2026-10-19",
-    priceSourceUrl: "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+    priceSourceUrl: "https://developers.openai.com/api/docs/pricing",
   },
   {
     id: "openai:gpt-5.6-terra",
@@ -85,9 +97,13 @@ export const DEFAULT_MODELS: ModelInfo[] = [
     contextWindow: 1_050_000,
     inputPrice: 2,
     outputPrice: 12,
+    cachedInputPrice: 0.2,
+    cacheWritePrice: 2.5,
+    cacheWritesUnreported: true,
+    longContext: { aboveInputTokens: 272_000, inputPrice: 4, outputPrice: 18, cachedInputPrice: 0.4, cacheWritePrice: 5 },
     isEnabled: true,
     lastVerifiedAt: "2026-10-19",
-    priceSourceUrl: "https://developers.openai.com/api/docs/models/gpt-5.6-terra",
+    priceSourceUrl: "https://developers.openai.com/api/docs/pricing",
   },
   {
     // Premium: offered on the Max plan.
@@ -101,9 +117,13 @@ export const DEFAULT_MODELS: ModelInfo[] = [
     contextWindow: 1_050_000,
     inputPrice: 4,
     outputPrice: 20,
+    cachedInputPrice: 0.4,
+    cacheWritePrice: 5,
+    cacheWritesUnreported: true,
+    longContext: { aboveInputTokens: 272_000, inputPrice: 8, outputPrice: 30, cachedInputPrice: 0.8, cacheWritePrice: 10 },
     isEnabled: true,
     lastVerifiedAt: "2026-10-19",
-    priceSourceUrl: "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+    priceSourceUrl: "https://developers.openai.com/api/docs/pricing",
   },
   {
     // Google's OpenAI-compatible Gemini endpoint. Admins can add other Gemini
@@ -275,6 +295,19 @@ export const modelInfoSchema = z.object({
   contextWindow: z.number().int().positive().nullable().default(null),
   inputPrice: z.number().nonnegative().nullable().default(null),
   outputPrice: z.number().nonnegative().nullable().default(null),
+  cachedInputPrice: z.number().nonnegative().nullable().optional(),
+  cacheWritePrice: z.number().nonnegative().nullable().optional(),
+  cacheWritesUnreported: z.boolean().optional(),
+  longContext: z
+    .object({
+      aboveInputTokens: z.number().int().positive(),
+      inputPrice: z.number().nonnegative(),
+      outputPrice: z.number().nonnegative(),
+      cachedInputPrice: z.number().nonnegative().nullable().optional(),
+      cacheWritePrice: z.number().nonnegative().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
   isEnabled: z.boolean().default(true),
   lastVerifiedAt: z.string().nullable().default(null),
   priceSourceUrl: z.url().nullable().default(null),

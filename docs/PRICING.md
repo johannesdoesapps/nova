@@ -1,112 +1,191 @@
-# NOVA plans: costs, prices and margins
+# NOVA: API costs, usage limits and plan prices
 
-Last calculated **2026-10-19**, from the official API prices in `src/lib/ai/registry.ts` and the defaults in `src/lib/plans.ts`.
+Calculated on **2026-10-19**. The calculations are in code, not just in this document:
 
-Admins can change every number below without code: **Admin → Plans & pricing**. The editor recalculates the budgets live. The finance dashboard (**Admin → Finance**) shows what actually happens.
+- request costs: `src/lib/ai/cost.ts`;
+- scenarios and capacity: `src/lib/billing/scenarios.ts`;
+- plan economics: `src/lib/plans.ts`.
 
-## Recommendation
+The tests in `tests/plans-billing.test.ts` reproduce these numbers.
 
-| Plan | Price (USD) | Yearly | Models | 5-hour / weekly units | AI budget / month | Margin |
+Admins can change every assumption in **Admin → Plans & pricing**, where a usage calculator shows the results live. **Admin → Finance** shows real costs, revenue and averages once people use NOVA.
+
+## 1. Configured models and verified prices
+
+These are the models in `src/lib/ai/registry.ts` that are live on this site (Anthropic and OpenAI keys are set). Prices were read on 2026-10-19 from the official pages:
+
+- Anthropic: https://platform.claude.com/docs/en/about-claude/pricing
+- OpenAI: https://developers.openai.com/api/docs/pricing (standard tier)
+
+| Model (API id) | Tier | Input | Cached input | Cache write | Output | Long prompts |
 | --- | --- | --- | --- | --- | --- | --- |
-| **Free** | $0 | — | Standard: Claude Haiku 5.5, GPT-5.6 Luna | 10 / 30 | $0.10 (fixed) | paid for by subscribers ($1 each assumed) |
-| **Pro** | **$20 / month** | $216 / year (10% off) | Standard and Advanced: adds Claude Sonnet 5.5, GPT-5.6 Terra | 200 / 1,100 | $4.66 (yearly: $4.27) | ≥ 60% |
-| **Max** | **$100 / month** | $1,080 / year (10% off) | All: adds Claude Opus 5.5, GPT-5.6 Sol | 600 / 3,200 | $29.41 (yearly: $26.55) | ≥ 60% |
+| Claude Haiku 5.5 (`claude-haiku-5-5`) | Standard | $0.10 | $0.01 | $0.125 | $0.50 | over 100k tokens: $0.50 / $2.50 |
+| GPT-5.6 Luna (`gpt-5.6-luna`) | Standard | $0.20 | $0.02 | $0.25 | $1.20 | over 272k tokens: $0.40 / $1.80 |
+| Claude Sonnet 5.5 (`claude-sonnet-5-5`) | Advanced | $2.00 | $0.10 | $2.50 | $10.00 | — |
+| GPT-5.6 Terra (`gpt-5.6-terra`) | Advanced | $2.00 | $0.20 | $2.50 | $12.00 | over 272k tokens: $4 / $18 |
+| Claude Opus 5.5 (`claude-opus-5-5`) | Premium | $4.00 | $0.20 | $5.00 | $20.00 | — |
+| GPT-5.6 Sol (`gpt-5.6-sol`) | Premium | $4.00 | $0.40 | $5.00 | $20.00 | over 272k tokens: $8 / $30 |
 
-**Both proposed prices work at a 60% margin. Keep them.**
+All prices are USD per 1 million tokens. Cache-write prices are for 5-minute caching. Web search on either provider costs $10 per 1,000 searches. NOVA's own web search is configured at $0.01 per search.
 
-- No plan is unlimited. Each plan has a 5-hour allowance, a weekly allowance and a monthly AI budget.
-- **Recommended yearly discount: 10%.** At 20%, Pro's AI budget falls to $3.65 a month, too small for Sonnet-heavy use. Every yearly discount is configurable.
-- Premium models (Opus, Sol) are on Max only. On Pro they'd allow only about 119 typical requests a month, which would feel stingy.
-- If you want Opus on Pro, Pro would have to cost about $36 for 200 Opus requests a month (the admin editor shows this calculation).
+The registry also lists Gemini, Grok and DeepSeek models. They aren't configured on this site, so they aren't offered or priced here.
 
-## Official model prices (USD per 1M tokens)
-
-| Model | Tier | Input | Output | Source (checked 2026-10-19) |
-| --- | --- | --- | --- | --- |
-| Claude Haiku 5.5 | Standard | $0.10 | $0.50 | platform.claude.com/docs/en/about-claude/pricing |
-| GPT-5.6 Luna | Standard | $0.20 | $1.20 | developers.openai.com/api/docs/models/gpt-5.6-luna |
-| Claude Sonnet 5.5 | Advanced | $2 | $10 | platform.claude.com/docs/en/about-claude/pricing |
-| GPT-5.6 Terra | Advanced | $2 | $12 | developers.openai.com/api/docs/models/gpt-5.6-terra |
-| Claude Opus 5.5 | Premium | $4 | $20 | platform.claude.com/docs/en/about-claude/pricing |
-| GPT-5.6 Sol | Premium | $4 | $20 | developers.openai.com/api/docs/models/gpt-5.6-sol |
-
-Only models with a configured API key are offered. Today that means Anthropic and OpenAI.
-
-## Cost per request
-
-A request is one message with its conversation history, plus the reply. The cost estimate uses a conservative mix. Real traffic so far is far lighter: the median is 557 input and 34 output tokens.
-
-- **Free / Pro:**
-  - 60% short (1,500 in / 400 out)
-  - 30% medium (6,000 / 1,200)
-  - 10% long (12,000–20,000 / 1,200–2,400)
-- **Max:**
-  - 50% short
-  - 30% medium (8,000 / 1,500)
-  - 20% very long (40,000 / 4,800)
-- Plus 10% for retries.
-
-The average Pro request is about 5,000 input and 960 output tokens (`TYPICAL_REQUEST`).
-
-| Model | Pro mix: per request | per 1,000 | Max mix: per request |
-| --- | --- | --- | --- |
-| Claude Haiku 5.5 | $0.00098 | $0.98 | $0.00211 |
-| GPT-5.6 Luna | $0.00214 | $2.14 | $0.00458 |
-| Claude Sonnet 5.5 | $0.0196 | $19.58 | $0.0422 |
-| GPT-5.6 Terra | $0.0214 | $21.43 | $0.0458 |
-| Claude Opus 5.5 / GPT-5.6 Sol | $0.0392 | $39.16 | $0.0845 |
-
-## How the AI budget is calculated
+## 2. How a request is costed
 
 ```
-revenue per month    = price (yearly: yearly price ÷ 12)
-allowed costs        = revenue × (1 − 60%)
-payment fees         = price × 3.6% + $0.30 per charge (yearly: ÷ 12)
-other costs          = $0.50 hosting + $1.00 Free users' AI, per subscriber
-AI budget            = (allowed costs − fees − other costs) × (1 − 15% safety buffer)
+cost = (uncached input × input price + cache-write tokens × write price
+        + cached input × cached price + output × output price) / 1,000,000
 ```
+
+- **Token counts:** each call is costed from the token counts the provider reports.
+- **Long prompts:** long-context prices apply when a prompt is above the provider's threshold.
+- **OpenAI cache writes:** OpenAI doesn't report cache writes separately, so uncached OpenAI input is counted at the cache-write price. This is an upper bound, about 25% more than the input price.
+- **Several calls per message:** every model call is recorded separately and shares the user message's request id.
+  - Agents, Council, Arena and fallbacks can make several calls for one message.
+  - Retries that produced output are charged; a call that failed before any output is recorded at no charge.
+- **Web search:** each search adds $0.01 to its call.
+- **Missing price:** a call without a verified price counts at the most expensive verified price.
+
+Every call's cost is stored in USD in `model_runs.estimated_cost`. The record also includes:
+
+- the provider and the model tier;
+- input, output, cached and cache-write tokens;
+- the plan, the request id and the tools used.
+
+## 3. Cost per message and per volume
+
+**Planning assumptions** (configurable):
+
+| Setting | Value |
+| --- | --- |
+| Input tokens per call | 2,000 (conversation history included) |
+| Output tokens per call | 800 |
+| Model calls per user message | 1.05 (allows for agent steps, retries and fallbacks) |
+| Cached input | 0% (conservative; real caching lowers costs) |
+| Days per month | 30 |
+
+**Messages and calls are counted separately.** A *message* is what the user sends. A *call* is one model request. Finance shows both.
+
+| Model | Per message | Per 100 | Per 1,000 | Per 3,000 | 10/day: month | 50/day: month | 100/day: month | 300/day: month |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Claude Haiku 5.5 | $0.00063 | $0.06 | $0.63 | $1.89 | $0.19 | $0.94 | $1.89 | $5.67 |
+| GPT-5.6 Luna | $0.00153 | $0.15 | $1.53 | $4.60 | $0.46 | $2.30 | $4.60 | $13.80 |
+| Claude Sonnet 5.5 | $0.0126 | $1.26 | $12.60 | $37.80 | $3.78 | $18.90 | $37.80 | $113.40 |
+| GPT-5.6 Terra | $0.0153 | $1.53 | $15.33 | $45.99 | $4.60 | $23.00 | $45.99 | $137.97 |
+| Claude Opus 5.5 | $0.0252 | $2.52 | $25.20 | $75.60 | $7.56 | $37.80 | $75.60 | $226.80 |
+| GPT-5.6 Sol | $0.0273 | $2.73 | $27.30 | $81.90 | $8.19 | $40.95 | $81.90 | $245.70 |
+
+Daily cost is the monthly cost ÷ 30. For example, Opus at 100 messages a day costs $2.52 a day.
+
+**Economical vs premium:**
+- A premium model (Opus or Sol) costs about **40× a Claude Haiku message** and about **17× a GPT Luna message**.
+- An advanced model (Sonnet or Terra) costs about 20× a Haiku message.
+- Someone sending 300 premium messages a day would cost $227–$246 a month. That's more than any plan's price, which is why the limits below exist.
+
+## 4. Prices and the 60% contribution margin
+
+```
+contribution margin = (revenue − variable costs) / revenue
+revenue          = price, excluding tax collected for authorities, less expected refunds (2%)
+allowed costs    = revenue × 40%
+variable costs   = payment fees (3.6% + $0.30 per charge) + hosting ($0.50) + Free users' share ($1.00) + AI usage
+AI budget        = (allowed costs − fees − hosting − Free share) × (1 − 15% safety buffer)
+```
+
+Fixed overhead isn't a variable cost, so it isn't in this formula. It's shown separately in Finance, as "operating result = contribution − fixed overhead". The contribution margin is not net profit.
 
 | | Pro monthly | Pro yearly | Max monthly | Max yearly |
 | --- | --- | --- | --- | --- |
-| Revenue / month | $20.00 | $18.00 | $100.00 | $90.00 |
-| Allowed costs (40%) | $8.00 | $7.20 | $40.00 | $36.00 |
-| Payment fees | $1.02 | $0.67 | $3.90 | $3.27 |
-| Hosting + Free users | $1.50 | $1.50 | $1.50 | $1.50 |
-| Safety buffer (15%) | $0.82 | $0.75 | $5.19 | $4.69 |
-| **AI budget** | **$4.66** | **$4.27** | **$29.41** | **$26.55** |
-| Profit if the whole budget is used | $12.00 (60%) | $10.80 (60%) | $60.00 (60%) | $54.00 (60%) |
+| Price | **$15 / month** | $162 / year (10% off) | **$110 / month** | $1,188 / year (10% off) |
+| Revenue / month (excl. tax, after refunds) | $14.70 | $13.23 | $107.80 | $97.02 |
+| Allowed costs (40%) | $5.88 | $5.29 | $43.12 | $38.81 |
+| Payment fees | $0.84 | $0.51 | $4.26 | $3.59 |
+| Hosting + Free users' share | $1.50 | $1.50 | $1.50 | $1.50 |
+| Safety buffer | $0.53 | $0.49 | $5.60 | $5.06 |
+| **AI budget / month** | **$3.01** | **$2.79** | **$31.76** | **$28.66** |
+| … of which advanced/premium models | $1.81 (60%) | $1.67 | $26.99 (85%) | $24.36 |
+| Required profit (60%) | $8.82 | $7.94 | $64.68 | $58.21 |
+| Contribution if the whole budget is used | $9.35 (63.6%) | $8.43 (63.7%) | $70.28 (65.2%) | $63.27 (65.2%) |
 
-The safety buffer is extra profit unless estimates turn out low. With typical use, most subscribers use far less than their budget, so the real margin is higher.
+**Verdict: the proposed prices, Pro $15 and Max $110, both sustain at least 60% contribution margin, so they don't need to change.**
 
-**What the budget buys per month (typical requests):**
+The margin holds because the server stops usage at the AI budget. Without that guard, no flat price would be safe: a Max user on Opus at 300 messages a day would cost $227 a month.
 
-| | Haiku | Luna | Sonnet | Terra | Opus / Sol |
+### Every scenario
+
+These run 10, 50, 100 and 300 messages a day on each model the plan includes, with the guard applied:
+
+| Plan | Model | 10/day | 50/day | 100/day | 300/day |
 | --- | --- | --- | --- | --- | --- |
-| Free ($0.10) | 121 | 55 | — | — | — |
-| Pro ($4.66) | 4,758 | 2,174 | 238 | 217 | (Max only) |
-| Max ($29.41) | 13,925 | 6,424 | 696 | 642 | 348 |
+| Pro | Claude Haiku | 82.8% | 77.7% | 71.2% | 63.6% (capped) |
+| Pro | GPT Luna | 81.0% | 68.4% | 63.6% (capped) | 63.6% (capped) |
+| Pro | Claude Sonnet | 71.8% (capped at the advanced part) | 71.8% | 71.8% | 71.8% |
+| Pro | GPT Terra | 71.9% (capped) | 71.9% | 71.9% | 71.9% |
+| Max | Claude Haiku | 94.5% | 93.8% | 92.9% | 89.4% |
+| Max | Claude Sonnet | 91.2% | 77.1% | 69.6% (capped) | 69.6% (capped) |
+| Max | Claude Opus (premium only) | 87.6% | 69.6% (capped) | 69.6% | 69.6% |
+| Max | GPT Sol (premium only) | 87.1% | 69.6% (capped) | 69.6% | 69.6% |
 
-The usage units are set so the weekly allowance matches the budget:
+- Yearly plans give at least 63% in every scenario.
+- The lowest result anywhere is **63.6%**: a Pro user sending 300 messages a day.
+- All of these are checked in a test.
 
-- Standard = 1 unit, Advanced = 20, Premium = 40 (roughly the cost ratio).
-- Pro's 1,100 units a week ≈ 4,700 a month. That's about 4,700 Haiku requests or about 235 Sonnet requests, each roughly $4.6.
-- Max's 3,200 units a week ≈ 13,700 a month. That's about 340 Opus requests, roughly $29.
+**Average cost per subscriber** depends on the mix of light, normal and heavy users. As an illustration only (not data): with 50% light (15/day), 35% normal (45/day) and 15% heavy (200/day) users, all on Auto (Haiku), it's about **$0.89 a month on Pro** and **$1.01 on Max**.
 
-## Assumptions to check
+Use the real "AI cost per paying subscriber" in Finance after launch.
 
-1. **Stripe fees, 3.6% + $0.30:** 2.9% + $0.30 for cards plus 0.7% for Stripe Billing, Stripe's standard US pricing. International cards cost more; the buffer covers some of that. Check your Stripe account's pricing.
-2. **Hosting, $0.50 per subscriber per month:** an estimate. Set the real figure as (Vercel + Supabase bill) ÷ subscribers.
-3. **Free users' cost, $1 per subscriber:** at $0.10 maximum per Free user, this covers 10 Free users per subscriber. The finance dashboard warns when Free costs more.
-4. **Web search:** $0.01 per search (Pro: 100 a month, Max: 500), counted against the budget.
-5. **Taxes:** prices exclude sales tax / VAT. Turn on Stripe Tax if you need it.
+## 5. Recommended allowances
 
-## What happens at the limits
+| | Free | Pro ($15) | Max ($110) |
+| --- | --- | --- | --- |
+| Models | Standard: Haiku, Luna | + Advanced: Sonnet, Terra | + Premium: Opus, Sol |
+| Monthly AI budget | $0.10 | $3.01 | $31.76 |
+| Advanced-model part | — | $1.81 | $26.99 |
+| Messages / month, Auto (Haiku) | about 136 (token cap) | about 4,776 (159/day) | about 50,400 (5-hour/weekly units cap it lower) |
+| Messages / month, GPT Luna | about 65 | about 1,962 | about 20,700 |
+| Messages / month, advanced models | — | about 117 (Terra) – 143 (Sonnet) | about 1,760 (Terra) – 2,142 (Sonnet) |
+| Messages / month, premium models | — | — | about 988 (Sol) – 1,071 (Opus) |
+| Mix: 80% Auto, 20% top model | — | about 588 | about 4,943 |
+| Messages / day | 10 | no daily cap | no daily cap |
+| Tokens / month | 400,000 | 15,000,000 | 60,000,000 |
+| 5-hour / weekly units | 10 / 30 | 200 / 1,100 | 1,200 / 6,000 |
+| Longest reply | 1,200 tokens | 2,400 tokens | 4,800 tokens |
+| History sent per message | 12,000 characters | 24,000 characters | 80,000 characters |
+| Web searches / month | 0 | 50 | 500 |
+| Resets | calendar month | billing date, monthly | billing date, monthly (also on yearly plans) |
 
-| Situation | What happens |
-| --- | --- |
-| 80% of the monthly AI budget used | Economy mode: only the lowest-cost model on the plan. Users see why, and are offered Auto and the upgrade. |
-| 100% of the budget | AI requests stop until the billing month renews. The reset date is shown. |
-| 5-hour or weekly units used | Requests stop until the window resets. The time and an upgrade link are shown. |
-| A model outside the plan | Refused (403 `plan_required`) with the plan that includes it and same-provider alternatives. Never silently switched. |
+Message counts assume the planning message above. Longer conversations use more of the allowance.
 
-Administrators are exempt from all of these (`NOVA_ADMINS_UNLIMITED=false` turns the exemption off).
+The pricing page shows these as "about" figures. Nothing is advertised as unlimited.
+
+## 6. How the limits are enforced
+
+All of this runs on the server, in `usage_reserve_v3`, under a per-user database lock. Nothing in the browser can change a limit.
+
+1. **Plan access:** a model outside the plan is refused with the plan that includes it and same-provider alternatives.
+2. **Pre-request estimate:** the request's input plus the longest reply the plan allows, for every model call it makes.
+3. **Holds:** that estimate is held against the budget while the request runs, so concurrent requests can't overspend.
+4. **Monthly AI budget:** refuses a request when the budget is used up, or when its estimate exceeds what's left.
+5. **Advanced-model part:** when it's used up, those models are refused. The user gets three options: wait for the reset date, upgrade, or switch to a fast model of the same provider. Their choice is never switched silently, and Auto keeps working.
+6. **Daily messages and monthly tokens** (where set), then the 5-hour and weekly units.
+7. **Settlement:** the real cost is recorded from the provider's token counts and the hold is settled. A failed call with no output is released at no charge.
+
+**Alerts** appear in Admin → Finance. They cover:
+- users at 80% or more of their budget;
+- daily AI spend above twice the 7-day average;
+- failed payments and past-due subscriptions;
+- refunds above the assumed rate;
+- plans below the target margin;
+- Free users costing more than assumed.
+
+## 7. Assumptions to check
+
+1. **Stripe fees, 3.6% + $0.30 per charge:** card pricing plus Stripe Billing. International cards cost more. Check your Stripe account and adjust.
+2. **Hosting, $0.50 per subscriber per month:** an estimate. Set it to (Vercel + Supabase bill) ÷ subscribers.
+3. **Free users' cost, $1 per paying subscriber:** covers about 10 Free users at their full $0.10 each. Finance warns if Free costs more.
+4. **Refunds, 2% of revenue.** Taxes: prices exclude tax (0%). With Stripe Tax, tax is added at checkout and recorded separately; it is never counted as revenue.
+5. **Message size, 2,000 in / 800 out tokens and 1.05 calls per message:** illustrative.
+   - Observed so far (test traffic only, not representative): a median of 557 input and 34 output tokens.
+   - Replace with Finance's "avg tokens in/out" and "calls per message" once there's real usage.
+6. **Fixed overhead** (salaries, tools, base plans) is $0 until you enter it. It's shown separately.
+7. **Prices change.** Re-check both pricing pages before changing plan prices. The admin editor uses the prices in the registry.

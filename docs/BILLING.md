@@ -2,7 +2,7 @@
 
 ## Plans
 
-Free ($0), **Pro ($20/month)** and **Max ($100/month)**, in USD. Yearly billing is 10% off ($216 and $1,080).
+Free ($0), **Pro ($15/month)** and **Max ($110/month)**, in USD, plus tax where it applies. Yearly billing is 10% off ($162 and $1,188).
 
 The numbers behind these prices, the 60% margin and the allowances are in **docs/PRICING.md**. Admins change prices, allowances, model tiers, costs and the margin in **Admin → Plans & pricing**, without code.
 
@@ -17,13 +17,13 @@ Each paid plan's monthly AI budget is derived from its price, so 60% stays as pr
 
 Free has a fixed $0.10.
 
-Enforcement happens on the server, atomically, before every AI request (`usage_reserve_v2`, under a per-user lock). It covers chat, agents, Council, Arena, Mission Control, search and Truth Layer:
+Enforcement happens on the server, atomically, before every AI request (`usage_reserve_v3`, under a per-user lock). It covers chat, agents, Council, Arena, Mission Control, search and Truth Layer:
 
 1. **Plan access:** a model outside the plan is refused with an explanation. It is never switched silently.
 2. **Budget:** the request's worst-case cost is checked against the budget. That cost is its input plus the longest reply the plan allows. Requests in flight count toward the budget too.
-   - From **80%** of the budget, only the plan's lowest-cost model is allowed.
+   - Advanced and premium models have their own part of the budget (Pro 60%, Max 85%). When it's used, those models are refused with the choice to wait, upgrade or switch to a fast model; Auto keeps working.
    - At **100%**, AI requests stop until the billing month renews.
-3. **Units:** 5-hour and weekly allowances.
+3. **Caps:** messages per day (Free: 10), tokens per month, and 5-hour and weekly units.
 
 The budget resets monthly on the billing date. Yearly plans also reset monthly. Free resets on the calendar month.
 
@@ -37,7 +37,7 @@ A run without a verified price is counted at the most expensive verified price. 
 2. **Developers → API keys:** copy the **Secret key** (`sk_test_…`, later `sk_live_…`).
 3. **Developers → Webhooks → Add endpoint:**
    - URL: `https://nova-supabase.vercel.app/api/stripe/webhook`;
-   - events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.paused` and `customer.subscription.resumed` (a failed payment arrives as `customer.subscription.updated` with status `past_due`);
+   - events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.paused`, `customer.subscription.resumed`, `invoice.paid`, `invoice.payment_failed` and `refund.created`;
    - copy the **Signing secret** (`whsec_…`).
 4. **Settings → Billing → Customer portal:** turn it on (lets subscribers cancel, change card and see invoices). Plan changes happen on NOVA's pricing page.
 5. **Supabase → Project Settings → API Keys:** copy the **secret / service_role** key. It lets the webhook update a user's plan; never share it.
@@ -60,7 +60,9 @@ Until all three keys are set, the pricing page says "Coming soon" and checkout i
   - **Downgrades** apply now, and the unused part is credited to the next invoice.
   - **Free** cancels at the end of the paid period.
 - **Manage subscription:** `POST /api/billing/portal` opens Stripe's billing portal (card, invoices, cancel).
-- **The webhook keeps NOVA in sync.** `POST /api/stripe/webhook`:
+- **The webhook keeps NOVA in sync.** Paid access is never granted from the checkout success page. `POST /api/stripe/webhook`:
+  - handles each event once (`stripe_events`);
+  - records paid invoices (excluding tax), refunds and failed payments in `billing_ledger`, which Finance uses for collected revenue;
   - checks Stripe's signature;
   - re-reads the subscription from Stripe, so retries and out-of-order events are harmless;
   - writes `public.subscriptions` (plan, interval, price, status, period) with the service role.

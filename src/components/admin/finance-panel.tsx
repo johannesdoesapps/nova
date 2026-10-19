@@ -86,7 +86,7 @@ export function FinancePanel() {
             {[
               ["Monthly recurring revenue", usd(report.totals.mrrUsd), `${usd(report.totals.arrUsd, 0)} a year`],
               [`AI cost, ${report.periodDays} days`, usd(report.totals.aiCostUsd), `${report.totals.subscribers} paying of ${report.totals.users} users`],
-              [`Profit, ${report.periodDays} days`, usd(report.totals.profitUsd), `margin ${pct(report.totals.margin)}`],
+              [`Contribution, ${report.periodDays} days`, usd(report.contribution.contributionUsd), `contribution margin ${report.contribution.marginPct === null ? "—" : `${report.contribution.marginPct}%`}`],
               ["Projected month", usd(report.projection.profitUsd), `AI ${usd(report.projection.aiCostUsd)} · margin ${pct(report.projection.margin)}`],
             ].map(([k, v, sub]) => (
               <div key={k} className="rounded-xl border border-s-line px-3 py-2.5">
@@ -97,11 +97,50 @@ export function FinancePanel() {
             ))}
           </dl>
 
+          <div className="grid gap-3 sm:grid-cols-3">
+            <dl className="rounded-xl border border-s-line px-3 py-2.5 text-[12.5px]">
+              <dt className="font-medium">Collected (Stripe, {report.periodDays} days)</dt>
+              <dd className="mt-1 space-y-0.5 tabular-nums text-s-ink-2">
+                <Row k="Revenue excl. tax" v={usd(report.collected.revenueUsd)} />
+                <Row k="Tax collected (not revenue)" v={usd(report.collected.taxUsd)} />
+                <Row k={`Refunds (${report.collected.refunds})`} v={usd(report.collected.refundsUsd)} />
+                <Row k={`Failed payments (${report.collected.failedPayments})`} v={usd(report.collected.failedUsd)} />
+                {Object.entries(report.collected.byPlan).map(([k, v]) => (
+                  <Row key={k} k={`· ${k}`} v={usd(v)} />
+                ))}
+              </dd>
+            </dl>
+            <dl className="rounded-xl border border-s-line px-3 py-2.5 text-[12.5px]">
+              <dt className="font-medium">Contribution vs fixed overhead</dt>
+              <dd className="mt-1 space-y-0.5 tabular-nums text-s-ink-2">
+                <Row k="Subscription revenue" v={usd(report.contribution.revenueUsd)} />
+                <Row k="Variable costs (AI, fees, hosting)" v={usd(report.contribution.variableCostsUsd)} />
+                <Row k="Contribution" v={usd(report.contribution.contributionUsd)} />
+                <Row k="Fixed overhead" v={usd(report.contribution.fixedOverheadUsd)} />
+                <Row k="Operating result" v={usd(report.contribution.operatingResultUsd)} strong />
+              </dd>
+            </dl>
+            <dl className="rounded-xl border border-s-line px-3 py-2.5 text-[12.5px]">
+              <dt className="font-medium">Usage ({report.periodDays} days)</dt>
+              <dd className="mt-1 space-y-0.5 tabular-nums text-s-ink-2">
+                <Row k="User messages · model calls" v={`${report.usage.messages.toLocaleString("en-US")} · ${report.usage.modelCalls.toLocaleString("en-US")}`} />
+                <Row k="Cost per 1,000 messages" v={report.usage.costPer1000MessagesUsd === null ? "—" : usd(report.usage.costPer1000MessagesUsd)} />
+                <Row k="AI cost per paying subscriber" v={report.usage.aiCostPerPaidSubscriberUsd === null ? "—" : usd(report.usage.aiCostPerPaidSubscriberUsd)} />
+                <Row k="Avg tokens in / out per call" v={`${report.usage.avgInputTokens ?? "—"} / ${report.usage.avgOutputTokens ?? "—"}`} />
+                <Row k="Cached input" v={report.usage.cachedInputShare === null ? "—" : `${Math.round(report.usage.cachedInputShare * 100)}%`} />
+                <Row k="Failed calls" v={report.usage.failedCalls.toLocaleString("en-US")} />
+                {Object.entries(report.usage.byProvider).map(([k, v]) => (
+                  <Row key={k} k={`AI cost · ${k === "anthropic" ? "Claude" : k === "openai" ? "OpenAI" : k}`} v={usd(v, 4)} />
+                ))}
+              </dd>
+            </dl>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-[13px] tabular-nums">
               <thead className="text-[12px] text-s-ink-3">
                 <tr>
-                  {["Plan", "Users", "Canceling", "MRR", "Fees", "Hosting", "AI cost", "AI budget", "Profit", "Margin"].map((h) => (
+                  {["Plan", "Users", "Canceling", "MRR", "Fees", "Hosting", "AI cost", "AI budget", "Contribution", "Margin"].map((h) => (
                     <th key={h} className="px-2 py-1.5 font-medium">
                       {h}
                     </th>
@@ -189,5 +228,14 @@ export function FinancePanel() {
       )}
       {!report && !error && <div className="s-skeleton mt-4 h-32 rounded-xl" />}
     </section>
+  );
+}
+
+function Row({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
+  return (
+    <div className={cn("flex justify-between gap-3", strong && "font-medium text-s-ink")}>
+      <span>{k}</span>
+      <span>{v}</span>
+    </div>
   );
 }

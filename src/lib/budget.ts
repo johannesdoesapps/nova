@@ -1,4 +1,5 @@
 import "server-only";
+import { estimateCost } from "./ai/cost";
 import { cheapestModel } from "./ai/router";
 import type { ModelInfo, ModelWithStatus } from "./ai/types";
 import type { AuthContext } from "./auth";
@@ -58,16 +59,22 @@ export function fallbackPrices(models: ModelInfo[]): { input: number; output: nu
   return { input: Math.max(0, ...priced.map((m) => m.inputPrice!)), output: Math.max(0, ...priced.map((m) => m.outputPrice!)) };
 }
 
-/** Worst-case cost of one request before sending it: its input plus the longest reply the plan allows. */
+/**
+ * Worst-case cost of one request before sending it: its input (uncached) plus
+ * the longest reply the plan allows, for every model call it makes. Models
+ * without a verified price count at the most expensive verified price.
+ */
 export function estimateRequestUsd(models: ModelInfo[], inputTokens: number, maxOutputTokens: number, all: ModelInfo[]): number {
   const fb = fallbackPrices(all);
-  return models.reduce((sum, m) => sum + (inputTokens * (m.inputPrice ?? fb.input) + maxOutputTokens * (m.outputPrice ?? fb.output)) / 1_000_000, 0);
+  const usage = { inputTokens, outputTokens: maxOutputTokens };
+  return models.reduce((sum, m) => sum + (estimateCost(m, usage) ?? estimateCost({ inputPrice: fb.input, outputPrice: fb.output }, usage) ?? 0), 0);
 }
 
-export function budgetState(spentUsd: number, limitUsd: number | null, premiumShare = 0.8): "ok" | "economy" | "exhausted" {
+/** "economy" once the premium-model budget is used (only standard models remain), "exhausted" once the whole budget is. */
+export function budgetState(spentUsd: number, limitUsd: number | null, premiumSpentUsd = 0, premiumLimitUsd: number | null = null): "ok" | "economy" | "exhausted" {
   if (limitUsd === null) return "ok";
   if (spentUsd >= limitUsd) return "exhausted";
-  if (spentUsd >= limitUsd * premiumShare) return "economy";
+  if (premiumLimitUsd !== null && premiumSpentUsd >= premiumLimitUsd) return "economy";
   return "ok";
 }
 
@@ -87,20 +94,32 @@ export function costOfRuns(rows: RunCost[], models: ModelInfo[]): number {
 export interface BudgetStatus {
   limitUsd: number | null;
   spentUsd: number;
+  /** Separate budget for advanced and premium models, and what's been spent on them. */
+  premiumLimitUsd: number | null;
+  premiumSpentUsd: number;
+  tokensUsed: number;
+  tokenLimit: number | null;
+  messagesToday: number;
+  dailyLimit: number | null;
+  /** This period by provider: cost, tokens and model calls. */
+  byProvider: Record<string, { costUsd: number; inputTokens: number; outputTokens: number; calls: number }>;
   periodStart: number;
   resetsAt: number;
   state: "ok" | "economy" | "exhausted";
 }
 
-/** The account's budget this period, for display (enforcement is atomic in the database). */
+type RunRow = RunCost & { model_id: string; model_tier: string | null; request_id: string | null; created_at: string };
+
+/** The account's usage this budget period, for display (enforcement is atomic in the database). */
 export async function budgetStatus(auth: AuthContext, entitlement: Entitlement | null, models: ModelInfo[], now = Date.now()): Promise<BudgetStatus | null> {
   if (auth.mode !== "authenticated") return null;
   const limitUsd = budgetLimitUsd(entitlement);
   const { start, end } = budgetPeriod(entitlement, now);
-  if (limitUsd === null) return { limitUsd, spentUsd: 0, periodStart: start, resetsAt: end, state: "ok" };
+  const plan = entitlement?.kind === "plan" ? entitlement.limits : null;
+  const premiumLimitUsd = plan && limitUsd !== null ? (limitUsd * plan.premiumBudgetPct) / 100 : null;
   const { data, error } = await auth.supabase
     .from("model_runs")
-    .select("estimated_cost, input_tokens, output_tokens")
+    .select("estimated_cost, input_tokens, output_tokens, model_id, model_tier, request_id, created_at")
     .gte("created_at", new Date(start).toISOString())
     .gt("units", 0)
     .limit(20_000);
@@ -108,8 +127,36 @@ export async function budgetStatus(auth: AuthContext, entitlement: Entitlement |
     reportError(error, { where: "budgetStatus" });
     return null;
   }
-  const spentUsd = costOfRuns((data ?? []) as RunCost[], models);
-  return { limitUsd, spentUsd, periodStart: start, resetsAt: end, state: budgetState(spentUsd, limitUsd, entitlement?.billing.premiumBudgetShare) };
+  const rows = (data ?? []) as RunRow[];
+  const byId = new Map(models.map((m) => [m.id, m]));
+  const tierOf = (r: RunRow) => r.model_tier ?? (byId.get(r.model_id) ? modelTier(byId.get(r.model_id)!) : "advanced");
+  const byProvider: BudgetStatus["byProvider"] = {};
+  for (const r of rows) {
+    const p = r.model_id.split(":")[0] ?? "other";
+    const e = (byProvider[p] ??= { costUsd: 0, inputTokens: 0, outputTokens: 0, calls: 0 });
+    e.costUsd += costOfRuns([r], models);
+    e.inputTokens += r.input_tokens ?? 0;
+    e.outputTokens += r.output_tokens ?? 0;
+    e.calls += 1;
+  }
+  const spentUsd = costOfRuns(rows, models);
+  const premiumSpentUsd = costOfRuns(rows.filter((r) => tierOf(r) !== "standard"), models);
+  const dayStart = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate());
+  const today = new Set(rows.filter((r) => Date.parse(r.created_at) >= dayStart).map((r, i) => r.request_id ?? `run-${i}`));
+  return {
+    limitUsd,
+    spentUsd,
+    premiumLimitUsd,
+    premiumSpentUsd,
+    tokensUsed: rows.reduce((t, r) => t + (r.input_tokens ?? 0) + (r.output_tokens ?? 0), 0),
+    tokenLimit: plan?.monthlyTokens ? plan.monthlyTokens : null,
+    messagesToday: today.size,
+    dailyLimit: plan?.dailyMessages ? plan.dailyMessages : null,
+    byProvider,
+    periodStart: start,
+    resetsAt: end,
+    state: budgetState(spentUsd, limitUsd, premiumSpentUsd, premiumLimitUsd),
+  };
 }
 
 /**

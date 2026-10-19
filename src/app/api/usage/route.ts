@@ -8,9 +8,12 @@ import { planLimits, planUsage } from "@/lib/usage";
 
 /**
  * GET /api/usage — the signed-in user's plan, 5-hour and weekly allowance,
- * share of this month's AI budget used (not dollars) and when it renews, and
- * web searches left. Null for guests.
+ * this month's AI allowance (in USD, with the part for advanced models), tokens
+ * and messages today against their caps, usage by provider (OpenAI, Claude),
+ * when it renews, and web searches left. Null for guests.
  */
+const round = (n: number) => Math.round(n * 100) / 100;
+
 export async function GET() {
   try {
     const auth = await getAuth();
@@ -24,7 +27,20 @@ export async function GET() {
     return NextResponse.json(
       {
         usage: state,
-        budget: budget && budget.limitUsd ? { usedShare: Math.min(1, budget.spentUsd / budget.limitUsd), state: budget.state, resetsAt: budget.resetsAt } : null,
+        budget:
+          budget && budget.limitUsd
+            ? {
+                usedShare: Math.min(1, budget.spentUsd / budget.limitUsd),
+                state: budget.state,
+                resetsAt: budget.resetsAt,
+                limitUsd: round(budget.limitUsd),
+                remainingUsd: round(Math.max(0, budget.limitUsd - budget.spentUsd)),
+                premium: budget.premiumLimitUsd ? { usedShare: Math.min(1, budget.premiumSpentUsd / budget.premiumLimitUsd), remainingUsd: round(Math.max(0, budget.premiumLimitUsd - budget.premiumSpentUsd)), limitUsd: round(budget.premiumLimitUsd) } : null,
+                tokens: budget.tokenLimit ? { used: budget.tokensUsed, limit: budget.tokenLimit } : null,
+                today: budget.dailyLimit ? { used: budget.messagesToday, limit: budget.dailyLimit } : null,
+                byProvider: Object.fromEntries(Object.entries(budget.byProvider).map(([k, v]) => [k, { ...v, costUsd: round(v.costUsd) }])),
+              }
+            : null,
         plan: {
           id: entitlement.plan,
           label: entitlement.limits.label,

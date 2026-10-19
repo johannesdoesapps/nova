@@ -26,19 +26,21 @@ afterAll(() => {
   delete process.env.OPENAI_API_KEY;
 });
 
-type FakeRun = { estimated_cost: number | null; input_tokens: number | null; output_tokens: number | null };
+type FakeRun = { estimated_cost: number | null; input_tokens: number | null; output_tokens: number | null; model_tier?: string };
 
-/** The budget rules of usage_reserve_v2, over the fake's recorded runs (the SQL is tested separately). */
-function fakeReserveV2(a: Record<string, unknown>, runs: FakeRun[]) {
+/** The budget rules of usage_reserve_v3, over the fake's recorded runs (the SQL itself is tested in plans-billing.test.ts). */
+function fakeReserveV3(a: Record<string, unknown>, runs: FakeRun[]) {
   if (a.p_budget_usd === null) return { ok: true };
   const fin = Number(a.p_fallback_in);
   const fout = Number(a.p_fallback_out);
-  const spent = runs.reduce((t, r) => t + (r.estimated_cost ?? ((r.input_tokens ?? 2000) * fin + (r.output_tokens ?? 1000) * fout) / 1e6), 0);
+  const cost = (r: FakeRun) => r.estimated_cost ?? ((r.input_tokens ?? 2000) * fin + (r.output_tokens ?? 1000) * fout) / 1e6;
+  const spent = runs.reduce((t, r) => t + cost(r), 0);
+  const premiumSpent = runs.filter((r) => r.model_tier && r.model_tier !== "standard").reduce((t, r) => t + cost(r), 0);
   const budget = Number(a.p_budget_usd);
   const est = Number(a.p_est_cost_usd);
   if (spent >= budget) return { ok: false, reason: "budget", scope: "exhausted" };
   if (spent + est > budget) return { ok: false, reason: "budget", scope: "insufficient" };
-  if (a.p_premium && spent + est > budget * Number(a.p_premium_share)) return { ok: false, reason: "budget", scope: "economy" };
+  if (a.p_premium && a.p_premium_budget_usd !== null && premiumSpent + est > Number(a.p_premium_budget_usd)) return { ok: false, reason: "budget", scope: "premium" };
   return { ok: true };
 }
 
@@ -65,7 +67,7 @@ function fakeAuth(opts: { admin?: boolean; plan?: Record<string, unknown> | null
     },
     rpc: async (fn: string, args: Record<string, unknown>) => {
       rpc.push([fn, args]);
-      if (fn === "usage_reserve_v2") return { data: opts.reserve ? opts.reserve(args) : fakeReserveV2(args, opts.runs ?? []), error: null };
+      if (fn === "usage_reserve_v3") return { data: opts.reserve ? opts.reserve(args) : fakeReserveV3(args, opts.runs ?? []), error: null };
       if (fn === "usage_status") return { data: [{ window_used: 3, window_start: "2026-10-19T10:00:00Z", week_used: 20, week_oldest: "2026-10-15T08:00:00Z" }], error: null };
       return { data: null, error: null };
     },
@@ -97,17 +99,23 @@ describe("usage policy", () => {
     const { auth, rpc } = fakeAuth();
     const t = await enforceLimits(req(), auth, 1, [haiku], { requestId: "00000000-0000-4000-8000-000000000001", purpose: "chat" });
     expect(t).toMatchObject({ units: 1, entitlement: "plan:free", requestId: "00000000-0000-4000-8000-000000000001" });
-    expect(rpc[0]).toEqual(["usage_reserve_v2", expect.objectContaining({ p_units: 1, p_window_limit: 10, p_week_limit: 30, p_purpose: "chat", p_budget_usd: 0.1, p_premium: false })]);
+    expect(rpc[0]).toEqual([
+      "usage_reserve_v3",
+      expect.objectContaining({ p_units: 1, p_window_limit: 10, p_week_limit: 30, p_purpose: "chat", p_budget_usd: 0.1, p_premium: false, p_daily_limit: 10, p_token_limit: 400_000 }),
+    ]);
+    // Tokens held for the request: its input plus the longest reply Free allows.
+    expect(rpc[0]![1].p_est_tokens).toBe(3000 + 1200);
     expect(t.estCostUsd).toBeGreaterThan(0);
   });
 
   it("uses Pro and Max limits only for an active subscription", async () => {
     const pro = fakeAuth({ plan: PRO });
     await enforceLimits(req(), pro.auth, 1, [sonnet]);
-    expect(pro.rpc[0]![1]).toMatchObject({ p_units: 20, p_window_limit: 200, p_week_limit: 1100, p_budget_usd: planEconomics(DEFAULT_BILLING, "pro").aiBudgetUsd, p_premium: true });
+    const proEcon = planEconomics(DEFAULT_BILLING, "pro");
+    expect(pro.rpc[0]![1]).toMatchObject({ p_units: 20, p_window_limit: 200, p_week_limit: 1100, p_budget_usd: proEcon.aiBudgetUsd, p_premium_budget_usd: proEcon.premiumBudgetUsd, p_premium: true, p_daily_limit: 0 });
     const max = fakeAuth({ plan: MAX });
     await enforceLimits(req(), max.auth, 1, [opus]);
-    expect(max.rpc[0]![1]).toMatchObject({ p_units: 40, p_window_limit: 600, p_budget_usd: planEconomics(DEFAULT_BILLING, "max").aiBudgetUsd });
+    expect(max.rpc[0]![1]).toMatchObject({ p_units: 40, p_window_limit: 1200, p_budget_usd: planEconomics(DEFAULT_BILLING, "max").aiBudgetUsd });
     const lapsed = fakeAuth({ plan: { ...PRO, status: "canceled" } });
     await enforceLimits(req(), lapsed.auth, 1, [haiku]);
     expect(lapsed.rpc[0]![1]).toMatchObject({ p_window_limit: 10 });
@@ -149,7 +157,7 @@ describe("usage policy", () => {
     const t = await enforceLimits(req(), auth, 1, [opus]);
     expect(t).toMatchObject({ units: 40, entitlement: "admin_unlimited" });
     // Still reserved (so duplicates are refused), but with no limit.
-    expect(rpc[0]).toEqual(["usage_reserve_v2", expect.objectContaining({ p_window_limit: 1_000_000_000, p_week_limit: 1_000_000_000, p_budget_usd: null })]);
+    expect(rpc[0]).toEqual(["usage_reserve_v3", expect.objectContaining({ p_window_limit: 1_000_000_000, p_week_limit: 1_000_000_000, p_budget_usd: null, p_daily_limit: 0, p_token_limit: 0 })]);
     expect(await planUsage(auth)).toBeNull();
     await recordRun(auth, run(sonnet));
     expect(inserts[0]).toMatchObject({ entitlement: "admin_unlimited", units: 20 });
@@ -170,6 +178,16 @@ describe("usage policy", () => {
     await recordRun(auth, run(haiku, { routingReason: "Fallback from Claude Sonnet 5.5.", requestedModel: "auto", tools: ["time"] }));
     expect(inserts[0]).toMatchObject({ model_id: haiku.id, units: 1, request_id: "00000000-0000-4000-8000-000000000002", requested_model: "auto", tools: ["time"], entitlement: "plan:pro" });
     expect(rpc.at(-1)).toEqual(["usage_finish", { p_request_id: "00000000-0000-4000-8000-000000000002", p_state: "settled" }]);
+  });
+
+  it("records the real cost of each call: tier, cached and cache-write tokens at their prices", async () => {
+    const { auth, inserts } = fakeAuth({ plan: PRO });
+    await enforceLimits(req(), auth, 1, [sonnet]);
+    // 10,000 input of which 6,000 read from cache and 1,000 written to it, 500 output.
+    await recordRun(auth, run(sonnet, { usage: { inputTokens: 10_000, outputTokens: 500, cachedInputTokens: 6000, cacheWriteInputTokens: 1000, estimated: false } }));
+    expect(inserts[0]).toMatchObject({ model_tier: "advanced", cached_input_tokens: 6000, cache_write_input_tokens: 1000 });
+    // (3,000 × $2 + 1,000 × $2.50 + 6,000 × $0.10 + 500 × $10) / 1M
+    expect(Number(inserts[0]!.estimated_cost)).toBeCloseTo((3000 * 2 + 1000 * 2.5 + 6000 * 0.1 + 500 * 10) / 1e6, 8);
   });
 
   it("adds the cost of web searches to the recorded cost", async () => {
@@ -202,49 +220,66 @@ describe("usage policy", () => {
 
 describe("AI budget guard", () => {
   const pro = (runs: FakeRun[]) => fakeAuth({ plan: PRO, runs });
-  const spend = (usd: number): FakeRun[] => [{ estimated_cost: usd, input_tokens: 1000, output_tokens: 500 }];
-  const budget = planEconomics(DEFAULT_BILLING, "pro").aiBudgetUsd; // $4.66
+  const spend = (usd: number, tier = "standard"): FakeRun[] => [{ estimated_cost: usd, input_tokens: 1000, output_tokens: 500, model_tier: tier }];
+  const econ = planEconomics(DEFAULT_BILLING, "pro"); // $3.01 a month, $1.81 of it for advanced models
 
-  it("allows any included model while under the economy threshold", async () => {
-    const { auth } = pro(spend(budget * 0.5));
+  it("allows advanced models within their part of the budget", async () => {
+    const { auth } = pro(spend(econ.premiumBudgetUsd * 0.5, "advanced"));
     await expect(enforceLimits(req(), auth, 1, [sonnet])).resolves.toMatchObject({ units: 20 });
   });
 
-  it("from 80% of the budget, allows only the lowest-cost model", async () => {
-    const { auth } = pro(spend(budget * 0.82));
+  it("once the advanced-model budget is used, explains it and offers to wait, upgrade or switch — without switching", async () => {
+    const { auth } = pro(spend(econ.premiumBudgetUsd, "advanced"));
     const err = await fail(enforceLimits(req(), auth, 1, [sonnet]));
     expect(err.code).toBe("quota_exceeded");
-    expect(err.message).toMatch(/only the lowest-cost model \(Claude Haiku 5\.5\)/);
-    expect(err.details).toMatchObject({ budget: true, state: "economy", allowedModelId: haiku.id, upgradeTo: "max" });
-    const ok = pro(spend(budget * 0.82));
+    expect(err.message).toMatch(/Claude Sonnet 5\.5 has used this month's allowance for advanced models on your Pro plan/);
+    expect(err.message).toMatch(/wait until .*upgrade to Max.*switch to Claude Haiku 5\.5/);
+    expect(err.details).toMatchObject({ budget: true, state: "economy", allowedModelId: haiku.id, upgradeTo: "max", alternatives: [haiku.id] });
+    // The standard models keep working on the rest of the budget.
+    const ok = pro(spend(econ.premiumBudgetUsd, "advanced"));
     await expect(enforceLimits(req(), ok.auth, 1, [haiku])).resolves.toMatchObject({ units: 1 });
   });
 
   it("refuses a request whose worst-case cost would exceed what's left", async () => {
-    const { auth } = pro(spend(budget - 0.01));
+    const { auth } = pro(spend(econ.aiBudgetUsd - 0.01));
     const err = await fail(enforceLimits(req(), auth, 1, [sonnet], { inputTokens: 3000, maxOutputTokens: 2400 }));
     expect(err.details).toMatchObject({ state: "insufficient" });
   });
 
   it("stops AI requests when the budget is used up, until it renews", async () => {
-    const { auth } = pro(spend(budget + 0.01));
+    const { auth } = pro(spend(econ.aiBudgetUsd + 0.01));
     const err = await fail(enforceLimits(req(), auth, 1, [haiku]));
-    expect(err.message).toMatch(/used this month's AI budget on your Pro plan/);
+    expect(err.message).toMatch(/used this month's AI allowance on your Pro plan/);
     expect((err.details as { resetsAt: string }).resetsAt).toBeTruthy();
   });
 
-  it("caps Free users with their own budget", async () => {
+  it("caps Free users with their own budget, daily messages and tokens", async () => {
     const { auth } = fakeAuth({ runs: spend(0.3) });
     const err = await fail(enforceLimits(req(), auth, 1, [haiku]));
     expect(err.message).toMatch(/Free plan/);
+    const day = fakeAuth({ reserve: () => ({ ok: false, reason: "limit", scope: "day", used: 10, limit: 10, resets_at: "2026-10-20T00:00:00Z" }) });
+    const dayErr = await fail(enforceLimits(req(), day.auth, 1, [haiku]));
+    expect(dayErr.message).toMatch(/today's 10 messages on the Free plan/);
+    expect(dayErr.details).toMatchObject({ scope: "day", resetsAt: "2026-10-20T00:00:00.000Z", upgradeTo: "pro" });
+    const tok = fakeAuth({ reserve: () => ({ ok: false, reason: "tokens", used: 399_000, limit: 400_000 }) });
+    expect((await fail(enforceLimits(req(), tok.auth, 1, [haiku]))).message).toMatch(/400,000-token allowance/);
   });
 
   it("counts runs without a verified price at the most expensive verified price", async () => {
     // 300 unpriced runs of 2k in + 1k out tokens at the top verified price ($4 in / $20 out per 1M): $8.40.
     const runs: FakeRun[] = Array.from({ length: 300 }, () => ({ estimated_cost: null, input_tokens: 2000, output_tokens: 1000 }));
     const { auth, rpc } = pro(runs);
-    await expect(enforceLimits(req(), auth, 1, [haiku])).rejects.toThrow(/AI budget/);
+    await expect(enforceLimits(req(), auth, 1, [haiku])).rejects.toThrow(/AI allowance/);
     expect(rpc[0]![1]).toMatchObject({ p_fallback_in: 4, p_fallback_out: 20 });
+  });
+
+  it("estimates a request before it runs from every model call, with OpenAI cache writes as an upper bound", async () => {
+    const terra = DEFAULT_MODELS.find((m) => m.id === "openai:gpt-5.6-terra")!;
+    const { auth, rpc } = fakeAuth({ plan: PRO });
+    // Two calls (e.g. Council): 2 × (2,000 input at the $2.50 cache-write price + 2,400 output at $12) / 1M.
+    await enforceLimits(req(), auth, 2, [terra, terra], { inputTokens: 2000, maxOutputTokens: 2400 });
+    expect(rpc[0]![1].p_est_cost_usd).toBeCloseTo(2 * ((2000 * 2.5 + 2400 * 12) / 1e6), 6);
+    expect(rpc[0]![1].p_est_tokens).toBe(2 * (2000 + 2400));
   });
 
   it("doesn't apply to administrators", async () => {
