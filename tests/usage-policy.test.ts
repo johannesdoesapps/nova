@@ -76,7 +76,7 @@ describe("usage policy", () => {
     const err = (await enforceLimits(req(), auth, 1, [sonnet]).then(() => null, (e: unknown) => e)) as ApiError;
     expect(err).toBeInstanceOf(ApiError);
     expect(err.code).toBe("quota_exceeded");
-    expect(err.message).toMatch(/Claude Sonnet 5\.5 uses 15 units per message and you have 12 left/);
+    expect(err.message).toBe("Claude Sonnet 5.5 uses 15 units per message, but only 12 of your Free plan's 5-hour allowance are left. Auto or a lighter model uses 1.");
     expect(err.details).toMatchObject({ scope: "window", resetsAt: "2026-10-19T15:00:00.000Z", unitsNeeded: 15, unitsLeft: 12 });
   });
 

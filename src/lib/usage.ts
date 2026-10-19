@@ -105,8 +105,12 @@ export async function enforceLimits(
     const plan = entitlement.limits;
     const left = Math.max(0, Number(r.limit ?? 0) - Number(r.used ?? 0));
     const scope = r.scope === "week" ? "weekly" : "5-hour";
-    const heavy = models?.length === 1 && units > 1 ? ` ${models[0]!.displayName} uses ${units} units per message and you have ${left} left; Auto or a lighter model uses 1.` : "";
-    throw new ApiError("quota_exceeded", `You've reached your ${plan.label} plan's ${scope} limit.${heavy}`, {
+    const name = models?.length === 1 ? models[0]!.displayName : "This request";
+    const message =
+      left > 0 && units > left
+        ? `${name} uses ${units} units per message, but only ${left} of your ${plan.label} plan's ${scope} allowance ${left === 1 ? "is" : "are"} left. Auto or a lighter model uses 1.`
+        : `You've reached your ${plan.label} plan's ${scope} limit.`;
+    throw new ApiError("quota_exceeded", message, {
       scope: r.scope,
       resetsAt: r.resets_at ? new Date(r.resets_at).toISOString() : null,
       plan: entitlement.plan,
