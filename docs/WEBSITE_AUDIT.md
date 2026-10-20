@@ -85,3 +85,21 @@ How the site was checked:
 - **Headline:** "One workspace. Leading models. Agents that do the work."
   - It follows the suggested "One workspace. Every model. Agents that do the work." with one change. Orbis offers Claude and GPT models on tryorbis.app (and can add Gemini, Grok and DeepSeek), not *every* model. "Leading models" is accurate; "every" would be an exaggeration.
 - **Supporting text:** "Use leading AI models, build specialised agents, and turn complex tasks into actionable plans — all in one workspace, with transparent results you can review."
+
+## Measurements (production, 20 October 2026)
+
+- **Lighthouse** 12, mobile preset with throttling, run from this environment through its proxy:
+
+  | Page | Before | After |
+  |---|---|---|
+  | `/` | Performance 80, LCP 2.3 s, TBT 360 ms, CLS 0 | Performance 99, LCP 2.1 s, TBT 80 ms, CLS 0 |
+  | `/pricing` | (run failed) | Performance 98–99, LCP 1.7–1.8 s, TBT 120–140 ms, CLS 0 |
+  | `/features/ai-coding-assistant` | — | Performance 97, LCP 2.6 s, TBT 90 ms, CLS 0 |
+
+  Accessibility, Best practices and SEO scored 100 on each page.
+  - A first run after the redesign scored 82 (LCP 3.2 s), because phones preloaded both hero images. The hero now uses one `<picture>`, so a device downloads only the image that fits it.
+  - Lab numbers only. Field data (real users' Core Web Vitals) needs analytics, which isn't enabled.
+- **axe-core:** no violations on any public page. The sign-in page has two "moderate" best-practice notes about landmarks.
+- **Layout:** no horizontal overflow at 1440 px or 390 px on any public page.
+- **Links:** all 42 internal links return 200.
+- **Live checks on tryorbis.app** (14 of 14 passed): hero and CTAs, the tour (including the keyboard), images and alt text, the phone menu (including Escape to close), the pricing comparison, the first-run introduction and goal chooser, the document prompt filling the box, and "Create an agent" opening the editor.
