@@ -152,8 +152,10 @@ The recorded costs were checked by hand against the token counts.
 
 | Plan | Monthly AI budget | Worst-case contribution margin |
 | --- | --- | --- |
-| Pro, $20 (raised from $15 on 2026-10-19) | $4.12 (after $0.47 set aside for code runs) | 63.7% |
-| Max, $100 (lowered from $110 on 2026-10-19) | $26.74 (after $2.34 for code runs) | 64.8% |
+| Pro, $20 (raised from $15 on 2026-10-19) | $3.59 (after $0.47 for code runs and $0.63 for Code workspace minutes) | 63.2% |
+| Max, $100 (lowered from $110 on 2026-10-19) | $24.07 (after $2.34 for code runs and $3.14 for Code workspace minutes) | 64.3% |
+
+The Code workspace (added 2026-10-20, docs/CODE_WORKSPACE.md) lowered these budgets from $4.12 and $26.74. This needs the owner's approval; the alternatives are fewer workspace minutes or a higher price.
 
 The 60% margin is a target the limits enforce. It is not a guarantee, and it is not net profit: fixed overhead is $0 until you enter it. Full scenarios are in `docs/PRICING.md`.
 
