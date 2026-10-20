@@ -81,7 +81,7 @@ describe("runner script (local bash standing in for the VM)", () => {
   it("stops a program at the time limit", async () => {
     const r = await run("python", "import time\nprint('start', flush=True)\ntime.sleep(10)", 1);
     expect(r.timedOut).toBe(true);
-    expect(r.exitCode).toBe(137);
+    expect([124, 137]).toContain(r.exitCode);
     expect(r.stdout).toBe("start\n");
   });
 

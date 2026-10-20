@@ -19,6 +19,7 @@ export function LoginForm({
   siteUrl,
   initialMode = "signin",
   google,
+  github = false,
 }: {
   url: string;
   supabaseKey: string;
@@ -27,6 +28,8 @@ export function LoginForm({
   initialMode?: Mode;
   /** Whether Google is switched on in Supabase Auth; null when that couldn't be checked. */
   google: boolean | null;
+  /** Whether GitHub is switched on in Supabase Auth (the button is only shown then). */
+  github?: boolean;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>(initialMode);
@@ -35,6 +38,7 @@ export function LoginForm({
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
+  const [githubBusy, setGithubBusy] = useState(false);
   const [resetBusy, setResetBusy] = useState(false);
   // Blocks a second click before React re-renders the button as busy.
   const googleStarted = useRef(false);
@@ -45,8 +49,10 @@ export function LoginForm({
   // redirect allow-list, even when signing in from a preview URL.
   const origin = () => (siteUrl.includes("localhost") && typeof window !== "undefined" ? window.location.origin : siteUrl);
 
-  const continueWithGoogle = async () => {
+  const continueWithGoogle = () => continueWith("google");
+  const continueWith = async (provider: "google" | "github") => {
     if (googleStarted.current || busy) return;
+    const setProviderBusy = provider === "google" ? setGoogleBusy : setGithubBusy;
     setError(null);
     setInfo(null);
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -54,24 +60,29 @@ export function LoginForm({
       return;
     }
     googleStarted.current = true;
-    setGoogleBusy(true);
+    setProviderBusy(true);
     try {
-      // Supabase runs the OAuth/OpenID Connect flow with PKCE and checks state
-      // and nonce; NOVA never sees Google credentials.
-      const { error } = await browserSupabase(url, supabaseKey).auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: oauthRedirectTo(origin(), next),
-          // Always show Google's account chooser, so a shared device doesn't
-          // silently continue as whoever used Google last.
-          queryParams: { prompt: "select_account" },
-        },
-      });
+      // Supabase runs the OAuth flow with PKCE and checks state (and, for
+      // Google, the OpenID nonce); NOVA never sees Google or GitHub credentials.
+      const { error } = await browserSupabase(url, supabaseKey).auth.signInWithOAuth(
+        provider === "google"
+          ? {
+              provider: "google",
+              options: {
+                redirectTo: oauthRedirectTo(origin(), next),
+                // Always show Google's account chooser, so a shared device doesn't
+                // silently continue as whoever used Google last.
+                queryParams: { prompt: "select_account" },
+              },
+            }
+          : // Only the public profile and email; repository access is granted separately, per repository.
+            { provider: "github", options: { redirectTo: oauthRedirectTo(origin(), next, "github"), scopes: "read:user user:email" } },
+      );
       if (error) throw error;
-      // The browser is now leaving for Google; keep the button busy until it does.
+      // The browser is now leaving for the provider; keep the button busy until it does.
     } catch (e) {
       googleStarted.current = false;
-      setGoogleBusy(false);
+      setProviderBusy(false);
       const m = String((e as Error)?.message ?? "");
       setError(/fetch|network/i.test(m) ? "Couldn't reach the sign-in service. Check your connection and try again." : LOGIN_MESSAGES[oauthErrorCode(m)].text);
     }
@@ -147,6 +158,20 @@ export function LoginForm({
         <GoogleButton onClick={() => void continueWithGoogle()} loading={googleBusy} disabled={google === false || busy} />
         {google === false && (
           <p className="mt-2 text-center text-xs text-muted">Google sign-in isn&rsquo;t set up on this site yet. Use your email below.</p>
+        )}
+        {github && (
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-2 w-full bg-bg-elev focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            onClick={() => void continueWith("github")}
+            loading={githubBusy}
+            disabled={busy || googleBusy}
+            aria-busy={githubBusy}
+          >
+            {!githubBusy && <GitHubLogo />}
+            <span>{githubBusy ? "Opening GitHub…" : "Continue with GitHub"}</span>
+          </Button>
         )}
       </div>
 
@@ -226,6 +251,14 @@ function GoogleButton({ onClick, loading, disabled }: { onClick: () => void; loa
       {!loading && <GoogleLogo />}
       <span>{loading ? "Opening Google…" : "Continue with Google"}</span>
     </Button>
+  );
+}
+
+export function GitHubLogo({ className = "h-[18px] w-[18px]" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} aria-hidden focusable="false" fill="currentColor">
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+    </svg>
   );
 }
 

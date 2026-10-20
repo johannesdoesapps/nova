@@ -89,8 +89,8 @@ export async function runCode(
     });
     const parsed = parseRunnerOutput(await cmd.stdout());
     const durationMs = Date.now() - started;
-    // timeout -s KILL exits 137 when it had to stop the program.
-    const timedOut = parsed.exitCode === 137 && durationMs >= input.seconds * 1000;
+    // When timeout(1) had to stop the program it exits 124 (GNU coreutils) or 137 (killed), depending on the build.
+    const timedOut = (parsed.exitCode === 124 || parsed.exitCode === 137) && durationMs >= input.seconds * 1000;
     return { language: lang.id, ...parsed, timedOut, durationMs };
   } finally {
     await vm.stop().catch(() => {});

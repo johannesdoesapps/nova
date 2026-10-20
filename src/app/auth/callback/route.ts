@@ -4,7 +4,8 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 /**
- * Email-confirmation, password-reset and Google (OAuth) callback. Supabase has already
+ * Email-confirmation, password-reset, Google and GitHub (OAuth) callback, and
+ * the return from connecting GitHub to a signed-in account (via=github-link). Supabase has already
  * validated the provider response (state, nonce); here the one-time code is
  * exchanged for a session using the PKCE verifier stored in this browser.
  */
@@ -19,10 +20,20 @@ export async function GET(req: Request) {
     if (next !== "/") login.searchParams.set("next", next);
     return NextResponse.redirect(login);
   };
+  const toPage = (msg: LoginMessageCode) => {
+    const back = new URL(next, url.origin);
+    back.searchParams.set("github", msg);
+    return NextResponse.redirect(back);
+  };
 
   // Cancelled or failed at Google or Supabase: they report it on the URL.
   const error = url.searchParams.get("error");
-  if (error) return toLogin(oauthErrorCode(error, url.searchParams.get("error_code")));
+  if (error) {
+    const msg = oauthErrorCode(error, url.searchParams.get("error_code"), via);
+    // Linking GitHub happens while signed in: report back on the page it started from.
+    if (via === "github-link") return toPage(msg);
+    return toLogin(msg);
+  }
 
   if (code && isSupabaseConfigured()) {
     const supabase = await createServerSupabase();
@@ -34,5 +45,6 @@ export async function GET(req: Request) {
   }
   // The exchange fails when the code was used already, expired, or the flow
   // was started in another browser (no PKCE verifier here).
+  if (via === "github-link") return toPage(exchangeFailureCode(via, Boolean(code), next));
   return toLogin(exchangeFailureCode(via, Boolean(code), next));
 }

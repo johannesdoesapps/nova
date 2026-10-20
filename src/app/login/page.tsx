@@ -31,7 +31,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   // Only known message codes are shown, never free text from the URL.
   const message = loginMessage(sp.msg);
   const initialMode = sp.mode === "signup" ? "signup" : "signin";
-  const providers = configured ? await authProviders() : { google: false };
+  const providers = configured ? await authProviders() : { google: false, github: false };
 
   return (
     <div className={`nova-glow grid min-h-dvh place-items-center px-4 py-10 ${serif.variable}`}>
@@ -40,7 +40,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         <div className="lux-card rounded-[26px] p-7">
           {message && <Notice tone={message.tone} className="mb-4">{message.text}</Notice>}
           {configured ? (
-            <LoginForm url={publicEnv.supabaseUrl!} supabaseKey={publicEnv.supabaseKey!} next={next} siteUrl={publicEnv.siteUrl} initialMode={initialMode} google={providers.google} />
+            <LoginForm url={publicEnv.supabaseUrl!} supabaseKey={publicEnv.supabaseKey!} next={next} siteUrl={publicEnv.siteUrl} initialMode={initialMode} google={providers.google} github={providers.github === true} />
           ) : (
             <Notice tone="warning" title="Authentication is not configured">
               Set <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY</code>, apply the migrations, and restart.{" "}

@@ -6,6 +6,8 @@ import { CHAT_MODES, MODE_LABELS, type ChatMode } from "@/lib/ai/modes";
 import { ALLOWED_ATTACHMENT_EXT, MAX_ATTACHMENT_CHARS } from "@/lib/limits";
 import { cn } from "@/lib/utils";
 import { attachmentBytes, MAX_ATTACHMENTS_BYTES, type ChatAttachment } from "./chat-client";
+import { GitHubLogo } from "@/components/common/login-form";
+import { GitHubPicker } from "./github-picker";
 import { IconButton, iconButtonClass, Menu, MenuItem, MenuLabel, MenuSeparator, Switch } from "./ui";
 import { ModelSelector } from "./model-selector";
 import { UsageNotice, useUsage } from "./usage";
@@ -54,6 +56,7 @@ export function Composer(p: ComposerProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [drag, setDrag] = useState(false);
+  const [githubOpen, setGithubOpen] = useState(false);
   const speech = useSpeech(p.onChange);
   const canSend = p.value.trim().length > 0 && !p.busy;
 
@@ -207,6 +210,14 @@ export function Composer(p: ComposerProps) {
             >
               Upload files
             </MenuItem>
+            <MenuItem
+              icon={<GitHubLogo className="h-4 w-4" />}
+              hint={filesAllowed ? "Files from repositories you choose" : "Not enabled for this agent"}
+              disabled={!filesAllowed}
+              onClick={() => setGithubOpen(true)}
+            >
+              Add from GitHub
+            </MenuItem>
             <MenuItem icon={<ImagePlus />} hint="The connected models accept text only for now" disabled>
               Add images
             </MenuItem>
@@ -328,6 +339,9 @@ export function Composer(p: ComposerProps) {
         </p>
       )}
       <UsageNotice usage={usage} />
+      {githubOpen && (
+        <GitHubPicker open={githubOpen} onClose={() => setGithubOpen(false)} attachments={p.attachments} onAttachments={p.onAttachments} maxFiles={MAX_FILES} />
+      )}
     </div>
   );
 }

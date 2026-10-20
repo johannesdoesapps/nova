@@ -2,7 +2,7 @@ import "server-only";
 import { publicEnv } from "./env";
 
 /** true / false when Supabase answered; null when it couldn't be asked (the button then stays usable). */
-export type ProviderStatus = { google: boolean | null };
+export type ProviderStatus = { google: boolean | null; github: boolean | null };
 
 /**
  * Which sign-in providers are switched on in Supabase Auth. Reads the public
@@ -11,17 +11,17 @@ export type ProviderStatus = { google: boolean | null };
  */
 export async function authProviders(): Promise<ProviderStatus> {
   const { supabaseUrl, supabaseKey } = publicEnv;
-  if (!supabaseUrl || !supabaseKey) return { google: false };
+  if (!supabaseUrl || !supabaseKey) return { google: false, github: false };
   try {
     const res = await fetch(`${supabaseUrl.replace(/\/$/, "")}/auth/v1/settings`, {
       headers: { apikey: supabaseKey },
       signal: AbortSignal.timeout(3_000),
       next: { revalidate: 60 },
     });
-    if (!res.ok) return { google: null };
+    if (!res.ok) return { google: null, github: null };
     const j = (await res.json()) as { external?: Record<string, unknown> };
-    return { google: j.external?.google === true };
+    return { google: j.external?.google === true, github: j.external?.github === true };
   } catch {
-    return { google: null };
+    return { google: null, github: null };
   }
 }

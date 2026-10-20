@@ -140,9 +140,9 @@ describe("provider detection", () => {
   });
 
   it("reads whether Google is enabled from Supabase's public settings", async () => {
-    const f = vi.fn(async () => Response.json({ external: { google: true, email: true } }));
+    const f = vi.fn(async () => Response.json({ external: { google: true, github: true, email: true } }));
     globalThis.fetch = f as unknown as typeof fetch;
-    expect(await authProviders()).toEqual({ google: true });
+    expect(await authProviders()).toEqual({ google: true, github: true });
     const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://sb.example.co/auth/v1/settings");
     expect((init.headers as Record<string, string>).apikey).toBe("pk_test");
@@ -150,12 +150,12 @@ describe("provider detection", () => {
 
   it("reports Google as off when Supabase says so, and unknown when Supabase can't be reached", async () => {
     globalThis.fetch = (async () => Response.json({ external: { google: false } })) as typeof fetch;
-    expect(await authProviders()).toEqual({ google: false });
+    expect(await authProviders()).toEqual({ google: false, github: false });
     globalThis.fetch = (async () => new Response("nope", { status: 503 })) as typeof fetch;
-    expect(await authProviders()).toEqual({ google: null });
+    expect(await authProviders()).toEqual({ google: null, github: null });
     globalThis.fetch = (async () => {
       throw new TypeError("fetch failed");
     }) as typeof fetch;
-    expect(await authProviders()).toEqual({ google: null });
+    expect(await authProviders()).toEqual({ google: null, github: null });
   });
 });
