@@ -1,5 +1,25 @@
 # Orbis Code — changelog
 
+## 20 October 2026 — simpler sidebar, redesigned Code, Stop fix
+
+### Changed
+- **Sidebar**: one navigation list (`src/components/studio/nav.ts`) drives the sidebar (expanded, collapsed, phone drawer) and the command palette. The old Chat | Code switch, which repeated the Chat and Code links, is gone: there is one Chat and one Code entry. In Code, the sidebar shows New project and recent projects instead of chats.
+- **Code start screen**: "What would you like to build or fix?", how it works in three steps, continue where you left off, Try an example (a small calculator with a failing test), Import from GitHub, New project.
+- **Code workspace**: the agent is the main panel. Files and Sessions on the left; editor, changes, preview, terminal and Quick edit open on the right when needed. Phones open on the agent.
+- **Progress** is shown as plain-English stages built from the run's real activity (Understanding, Exploring, Planning, Editing, Running checks, Reviewing), each with Details showing the actual commands and output.
+- **Permission modes** replace the separate switches: Ask first (default), Review each edit, Let it work, Read only.
+- **Report card**: what changed and why, the checks that actually ran, files with Open buttons, anything still open; Review changes, Run tests, Undo all changes.
+- **Sessions**: every agent run in the project, reopenable with its report.
+- Visitors whose chat needs an account now see "Create a free account" and "Sign in" instead of "Try again".
+
+### Fixed
+- **Stop**: a Stop that arrived while a step was saving could be overwritten, and the next step went on to edit files. Steps now save with a conditional update that never undoes a Stop, and the agent re-checks Stop right before any action that changes the project or runs a command.
+- The checkpoints list returns 404 for someone else's run, like the other run routes (it returned an empty list before).
+- Loading placeholders in the sidebar have `role="status"` (an accessibility error).
+
+### Database
+- None.
+
 ## 20 October 2026 — agent runtime, native tool calling, checkpoints, verified reports
 
 ### Added

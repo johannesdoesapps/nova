@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { restoreCheckpoint } from "@/lib/code/agent/engine";
-import { listCheckpoints } from "@/lib/code/agent/runs";
+import { getRun, listCheckpoints } from "@/lib/code/agent/runs";
 import { codeContext } from "@/lib/code/server";
 import { errorResponse, parseJsonBody, requireUuid } from "@/lib/http";
 
@@ -10,6 +10,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/code/agent/[run
   try {
     const runId = requireUuid((await ctx.params).runId);
     const auth = await codeContext("code-agent-read", 240);
+    await getRun(auth, runId); // 404 for a run that isn't the caller's, like the other run routes
     const checkpoints = (await listCheckpoints(auth, runId)).map((c) => ({ id: c.id, label: c.label, createdAt: c.createdAt, paths: Object.keys(c.files) }));
     return NextResponse.json({ checkpoints });
   } catch (err) {
