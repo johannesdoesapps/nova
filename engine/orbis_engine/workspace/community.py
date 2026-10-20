@@ -76,7 +76,7 @@ def publish(db: Database, ident: Identity, kind: str, source_id: str, title: str
 
 def _examples() -> list[dict[str, Any]]:
     return [
-        {"id": f"example:{t['id']}", "kind": "workflow_template", "title": t["name"], "description": t["description"], "author_id": "nova", "author_name": "NOVA AI (built-in example)", "license": "CC0-1.0", "status": "published", "forks": 0, "reports": 0, "created_at": "2026-10-18T00:00:00.000Z", "example": True}
+        {"id": f"example:{t['id']}", "kind": "workflow_template", "title": t["name"], "description": t["description"], "author_id": "orbis", "author_name": "ORBIS AI (built-in example)", "license": "CC0-1.0", "status": "published", "forks": 0, "reports": 0, "created_at": "2026-10-18T00:00:00.000Z", "example": True}
         for t in list_templates()
     ]
 

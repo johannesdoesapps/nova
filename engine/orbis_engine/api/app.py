@@ -1,7 +1,7 @@
-"""HTTP API for the NOVA AI engine.
+"""HTTP API for the ORBIS AI engine.
 
 Only the Next.js server calls this API (never the browser directly): requests
-must carry a signed X-Nova-Identity header. Every handler scopes data to that
+must carry a signed X-Orbis-Identity header. Every handler scopes data to that
 identity; workspace handlers additionally enforce role permissions.
 """
 
@@ -35,7 +35,7 @@ from ..security.policy import APPROVAL_KINDS, TOOLS
 from ..workspace import community, portability, service as ws
 from ..workspace.permissions import matrix
 
-log = logging.getLogger("nova.api")
+log = logging.getLogger("orbis.api")
 
 
 class RateLimiter:
@@ -64,8 +64,8 @@ def db_dep() -> Database:
     return get_db()
 
 
-def ident_dep(request: Request, x_nova_identity: str | None = Header(default=None)) -> Identity:
-    ident = verify_identity(x_nova_identity)
+def ident_dep(request: Request, x_orbis_identity: str | None = Header(default=None)) -> Identity:
+    ident = verify_identity(x_orbis_identity)
     cost = 5 if request.method != "GET" else 1
     if not limiter.take(ident.sub, cost):
         raise EngineError("rate_limited", "Too many requests. Please slow down.")
@@ -73,7 +73,7 @@ def ident_dep(request: Request, x_nova_identity: str | None = Header(default=Non
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="NOVA AI engine", version=__version__, docs_url="/docs", redoc_url=None)
+    app = FastAPI(title="ORBIS AI engine", version=__version__, docs_url="/docs", redoc_url=None)
 
     @app.middleware("http")
     async def guard(request: Request, call_next):

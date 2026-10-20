@@ -18,6 +18,10 @@ export interface RunBox {
 }
 export type BoxFactory = (opts: { timeoutMs: number; signal?: AbortSignal }) => Promise<RunBox>;
 
+/** Lines separating the run's summary, standard output and errors in what the VM prints. */
+const OUT = "--ORBIS-OUT--";
+const ERR = "--ORBIS-ERR--";
+
 /** Where the program and its output live in the VM (it exists in the image). */
 const DIR = "/tmp";
 
@@ -32,9 +36,9 @@ export const vercelBox: BoxFactory = async ({ timeoutMs, signal }) =>
     ...sandboxCredentials(),
   } as Parameters<typeof Sandbox.create>[0])) as unknown as RunBox;
 
-/** Whether runs can start here: on Vercel (OIDC) or with NOVA_SANDBOX_* set for local development. */
+/** Whether runs can start here: on Vercel (OIDC) or with ORBIS_SANDBOX_* set for local development. */
 export function codeRunsAvailable(): boolean {
-  return Boolean(process.env.VERCEL || process.env.NOVA_SANDBOX_TOKEN);
+  return Boolean(process.env.VERCEL || process.env.ORBIS_SANDBOX_TOKEN);
 }
 
 /**
@@ -49,20 +53,22 @@ export function runnerScript(command: string[], seconds: number, dir = DIR): str
     `( ulimit -f 4096; exec timeout -s KILL ${seconds} ${q} ) > out.txt 2> err.txt < /dev/null`,
     `code=$?`,
     `printf '%s' "$(wc -c < out.txt) $(wc -c < err.txt) $code"`,
-    `printf '\\n--NOVA-OUT--\\n'; head -c ${CODE_OUTPUT_LIMIT} out.txt`,
-    `printf '\\n--NOVA-ERR--\\n'; head -c ${CODE_OUTPUT_LIMIT} err.txt`,
+    `printf '\\n${OUT}\\n'; head -c ${CODE_OUTPUT_LIMIT} out.txt`,
+    `printf '\\n${ERR}\\n'; head -c ${CODE_OUTPUT_LIMIT} err.txt`,
   ].join("\n");
 }
 
 /** Parse what runnerScript prints. */
 export function parseRunnerOutput(raw: string): { stdout: string; stderr: string; exitCode: number; truncated: boolean } {
-  const outAt = raw.indexOf("\n--NOVA-OUT--\n");
-  const errAt = raw.lastIndexOf("\n--NOVA-ERR--\n");
+  const outMark = `\n${OUT}\n`;
+  const errMark = `\n${ERR}\n`;
+  const outAt = raw.indexOf(outMark);
+  const errAt = raw.lastIndexOf(errMark);
   if (outAt < 0 || errAt < outAt) return { stdout: "", stderr: raw.slice(-CODE_OUTPUT_LIMIT), exitCode: 1, truncated: false };
   const [outBytes, errBytes, code] = raw.slice(0, outAt).trim().split(/\s+/).map(Number);
   return {
-    stdout: raw.slice(outAt + 14, errAt),
-    stderr: raw.slice(errAt + 14),
+    stdout: raw.slice(outAt + outMark.length, errAt),
+    stderr: raw.slice(errAt + errMark.length),
     exitCode: Number.isFinite(code) ? code! : 1,
     truncated: (outBytes ?? 0) > CODE_OUTPUT_LIMIT || (errBytes ?? 0) > CODE_OUTPUT_LIMIT,
   };

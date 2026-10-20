@@ -2,7 +2,7 @@
 import { useSyncExternalStore, type ReactNode } from "react";
 import { CodeXml, Scale, ShieldQuestionMark, Telescope } from "lucide-react";
 import type { ChatMode } from "@/lib/ai/modes";
-import { NovaMark } from "./ui";
+import { OrbisMark } from "./ui";
 
 const SUGGESTIONS: { icon: ReactNode; title: string; prompt: string; mode: ChatMode }[] = [
   {
@@ -51,7 +51,7 @@ export function Welcome({
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-[728px] flex-col items-center justify-center px-4 pb-16 pt-10 sm:px-6">
-      <NovaMark className="s-in h-10 w-10 text-s-ink" />
+      <OrbisMark className="s-in h-10 w-10 text-s-ink" />
       <p className="s-in mt-6 h-5 text-[14px] text-s-ink-3 [animation-delay:40ms]">{greeting}</p>
       <h1 className="s-in mt-2 text-balance text-center font-serif text-[clamp(34px,6vw,50px)] leading-[1.08] tracking-[-0.01em] [animation-delay:80ms]">
         What can I help you explore?

@@ -1,4 +1,4 @@
--- NOVA AI — code runs (the Run button on code blocks).
+-- ORBIS AI — code runs (the Run button on code blocks).
 -- A run is reserved like an AI request (usage_reserve_v4, purpose 'code_run',
 -- so duplicates are refused and it's held while it runs) and recorded in
 -- model_runs with tools = {code_run}. This function counts the caller's runs

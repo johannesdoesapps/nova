@@ -45,7 +45,7 @@ beforeAll(() => {
   process.env.STRIPE_SECRET_KEY = "sk_test_dummy";
   process.env.STRIPE_WEBHOOK_SECRET = SECRET;
   process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-dummy";
-  process.env.NEXT_PUBLIC_SITE_URL = "https://nova.example";
+  process.env.NEXT_PUBLIC_SITE_URL = "https://orbis.example";
 });
 afterAll(() => {
   process.env = saved;
@@ -65,8 +65,8 @@ const subscription = (over: Record<string, unknown> = {}) => ({
   status: "active",
   customer: "cus_123",
   cancel_at_period_end: false,
-  metadata: { user_id: "user-1", nova_plan: "pro" },
-  items: { data: [{ id: "si_1", current_period_start: 1_792_400_000, current_period_end: 1_795_000_000, price: { id: "price_pro", lookup_key: "nova_pro_month_usd_1500", unit_amount: 1500, recurring: { interval: "month" }, metadata: {} } }] },
+  metadata: { user_id: "user-1", orbis_plan: "pro" },
+  items: { data: [{ id: "si_1", current_period_start: 1_792_400_000, current_period_end: 1_795_000_000, price: { id: "price_pro", lookup_key: "orbis_pro_month_usd_1500", unit_amount: 1500, recurring: { interval: "month" }, metadata: {} } }] },
   ...over,
 });
 const withPrice = (lookup: string, cents: number, interval: "month" | "year") => ({
@@ -104,9 +104,9 @@ describe("subscription mapping", () => {
 
   it("reads Max and yearly billing from the Stripe price", async () => {
     const { subscriptionRow, parseLookupKey, priceLookupKey } = await import("@/lib/billing/stripe");
-    expect(subscriptionRow(subscription(withPrice("nova_max_year_usd_118800", 118_800, "year")) as never, "user-1")).toMatchObject({ plan: "max", billing_interval: "year", price_usd: 1188 });
-    expect(priceLookupKey("max", "year", 118_800)).toBe("nova_max_year_usd_118800");
-    expect(parseLookupKey("nova_pro_month_usd_1500")).toEqual({ plan: "pro", interval: "month" });
+    expect(subscriptionRow(subscription(withPrice("orbis_max_year_usd_118800", 118_800, "year")) as never, "user-1")).toMatchObject({ plan: "max", billing_interval: "year", price_usd: 1188 });
+    expect(priceLookupKey("max", "year", 118_800)).toBe("orbis_max_year_usd_118800");
+    expect(parseLookupKey("orbis_pro_month_usd_1500")).toEqual({ plan: "pro", interval: "month" });
     expect(parseLookupKey("something_else")).toBeNull();
   });
 });
@@ -150,7 +150,7 @@ describe("POST /api/stripe/webhook", () => {
   it("applies upgrades, renewals and failed payments from Stripe", async () => {
     const { stripeClient } = await import("@/lib/billing/stripe");
     const retrieve = vi.spyOn(stripeClient()!.subscriptions, "retrieve");
-    retrieve.mockResolvedValue(subscription(withPrice("nova_max_month_usd_11000", 11_000, "month")) as never);
+    retrieve.mockResolvedValue(subscription(withPrice("orbis_max_month_usd_11000", 11_000, "month")) as never);
     await signedPost({ id: "evt_6", type: "customer.subscription.updated", data: { object: subscription() } });
     expect(upserts.at(-1)).toMatchObject({ plan: "max", billing_interval: "month", price_usd: 110, status: "active" });
     // Renewal: a new period.
@@ -185,7 +185,7 @@ describe("POST /api/stripe/webhook", () => {
       created: 1_792_400_000,
       status_transitions: { paid_at: 1_792_400_100 },
       total_taxes: [{ amount: 120, tax_behavior: "exclusive" }],
-      parent: { type: "subscription_details", subscription_details: { metadata: { user_id: "user-1", nova_plan: "pro" }, subscription: "sub_123" } },
+      parent: { type: "subscription_details", subscription_details: { metadata: { user_id: "user-1", orbis_plan: "pro" }, subscription: "sub_123" } },
     };
     await signedPost({ id: "evt_10", type: "invoice.paid", data: { object: invoice } });
     await signedPost({ id: "evt_10b", type: "invoice.paid", data: { object: invoice } }); // same invoice, new event: stored once
@@ -216,15 +216,15 @@ describe("POST /api/billing/checkout", () => {
     const { POST } = await import("@/app/api/billing/checkout/route");
     const res = await POST(post({ plan: "pro", interval: "month" }));
     expect(await res.json()).toEqual({ url: "https://checkout.stripe.com/c/pay_1" });
-    expect(createPrice).toHaveBeenCalledWith(expect.objectContaining({ currency: "usd", unit_amount: 2000, recurring: { interval: "month" }, lookup_key: "nova_pro_month_usd_2000" }));
+    expect(createPrice).toHaveBeenCalledWith(expect.objectContaining({ currency: "usd", unit_amount: 2000, recurring: { interval: "month" }, lookup_key: "orbis_pro_month_usd_2000" }));
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: "subscription",
         line_items: [{ price: "price_pro", quantity: 1 }],
         customer_email: "pat@example.com",
         client_reference_id: "user-1",
-        subscription_data: { metadata: { user_id: "user-1", nova_plan: "pro" } },
-        success_url: "https://nova.example/chat?upgraded=pro",
+        subscription_data: { metadata: { user_id: "user-1", orbis_plan: "pro" } },
+        success_url: "https://orbis.example/chat?upgraded=pro",
       }),
     );
   });
@@ -238,7 +238,7 @@ describe("POST /api/billing/checkout", () => {
     const { POST } = await import("@/app/api/billing/checkout/route");
     await POST(post({ plan: "max", interval: "year" }));
     // $100 × 12 × (1 − 10%) = $1,080 a year.
-    expect(list).toHaveBeenCalledWith(expect.objectContaining({ lookup_keys: ["nova_max_year_usd_108000"] }));
+    expect(list).toHaveBeenCalledWith(expect.objectContaining({ lookup_keys: ["orbis_max_year_usd_108000"] }));
     expect(createPrice).not.toHaveBeenCalled();
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ line_items: [{ price: "price_max_year", quantity: 1 }] }));
   });
@@ -271,8 +271,8 @@ describe("POST /api/billing/change", () => {
     const { update, POST } = await setup({});
     const res = await POST(post({ plan: "max", interval: "month" }));
     expect(res.status).toBe(200);
-    expect(update).toHaveBeenCalledWith("sub_123", { items: [{ id: "si_1", price: "price_nova_max_month_usd_10000" }], proration_behavior: "always_invoice", payment_behavior: "pending_if_incomplete" });
-    expect(update).toHaveBeenCalledWith("sub_123", expect.objectContaining({ cancel_at_period_end: false, metadata: expect.objectContaining({ nova_plan: "max" }) }));
+    expect(update).toHaveBeenCalledWith("sub_123", { items: [{ id: "si_1", price: "price_orbis_max_month_usd_10000" }], proration_behavior: "always_invoice", payment_behavior: "pending_if_incomplete" });
+    expect(update).toHaveBeenCalledWith("sub_123", expect.objectContaining({ cancel_at_period_end: false, metadata: expect.objectContaining({ orbis_plan: "max" }) }));
     expect(upserts.length).toBeGreaterThan(0); // allowance updated immediately
   });
 

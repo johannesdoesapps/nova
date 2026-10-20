@@ -13,7 +13,7 @@ Dashboard (/workforce, /workforce/tasks/[id])
 Orbis Commander  src/lib/workforce/commander.ts   persistent state machine, ticks under a lease
    ├─ Agent registry        agents.ts           ids, versions, permissions, limits, models
    ├─ Executors             executors.ts        one per step type; the only code that touches tools
-   ├─ Model adapter         models.ts / models-nova.ts   Orbis providers + Auto routing, budgets, schema validation
+   ├─ Model adapter         models.ts / models-orbis.ts   Orbis providers + Auto routing, budgets, schema validation
    ├─ Workspace manager     workspace.ts / sandbox-vercel.ts   Vercel Sandbox microVM per task
    ├─ Allow-listed checks   checks.ts           only package.json scripts; no arbitrary commands
    ├─ Store                 store.ts / supabase-store.ts   wf_* tables (tasks, steps, events, approvals, memory)
@@ -124,7 +124,7 @@ live deployment against `johannesdoesapps/nova`, with Claude models:
 
 1. Apply `supabase/migrations/20261019100000_workforce.sql`.
 2. Deploy on Vercel (Sandbox uses the function's OIDC token automatically). For local
-   development set `NOVA_SANDBOX_TOKEN`, `NOVA_SANDBOX_TEAM_ID`, `NOVA_SANDBOX_PROJECT_ID`.
+   development set `ORBIS_SANDBOX_TOKEN`, `ORBIS_SANDBOX_TEAM_ID`, `ORBIS_SANDBOX_PROJECT_ID`.
 3. Make your account an admin (`insert into public.admins (user_id) values ('…')`).
 4. Open `/workforce` → Projects → register `owner/repo` → New task.
 

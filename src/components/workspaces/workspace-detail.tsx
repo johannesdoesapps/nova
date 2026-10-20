@@ -83,10 +83,10 @@ export function WorkspaceDetail({ id }: { id: string }) {
       {tab === "export" && (
         <Card className="max-w-2xl space-y-3 p-4 text-sm">
           <div className="font-medium">Take your data with you</div>
-          <p className="text-muted">Exports are self-describing JSON bundles (format <code>nova-workspace</code> v1) with a checksum. They never include OAuth tokens, share-link tokens or connector credentials; member emails are only included when an admin asks.</p>
+          <p className="text-muted">Exports are self-describing JSON bundles (format <code>orbis-workspace</code> v1) with a checksum. They never include OAuth tokens, share-link tokens or connector credentials; member emails are only included when an admin asks.</p>
           <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" disabled={!can("export")} onClick={() => run(async () => download(await engine.get(`workspaces/${id}/export`), `${w.name}.nova.json`))}><Download className="h-4 w-4" /> Export items & comments</Button>
-            <Button variant="secondary" disabled={!can("export")} onClick={() => run(async () => download(await engine.get(`workspaces/${id}/export?history=true`), `${w.name}.full-history.nova.json`))}><History className="h-4 w-4" /> Export with full history</Button>
+            <Button variant="secondary" disabled={!can("export")} onClick={() => run(async () => download(await engine.get(`workspaces/${id}/export`), `${w.name}.orbis.json`))}><Download className="h-4 w-4" /> Export items & comments</Button>
+            <Button variant="secondary" disabled={!can("export")} onClick={() => run(async () => download(await engine.get(`workspaces/${id}/export?history=true`), `${w.name}.full-history.orbis.json`))}><History className="h-4 w-4" /> Export with full history</Button>
           </div>
           <div className="border-t border-border pt-3">
             <div className="font-medium">Delete workspace</div>

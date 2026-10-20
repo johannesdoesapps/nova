@@ -40,8 +40,8 @@ dashboard shows plain counts of open findings by severity.
 
 - **Authorization in the backend**: every endpoint requires a signed-in user; Row Level
   Security isolates each user's targets, runs, findings and audit trail.
-- **Website ownership** is proved by a token at `/.well-known/nova-security-verification.txt`
-  or a TXT record on `_nova-verify.<domain>`, re-checked by the server immediately before
+- **Website ownership** is proved by a token at `/.well-known/orbis-security-verification.txt`
+  or a TXT record on `_orbis-verify.<domain>`, re-checked by the server immediately before
   every scan. Administrators may scan this Orbis deployment's own domain without a token.
   Every scan also requires an explicit "I'm authorised" confirmation.
 - **SSRF protection**: only ports 80/443, public DNS names, no credentials in URLs; each

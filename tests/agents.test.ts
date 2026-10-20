@@ -7,7 +7,7 @@ import { builtinAgents } from "@/lib/agents/builtins";
 import { formatSummary, parseDelimited, summarizeDataset } from "@/lib/agents/tools/csv-stats";
 
 beforeAll(() => {
-  for (const k of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "OPENAI_API_KEY", "HUGGINGFACE_API_KEY", "SEARCH_API_KEY", "NOVA_MODELS"])
+  for (const k of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "OPENAI_API_KEY", "HUGGINGFACE_API_KEY", "SEARCH_API_KEY", "ORBIS_MODELS"])
     delete process.env[k];
 });
 
@@ -183,13 +183,13 @@ describe("public deployment safeguard", () => {
       const res = await POST(post("/api/agents/chat", { agentId: "general", message: "hi" }));
       expect(res.status).toBe(503);
       expect((await res.json()).error.message).toMatch(/isn't accepting anonymous AI requests/);
-      env.NOVA_ALLOW_GUEST_AI = "1";
+      env.ORBIS_ALLOW_GUEST_AI = "1";
       const { requireUserIfConfigured } = await import("@/lib/auth");
       await expect(requireUserIfConfigured()).resolves.toMatchObject({ mode: "guest" });
     } finally {
       env.NODE_ENV = prev;
       delete env.OPENAI_API_KEY;
-      delete env.NOVA_ALLOW_GUEST_AI;
+      delete env.ORBIS_ALLOW_GUEST_AI;
     }
   });
 });

@@ -24,7 +24,7 @@ how data is isolated and protected, and how to ship it in phases.
 | Long-running / agent / background work | Next.js route handlers only · **Python service** · Java/Kotlin (Spring) service · Go service · managed workflow engines (Temporal, Inngest) | **Python 3.12+ / FastAPI "Orbis engine"** ✅. Workflow execution, feeds, scheduling and connector syncs need long-lived processes and background workers, which serverless functions handle poorly. Python has the best ecosystem for retrieval, parsing, evaluation and future ML (pgvector clients, document parsing, scikit-learn). **Java was considered**: strong typing and the JVM are excellent for large teams, but a second statically typed stack adds operational weight (JVM tuning, build chain) without a capability Python lacks here. Revisit only if the engine needs very high-throughput concurrency. Temporal is the planned upgrade if workflow volume outgrows the built-in executor (§16). |
 | Auth | **Supabase Auth** · Auth.js · Clerk | **Supabase Auth** ✅ — integrates with Postgres RLS via `auth.uid()`, email/password and OAuth providers, no extra vendor. |
 | Database | **Postgres (Supabase)** · MySQL · document DB | **Postgres** ✅ — RLS, JSONB for flexible documents (reports, specs, items), strong consistency, pgvector for retrieval, point-in-time recovery. The engine uses SQLAlchemy Core so the same code runs on SQLite for local development and tests. |
-| Engine ↔ web trust | Shared DB credentials only · Supabase JWT forwarding · **HMAC-signed identity** | **HMAC identity header** ✅ — the web tier authenticates the user and signs `{sub, email, name, exp}` with `NOVA_ENGINE_SECRET` (TTL 2 min, max 5). The engine never handles passwords or sessions. Forwarding the Supabase JWT (verified with the JWKS) is the alternative once the engine also enforces RLS directly (🔜). |
+| Engine ↔ web trust | Shared DB credentials only · Supabase JWT forwarding · **HMAC-signed identity** | **HMAC identity header** ✅ — the web tier authenticates the user and signs `{sub, email, name, exp}` with `ORBIS_ENGINE_SECRET` (TTL 2 min, max 5). The engine never handles passwords or sessions. Forwarding the Supabase JWT (verified with the JWKS) is the alternative once the engine also enforces RLS directly (🔜). |
 | Semantic retrieval | **pgvector** · Pinecone · Weaviate | **pgvector** 🔜 — one database, RLS applies to embeddings too, no data copied to another vendor. Lexical search is used today. |
 | Knowledge graph | **Postgres adjacency tables** · Neo4j · RDF store | **Postgres tables (`entities`, `relations`, both with provenance)** 🔜 — graphs are per workspace and small (< 1M edges), so recursive CTEs are enough; avoids a second datastore. Revisit Neo4j at > 10M edges or heavy path queries. |
 | Background jobs | Vercel Cron only · Redis/BullMQ · **Postgres row leases + worker** · Celery | **Postgres leases + Python worker** ✅ — `UPDATE … WHERE lease_until < now()` claims rows atomically (Radar); runs have heartbeats. No extra infrastructure; migrate to Redis/Celery or Temporal when throughput requires it. |
@@ -91,18 +91,18 @@ flowchart TB
 | `lib/intel` | web (shared, pure) | Blind trials, benchmarks, fingerprint, routing, pricing | 5 |
 | `lib/db`, `lib/auth`, `lib/usage`, `lib/http` | web | Supabase data access (RLS), auth, quotas, errors | 1–5 |
 | `lib/engine` + `api/engine/[...path]` | web | Identity signing and the engine proxy | 7–9 |
-| `nova_engine.lab` | engine | Planner, validator, executor, templates, tests, versions | 7 |
-| `nova_engine.radar` | engine | Sources, analysis, alerts, digests, freshness | 8 |
-| `nova_engine.workspace` | engine | Workspaces, permissions, items, versions, comments, collections, shares, community, portability | 9 |
-| `nova_engine.connectors` | engine | Catalog, OAuth, token vault, sync, conflicts, consent | 9 |
-| `nova_engine.security` | engine | Untrusted-content handling, sensitive-data detection, tool policy, SSRF guard, crypto | 7–9 |
-| `nova_engine.worker` | engine | Background passes | 7–9 |
+| `orbis_engine.lab` | engine | Planner, validator, executor, templates, tests, versions | 7 |
+| `orbis_engine.radar` | engine | Sources, analysis, alerts, digests, freshness | 8 |
+| `orbis_engine.workspace` | engine | Workspaces, permissions, items, versions, comments, collections, shares, community, portability | 9 |
+| `orbis_engine.connectors` | engine | Catalog, OAuth, token vault, sync, conflicts, consent | 9 |
+| `orbis_engine.security` | engine | Untrusted-content handling, sensitive-data detection, tool policy, SSRF guard, crypto | 7–9 |
+| `orbis_engine.worker` | engine | Background passes | 7–9 |
 
 ## 5. Data model
 
 Web tier (Supabase migrations, RLS on every table) ✅: `profiles`, `projects`, `conversations`, `messages`, `search_sessions`, `sources`, `model_registry`, `model_price_history`, `model_runs`, `model_comparisons`, `favorite_models`, `project_notes`, `radar_tasks` (legacy placeholder), `claim_reports`, `hypothesis_arenas`, `blind_trials`, `benchmark_runs`.
 
-Engine (`engine/nova_engine/db.py`) ✅: `workflows`, `workflow_versions`, `runs`, `run_events`, `approvals`, `outbox`, `tool_grants`, `radar_watches`, `radar_items`, `radar_checks`, `radar_alerts`, `radar_digests`, `radar_profiles`, `http_cache`, `workspaces`, `workspace_members`, `workspace_items`, `item_versions`, `comments`, `collections`, `shares`, `community_posts`, `community_reports`, `connections`, `oauth_states`, `consent_log`, `sync_conflicts`, `audit_log`, `worker_heartbeats`.
+Engine (`engine/orbis_engine/db.py`) ✅: `workflows`, `workflow_versions`, `runs`, `run_events`, `approvals`, `outbox`, `tool_grants`, `radar_watches`, `radar_items`, `radar_checks`, `radar_alerts`, `radar_digests`, `radar_profiles`, `http_cache`, `workspaces`, `workspace_members`, `workspace_items`, `item_versions`, `comments`, `collections`, `shares`, `community_posts`, `community_reports`, `connections`, `oauth_states`, `consent_log`, `sync_conflicts`, `audit_log`, `worker_heartbeats`.
 
 ```mermaid
 erDiagram
@@ -146,16 +146,16 @@ erDiagram
 
 | Layer | Mechanism |
 |---|---|
-| Identity | Supabase Auth (`getUser()` validated server-side) → HMAC identity to the engine. Guests get a random `nova_guest` httpOnly cookie, so their demo data is separate per browser. |
+| Identity | Supabase Auth (`getUser()` validated server-side) → HMAC identity to the engine. Guests get a random `orbis_guest` httpOnly cookie, so their demo data is separate per browser. |
 | Web data | Postgres **RLS** on every table (`user_id = auth.uid()`). `owns_project()` stops cross-tenant references. Tested with PGlite in `tests/rls.test.ts`. |
 | Engine data | Every service function scopes by owner or verified workspace membership. Non-members get 404. The role matrix is in `workspace/permissions.py`. Tests cover cross-user access. |
-| Engine data, defence in depth 🔜 | Connect as a dedicated `nova_engine` Postgres role **without** `BYPASSRLS`, and set `app.user_id` per transaction (`SET LOCAL`). RLS policies: `owner_id = current_setting('app.user_id')`, plus membership checks via `workspace_members` for workspace tables. |
+| Engine data, defence in depth 🔜 | Connect as a dedicated `orbis_engine` Postgres role **without** `BYPASSRLS`, and set `app.user_id` per transaction (`SET LOCAL`). RLS policies: `owner_id = current_setting('app.user_id')`, plus membership checks via `workspace_members` for workspace tables. |
 | Tools and connectors | Per-user tool grants plus per-workflow permissions plus run-time approval policy. OAuth scopes are checked before writes. |
 | Admin | No service-role key in the web tier. Registry and price writes go through SQL or an admin console (🔜) with an audit log. |
 
 ## 8. Secrets and sensitive data
 
-- **Server-only secrets:** `OPENAI_API_KEY`, `HUGGINGFACE_API_KEY`, `SEARCH_API_KEY`, `NOVA_ENGINE_SECRET`, `NOVA_TOKEN_KEYS`, `NOVA_TRIAL_SECRET`, `GITHUB_CLIENT_SECRET`. They live in Vercel and engine environment stores, and are never prefixed `NEXT_PUBLIC_`. The Settings page shows booleans only.
+- **Server-only secrets:** `OPENAI_API_KEY`, `HUGGINGFACE_API_KEY`, `SEARCH_API_KEY`, `ORBIS_ENGINE_SECRET`, `ORBIS_TOKEN_KEYS`, `ORBIS_TRIAL_SECRET`, `GITHUB_CLIENT_SECRET`. They live in Vercel and engine environment stores, and are never prefixed `NEXT_PUBLIC_`. The Settings page shows booleans only.
 - **OAuth tokens:** AES-256-GCM with key ids and AAD binding; rotation by prepending a key and re-encrypting in the background.
 - **Sensitive inputs:** marked per workflow input, masked in logs, and gated before leaving Orbis (model providers or egress tools). The detector catches emails, phones, Luhn-valid cards, SSNs, IBANs and common API key formats.
 - **Retention:**
@@ -182,8 +182,8 @@ Applies to search answers (Part 2), Claim DNA (Part 4), AI Lab (Part 7), Radar (
 
 | Control | Where |
 |---|---|
-| Per-minute rate limits | Web: `NOVA_RATE_LIMIT_PER_MINUTE` per user or IP (default 20 AI requests per minute; engine proxy 240 per minute per IP). Engine: token bucket of 120 per minute per identity, with writes costing 5. |
-| Usage limits | Signed-in users: Claude-style 5-hour window plus a weekly cap per plan (`src/lib/plans.ts`, counted from `model_runs`, plan from `subscriptions`). Guests: `NOVA_DAILY_REQUEST_LIMIT`. |
+| Per-minute rate limits | Web: `ORBIS_RATE_LIMIT_PER_MINUTE` per user or IP (default 20 AI requests per minute; engine proxy 240 per minute per IP). Engine: token bucket of 120 per minute per identity, with writes costing 5. |
+| Usage limits | Signed-in users: Claude-style 5-hour window plus a weekly cap per plan (`src/lib/plans.ts`, counted from `model_runs`, plan from `subscriptions`). Guests: `ORBIS_DAILY_REQUEST_LIMIT`. |
 | Workflow limits | Per-run budgets (cost, calls, tokens, steps, duration), ≤ 5 active runs per user, ≤ 200 workflows. |
 | Radar limits | ≤ 50 watches per user, 3 manual checks per watch per 10 minutes, daily paid-search cap. |
 | Workspace limits | ≤ 100 workspaces per user, 50 members, 5000 items, 500 KB per item. Body limits: 2 MB (10 MB for import). |
@@ -236,10 +236,10 @@ Applies to search answers (Part 2), Claim DNA (Part 4), AI Lab (Part 7), Radar (
 | Component | Platform | Notes |
 |---|---|---|
 | Web | Vercel | Env vars per environment; streaming routes `maxDuration` 60–120 s. |
-| Engine API | Fly.io / Render / any container host (2+ instances behind TLS, private networking to the web tier preferred) | `uvicorn nova_engine.api.app:app --workers N`; health check `/health`. |
-| Worker | Same image, separate process (`python -m nova_engine.worker`) | ≥ 1 instance. Leases make several safe. Alternatively `--once` from a scheduler every minute. |
-| Database | Supabase Postgres | Engine uses `NOVA_ENGINE_DATABASE_URL` (pooler, transaction mode), with a dedicated role. |
-| Secrets | Vercel env + host secret store | `NOVA_ENGINE_SECRET` must match on both tiers. |
+| Engine API | Fly.io / Render / any container host (2+ instances behind TLS, private networking to the web tier preferred) | `uvicorn orbis_engine.api.app:app --workers N`; health check `/health`. |
+| Worker | Same image, separate process (`python -m orbis_engine.worker`) | ≥ 1 instance. Leases make several safe. Alternatively `--once` from a scheduler every minute. |
+| Database | Supabase Postgres | Engine uses `ORBIS_ENGINE_DATABASE_URL` (pooler, transaction mode), with a dedicated role. |
+| Secrets | Vercel env + host secret store | `ORBIS_ENGINE_SECRET` must match on both tiers. |
 
 **Environments:** preview (per PR, demo mode), staging (real Supabase project, test OAuth apps), production.
 
@@ -256,7 +256,7 @@ Applies to search answers (Part 2), Claim DNA (Part 4), AI Lab (Part 7), Radar (
 | Secrets | Host secret stores; encryption keys escrowed offline (two-person access) | — |
 | Workflow runs | Checkpoints per step; worker marks stale runs `interrupted`; users resume | No step repeated (idempotency keys) |
 
-Quarterly restore drills to a scratch project (with checksum comparison of row counts and sample documents). A runbook covers key compromise: rotate `NOVA_ENGINE_SECRET` (2-minute token TTL limits exposure) and `NOVA_TOKEN_KEYS` (re-encrypt, then drop the old key), and force-reconnect integrations if needed.
+Quarterly restore drills to a scratch project (with checksum comparison of row counts and sample documents). A runbook covers key compromise: rotate `ORBIS_ENGINE_SECRET` (2-minute token TTL limits exposure) and `ORBIS_TOKEN_KEYS` (re-encrypt, then drop the old key), and force-reconnect integrations if needed.
 
 ## 18. Phased implementation plan
 
@@ -265,7 +265,7 @@ Quarterly restore drills to a scratch project (with checksum comparison of row c
 | **0 Foundation** | Next.js shell, Supabase auth, RLS schema, search, chat, model registry, battle | — | RLS tests pass; demo mode works without keys | ✅ |
 | **1 Trust & Intelligence** (Parts 4–5) | Claim DNA, Arena, Replay, blind trials, benchmarks, fingerprint, routing, directory | 0 | No confidence shown as truth; sample-size gating; 103 TS tests | ✅ |
 | **2 Engine MVP** (Parts 7–9 core) | Python engine, signed identity, Lab (plan → build → run, approvals, budgets, versions, tests, templates), Radar (baseline, labels, ranking, alerts, digests, honest status), Workspaces (roles, versions, comments, sharing, export/import), Community, RSS + GitHub public connectors | 0 | 54 engine tests; e2e flow; no consequential action without an approval bound to its payload; SSRF guard; no secrets in the browser | ✅ (this release) |
-| **3 Production hardening** | Alembic; engine on Postgres with a dedicated role + RLS (`app.user_id`); Upstash rate limits; OpenTelemetry + Sentry; `NOVA_TOKEN_KEYS` rotation runbook; delete-my-data job; CAPTCHA | 2 | Pen-test with no high findings; restore drill passes; p95 API < 500 ms (non-model); error budget 99.5% | 🔜 |
+| **3 Production hardening** | Alembic; engine on Postgres with a dedicated role + RLS (`app.user_id`); Upstash rate limits; OpenTelemetry + Sentry; `ORBIS_TOKEN_KEYS` rotation runbook; delete-my-data job; CAPTCHA | 2 | Pen-test with no high findings; restore drill passes; p95 API < 500 ms (non-model); error budget 99.5% | 🔜 |
 | **4 Accounts & documents** | GitHub OAuth app, Google Drive (`drive.file`), Notion; Storage uploads with PDF/DOCX parsing; email provider (invitations, digests, `email.send`) | 3 | OAuth verified; revocation tested; email deliverability > 98% | 🔜 |
 | **5 Knowledge layer** | pgvector embeddings for items, claims and radar; semantic search; knowledge graph (entities/relations with provenance) and graph view; merge projects into workspaces | 3 | nDCG@10 ≥ 0.7 on a labelled set; migration dry-run with zero loss | 🔜 |
 | **6 Scale & collaboration** | Parallel workflow branches; Temporal (if needed); real-time co-editing; moderation console; public workspace pages; What-If Simulator | 4, 5 | 10k runs/day sustained; moderation SLA < 24 h | 🔜 |

@@ -318,7 +318,7 @@ export async function getTarget(db: ServerSupabase, userId: string, id: string):
 }
 
 export async function addTarget(db: ServerSupabase, userId: string, hostname: string): Promise<TargetRow> {
-  const token = `nova-verify-${crypto.randomUUID().replace(/-/g, "")}`;
+  const token = `orbis-verify-${crypto.randomUUID().replace(/-/g, "")}`;
   const { data, error } = await db
     .from("security_targets")
     .insert({ user_id: userId, hostname, token })

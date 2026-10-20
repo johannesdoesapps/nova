@@ -72,18 +72,18 @@ export function RunOutput({ state }: { state: State }) {
   if (state.status === "idle") return null;
   if (state.status === "running") {
     return (
-      <div className="nova-run-out" role="status">
-        <span className="nova-run-meta"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Running in an isolated sandbox…</span>
+      <div className="orbis-run-out" role="status">
+        <span className="orbis-run-meta"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Running in an isolated sandbox…</span>
       </div>
     );
   }
   if (state.status === "error") {
     return (
-      <div className="nova-run-out" role="alert">
-        <span className="nova-run-meta">
+      <div className="orbis-run-out" role="alert">
+        <span className="orbis-run-meta">
           {state.message}
           {state.action && (
-            <a href={state.action.href} className="nova-run-link">{state.action.label}</a>
+            <a href={state.action.href} className="orbis-run-link">{state.action.label}</a>
           )}
         </span>
       </div>
@@ -93,12 +93,12 @@ export function RunOutput({ state }: { state: State }) {
   const ok = r.exitCode === 0 && !r.timedOut;
   const seconds = (r.durationMs / 1000).toFixed(1);
   return (
-    <div className="nova-run-out" aria-live="polite">
-      {r.stdout && <pre className="nova-run-stdout">{r.stdout}</pre>}
-      {r.stderr && <pre className="nova-run-stderr">{r.stderr}</pre>}
-      {!r.stdout && !r.stderr && <span className="nova-run-meta">No output.</span>}
-      <span className="nova-run-meta">
-        <span className={ok ? "nova-run-ok" : "nova-run-bad"}>{r.timedOut ? `Stopped after ${r.timeLimitSeconds} s` : `Exit ${r.exitCode}`}</span>
+    <div className="orbis-run-out" aria-live="polite">
+      {r.stdout && <pre className="orbis-run-stdout">{r.stdout}</pre>}
+      {r.stderr && <pre className="orbis-run-stderr">{r.stderr}</pre>}
+      {!r.stdout && !r.stderr && <span className="orbis-run-meta">No output.</span>}
+      <span className="orbis-run-meta">
+        <span className={ok ? "orbis-run-ok" : "orbis-run-bad"}>{r.timedOut ? `Stopped after ${r.timeLimitSeconds} s` : `Exit ${r.exitCode}`}</span>
         <span>· {seconds} s</span>
         {r.truncated && <span>· output shortened</span>}
         {r.runsLeft !== null && <span>· {r.runsLeft.toLocaleString("en-US")} runs left this month</span>}

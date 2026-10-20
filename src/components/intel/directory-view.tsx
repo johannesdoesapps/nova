@@ -120,9 +120,9 @@ export function DirectoryView() {
         <summary className="cursor-pointer font-medium text-fg">Where this data comes from</summary>
         <ul className="mt-2 list-disc space-y-1 pl-5">
           <li><b>Model availability</b>: whether this server has credentials for the provider. Model lists are cross-checked against each provider&apos;s <code>/v1/models</code> API on demand.</li>
-          <li><b>Prices</b> are entered by the operator (database or <code>NOVA_MODELS</code>) with a source URL and date — never scraped. They are validated for missing data, unit typos, unusual ratios and staleness (re-check every {staleDays} days). Price changes are logged to a history table.</li>
+          <li><b>Prices</b> are entered by the operator (database or <code>ORBIS_MODELS</code>) with a source URL and date — never scraped. They are validated for missing data, unit typos, unusual ratios and staleness (re-check every {staleDays} days). Price changes are logged to a history table.</li>
           <li><b>Costs</b> are provider-reported token counts × the verified price, marked “(est.)” when tokens were estimated. Compare against your provider billing export periodically.</li>
-          <li><b>Data handling</b> defaults to “Not verified” because policies change and depend on your account and contract. Operators record what they have confirmed in <code>NOVA_PRIVACY_PROFILES</code>.</li>
+          <li><b>Data handling</b> defaults to “Not verified” because policies change and depend on your account and contract. Operators record what they have confirmed in <code>ORBIS_PRIVACY_PROFILES</code>.</li>
           <li><b>Versions</b> are the model strings providers return with each response, collected from your own calls.</li>
         </ul>
       </details>

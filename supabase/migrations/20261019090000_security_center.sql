@@ -1,4 +1,4 @@
--- NOVA AI — Security Center: the Sentinel, Threat Hunter and Code Guardian
+-- ORBIS AI — Security Center: the Sentinel, Threat Hunter and Code Guardian
 -- agents' targets, runs, findings and an append-only audit trail.
 -- Ownership of scan targets is re-proved by the server before every active
 -- scan; verified_at here is only a display cache, never trusted on its own.

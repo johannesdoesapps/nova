@@ -167,7 +167,7 @@ export function makeLocalHistory(KEY: string): HistoryStore {
   };
 }
 
-export const localHistory = makeLocalHistory("nova:studio:chats");
+export const localHistory = makeLocalHistory("orbis:studio:chats");
 
 export function titleFrom(message: string): string {
   const t = message.replace(/\s+/g, " ").trim();

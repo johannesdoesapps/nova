@@ -141,7 +141,7 @@ export function SearchView() {
     <div className="mx-auto flex min-h-[calc(100dvh-3.5rem)] max-w-4xl flex-col px-4 pt-8 sm:px-6 lg:min-h-dvh">
       {turns.length === 0 ? (
         <div className="flex-1 pt-10">
-          <h1 className="text-center text-3xl font-semibold tracking-tight"><span className="nova-gradient-text">AI Search</span></h1>
+          <h1 className="text-center text-3xl font-semibold tracking-tight"><span className="orbis-gradient-text">AI Search</span></h1>
           <p className="mt-2 text-center text-sm text-muted">Answers grounded in live web sources. Every citation links to a real page you can check.</p>
           {!integrations.search && (
             <Notice tone="warning" className="mt-6" title="Web search is not configured">
@@ -268,7 +268,7 @@ function TurnView({
             <Skeleton className="h-4 w-7/12" />
           </div>
         )}
-        {t.status === "answering" && t.answer && <span className="nova-dot ml-0.5 inline-block h-4 w-1.5 translate-y-0.5 rounded-sm bg-accent" />}
+        {t.status === "answering" && t.answer && <span className="orbis-dot ml-0.5 inline-block h-4 w-1.5 translate-y-0.5 rounded-sm bg-accent" />}
         {t.status === "error" && <Notice tone="danger" className="mt-2" title="The answer could not be generated">{t.error}</Notice>}
 
         {t.status === "done" && (

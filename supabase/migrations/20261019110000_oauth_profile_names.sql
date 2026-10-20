@@ -1,4 +1,4 @@
--- NOVA AI — name new profiles from Google sign-ups too. Google (via Supabase
+-- ORBIS AI — name new profiles from Google sign-ups too. Google (via Supabase
 -- Auth) provides `full_name` / `name` instead of the `display_name` set by the
 -- email sign-up form. Only new users are affected; existing profiles are kept.
 create or replace function public.handle_new_user()

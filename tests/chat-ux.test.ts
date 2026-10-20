@@ -45,7 +45,7 @@ const saved = [
 ];
 
 beforeAll(() => {
-  for (const k of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "NOVA_MODELS"]) delete process.env[k];
+  for (const k of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "ORBIS_MODELS"]) delete process.env[k];
 });
 beforeEach(() => {
   for (const f of Object.values(db)) f.mockReset();

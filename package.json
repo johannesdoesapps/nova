@@ -1,5 +1,5 @@
 {
-  "name": "nova-ai",
+  "name": "orbis-ai",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,8 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "engine": "cd engine && .venv/bin/python -m nova_engine",
-    "engine:worker": "cd engine && .venv/bin/python -m nova_engine.worker",
+    "engine": "cd engine && .venv/bin/python -m orbis_engine",
+    "engine:worker": "cd engine && .venv/bin/python -m orbis_engine.worker",
     "engine:setup": "cd engine && python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt",
     "engine:test": "cd engine && .venv/bin/python -m pytest"
   },

@@ -9,7 +9,7 @@ export function EngineError({ message }: { message: string }) {
       {message}
       {down && (
         <span className="mt-2 block">
-          Start it with <code>cd engine &amp;&amp; .venv/bin/python -m nova_engine</code> and set the same <code>NOVA_ENGINE_SECRET</code> in both <code>.env.local</code> and the engine&apos;s environment.
+          Start it with <code>cd engine &amp;&amp; .venv/bin/python -m orbis_engine</code> and set the same <code>ORBIS_ENGINE_SECRET</code> in both <code>.env.local</code> and the engine&apos;s environment.
         </span>
       )}
     </Notice>

@@ -31,7 +31,7 @@ pricing numbers (read from `src/lib/plans.ts`, so limits never drift from what's
 ## SEO in place
 
 - Unique title, description and canonical URL per page (`pageMetadata` in `src/lib/seo.ts`),
-  based on `NEXT_PUBLIC_SITE_URL` (production: `https://nova-supabase.vercel.app`).
+  based on `NEXT_PUBLIC_SITE_URL` (production: `https://tryorbis.app`).
 - Open Graph / Twitter previews with a generated image (`src/app/opengraph-image.tsx`),
   favicon and `icon.svg`, Apple touch icon.
 - `sitemap.xml` (public pages only) and `robots.txt` (blocks `/api/` and `/auth/`, points
@@ -47,7 +47,7 @@ pricing numbers (read from `src/lib/plans.ts`, so limits never drift from what's
 ## Google Search Console (to do — needs the site owner)
 
 1. Open https://search.google.com/search-console and **Add property**.
-2. Choose **URL prefix** and enter `https://nova-supabase.vercel.app/` (a *Domain*
+2. Choose **URL prefix** and enter `https://tryorbis.app/` (a *Domain*
    property isn't possible on a `vercel.app` subdomain; it is once you own a domain).
 3. Verify with the **HTML tag** method: copy the `content` value of the
    `google-site-verification` tag and add it to the root layout metadata in

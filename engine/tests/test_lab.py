@@ -1,15 +1,15 @@
 import pytest
 
-from nova_engine.db import outbox, run_events
-from nova_engine.errors import EngineError
-from nova_engine.lab import executor as ex
-from nova_engine.lab import planner
-from nova_engine.lab import service as lab
-from nova_engine.lab.expressions import evaluate, render
-from nova_engine.lab.templates import list_templates, template_spec
-from nova_engine.lab.validate import parse_spec, validate
-from nova_engine.llm import LLMResult
-from nova_engine.workspace import service as ws
+from orbis_engine.db import outbox, run_events
+from orbis_engine.errors import EngineError
+from orbis_engine.lab import executor as ex
+from orbis_engine.lab import planner
+from orbis_engine.lab import service as lab
+from orbis_engine.lab.expressions import evaluate, render
+from orbis_engine.lab.templates import list_templates, template_spec
+from orbis_engine.lab.validate import parse_spec, validate
+from orbis_engine.llm import LLMResult
+from orbis_engine.workspace import service as ws
 
 
 def spec(nodes, **kw):

@@ -1,4 +1,4 @@
--- NOVA AI — close a budget bypass. usage_finish is callable with the user's
+-- ORBIS AI — close a budget bypass. usage_finish is callable with the user's
 -- own session (the server uses it), so a user could release or settle their
 -- own in-flight hold early and start more concurrent requests than the
 -- budget allows. Money and token checks now count a hold until it expires or
@@ -93,7 +93,7 @@ begin
   if p_units is null or p_units < 0 or p_window_limit is null or p_week_limit is null then
     raise exception 'Invalid usage request' using errcode = '22023';
   end if;
-  perform pg_advisory_xact_lock(hashtextextended('nova-usage:' || uid::text, 0));
+  perform pg_advisory_xact_lock(hashtextextended('orbis-usage:' || uid::text, 0));
 
   if exists (select 1 from public.usage_holds where user_id = uid and request_id = p_request_id)
      or exists (select 1 from public.model_runs where user_id = uid and request_id = p_request_id) then

@@ -16,7 +16,7 @@ import { planOf, resolveBilling, type BillingInterval, type BillingSettings, typ
  * - Signed-in users: their plan's allowance and monthly AI budget (Free unless
  *   an active or trialing Pro or Max subscription exists), from the billing
  *   settings administrators edit in Admin → Plans & pricing.
- * - Administrators: no allowance while NOVA_ADMINS_UNLIMITED isn't "false".
+ * - Administrators: no allowance while ORBIS_ADMINS_UNLIMITED isn't "false".
  *   Their runs are still recorded, marked admin_unlimited, so it's auditable.
  * - Test accounts get limits like anyone else; give one Pro with a
  *   subscriptions row, or admin rights with an admins row, if a test needs more.

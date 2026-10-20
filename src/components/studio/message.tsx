@@ -5,7 +5,7 @@ import { Markdown } from "@/components/common/markdown";
 import { cn, formatUsd } from "@/lib/utils";
 import type { Msg } from "./history";
 import type { Feedback } from "./prefs";
-import { IconButton, iconButtonClass, Menu, MenuItem, NovaMark } from "./ui";
+import { IconButton, iconButtonClass, Menu, MenuItem, OrbisMark } from "./ui";
 import { useVerify, VerifyButton, VerifyPanel } from "./verify-panel";
 
 export const MessageView = memo(function MessageView({
@@ -66,7 +66,7 @@ export const MessageView = memo(function MessageView({
   return (
     <div className="group/msg s-in">
       <div className="mb-2.5 flex items-center gap-2 text-[12.5px] text-s-ink-3">
-        {assistantAvatar ?? <NovaMark className="h-[18px] w-[18px] text-s-ink" />}
+        {assistantAvatar ?? <OrbisMark className="h-[18px] w-[18px] text-s-ink" />}
         <span className="font-medium text-s-ink-2">{assistantName ?? m.modelName ?? "Orbis"}</span>
         {assistantName && m.modelName && <span className="hidden sm:inline">· {m.modelName}</span>}
         {m.routing && (

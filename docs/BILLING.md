@@ -29,7 +29,7 @@ The budget resets monthly on the billing date. Yearly plans also reset monthly. 
 
 A run without a verified price is counted at the most expensive verified price. Web searches are added at $0.01 each.
 
-`NOVA_MONTHLY_AI_BUDGET_USD` (optional) or Admin → Plans & pricing → Spending protection caps the whole site's monthly spend; the emergency stop there pauses AI for everyone but administrators.
+`ORBIS_MONTHLY_AI_BUDGET_USD` (optional) or Admin → Plans & pricing → Spending protection caps the whole site's monthly spend; the emergency stop there pauses AI for everyone but administrators.
 
 Stripe webhooks are processed once per event id (`stripe_events`); paid invoices and refunds are written to `billing_ledger`, which Finance uses for collected revenue.
 
@@ -38,7 +38,7 @@ Stripe webhooks are processed once per event id (`stripe_events`); paid invoices
 1. Create a Stripe account at https://dashboard.stripe.com and finish activation. Start in **Test mode** to try it.
 2. **Developers → API keys:** copy the **Secret key** (`sk_test_…`, later `sk_live_…`).
 3. **Developers → Webhooks → Add endpoint:**
-   - URL: `https://nova-supabase.vercel.app/api/stripe/webhook`;
+   - URL: `https://tryorbis.app/api/stripe/webhook`;
    - events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.paused`, `customer.subscription.resumed`, `invoice.paid`, `invoice.payment_failed` and `refund.created`;
    - copy the **Signing secret** (`whsec_…`).
 4. **Settings → Billing → Customer portal:** turn it on (lets subscribers cancel, change card and see invoices). Plan changes happen on Orbis's pricing page.
@@ -50,7 +50,7 @@ Stripe webhooks are processed once per event id (`stripe_events`); paid invoices
 
    Then **redeploy**.
 
-The four prices (Pro and Max, monthly and yearly, products "Orbis Pro" and "Orbis Max") are created in Stripe automatically on first use. They are found by lookup key, for example `nova_pro_month_usd_2000`. Changing a price in the admin creates a new Stripe price for new checkouts and plan changes; existing subscribers keep their price until they change plan.
+The four prices (Pro and Max, monthly and yearly, products "Orbis Pro" and "Orbis Max") are created in Stripe automatically on first use. They are found by lookup key, for example `orbis_pro_month_usd_2000`. Changing a price in the admin creates a new Stripe price for new checkouts and plan changes; existing subscribers keep their price until they change plan.
 
 Until all three keys are set, the pricing page says "Coming soon" and checkout is off.
 

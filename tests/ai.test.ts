@@ -52,7 +52,7 @@ describe("registry", () => {
       expect(DEFAULT_MODELS.some((m) => m.id === r.replacement)).toBe(true);
     }
   });
-  it("parses a valid NOVA_MODELS override and ignores invalid JSON", () => {
+  it("parses a valid ORBIS_MODELS override and ignores invalid JSON", () => {
     const parsed = parseModelsOverride(JSON.stringify([{ id: "x", provider: "openai", providerModelId: "m", displayName: "X", inputPrice: 1, outputPrice: 2 }]));
     expect(parsed?.[0]).toMatchObject({ id: "x", capabilities: ["chat"], contextWindow: null, inputPrice: 1 });
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

@@ -50,17 +50,17 @@ export function serverEnv() {
       | "brave"
       | string,
     searchKey: clean(process.env.SEARCH_API_KEY),
-    modelsJson: clean(process.env.NOVA_MODELS),
-    maxCompareModels: int(process.env.NOVA_MAX_COMPARE_MODELS, 3, 2, 6),
-    dailyRequestLimit: int(process.env.NOVA_DAILY_REQUEST_LIMIT, 200),
-    ratePerMinute: int(process.env.NOVA_RATE_LIMIT_PER_MINUTE, 20, 1, 1000),
+    modelsJson: clean(process.env.ORBIS_MODELS),
+    maxCompareModels: int(process.env.ORBIS_MAX_COMPARE_MODELS, 3, 2, 6),
+    dailyRequestLimit: int(process.env.ORBIS_DAILY_REQUEST_LIMIT, 200),
+    ratePerMinute: int(process.env.ORBIS_RATE_LIMIT_PER_MINUTE, 20, 1, 1000),
     sentryDsn: clean(process.env.SENTRY_DSN),
-    privacyProfilesJson: clean(process.env.NOVA_PRIVACY_PROFILES),
-    trialSecretSet: Boolean(clean(process.env.NOVA_TRIAL_SECRET)),
+    privacyProfilesJson: clean(process.env.ORBIS_PRIVACY_PROFILES),
+    trialSecretSet: Boolean(clean(process.env.ORBIS_TRIAL_SECRET)),
     /** Explicit opt-in to let anonymous visitors use paid AI in production without accounts. */
-    allowGuestAi: clean(process.env.NOVA_ALLOW_GUEST_AI) === "1",
+    allowGuestAi: clean(process.env.ORBIS_ALLOW_GUEST_AI) === "1",
     /** Administrators have no usage allowance unless this is "false". */
-    adminsUnlimited: clean(process.env.NOVA_ADMINS_UNLIMITED) !== "false",
+    adminsUnlimited: clean(process.env.ORBIS_ADMINS_UNLIMITED) !== "false",
     // Billing (Stripe) and the AI budget guard; see docs/BILLING.md.
     stripeSecretKey: clean(process.env.STRIPE_SECRET_KEY),
     stripeWebhookSecret: clean(process.env.STRIPE_WEBHOOK_SECRET),
@@ -69,14 +69,14 @@ export function serverEnv() {
     /** Server-only key that lets the payment webhook update subscriptions (bypasses RLS). */
     supabaseServiceRoleKey: clean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     /** Payment fees per charge, used for the profit-margin budget: percent and fixed USD. */
-    paymentFeePercent: num(process.env.NOVA_PAYMENT_FEE_PERCENT, 2.9, 0, 20),
-    paymentFeeFixedUsd: num(process.env.NOVA_PAYMENT_FEE_FIXED_USD, 0.3, 0, 5),
+    paymentFeePercent: num(process.env.ORBIS_PAYMENT_FEE_PERCENT, 2.9, 0, 20),
+    paymentFeeFixedUsd: num(process.env.ORBIS_PAYMENT_FEE_FIXED_USD, 0.3, 0, 5),
     /** Other monthly costs per paying subscriber (e.g. a share of hosting), in USD. */
-    overheadPerSubscriberUsd: num(process.env.NOVA_OVERHEAD_PER_SUBSCRIBER_USD, 0, 0, 100),
+    overheadPerSubscriberUsd: num(process.env.ORBIS_OVERHEAD_PER_SUBSCRIBER_USD, 0, 0, 100),
     /** Monthly AI spend allowed per Free user, in USD. */
-    freeAiBudgetUsd: num(process.env.NOVA_FREE_AI_BUDGET_USD, 0.25, 0, 100),
+    freeAiBudgetUsd: num(process.env.ORBIS_FREE_AI_BUDGET_USD, 0.25, 0, 100),
     /** Optional cap on the whole site's AI spend per calendar month, in USD. Unset means no cap. */
-    monthlyAiBudgetUsd: process.env.NOVA_MONTHLY_AI_BUDGET_USD ? num(process.env.NOVA_MONTHLY_AI_BUDGET_USD, 0, 0, 1_000_000) : null,
+    monthlyAiBudgetUsd: process.env.ORBIS_MONTHLY_AI_BUDGET_USD ? num(process.env.ORBIS_MONTHLY_AI_BUDGET_USD, 0, 0, 1_000_000) : null,
   };
 }
 
@@ -158,8 +158,8 @@ export function integrationStatus(): IntegrationStatus[] {
     {
       id: "engine",
       label: "Orbis engine (Python)",
-      configured: Boolean(clean(process.env.NOVA_ENGINE_SECRET)),
-      envVars: ["NOVA_ENGINE_URL", "NOVA_ENGINE_SECRET"],
+      configured: Boolean(clean(process.env.ORBIS_ENGINE_SECRET)),
+      envVars: ["ORBIS_ENGINE_URL", "ORBIS_ENGINE_SECRET"],
       purpose: "AI Lab workflows, Signal Radar, Workspaces, Community and Integrations",
     },
     {

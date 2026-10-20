@@ -1,7 +1,7 @@
 """SSRF guard for user-supplied URLs (feeds, URL-fetch steps, webhooks).
 
 Resolves the host and rejects loopback, private, link-local, multicast,
-reserved and cloud-metadata addresses. Set NOVA_ALLOW_PRIVATE_FETCH=1 only for
+reserved and cloud-metadata addresses. Set ORBIS_ALLOW_PRIVATE_FETCH=1 only for
 local development (e.g. a feed served from localhost).
 """
 
@@ -22,7 +22,7 @@ def assert_public_url(url: str) -> None:
         raise EngineError("bad_request", "Invalid URL.") from None
     if u.scheme not in ("http", "https") or not u.hostname:
         raise EngineError("bad_request", "Only http(s) URLs are allowed.")
-    if os.environ.get("NOVA_ALLOW_PRIVATE_FETCH") == "1":
+    if os.environ.get("ORBIS_ALLOW_PRIVATE_FETCH") == "1":
         return
     host = u.hostname
     if host == "localhost" or host.endswith((".localhost", ".local", ".internal")):

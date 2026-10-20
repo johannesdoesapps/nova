@@ -14,7 +14,7 @@ from typing import Literal
 Risk = Literal["read", "internal_write", "external_send", "irreversible"]
 
 APPROVAL_KINDS = {
-    "consequential_action": "Sends, posts or changes something outside NOVA AI.",
+    "consequential_action": "Sends, posts or changes something outside ORBIS AI.",
     "irreversible_change": "Cannot be undone.",
     "sensitive_data_sharing": "Shares sensitive data with an external service or model provider.",
     "untrusted_parameters": "Parameters for this action came from untrusted content (web, documents, model output).",
@@ -44,7 +44,7 @@ class ToolSpec:
 TOOLS: dict[str, ToolSpec] = {
     t.id: t
     for t in [
-        ToolSpec("web.search", "Web search", "Search the web via the configured provider (Tavily/Brave). Sends the query to that provider.", "read", True, ("query",), default_granted=True, notes="Query text leaves NOVA AI."),
+        ToolSpec("web.search", "Web search", "Search the web via the configured provider (Tavily/Brave). Sends the query to that provider.", "read", True, ("query",), default_granted=True, notes="Query text leaves ORBIS AI."),
         ToolSpec("http.get", "Fetch URL", "GET a URL on an allow-listed domain and return its text.", "read", True, ("url",), default_granted=True, notes="Only domains listed in the workflow's network permissions."),
         ToolSpec("workspace.search", "Search workspace", "Search items in one of your workspaces.", "read", False, ("workspace_id", "query"), default_granted=True),
         ToolSpec("workspace.create_item", "Save to workspace", "Create a note/document item in a workspace you can edit.", "internal_write", False, ("workspace_id", "title", "body"), default_granted=True),

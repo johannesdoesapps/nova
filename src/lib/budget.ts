@@ -21,7 +21,7 @@ import { serviceSupabase } from "./supabase/admin";
  *   flight: below the premium share any allowed model, then only the
  *   lowest-cost model, and nothing once the budget is used. It resets with the
  *   billing period (calendar month on Free).
- * - Optionally a site-wide monthly cap (NOVA_MONTHLY_AI_BUDGET_USD).
+ * - Optionally a site-wide monthly cap (ORBIS_MONTHLY_AI_BUDGET_USD).
  * Administrators have no budget.
  */
 
@@ -183,7 +183,7 @@ export function checkModelAccess(entitlement: Entitlement | null, requested: Mod
 
 let siteSpendCache: { at: number; month: number; usd: number } | null = null;
 
-/** Refuse new AI requests once the whole site's monthly spend reaches NOVA_MONTHLY_AI_BUDGET_USD (service role; cached a minute). */
+/** Refuse new AI requests once the whole site's monthly spend reaches ORBIS_MONTHLY_AI_BUDGET_USD (service role; cached a minute). */
 export async function checkSiteCap(all: ModelInfo[], now = Date.now()): Promise<void> {
   const cap = serverEnv().monthlyAiBudgetUsd;
   if (cap === null) return;

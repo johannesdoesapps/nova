@@ -16,7 +16,7 @@ from .executor import TERMINAL_RUN, Executor, initial_state
 from .models import WorkflowSpec, WorkflowTestCase
 from .validate import parse_spec, validate
 
-_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="nova-run")
+_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="orbis-run")
 _sync = {"on": False}
 
 

@@ -110,7 +110,7 @@ export function RouterView({ models }: { models: ModelWithStatus[] }) {
         </table>
       </div>
       <p className="mt-3 text-xs text-faint">
-        Context windows come from vendor model cards and should be re-verified (none are marked verified yet). Configure models and verified prices through the <code className="font-mono">model_registry</code> table or the <code className="font-mono">NOVA_MODELS</code> env var. Availability reflects configured credentials, not live provider status.
+        Context windows come from vendor model cards and should be re-verified (none are marked verified yet). Configure models and verified prices through the <code className="font-mono">model_registry</code> table or the <code className="font-mono">ORBIS_MODELS</code> env var. Availability reflects configured credentials, not live provider status.
       </p>
     </div>
   );

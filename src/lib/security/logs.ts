@@ -174,7 +174,7 @@ export function huntThreats(
       asset,
       location: d.ip,
       evidence: d.evidence,
-      evidenceSource: "nova:log-analyzer",
+      evidenceSource: "orbis:log-analyzer",
       remediation: d.remediation,
       references: ["https://attack.mitre.org/techniques/T1110/"].filter(() => d.ruleId.startsWith("auth.")).concat(d.ruleId.startsWith("web.") ? ["https://owasp.org/www-community/attacks/"] : []),
     });

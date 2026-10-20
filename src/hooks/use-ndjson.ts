@@ -62,7 +62,7 @@ export async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> 
 function timeZoneHeader(): Record<string, string> {
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return tz ? { "X-NOVA-Time-Zone": tz } : {};
+    return tz ? { "X-ORBIS-Time-Zone": tz } : {};
   } catch {
     return {};
   }

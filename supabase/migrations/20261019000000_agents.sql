@@ -1,4 +1,4 @@
--- NOVA AI — custom agents
+-- ORBIS AI — custom agents
 -- Built-in agents live in code (src/lib/agents/builtins.ts) and are referenced
 -- by key. Custom agents are rows owned by one user. A conversation belongs to
 -- at most one agent; ordinary chats have neither column set.

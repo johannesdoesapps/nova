@@ -30,7 +30,7 @@ export interface CompareResult {
 /**
  * POST /api/compare — run one prompt against several models in parallel.
  * Each model fails independently. The number of models is capped by
- * NOVA_MAX_COMPARE_MODELS, and each model counts against the user's quota.
+ * ORBIS_MAX_COMPARE_MODELS, and each model counts against the user's quota.
  */
 export async function POST(req: Request) {
   try {

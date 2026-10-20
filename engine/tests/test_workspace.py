@@ -1,13 +1,13 @@
 import pytest
 
-from nova_engine.auth import Identity
-from nova_engine.connectors import service as conn
-from nova_engine.db import connections, sync_conflicts, workspace_items
-from nova_engine.errors import EngineError
-from nova_engine.lab import service as lab
-from nova_engine.lab.templates import template_spec
-from nova_engine.workspace import community, portability, service as ws
-from nova_engine.workspace.permissions import can, can_assign
+from orbis_engine.auth import Identity
+from orbis_engine.connectors import service as conn
+from orbis_engine.db import connections, sync_conflicts, workspace_items
+from orbis_engine.errors import EngineError
+from orbis_engine.lab import service as lab
+from orbis_engine.lab.templates import template_spec
+from orbis_engine.workspace import community, portability, service as ws
+from orbis_engine.workspace.permissions import can, can_assign
 
 
 def test_permission_matrix():

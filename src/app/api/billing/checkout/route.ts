@@ -27,7 +27,7 @@ export async function POST(req: Request) {
       ...(customer ? { customer } : { customer_email: user.email ?? undefined }),
       client_reference_id: user.id,
       metadata: { user_id: user.id },
-      subscription_data: { metadata: { user_id: user.id, nova_plan: plan } },
+      subscription_data: { metadata: { user_id: user.id, orbis_plan: plan } },
       allow_promotion_codes: true,
       success_url: `${site}/chat?upgraded=${plan}`,
       cancel_url: `${site}/pricing`,

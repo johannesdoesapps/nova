@@ -3,11 +3,11 @@
 The engine never sees passwords or Supabase sessions. The Next.js tier
 authenticates the user, then calls the engine with
 
-    X-Nova-Identity: <base64url(json)>.<hex hmac-sha256(json, NOVA_ENGINE_SECRET)>
+    X-Orbis-Identity: <base64url(json)>.<hex hmac-sha256(json, ORBIS_ENGINE_SECRET)>
 
 where json = {"sub": "<user id or guest:<uuid>>", "email": ..., "name": ..., "exp": <unix seconds>}.
-Tokens live for at most 5 minutes. Without NOVA_ENGINE_SECRET the engine
-refuses every request unless NOVA_ENGINE_DEV_INSECURE=1 (local development only).
+Tokens live for at most 5 minutes. Without ORBIS_ENGINE_SECRET the engine
+refuses every request unless ORBIS_ENGINE_DEV_INSECURE=1 (local development only).
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ def verify_identity(header: str | None) -> Identity:
             # Development only: accept "dev:<sub>" without a signature.
             if header.startswith("dev:"):
                 return Identity(sub=header[4:][:120] or "dev-user")
-        raise EngineError("not_configured", "NOVA_ENGINE_SECRET is not set; the engine refuses unauthenticated calls.")
+        raise EngineError("not_configured", "ORBIS_ENGINE_SECRET is not set; the engine refuses unauthenticated calls.")
     if not header or "." not in header:
         raise EngineError("unauthorized", "Missing identity.")
     b64, mac = header.rsplit(".", 1)

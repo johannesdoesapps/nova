@@ -12,10 +12,10 @@ const enforce = vi.fn();
 vi.mock("@/lib/usage", async (orig) => ({ ...(await orig<typeof import("@/lib/usage")>()), enforceLimits: (...a: unknown[]) => enforce(...a) }));
 
 const post = (path: string, body: unknown, tz = "Europe/Zurich") =>
-  new Request(`http://localhost${path}`, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": "10.8.0.1", "x-nova-time-zone": tz }, body: JSON.stringify(body) });
+  new Request(`http://localhost${path}`, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": "10.8.0.1", "x-orbis-time-zone": tz }, body: JSON.stringify(body) });
 
 beforeAll(() => {
-  for (const k of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "NOVA_MODELS"]) delete process.env[k];
+  for (const k of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "ORBIS_MODELS"]) delete process.env[k];
 });
 afterEach(() => {
   enforce.mockReset();

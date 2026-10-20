@@ -28,11 +28,11 @@ export function stripeClient(): Stripe | null {
 export type PaidPlan = "pro" | "max";
 
 /** Identifies an Orbis price in Stripe; includes the amount, so a price change creates a new price. */
-export const priceLookupKey = (plan: PaidPlan, interval: BillingInterval, cents: number) => `nova_${plan}_${interval}_usd_${cents}`;
+export const priceLookupKey = (plan: PaidPlan, interval: BillingInterval, cents: number) => `orbis_${plan}_${interval}_usd_${cents}`;
 
 /** Parse a lookup key back into plan and interval. */
 export function parseLookupKey(key: string | null | undefined): { plan: PaidPlan; interval: BillingInterval } | null {
-  const m = key?.match(/^nova_(pro|max)_(month|year)_usd_\d+$/);
+  const m = key?.match(/^orbis_(pro|max)_(month|year)_usd_\d+$/);
   return m ? { plan: m[1] as PaidPlan, interval: m[2] as BillingInterval } : null;
 }
 
@@ -49,7 +49,7 @@ export async function planPriceId(stripe: Stripe, billing: BillingSettings, plan
     unit_amount: cents,
     recurring: { interval },
     lookup_key: key,
-    metadata: { nova_plan: plan, nova_interval: interval },
+    metadata: { orbis_plan: plan, orbis_interval: interval },
     product_data: { name: `Orbis ${p.label}` },
   });
   return price.id;
@@ -93,7 +93,7 @@ export function subscriptionRow(sub: Stripe.Subscription, userId: string): Subsc
   const item = sub.items?.data?.[0];
   const price = item?.price;
   const parsed = parseLookupKey(price?.lookup_key);
-  const metaPlan = (price?.metadata?.nova_plan ?? sub.metadata?.nova_plan) as string | undefined;
+  const metaPlan = (price?.metadata?.orbis_plan ?? sub.metadata?.orbis_plan) as string | undefined;
   const plan: PaidPlan = parsed?.plan ?? (metaPlan === "max" ? "max" : "pro");
   const interval: BillingInterval = parsed?.interval ?? (price?.recurring?.interval === "year" ? "year" : "month");
   return {
@@ -160,7 +160,7 @@ export function invoiceLedger(invoice: Stripe.Invoice, kind: "payment" | "failed
   if ((invoice.currency ?? "usd").toLowerCase() !== "usd") return null;
   const tax = (invoice.total_taxes ?? []).reduce((t, x) => t + (x.amount ?? 0), 0) / 100;
   const meta = invoice.parent?.subscription_details?.metadata ?? {};
-  const plan = (meta.nova_plan as string | undefined) ?? null;
+  const plan = (meta.orbis_plan as string | undefined) ?? null;
   if (kind === "payment") {
     if (!invoice.amount_paid) return null;
     return { stripe_object_id: invoice.id!, user_id: userId ?? (meta.user_id as string | undefined) ?? null, kind, plan, amount_usd: Math.round((invoice.amount_paid / 100 - tax) * 100) / 100, tax_usd: tax, occurred_at: new Date((invoice.status_transitions?.paid_at ?? invoice.created) * 1000).toISOString() };

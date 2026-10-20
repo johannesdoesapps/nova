@@ -48,7 +48,7 @@ class Settings:
 
 
 def _model_prices(raw: str | None) -> dict[str, tuple[float, float]]:
-    """NOVA_MODEL_PRICES='{"openai:gpt-5-mini":[0.25,2.0]}' — USD per 1M input/output tokens, operator-verified."""
+    """ORBIS_MODEL_PRICES='{"openai:gpt-5-mini":[0.25,2.0]}' — USD per 1M input/output tokens, operator-verified."""
     if not raw:
         return {}
     try:
@@ -59,7 +59,7 @@ def _model_prices(raw: str | None) -> dict[str, tuple[float, float]]:
 
 
 def _token_keys(raw: str | None) -> tuple[dict[str, str], str | None]:
-    """NOVA_TOKEN_KEYS='k2:<base64 32 bytes>,k1:<base64>' — first key encrypts, all keys decrypt (rotation)."""
+    """ORBIS_TOKEN_KEYS='k2:<base64 32 bytes>,k1:<base64>' — first key encrypts, all keys decrypt (rotation)."""
     if not raw:
         return {}, None
     keys: dict[str, str] = {}
@@ -75,10 +75,10 @@ def _token_keys(raw: str | None) -> tuple[dict[str, str], str | None]:
 
 @lru_cache
 def settings() -> Settings:
-    keys, active = _token_keys(_clean("NOVA_TOKEN_KEYS"))
+    keys, active = _token_keys(_clean("ORBIS_TOKEN_KEYS"))
     return Settings(
-        database_url=_clean("NOVA_ENGINE_DATABASE_URL") or "sqlite:///./nova_engine.db",
-        engine_secret=_clean("NOVA_ENGINE_SECRET"),
+        database_url=_clean("ORBIS_ENGINE_DATABASE_URL") or "sqlite:///./orbis_engine.db",
+        engine_secret=_clean("ORBIS_ENGINE_SECRET"),
         token_keys=keys,
         active_token_key=active,
         openai_key=_clean("OPENAI_API_KEY"),
@@ -86,13 +86,13 @@ def settings() -> Settings:
         huggingface_key=_clean("HUGGINGFACE_API_KEY"),
         search_provider=(_clean("SEARCH_PROVIDER") or "tavily").lower(),
         search_key=_clean("SEARCH_API_KEY"),
-        model_prices=_model_prices(_clean("NOVA_MODEL_PRICES")),
+        model_prices=_model_prices(_clean("ORBIS_MODEL_PRICES")),
         public_base_url=(_clean("NEXT_PUBLIC_SITE_URL") or "http://localhost:3000").rstrip("/"),
         github_client_id=_clean("GITHUB_CLIENT_ID"),
         github_client_secret=_clean("GITHUB_CLIENT_SECRET"),
         google_client_id=_clean("GOOGLE_CLIENT_ID"),
         google_client_secret=_clean("GOOGLE_CLIENT_SECRET"),
         smtp_configured=bool(_clean("SMTP_URL")),
-        radar_item_retention_days=_int("NOVA_RADAR_RETENTION_DAYS", 90, 1, 3650),
-        dev_insecure_identity=os.environ.get("NOVA_ENGINE_DEV_INSECURE") == "1",
+        radar_item_retention_days=_int("ORBIS_RADAR_RETENTION_DAYS", 90, 1, 3650),
+        dev_insecure_identity=os.environ.get("ORBIS_ENGINE_DEV_INSECURE") == "1",
     )

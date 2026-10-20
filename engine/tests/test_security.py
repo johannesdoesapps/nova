@@ -2,11 +2,11 @@ import time
 
 import pytest
 
-from nova_engine.auth import sign_identity, verify_identity
-from nova_engine.errors import EngineError
-from nova_engine.lab.tools_impl import domain_allowed
-from nova_engine.security.content import detect_sensitive, neutralize, scan_injection, wrap_untrusted
-from nova_engine.security.crypto import decrypt_json, encrypt_json
+from orbis_engine.auth import sign_identity, verify_identity
+from orbis_engine.errors import EngineError
+from orbis_engine.lab.tools_impl import domain_allowed
+from orbis_engine.security.content import detect_sensitive, neutralize, scan_injection, wrap_untrusted
+from orbis_engine.security.crypto import decrypt_json, encrypt_json
 
 SECRET = "test-secret-please-change"
 
@@ -69,11 +69,11 @@ def test_ssrf_guard():
 
 
 def test_netguard_blocks_internal_addresses(monkeypatch):
-    from nova_engine.security.netguard import assert_public_url
+    from orbis_engine.security.netguard import assert_public_url
 
-    monkeypatch.delenv("NOVA_ALLOW_PRIVATE_FETCH", raising=False)
+    monkeypatch.delenv("ORBIS_ALLOW_PRIVATE_FETCH", raising=False)
     for bad in ("http://localhost:8080/x", "http://127.0.0.1/", "http://10.0.0.5/feed", "http://169.254.169.254/latest/meta-data", "ftp://example.com"):
         with pytest.raises(EngineError):
             assert_public_url(bad)
-    monkeypatch.setenv("NOVA_ALLOW_PRIVATE_FETCH", "1")
+    monkeypatch.setenv("ORBIS_ALLOW_PRIVATE_FETCH", "1")
     assert_public_url("http://127.0.0.1/feed.xml") is None

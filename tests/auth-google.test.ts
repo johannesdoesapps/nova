@@ -12,14 +12,14 @@ vi.mock("@/lib/supabase/server", () => ({ createServerSupabase: async () => ({ a
 vi.mock("@/lib/env", async (orig) => ({
   ...(await orig<typeof import("@/lib/env")>()),
   isSupabaseConfigured: () => configured,
-  publicEnv: { supabaseUrl: "https://sb.example.co", supabaseKey: "pk_test", siteUrl: "https://nova.example" },
+  publicEnv: { supabaseUrl: "https://sb.example.co", supabaseKey: "pk_test", siteUrl: "https://orbis.example" },
 }));
 
 const { GET } = await import("@/app/auth/callback/route");
 const { authProviders } = await import("@/lib/auth-providers");
 
 async function callback(query: string) {
-  const res = await GET(new Request(`https://nova.example/auth/callback?${query}`));
+  const res = await GET(new Request(`https://orbis.example/auth/callback?${query}`));
   const loc = new URL(res.headers.get("location")!);
   return { status: res.status, path: loc.pathname, origin: loc.origin, params: Object.fromEntries(loc.searchParams) };
 }
@@ -33,11 +33,11 @@ describe("redirect safety", () => {
   });
 
   it("sends Google back to Orbis's callback with only a safe next path", () => {
-    const u = new URL(oauthRedirectTo("https://nova.example", "/workforce"));
-    expect(u.origin + u.pathname).toBe("https://nova.example/auth/callback");
+    const u = new URL(oauthRedirectTo("https://orbis.example", "/workforce"));
+    expect(u.origin + u.pathname).toBe("https://orbis.example/auth/callback");
     expect(u.searchParams.get("via")).toBe("google");
     expect(u.searchParams.get("next")).toBe("/workforce");
-    expect(new URL(oauthRedirectTo("https://nova.example", "//evil.example")).searchParams.has("next")).toBe(false);
+    expect(new URL(oauthRedirectTo("https://orbis.example", "//evil.example")).searchParams.has("next")).toBe(false);
   });
 });
 
@@ -52,14 +52,14 @@ describe("OAuth callback", () => {
     const r = await callback("code=abc&via=google&next=%2Fworkforce&sb_flow_id=f1");
     expect(exchange).toHaveBeenCalledWith("abc", { flowId: "f1" });
     expect(r.status).toBe(307);
-    expect(r.origin + r.path).toBe("https://nova.example/workforce");
+    expect(r.origin + r.path).toBe("https://orbis.example/workforce");
   });
 
   it("never redirects off-site after sign-in", async () => {
     exchange.mockResolvedValue({ error: null });
     for (const next of ["https://evil.example", "%2F%2Fevil.example", "%2F%5Cevil.example"]) {
       const r = await callback(`code=abc&via=google&next=${next}`);
-      expect(r.origin + r.path).toBe("https://nova.example/chat");
+      expect(r.origin + r.path).toBe("https://orbis.example/chat");
     }
   });
 

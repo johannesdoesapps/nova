@@ -268,7 +268,7 @@ function editContext(ctx: ExecContext) {
 
 async function applyAndCheckpoint(ctx: ExecContext, files: Map<string, string>, label: string, baseSha: string) {
   for (const [p, c] of files) await ctx.ws.writeFile(p, c);
-  const cp = await ctx.ws.checkpoint(`nova: ${label}`);
+  const cp = await ctx.ws.checkpoint(`orbis: ${label}`);
   const d = await ctx.ws.diff(baseSha);
   await ctx.log("workspace.changed", `${label}: ${files.size} file(s) written${cp ? `, checkpoint ${cp.slice(0, 10)}` : ""}`, { files: [...files.keys()], checkpoint: cp });
   return { checkpoint: cp, diff: d.diff, changed: d.files };

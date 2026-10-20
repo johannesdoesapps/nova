@@ -6,7 +6,7 @@ import { recordRunLater } from "../usage";
 import { estimateTokens, type ModelRunner, type ResolvedModel } from "./models";
 
 /** Production model access: Orbis's provider registry, Auto routing and usage records. */
-export function novaModelRunner(auth: AuthContext): ModelRunner {
+export function orbisModelRunner(auth: AuthContext): ModelRunner {
   const cache = new Map<string, Awaited<ReturnType<typeof resolveModelChoice>>["model"]>();
   return {
     async resolve(choice: string, prompt: string): Promise<ResolvedModel> {

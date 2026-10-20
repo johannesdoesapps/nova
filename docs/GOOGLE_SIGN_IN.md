@@ -70,7 +70,7 @@ Manual linking ("Connect Google" from settings while signed in) needs
 1. https://console.cloud.google.com → create or pick a project (e.g. "Orbis").
 2. **Google Auth Platform → Branding** (older consoles: *APIs & Services → OAuth
    consent screen*): app name "Orbis", support email, logo optional,
-   homepage `https://nova-supabase.vercel.app`, Audience: **External**. Add
+   homepage `https://tryorbis.app`, Audience: **External**. Add
    `supabase.co` under authorized domains if the console asks for it (Google
    checks the redirect URI's domain). Note: Google's screen will say you are
    continuing to `vbsdxadumiogbdwgvrir.supabase.co`, because Supabase handles the
@@ -80,7 +80,7 @@ Manual linking ("Connect Google" from settings while signed in) needs
 4. **Audience:** while the app is in *Testing*, only listed test users can sign in
    (max 100). Click **Publish app** to let anyone sign in.
 5. **Clients → Create client → Web application**, name "Orbis (Supabase)":
-   - **Authorized JavaScript origins:** `https://nova-supabase.vercel.app`
+   - **Authorized JavaScript origins:** `https://tryorbis.app`
      (add `http://localhost:3000` for local development)
    - **Authorized redirect URIs:**
      `https://vbsdxadumiogbdwgvrir.supabase.co/auth/v1/callback`
@@ -94,8 +94,8 @@ Manual linking ("Connect Google" from settings while signed in) needs
    and Client secret, save. The secret is stored by Supabase only — it is never
    in Orbis's code, Vercel variables or the browser.
 2. **Authentication → URL Configuration:**
-   - Site URL: `https://nova-supabase.vercel.app`
-   - Redirect URLs: `https://nova-supabase.vercel.app/**` (and
+   - Site URL: `https://tryorbis.app`
+   - Redirect URLs: `https://tryorbis.app/**` (and
      `http://localhost:3000/**` for local development)
 3. Recommended: turn **Confirm email** back on (see above).
 

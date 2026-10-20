@@ -19,7 +19,7 @@ export async function GET(req: Request) {
     const runnable = registry.find((m) => m.provider === "huggingface" && m.providerModelId === id) ?? null;
     return NextResponse.json({
       model: detail,
-      nova: runnable
+      orbis: runnable
         ? { runnable: runnable.available, registryId: runnable.id, reason: runnable.available ? null : runnable.unavailableReason }
         : { runnable: false, registryId: null, reason: "This model is not in Orbis's model registry, so it cannot be run here yet." },
     });

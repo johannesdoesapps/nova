@@ -5,7 +5,7 @@ Orbis talks to several AI providers through one server-side layer. Browsers neve
 | Piece | Where | What it does |
 | --- | --- | --- |
 | Provider registry | `src/lib/ai/index.ts`, `providers/*` | Anthropic (official SDK); OpenAI, Google Gemini, xAI Grok, DeepSeek and Hugging Face (OpenAI-compatible); demo |
-| Model registry | `src/lib/ai/registry.ts` + Admin | Default models, plus admin-added models stored in `app_settings`; `model_registry` table or `NOVA_MODELS` env override the defaults |
+| Model registry | `src/lib/ai/registry.ts` + Admin | Default models, plus admin-added models stored in `app_settings`; `model_registry` table or `ORBIS_MODELS` env override the defaults |
 | Platform settings | `src/lib/ai/platform.ts`, `app_settings` table | Enabled models, default model, Auto on/off, fallback on/off, usage units per model |
 | Model router | `src/lib/ai/router.ts` | Auto mode: classifies the message (everyday, summary, writing, analysis, coding, long document) with published rules and picks an available model with the needed capabilities |
 | Agent service | `src/lib/agents/*` | Agent instructions, tools, response style and memory; agents keep a capability preference, not a model name |
@@ -15,7 +15,7 @@ Orbis talks to several AI providers through one server-side layer. Browsers neve
 
 ## Default model and Auto mode
 
-**Everyone starts on Auto, and Auto uses the lowest-cost available model.** It is compared on the current prices in the registry (`DEFAULT_MODELS`, the `model_registry` table, `NOVA_MODELS` or admin-added models), so a price change or a newly connected provider changes the default automatically.
+**Everyone starts on Auto, and Auto uses the lowest-cost available model.** It is compared on the current prices in the registry (`DEFAULT_MODELS`, the `model_registry` table, `ORBIS_MODELS` or admin-added models), so a price change or a newly connected provider changes the default automatically.
 
 - **Ranking:** the expected price of a typical message, (3 × input + output) ÷ 4 per 1M tokens, because chats resend their history. Models with an unverified price rank after priced ones and are never assumed to be cheap.
 - **Requirements always win:** Auto only considers configured models with the capabilities the request needs. If the prompt is too long for the cheapest model's context window, it picks the cheapest model that fits.

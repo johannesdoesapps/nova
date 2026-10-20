@@ -46,7 +46,7 @@ GitHub's own error text is never shown to users, because it can name private rep
 
 1. In GitHub, go to **Settings → Developer settings → OAuth Apps → New OAuth App**.
    - **Application name:** Orbis
-   - **Homepage URL:** `https://nova-supabase.vercel.app`
+   - **Homepage URL:** `https://tryorbis.app`
    - **Authorization callback URL:** the one Supabase shows in **Authentication → Sign In / Providers → GitHub**. It looks like `https://<project-ref>.supabase.co/auth/v1/callback`.
 2. Create it. Copy the **Client ID**, then **Generate a new client secret** and copy it.
 3. In Supabase, go to **Authentication → Sign In / Providers → GitHub**. Turn it on, paste the Client ID and secret, and save.
@@ -58,8 +58,8 @@ The sign-in button appears within about a minute; no redeploy is needed.
 
 1. In GitHub, go to **Settings → Developer settings → GitHub Apps → New GitHub App**.
    - **GitHub App name:** something unique, e.g. `Orbis AI johannes`. The web address of the app ("slug") comes from this name.
-   - **Homepage URL:** `https://nova-supabase.vercel.app`
-   - **Setup URL:** `https://nova-supabase.vercel.app/chat`. Tick **Redirect on update**.
+   - **Homepage URL:** `https://tryorbis.app`
+   - **Setup URL:** `https://tryorbis.app/chat`. Tick **Redirect on update**.
    - **Webhook:** untick **Active**.
    - **Repository permissions → Contents:** Read-only. Metadata stays Read-only automatically. Leave everything else at No access.
    - **Where can this GitHub App be installed?** Any account.

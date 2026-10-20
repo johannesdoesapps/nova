@@ -15,7 +15,7 @@ API = "https://api.github.com"
 
 
 def _headers(token: str | None) -> dict[str, str]:
-    h = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "NOVA-AI"}
+    h = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "ORBIS-AI"}
     if token:
         h["Authorization"] = f"Bearer {token}"
     return h

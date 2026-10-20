@@ -14,7 +14,7 @@ from ..errors import EngineError
 from ..security.content import scan_injection
 from .service import ITEM_TYPES, MAX_ITEM_BYTES, create_item, create_workspace, require, upsert_collection
 
-FORMAT = "nova-workspace"
+FORMAT = "orbis-workspace"
 FORMAT_VERSION = 1
 MAX_BUNDLE_BYTES = 10_000_000
 MAX_ITEMS = 5000
@@ -53,7 +53,7 @@ def export_workspace(db: Database, ident: Identity, wid: str, *, include_history
 
 def import_bundle(db: Database, ident: Identity, bundle: Any, *, dry_run: bool = True, workspace_id: str | None = None) -> dict[str, Any]:
     if not isinstance(bundle, dict):
-        raise EngineError("bad_request", "Not a NOVA workspace bundle.")
+        raise EngineError("bad_request", "Not an ORBIS workspace bundle.")
     if len(json.dumps(bundle, default=str)) > MAX_BUNDLE_BYTES:
         raise EngineError("payload_too_large", "Bundle is larger than 10 MB.")
     if bundle.get("format") != FORMAT or bundle.get("format_version") != FORMAT_VERSION:

@@ -2,10 +2,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from nova_engine.db import radar_alerts, radar_items
-from nova_engine.errors import EngineError
-from nova_engine.radar import analyze, service as radar, sources
-from nova_engine.radar.text import canonical_url, hamming, simhash
+from orbis_engine.db import radar_alerts, radar_items
+from orbis_engine.errors import EngineError
+from orbis_engine.radar import analyze, service as radar, sources
+from orbis_engine.radar.text import canonical_url, hamming, simhash
 
 NOW = "2026-10-18T09:00:00Z"
 
@@ -135,7 +135,7 @@ def test_digest_cites_items_and_reports_freshness(db, alice, fake_fetch):
 def test_worker_status_is_honest(db):
     st = radar.worker_status(db)
     assert st["scheduler_running"] is False and "NOT running" in st["statement"]
-    from nova_engine import worker
+    from orbis_engine import worker
 
     worker.run_once(db)
     assert radar.worker_status(db)["scheduler_running"] is True

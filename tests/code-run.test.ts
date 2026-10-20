@@ -55,13 +55,13 @@ describe("languages", () => {
 
 describe("runner script (local bash standing in for the VM)", () => {
   beforeAll(() => {
-    dir = mkdtempSync(join(tmpdir(), "nova-run-"));
+    dir = mkdtempSync(join(tmpdir(), "orbis-run-"));
   });
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
   it("runs Python and returns its output and exit code, then stops the VM", async () => {
-    const r = await run("python", "print('hello from', 'nova')\nprint(2 + 3)");
-    expect(r).toMatchObject({ language: "python", stdout: "hello from nova\n5\n", stderr: "", exitCode: 0, timedOut: false, truncated: false });
+    const r = await run("python", "print('hello from', 'orbis')\nprint(2 + 3)");
+    expect(r).toMatchObject({ language: "python", stdout: "hello from orbis\n5\n", stderr: "", exitCode: 0, timedOut: false, truncated: false });
     expect(stopped).toContain(dir);
   });
 

@@ -1,7 +1,7 @@
 [project]
-name = "nova-engine"
+name = "orbis-engine"
 version = "0.1.0"
-description = "NOVA AI engine: AI Lab workflows, Signal Radar, workspaces and connectors"
+description = "ORBIS AI engine: AI Lab workflows, Signal Radar, workspaces and connectors"
 requires-python = ">=3.11"
 
 [tool.pytest.ini_options]

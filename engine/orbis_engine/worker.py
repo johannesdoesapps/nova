@@ -3,8 +3,8 @@
 Runs scheduled Radar checks, scheduled workflows, digest generation,
 retention clean-up, and crash recovery for workflow runs.
 
-    python -m nova_engine.worker            # loop (long-running process, e.g. a Fly.io/Render worker)
-    python -m nova_engine.worker --once     # one pass (cron: GitHub Actions, Vercel Cron → HTTP, systemd timer)
+    python -m orbis_engine.worker            # loop (long-running process, e.g. a Fly.io/Render worker)
+    python -m orbis_engine.worker --once     # one pass (cron: GitHub Actions, Vercel Cron → HTTP, systemd timer)
 
 There is no hidden always-on monitor: if this process isn't running, nothing
 is checked on a schedule, and the UI says so (see radar.service.worker_status).
@@ -24,7 +24,7 @@ from .lab import service as lab
 from .lab.executor import TERMINAL_RUN
 from .radar import service as radar
 
-log = logging.getLogger("nova.worker")
+log = logging.getLogger("orbis.worker")
 STALE_RUN_S = 180
 SCHEDULE = {"hourly": timedelta(hours=1), "daily": timedelta(days=1), "weekly": timedelta(days=7)}
 

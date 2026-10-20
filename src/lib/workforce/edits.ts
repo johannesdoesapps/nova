@@ -102,7 +102,7 @@ export function pathsInOutput(output: string, known: Set<string>): string[] {
 
 /** Keywords from free text for code search. */
 export function keywords(text: string, max = 8): string[] {
-  const stop = new Set("this that with from into when then than have will should would could there their which while where what about after before other these those page pages file files code make makes added adding update updates change changes using user users nova test tests".split(" "));
+  const stop = new Set("this that with from into when then than have will should would could there their which while where what about after before other these those page pages file files code make makes added adding update updates change changes using user users orbis test tests".split(" "));
   const ids = [...text.matchAll(/`([^`]{3,60})`/g)].map((m) => m[1]!);
   const words = (text.match(/[A-Za-z_][A-Za-z0-9_.-]{3,40}/g) ?? []).filter((w) => !stop.has(w.toLowerCase()));
   const freq = new Map<string, number>();

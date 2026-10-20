@@ -17,7 +17,7 @@ export function Markdown({
   text,
   onCitation,
   validCitations,
-  className = "nova-prose text-[15px]",
+  className = "orbis-prose text-[15px]",
   runnable = false,
 }: {
   text: string;
@@ -37,8 +37,8 @@ export function Markdown({
             return runnable && codeLanguage(b.lang) && b.text.trim() ? (
               <RunnableCode key={i} lang={b.lang} text={b.text} />
             ) : (
-              <div key={i} className="nova-code">
-                <div className="nova-code-head">
+              <div key={i} className="orbis-code">
+                <div className="orbis-code-head">
                   <span>{b.lang || "code"}</span>
                   <CodeCopy text={b.text} />
                 </div>
@@ -197,8 +197,8 @@ function inline(s: string, onCitation?: (n: number) => void, valid?: Set<number>
 function RunnableCode({ lang, text }: { lang: string; text: string }) {
   const { state, run, stop } = useCodeRun(lang, text);
   return (
-    <div className="nova-code">
-      <div className="nova-code-head">
+    <div className="orbis-code">
+      <div className="orbis-code-head">
         <span>{lang}</span>
         <span className="flex items-center gap-1">
           <RunButton running={state.status === "running"} onRun={run} onStop={stop} />

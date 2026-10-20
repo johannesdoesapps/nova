@@ -101,7 +101,7 @@ describe("Auto routing", () => {
 describe("explicit model choice", () => {
   const saved = { ...process.env };
   beforeAll(() => {
-    for (const k of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "NOVA_MODELS"]) delete process.env[k];
+    for (const k of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "ORBIS_MODELS"]) delete process.env[k];
     process.env.ANTHROPIC_API_KEY = "test-key";
   });
   afterAll(() => {

@@ -4,7 +4,7 @@ from conftest import headers
 def test_health_and_auth(client):
     assert client.get("/health").json()["ok"]
     assert client.get("/lab/workflows").status_code == 401
-    r = client.get("/lab/workflows", headers={"X-Nova-Identity": "garbage.sig"})
+    r = client.get("/lab/workflows", headers={"X-Orbis-Identity": "garbage.sig"})
     assert r.status_code == 401 and r.json()["error"]["code"] == "unauthorized"
 
 

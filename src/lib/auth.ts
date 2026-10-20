@@ -42,7 +42,7 @@ export async function getAuth(): Promise<AuthContext> {
  * For AI routes: with Supabase configured, a signed-in user is required (so
  * usage can be attributed and limited). Without Supabase, guests are allowed —
  * except in production with a paid provider key, where anonymous use of the
- * owner's key must be enabled explicitly (NOVA_ALLOW_GUEST_AI=1).
+ * owner's key must be enabled explicitly (ORBIS_ALLOW_GUEST_AI=1).
  */
 export async function requireUserIfConfigured(): Promise<AuthContext> {
   const env = serverEnv();

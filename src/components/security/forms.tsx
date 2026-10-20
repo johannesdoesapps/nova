@@ -13,7 +13,7 @@ export interface Target {
   verified_method: string | null;
 }
 
-export const VERIFY_PATH = "/.well-known/nova-security-verification.txt";
+export const VERIFY_PATH = "/.well-known/orbis-security-verification.txt";
 const MAX_TOTAL = 3_000_000;
 const SKIP = /(^|\/)(node_modules|\.git|dist|build|\.next|out|vendor|coverage|__pycache__|\.venv|venv)\//;
 const CODE_EXT = /\.(js|jsx|ts|tsx|mjs|cjs|vue|svelte|py|php|rb|go|java|cs|json|ya?ml|toml|env|ini|cfg|conf|properties|sh|tf|xml|html?|sql|txt|lock)$|(^|\/)\.env(\.|$)|Dockerfile$/i;
@@ -133,7 +133,7 @@ export function SentinelForm({ value, onChange, targets, onTargetsChanged }: { v
               Publish a file at <code className="rounded bg-s-hover px-1">https://{selected.hostname}{VERIFY_PATH}</code> containing the token, or
             </li>
             <li>
-              Add a DNS TXT record on <code className="rounded bg-s-hover px-1">_nova-verify.{selected.hostname}</code> with the token.
+              Add a DNS TXT record on <code className="rounded bg-s-hover px-1">_orbis-verify.{selected.hostname}</code> with the token.
             </li>
           </ol>
           <div className="mt-3 flex items-center gap-2">
@@ -326,7 +326,7 @@ export function GuardianForm({ value, onChange }: { value: GuardianValue; onChan
           <label htmlFor="guardian-asset" className={labelCls}>
             Project name
           </label>
-          <input id="guardian-asset" value={value.asset} onChange={(e) => onChange({ ...value, asset: e.target.value })} placeholder="e.g. nova-ai" className={inputCls} />
+          <input id="guardian-asset" value={value.asset} onChange={(e) => onChange({ ...value, asset: e.target.value })} placeholder="e.g. orbis-ai" className={inputCls} />
           <p className="mt-1.5 text-[12.5px] text-s-ink-3">Use the same name for later audits so Orbis can tell which findings were fixed.</p>
         </div>
       )}

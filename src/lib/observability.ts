@@ -4,5 +4,5 @@
  */
 export function reportError(err: unknown, context?: Record<string, unknown>): void {
   // Never log request bodies or secrets here — only the error and safe context.
-  console.error("[nova]", err instanceof Error ? err.stack ?? err.message : err, context ?? "");
+  console.error("[orbis]", err instanceof Error ? err.stack ?? err.message : err, context ?? "");
 }

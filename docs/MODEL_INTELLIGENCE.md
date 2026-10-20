@@ -66,7 +66,7 @@ Tables (RLS on all of them):
 2. Answers are released **together**, so speed cannot reveal which model is which. Latency is shown only after the vote.
 3. **Self-identification is redacted** ("As ChatGPT…", "I'm Claude…", vendor and model-family names) and replaced with `[model identity hidden]`. The count is shown.
 4. A/B order is randomised with a **CSPRNG** (`crypto.getRandomValues`).
-5. The identity mapping travels in an **AES-256-GCM sealed token** (encrypted, authenticated, 24-hour expiry, bound to the user). The browser never sees which model is A until the vote is submitted. `NOVA_TRIAL_SECRET` keeps tokens valid across restarts.
+5. The identity mapping travels in an **AES-256-GCM sealed token** (encrypted, authenticated, 24-hour expiry, bound to the user). The browser never sees which model is A until the vote is submitted. `ORBIS_TRIAL_SECRET` keeps tokens valid across restarts.
 6. *Random pair* mode is the most blind. *Choose two* reveals the pair but not the order.
 7. If one arm fails, the trial is **voided**: it is revealed and not recorded, because a one-sided trial measures nothing.
 8. Simulated (demo) arms are labelled before the vote and in history.
@@ -127,7 +127,7 @@ Rankings are only used for ordering. Decisions always come from pairwise interva
 
 ## 9. Privacy considerations
 
-- **Data-handling profiles default to "Not verified".** Provider policies change and depend on account tier and contract, so Orbis does not ship claims about them. Operators record confirmed facts with source URL and date in `NOVA_PRIVACY_PROFILES`, and the router can require them.
+- **Data-handling profiles default to "Not verified".** Provider policies change and depend on account tier and contract, so Orbis does not ship claims about them. Operators record confirmed facts with source URL and date in `ORBIS_PRIVACY_PROFILES`, and the router can require them.
 - Trial and benchmark records (which include prompts) are private to the user via RLS and can be deleted individually or exported.
 - Prompts are hashed (`promptHash`) so identical prompts can be compared without exposing text in aggregates.
 - Guests' evaluation data stays in their browser. The routing planner receives it only when it is used, and it is not stored.
@@ -139,7 +139,7 @@ Rankings are only used for ordering. Decisions always come from pairwise interva
 |---|---|---|
 | Model lists | On demand from provider APIs: OpenAI-compatible `GET {OPENAI_BASE_URL}/models`, Hugging Face `GET https://router.huggingface.co/v1/models`. | Diffed against the registry: missing → *renamed/retired?*, new → *available, not in registry*. |
 | Served versions | The `model` field in every chat-completion response (streaming and non-streaming). | Observed, not configured. Changes trigger version partitioning and drift checks. |
-| Prices | **Entered by the operator**, never scraped: the `model_registry` table (`input_price`, `output_price`, `price_source_url`, `last_verified_at`) or `NOVA_MODELS`. Hugging Face's router lists per-host prices; these are **shown for comparison only** and must be copied in with a source to take effect. | `validatePrice` flags: missing price; outside the $0.001–$500 per 1M sanity range (likely per-1K vs per-1M unit typos); output cheaper than input; no source URL; no verification date; **stale after 45 days**. `priceChangeNeedsReview` flags changes over 50%. `model_price_history` logs every change. |
+| Prices | **Entered by the operator**, never scraped: the `model_registry` table (`input_price`, `output_price`, `price_source_url`, `last_verified_at`) or `ORBIS_MODELS`. Hugging Face's router lists per-host prices; these are **shown for comparison only** and must be copied in with a source to take effect. | `validatePrice` flags: missing price; outside the $0.001–$500 per 1M sanity range (likely per-1K vs per-1M unit typos); output cheaper than input; no source URL; no verification date; **stale after 45 days**. `priceChangeNeedsReview` flags changes over 50%. `model_price_history` logs every change. |
 | Costs | Provider-reported token counts × verified price. Tokens are estimated (~4 chars per token) and labelled *(est.)* only when the provider omits usage. | `reconcile(estimated, billed)` compares against provider billing exports for a period (±5% tolerance → *match*, otherwise *investigate*). Unknown prices show as n/a, never 0. |
 | Context windows | Vendor model cards (`contextWindow`), labelled *vendor-stated*. | Re-verified with the price; the Models API can be used where available. |
 | Privacy | Operator-verified profiles (see §9). | `verifiedAt` and `sourceUrl` are shown next to each value. |

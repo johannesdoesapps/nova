@@ -13,7 +13,7 @@ beforeAll(() => {
     "OPENAI_API_KEY",
     "HUGGINGFACE_API_KEY",
     "SEARCH_API_KEY",
-    "NOVA_MODELS",
+    "ORBIS_MODELS",
   ])
     delete process.env[k];
 });
@@ -124,14 +124,14 @@ describe("POST /api/compare", () => {
 
   it("rate-limits bursts per client", async () => {
     vi.resetModules();
-    process.env.NOVA_RATE_LIMIT_PER_MINUTE = "2";
+    process.env.ORBIS_RATE_LIMIT_PER_MINUTE = "2";
     const { POST } = await import("@/app/api/compare/route");
     const body = { prompt: "p", modelIds: ["demo:alpha", "demo:beta"] };
     expect((await POST(post("/api/compare", body, "10.9.9.9"))).status).toBe(200);
     const limited = await POST(post("/api/compare", body, "10.9.9.9"));
     expect(limited.status).toBe(429);
     expect((await limited.json()).error.code).toBe("rate_limited");
-    delete process.env.NOVA_RATE_LIMIT_PER_MINUTE;
+    delete process.env.ORBIS_RATE_LIMIT_PER_MINUTE;
   });
 });
 
@@ -182,10 +182,10 @@ describe("CSRF guard for API changes", () => {
   it("refuses cross-site changes, allows same-site and the signed Stripe webhook", async () => {
     const { guardApi } = await import("@/proxy");
     const { NextRequest } = await import("next/server");
-    const make = (path: string, method: string, headers: Record<string, string>) => new NextRequest(`https://nova.example${path}`, { method, headers: { host: "nova.example", ...headers } });
+    const make = (path: string, method: string, headers: Record<string, string>) => new NextRequest(`https://orbis.example${path}`, { method, headers: { host: "orbis.example", ...headers } });
     expect(guardApi(make("/api/chat", "POST", { origin: "https://evil.example", "sec-fetch-site": "cross-site" })).status).toBe(403);
     expect(guardApi(make("/api/conversations/x", "DELETE", { origin: "null" })).status).toBe(403);
-    expect(guardApi(make("/api/chat", "POST", { origin: "https://nova.example", "sec-fetch-site": "same-origin" })).headers.get("x-middleware-next")).toBe("1");
+    expect(guardApi(make("/api/chat", "POST", { origin: "https://orbis.example", "sec-fetch-site": "same-origin" })).headers.get("x-middleware-next")).toBe("1");
     expect(guardApi(make("/api/chat", "GET", { origin: "https://evil.example" })).headers.get("x-middleware-next")).toBe("1");
     expect(guardApi(make("/api/stripe/webhook", "POST", { "sec-fetch-site": "cross-site" })).headers.get("x-middleware-next")).toBe("1");
     expect(guardApi(make("/api/chat", "POST", {})).headers.get("x-middleware-next")).toBe("1"); // non-browser client

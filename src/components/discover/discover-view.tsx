@@ -51,7 +51,7 @@ interface HubItem {
   url: string;
 }
 
-const SHORTLIST_KEY = "nova:shortlist";
+const SHORTLIST_KEY = "orbis:shortlist";
 
 export function DiscoverView() {
   const { user } = useApp();
@@ -306,7 +306,7 @@ function IconBtn({ children, label, onClick, active }: { children: React.ReactNo
 
 interface Detail {
   model: HubItem & { summary: string | null; license: string | null };
-  nova: { runnable: boolean; registryId: string | null; reason: string | null };
+  orbis: { runnable: boolean; registryId: string | null; reason: string | null };
 }
 
 function DetailDrawer({ id, onClose }: { id: string; onClose: () => void }) {
@@ -350,8 +350,8 @@ function DetailDrawer({ id, onClose }: { id: string; onClose: () => void }) {
               <div className="mb-1 text-xs font-medium uppercase tracking-wider text-faint">From the model card</div>
               <p className="text-sm leading-relaxed text-muted">{d.model.summary ?? "No summary could be extracted from the model card."}</p>
             </div>
-            <Notice tone={d.nova.runnable ? "success" : "info"} title={d.nova.runnable ? "Runnable in Orbis" : "Not runnable in Orbis yet"}>
-              {d.nova.runnable ? "This model is in the registry with a configured provider. Select it in Chat or Model Battle." : d.nova.reason}
+            <Notice tone={d.orbis.runnable ? "success" : "info"} title={d.orbis.runnable ? "Runnable in Orbis" : "Not runnable in Orbis yet"}>
+              {d.orbis.runnable ? "This model is in the registry with a configured provider. Select it in Chat or Model Battle." : d.orbis.reason}
             </Notice>
             {d.model.tags.length > 0 && (
               <div className="flex flex-wrap gap-1">{d.model.tags.slice(0, 20).map((t) => <Badge key={t}>{t}</Badge>)}</div>

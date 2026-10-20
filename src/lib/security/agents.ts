@@ -33,7 +33,7 @@ export const SECURITY_AGENTS: SecurityAgentDef[] = [
       "Exposed files (.env, .git) — with active scope only",
       "Re-check findings after fixes",
     ],
-    tools: ["nova-headers", "nova-exposure", "zap"],
+    tools: ["orbis-headers", "orbis-exposure", "zap"],
     action: { id: "scan", label: "Scan website" },
   },
   {
@@ -50,7 +50,7 @@ export const SECURITY_AGENTS: SecurityAgentDef[] = [
       "Incident timeline and alert grouping",
       "IP reputation (when a reputation service is connected)",
     ],
-    tools: ["nova-logs", "abuseipdb", "wazuh"],
+    tools: ["orbis-logs", "abuseipdb", "wazuh"],
     action: { id: "investigate", label: "Investigate threat" },
   },
   {
@@ -67,7 +67,7 @@ export const SECURITY_AGENTS: SecurityAgentDef[] = [
       "AI review with evidence checked against your code",
       "Proposed patches and regression tests — never applied automatically",
     ],
-    tools: ["nova-code-rules", "osv", "ai-review", "github", "semgrep", "trivy"],
+    tools: ["orbis-code-rules", "osv", "ai-review", "github", "semgrep", "trivy"],
     action: { id: "audit", label: "Audit code" },
   },
   {

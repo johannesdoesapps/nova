@@ -379,7 +379,7 @@ export function Kbd({ children }: { children: ReactNode }) {
   );
 }
 
-export function NovaMark({ className }: { className?: string }) {
+export function OrbisMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
       <rect x="1" y="1" width="30" height="30" rx="9" fill="currentColor" />

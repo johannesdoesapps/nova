@@ -1,4 +1,4 @@
--- NOVA AI — Internal AI Workforce: projects, persistent tasks and their step
+-- ORBIS AI — Internal AI Workforce: projects, persistent tasks and their step
 -- graph, append-only events, approvals, memory and benchmark records.
 -- Operators are administrators (public.admins); every policy requires both
 -- ownership and admin status, so non-admin accounts can't see or write any of it.

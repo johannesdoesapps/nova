@@ -2,7 +2,7 @@ import type { ModelInfo } from "../ai/types";
 
 /**
  * Pricing validation. Orbis never scrapes prices from marketing pages at
- * runtime. Prices enter through the registry (DB or NOVA_MODELS) with a
+ * runtime. Prices enter through the registry (DB or ORBIS_MODELS) with a
  * source URL and verification date, and are checked here before use.
  */
 

@@ -163,7 +163,7 @@ export function runCodeRules(files: SourceFile[], asset: string): { findings: Fi
           asset,
           location: `${file.path}:${i + 1}`,
           evidence: [evidence],
-          evidenceSource: "nova:code-rules",
+          evidenceSource: "orbis:code-rules",
           remediation: rule.remediation,
           references: rule.references,
         });

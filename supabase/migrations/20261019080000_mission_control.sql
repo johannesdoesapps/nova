@@ -1,4 +1,4 @@
--- NOVA AI — Mission Control: a project becomes a mission with a goal, a
+-- ORBIS AI — Mission Control: a project becomes a mission with a goal, a
 -- status, tasks grouped by milestone, and a history of AI task runs.
 
 alter table public.projects

@@ -34,7 +34,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const providers = configured ? await authProviders() : { google: false, github: false };
 
   return (
-    <div className={`nova-glow grid min-h-dvh place-items-center px-4 py-10 ${serif.variable}`}>
+    <div className={`orbis-glow grid min-h-dvh place-items-center px-4 py-10 ${serif.variable}`}>
       <div className="w-full max-w-sm">
         <Link href="/" className="mb-8 flex justify-center"><Logo /></Link>
         <div className="lux-card rounded-[26px] p-7">

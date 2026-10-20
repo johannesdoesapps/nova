@@ -11,7 +11,7 @@ export function SettingsClient({ email, displayName, themeOnly }: { email?: stri
   const [name, setName] = useState(displayName ?? "");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [stored, setStored] = useLocalStorage("nova:theme", "dark");
+  const [stored, setStored] = useLocalStorage("orbis:theme", "dark");
   const theme = stored === "light" ? "light" : "dark";
 
   const applyTheme = (t: "dark" | "light") => {

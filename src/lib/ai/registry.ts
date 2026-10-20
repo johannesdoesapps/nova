@@ -7,7 +7,7 @@ import type { ModelInfo, ModelWithStatus, ProviderId } from "./types";
  * Prices are `null` unless copied from the provider's pricing page (with the
  * date in lastVerifiedAt): pricing changes often and Orbis must not show
  * invented numbers. Set verified prices (USD per 1M tokens)
- * through the NOVA_MODELS env var or the `model_registry` table, and they
+ * through the ORBIS_MODELS env var or the `model_registry` table, and they
  * will flow into cost estimates automatically.
  *
  * Context windows come from each vendor's published model card and should be
@@ -313,18 +313,18 @@ export const modelInfoSchema = z.object({
   priceSourceUrl: z.url().nullable().default(null),
 });
 
-/** Parse NOVA_MODELS; invalid config is reported and ignored rather than crashing the app. */
+/** Parse ORBIS_MODELS; invalid config is reported and ignored rather than crashing the app. */
 export function parseModelsOverride(json: string | undefined): ModelInfo[] | null {
   if (!json) return null;
   try {
     const parsed = z.array(modelInfoSchema).safeParse(JSON.parse(json));
     if (!parsed.success) {
-      console.warn("[nova] NOVA_MODELS is invalid and was ignored:", parsed.error.issues[0]?.message);
+      console.warn("[orbis] ORBIS_MODELS is invalid and was ignored:", parsed.error.issues[0]?.message);
       return null;
     }
     return parsed.data;
   } catch {
-    console.warn("[nova] NOVA_MODELS is not valid JSON and was ignored.");
+    console.warn("[orbis] ORBIS_MODELS is not valid JSON and was ignored.");
     return null;
   }
 }

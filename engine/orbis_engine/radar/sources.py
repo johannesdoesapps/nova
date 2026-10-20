@@ -25,7 +25,7 @@ SOURCE_TYPES: dict[str, dict[str, Any]] = {
     "hacker_news": {"label": "Hacker News", "needs": "query", "sends_query": True, "cost": "free", "kind": "discussion"},
     "web_search": {"label": "Web search", "needs": "query", "sends_query": True, "cost": "paid per query (Tavily/Brave)", "kind": "web"},
 }
-UA = {"User-Agent": "NOVA-AI-Radar/0.1 (+https://github.com/; polite fetch)"}
+UA = {"User-Agent": "ORBIS-AI-Radar/0.1 (+https://github.com/; polite fetch)"}
 MAX_BYTES = 2_000_000
 
 

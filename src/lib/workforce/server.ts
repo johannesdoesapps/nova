@@ -4,7 +4,7 @@ import { isAdmin } from "../admin";
 import { requireUser, type AuthContext } from "../auth";
 import { ApiError, errorResponse } from "../http";
 import { WorkforceError, type Runtime } from "./commander";
-import { novaModelRunner } from "./models-nova";
+import { orbisModelRunner } from "./models-orbis";
 import { vercelWorkspaces } from "./sandbox-vercel";
 import { SupabaseStore } from "./supabase-store";
 import { AUTONOMY } from "./types";
@@ -17,7 +17,7 @@ export async function requireOperator(): Promise<{ auth: Extract<AuthContext, { 
   const auth = await requireUser();
   if (!(await isAdmin(auth))) throw new ApiError("forbidden", "The Workforce is limited to Orbis operators (administrators).");
   const store = new SupabaseStore(auth.supabase, auth.user.id);
-  return { auth, store, rt: { store, models: novaModelRunner(auth), workspaces: vercelWorkspaces } };
+  return { auth, store, rt: { store, models: orbisModelRunner(auth), workspaces: vercelWorkspaces } };
 }
 
 export function wfError(err: unknown) {
@@ -66,7 +66,7 @@ export const checkSchema = z.object({
 export async function fetchPackageJson(repo: string, branch: string): Promise<Record<string, unknown>> {
   const token = process.env.GITHUB_TOKEN?.trim();
   const res = token
-    ? await fetch(`https://api.github.com/repos/${repo}/contents/package.json?ref=${encodeURIComponent(branch)}`, { headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github.raw+json", "user-agent": "nova-workforce" } })
+    ? await fetch(`https://api.github.com/repos/${repo}/contents/package.json?ref=${encodeURIComponent(branch)}`, { headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github.raw+json", "user-agent": "orbis-workforce" } })
     : await fetch(`https://raw.githubusercontent.com/${repo}/${encodeURIComponent(branch)}/package.json`);
   if (res.status === 404) throw new ApiError("bad_request", `No package.json found on ${repo}@${branch}. The repository may be private (needs GITHUB_TOKEN) or not a Node project — only npm projects are supported so far.`);
   if (!res.ok) throw new ApiError("upstream_error", `GitHub returned HTTP ${res.status}.`);

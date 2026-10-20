@@ -28,7 +28,7 @@ export async function fetchRepoFiles(
   let usedRef = ref ?? "HEAD";
   if (opts.token) {
     res = await f(`https://api.github.com/repos/${owner}/${repo}/tarball${ref ? `/${encodeURIComponent(ref)}` : ""}`, {
-      headers: { authorization: `Bearer ${opts.token}`, accept: "application/vnd.github+json", "user-agent": "nova-code-guardian" },
+      headers: { authorization: `Bearer ${opts.token}`, accept: "application/vnd.github+json", "user-agent": "orbis-code-guardian" },
       signal: opts.signal,
     });
   } else {

@@ -1,4 +1,4 @@
--- NOVA AI — record prompt-cache hits separately (they're billed at a lower rate),
+-- ORBIS AI — record prompt-cache hits separately (they're billed at a lower rate),
 -- and show them in the admin request log. The log function gets a new name
 -- (admin_request_log_v2) because its result columns changed; the old one is
 -- left in place, unused.

@@ -96,7 +96,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
   }, [store]);
 
   // Layout
-  const [railStored, setRailStored] = useLocalStorage("nova:studio:rail", "0");
+  const [railStored, setRailStored] = useLocalStorage("orbis:studio:rail", "0");
   const collapsed = railStored === "1";
   const [mobileOpen, setMobileOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);

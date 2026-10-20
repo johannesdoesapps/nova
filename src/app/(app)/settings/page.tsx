@@ -59,7 +59,7 @@ export default async function SettingsPage() {
             <div className="rounded-xl border border-border bg-bg-elev p-3"><dt className="text-xs text-faint">Model runs per day</dt><dd className="mt-1 font-semibold">{env.dailyRequestLimit}</dd></div>
             <div className="rounded-xl border border-border bg-bg-elev p-3"><dt className="text-xs text-faint">Models per battle</dt><dd className="mt-1 font-semibold">{env.maxCompareModels}</dd></div>
           </dl>
-          <p className="mt-3 text-xs text-faint">Set with NOVA_RATE_LIMIT_PER_MINUTE, NOVA_DAILY_REQUEST_LIMIT and NOVA_MAX_COMPARE_MODELS. Also set spending limits in each provider&apos;s dashboard.</p>
+          <p className="mt-3 text-xs text-faint">Set with ORBIS_RATE_LIMIT_PER_MINUTE, ORBIS_DAILY_REQUEST_LIMIT and ORBIS_MAX_COMPARE_MODELS. Also set spending limits in each provider&apos;s dashboard.</p>
         </Card>
       </div>
     </div>

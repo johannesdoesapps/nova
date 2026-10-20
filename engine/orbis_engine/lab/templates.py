@@ -23,7 +23,7 @@ def _research_brief() -> dict[str, Any]:
             {"id": "has_sources", "type": "branch", "name": "Any sources?", "config": {"condition": "len(search) > 0"}, "depends_on": ["search"], "position": {"x": 260, "y": 0}},
             {"id": "sources", "type": "transform", "name": "Number the sources", "config": {"op": "join", "input": "{{nodes.search.output}}", "format": "[{n}] {title} — {url}", "separator": "\n"}, "depends_on": ["search"], "position": {"x": 260, "y": 140}},
             {"id": "brief", "type": "model_call", "name": "Write the brief", "config": {"prompt": "Write a one-page brief on: {{inputs.topic}}\nAudience: {{inputs.audience}}\n\nUse ONLY these sources and cite them as [n]:\n{{nodes.search.output}}\n\nSay plainly where the sources are thin or disagree.", "max_tokens": 1500}, "depends_on": ["search", "sources"], "when": {"node": "has_sources", "equals": True}, "retry": {"max_attempts": 2, "backoff_s": 2}, "position": {"x": 520, "y": 0}},
-            {"id": "no_sources", "type": "output", "name": "Nothing found", "config": {"value": "No web sources were retrieved for “{{inputs.topic}}”, so no brief was written (NOVA AI does not write unsourced briefs)."}, "when": {"node": "has_sources", "equals": False}, "position": {"x": 520, "y": 160}},
+            {"id": "no_sources", "type": "output", "name": "Nothing found", "config": {"value": "No web sources were retrieved for “{{inputs.topic}}”, so no brief was written (ORBIS AI does not write unsourced briefs)."}, "when": {"node": "has_sources", "equals": False}, "position": {"x": 520, "y": 160}},
             {"id": "want_save", "type": "branch", "name": "Save to workspace?", "config": {"condition": SAVE_IF_WORKSPACE}, "depends_on": ["brief"], "position": {"x": 780, "y": 140}},
             {"id": "save", "type": "action", "name": "Save to workspace", "config": {"tool": "workspace.create_item", "params": {"workspace_id": "{{inputs.workspace_id}}", "title": "Brief: {{inputs.topic}}", "body": "{{nodes.brief.output}}\n\nSources:\n{{nodes.sources.output}}", "type": "research"}}, "depends_on": ["brief", "sources"], "when": {"node": "want_save", "equals": True}, "position": {"x": 1040, "y": 140}},
             {"id": "result", "type": "output", "name": "Brief", "config": {"value": "{{nodes.brief.output}}\n\nSources:\n{{nodes.sources.output}}"}, "depends_on": ["brief", "sources"], "position": {"x": 780, "y": 0}},
@@ -37,7 +37,7 @@ def _research_brief() -> dict[str, Any]:
 def _email_draft() -> dict[str, Any]:
     return {
         "name": "Draft and send an email (with approval)",
-        "description": "Draft an email from your notes. NOVA AI pauses and shows you the exact message before anything is sent.",
+        "description": "Draft an email from your notes. ORBIS AI pauses and shows you the exact message before anything is sent.",
         "inputs": [
             {"name": "to", "label": "Recipient email", "type": "string", "sensitive": True},
             {"name": "notes", "label": "What the email should say", "type": "text"},

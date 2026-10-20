@@ -12,7 +12,7 @@ import { useStudio } from "./frame";
 export function useModelChoice(): [string | null, (id: string) => void] {
   const { user, modelChoice, setModelChoice } = useApp();
   const { notify } = useStudio();
-  const [local, setLocal] = useLocalStorage("nova:studio:model");
+  const [local, setLocal] = useLocalStorage("orbis:studio:model");
   const set = useCallback(
     (id: string) => {
       setLocal(id);

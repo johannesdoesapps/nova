@@ -142,7 +142,7 @@ def rules_plan(goal: str, *, model: str | None = None) -> Plan:
         content_task = next((t.id for t in reversed(tasks) if t.kind in ("draft", "analyze")), last)
         tasks.append(_task("save", "Save the result to your workspace", "save", [content_task], tool="workspace.create_item"))
     if has["monitor"]:
-        tasks.append(_task("watch", f"Follow “{topic}” in Signal Radar", "monitor", [], tool="radar.create_watch", params={"name": topic, "query": topic}, description="Radar checks run on the schedule the NOVA worker supports; it is not continuous."))
+        tasks.append(_task("watch", f"Follow “{topic}” in Signal Radar", "monitor", [], tool="radar.create_watch", params={"name": topic, "query": topic}, description="Radar checks run on the schedule the ORBIS worker supports; it is not continuous."))
         assumptions.append("Monitoring is created as a Radar watch; checks happen when the scheduled worker runs.")
     content_task = next((t.id for t in reversed(tasks) if t.kind in ("draft", "analyze")), None)
     tasks.append(_task("deliver", "Show the result", "deliver", [content_task] if content_task else [tasks[-1].id]))

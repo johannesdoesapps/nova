@@ -59,7 +59,7 @@ export async function runSentinel(
   let res: SafeResponse | null = null;
   let finalUrl = `https://${host}/`;
   try {
-    res = await get(finalUrl, { origin: "https://nova-cors-check.invalid" });
+    res = await get(finalUrl, { origin: "https://orbis-cors-check.invalid" });
     for (let hop = 0; hop < 5 && res.status >= 300 && res.status < 400; hop++) {
       const loc = header(res, "location");
       if (!loc) break;
@@ -70,7 +70,7 @@ export async function runSentinel(
         break;
       }
       finalUrl = next.toString();
-      res = await get(finalUrl, { origin: "https://nova-cors-check.invalid" });
+      res = await get(finalUrl, { origin: "https://orbis-cors-check.invalid" });
     }
   } catch (err) {
     const msg = (err as Error).message ?? String(err);
@@ -190,7 +190,7 @@ export async function runSentinel(
     ...d,
     agent: "sentinel",
     asset: host,
-    evidenceSource: d.ruleId.startsWith("exposure.") ? "nova:exposure" : "nova:headers",
+    evidenceSource: d.ruleId.startsWith("exposure.") ? "orbis:exposure" : "orbis:headers",
     fingerprint: fingerprint("sentinel", d.ruleId, host, d.key ?? ""),
   }));
   return { findings, checked, requests, finalUrl: res ? finalUrl : null, notes };
@@ -378,7 +378,7 @@ function cookieChecks(res: SafeResponse, url: string): Draft[] {
 function corsChecks(res: SafeResponse, url: string): Draft[] {
   const acao = header(res, "access-control-allow-origin");
   const acac = (header(res, "access-control-allow-credentials") ?? "").toLowerCase() === "true";
-  if (acao === "https://nova-cors-check.invalid") {
+  if (acao === "https://orbis-cors-check.invalid") {
     return [
       {
         ruleId: "cors.reflected-origin",
@@ -390,7 +390,7 @@ function corsChecks(res: SafeResponse, url: string): Draft[] {
         confidence: "confirmed",
         rationale: acac ? "Allows cross-site reading of authenticated data." : "No credentials, so impact is limited to data that is already public.",
         location: url,
-        evidence: [{ source: "Request with Origin: https://nova-cors-check.invalid", detail: `access-control-allow-origin: ${acao}; access-control-allow-credentials: ${acac}` }],
+        evidence: [{ source: "Request with Origin: https://orbis-cors-check.invalid", detail: `access-control-allow-origin: ${acao}; access-control-allow-credentials: ${acac}` }],
         remediation: "Only allow specific, trusted origins from an allow-list; never reflect the Origin header blindly with credentials.",
         references: [REF.cors],
       },

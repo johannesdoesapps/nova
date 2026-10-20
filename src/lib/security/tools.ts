@@ -23,12 +23,12 @@ export async function securityTools(auth?: AuthContext): Promise<SecurityTool[]>
   const admin = auth ? await isAdmin(auth) : false;
   const externalReason = "Not connected. Needs a separate scanner runner (it can't run inside the website's serverless functions).";
   return [
-    { id: "nova-headers", name: "Header & config checks", kind: "builtin", description: "HTTPS, HSTS, CSP, framing, cookie flags, CORS and version disclosure from live HTTP responses.", envVars: [], available: true },
-    { id: "nova-exposure", name: "Exposed file checks", kind: "builtin", description: "Requests a short list of sensitive paths (.env, .git, server-status) and confirms by content. Active scope only.", envVars: [], available: true },
-    { id: "nova-code-rules", name: "Code & secret rules", kind: "builtin", description: "Pattern rules for secrets, injection, XSS, unsafe eval, weak crypto and TLS bypasses.", envVars: [], available: true },
+    { id: "orbis-headers", name: "Header & config checks", kind: "builtin", description: "HTTPS, HSTS, CSP, framing, cookie flags, CORS and version disclosure from live HTTP responses.", envVars: [], available: true },
+    { id: "orbis-exposure", name: "Exposed file checks", kind: "builtin", description: "Requests a short list of sensitive paths (.env, .git, server-status) and confirms by content. Active scope only.", envVars: [], available: true },
+    { id: "orbis-code-rules", name: "Code & secret rules", kind: "builtin", description: "Pattern rules for secrets, injection, XSS, unsafe eval, weak crypto and TLS bypasses.", envVars: [], available: true },
     { id: "osv", name: "OSV.dev vulnerability database", kind: "service", description: "Known vulnerabilities for npm and PyPI packages from lockfiles and manifests.", envVars: [], available: true },
     { id: "ai-review", name: "AI code review", kind: "builtin", description: "Uses your chosen AI model; only findings whose quoted code exists in your files are kept, marked tentative.", envVars: [], available: true },
-    { id: "nova-logs", name: "Log analyzer", kind: "builtin", description: "Parses web access, SSH auth and JSON logs; detects brute force, spraying, scanners and payloads.", envVars: [], available: true },
+    { id: "orbis-logs", name: "Log analyzer", kind: "builtin", description: "Parses web access, SSH auth and JSON logs; detects brute force, spraying, scanners and payloads.", envVars: [], available: true },
     {
       id: "github",
       name: "GitHub repositories",

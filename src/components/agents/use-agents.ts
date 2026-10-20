@@ -14,8 +14,8 @@ export type AgentsState =
   | { status: "error"; message: string }
   | { status: "ready"; builtins: AgentConfig[]; custom: AgentConfig[]; capabilities: CapabilityStatus; persistence: "server" | "local" };
 
-const LOCAL_KEY = "nova:studio:agents";
-export const agentChatsKey = (id: string) => `nova:studio:agent-chats:${id}`;
+const LOCAL_KEY = "orbis:studio:agents";
+export const agentChatsKey = (id: string) => `orbis:studio:agent-chats:${id}`;
 
 let state: AgentsState = { status: "loading" };
 let inflight: Promise<void> | null = null;

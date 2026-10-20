@@ -1,4 +1,4 @@
--- NOVA AI — multi-model platform settings and agent conversation settings.
+-- ORBIS AI — multi-model platform settings and agent conversation settings.
 
 -- Administrators: managed with SQL or the Supabase dashboard, never from the app.
 create table public.admins (

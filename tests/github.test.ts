@@ -12,7 +12,7 @@ vi.mock("server-only", () => ({}));
 const { appJwt, clearTokenCache, githubAppConfig, githubIdentity, installationToken, repoFile, repoTree, safePath, userInstallation, listRepos } = await import("@/lib/github/app");
 
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs8", format: "pem" }, publicKeyEncoding: { type: "spki", format: "pem" } });
-const cfg = { appId: "123456", slug: "nova-ai-test", privateKey };
+const cfg = { appId: "123456", slug: "orbis-ai-test", privateKey };
 
 type Call = { url: string; init?: RequestInit };
 function fakeGitHub(routes: Record<string, unknown | ((call: Call) => unknown)>) {
@@ -33,8 +33,8 @@ beforeEach(() => clearTokenCache());
 
 describe("configuration and the app's JWT", () => {
   it("reads the app id, slug and private key (with escaped line breaks) from the environment", () => {
-    expect(githubAppConfig({ GITHUB_APP_ID: "1", GITHUB_APP_SLUG: "nova", GITHUB_APP_PRIVATE_KEY: "-----BEGIN-----\\nabc\\n-----END-----" })?.privateKey).toBe("-----BEGIN-----\nabc\n-----END-----");
-    expect(githubAppConfig({ GITHUB_APP_ID: "1", GITHUB_APP_SLUG: "nova" })).toBeNull();
+    expect(githubAppConfig({ GITHUB_APP_ID: "1", GITHUB_APP_SLUG: "orbis", GITHUB_APP_PRIVATE_KEY: "-----BEGIN-----\\nabc\\n-----END-----" })?.privateKey).toBe("-----BEGIN-----\nabc\n-----END-----");
+    expect(githubAppConfig({ GITHUB_APP_ID: "1", GITHUB_APP_SLUG: "orbis" })).toBeNull();
     expect(githubAppConfig({ GITHUB_APP_ID: "1", GITHUB_APP_SLUG: "bad slug/..", GITHUB_APP_PRIVATE_KEY: "k" })).toBeNull();
   });
 
@@ -136,9 +136,9 @@ describe("repositories and files", () => {
 
 describe("sign in with GitHub and connecting it", () => {
   it("sends the provider back to the callback with how it started", () => {
-    expect(oauthRedirectTo("https://nova.example", "/chat", "github")).toBe("https://nova.example/auth/callback?via=github&next=%2Fchat");
-    expect(oauthRedirectTo("https://nova.example", "/chat", "github-link")).toContain("via=github-link");
-    expect(oauthRedirectTo("https://nova.example", "/chat")).toContain("via=google");
+    expect(oauthRedirectTo("https://orbis.example", "/chat", "github")).toBe("https://orbis.example/auth/callback?via=github&next=%2Fchat");
+    expect(oauthRedirectTo("https://orbis.example", "/chat", "github-link")).toContain("via=github-link");
+    expect(oauthRedirectTo("https://orbis.example", "/chat")).toContain("via=google");
   });
 
   it("words GitHub failures for GitHub, never with the provider's text", () => {

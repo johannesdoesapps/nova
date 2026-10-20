@@ -57,13 +57,13 @@ export async function POST(req: Request) {
         await syncSubscription(stripe, subId, user.id).catch((e) => reportError(e, { where: "billing.change.sync" }));
         throw new ApiError("payment_required", `The payment for ${label} didn't go through, so your plan hasn't changed. Update your card under "Manage subscription" and try again.`);
       }
-      await stripe.subscriptions.update(subId, { cancel_at_period_end: false, metadata: { ...current.metadata, user_id: user.id, nova_plan: plan } });
+      await stripe.subscriptions.update(subId, { cancel_at_period_end: false, metadata: { ...current.metadata, user_id: user.id, orbis_plan: plan } });
     } else {
       await stripe.subscriptions.update(subId, {
         items: [{ id: item.id, price }],
         proration_behavior: "create_prorations",
         cancel_at_period_end: false,
-        metadata: { ...current.metadata, user_id: user.id, nova_plan: plan },
+        metadata: { ...current.metadata, user_id: user.id, orbis_plan: plan },
       });
     }
     await syncSubscription(stripe, subId, user.id).catch((e) => reportError(e, { where: "billing.change.sync" }));

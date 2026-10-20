@@ -1,4 +1,4 @@
--- NOVA AI — billing periods for Pro subscriptions. The AI budget guard counts
+-- ORBIS AI — billing periods for Pro subscriptions. The AI budget guard counts
 -- spend from the start of the current billing period; the Stripe webhook
 -- (service role) keeps these columns in sync. Users still can't write them.
 alter table public.subscriptions

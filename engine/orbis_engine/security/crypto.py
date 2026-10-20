@@ -1,6 +1,6 @@
 """Encryption at rest for OAuth tokens (AES-256-GCM with key ids for rotation).
 
-Keys come from NOVA_TOKEN_KEYS ("kid:base64key,..."); the first key encrypts
+Keys come from ORBIS_TOKEN_KEYS ("kid:base64key,..."); the first key encrypts
 and every listed key can decrypt, so keys can be rotated by prepending a new
 one and re-encrypting in the background. Tokens are never returned to the
 browser. Without configured keys, a per-process key is used and connections
@@ -28,7 +28,7 @@ def _keys() -> tuple[dict[str, bytes], str]:
         try:
             return {k: base64.b64decode(v) for k, v in s.token_keys.items()}, s.active_token_key
         except ValueError:
-            raise EngineError("not_configured", "NOVA_TOKEN_KEYS is not valid base64.") from None
+            raise EngineError("not_configured", "ORBIS_TOKEN_KEYS is not valid base64.") from None
     return {"dev": _dev_key}, "dev"
 
 

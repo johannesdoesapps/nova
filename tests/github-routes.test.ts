@@ -50,7 +50,7 @@ const getFile = (q: string) => file(new Request(`http://x/api/github/file?${q}`)
 beforeEach(() => {
   Object.assign(state, { signedIn: true, identities: linked, installationAccountId: 583231 });
   process.env.GITHUB_APP_ID = "123";
-  process.env.GITHUB_APP_SLUG = "nova-ai-test";
+  process.env.GITHUB_APP_SLUG = "orbis-ai-test";
   process.env.GITHUB_APP_PRIVATE_KEY = privateKey;
   requested.length = 0;
   clearTokenCache();
@@ -58,7 +58,7 @@ beforeEach(() => {
 
 describe("/api/github", () => {
   it("reports setup, link and installation status", async () => {
-    expect(await (await status()).json()).toMatchObject({ configured: true, linked: true, login: "octocat", installed: true, installUrl: "https://github.com/apps/nova-ai-test/installations/new" });
+    expect(await (await status()).json()).toMatchObject({ configured: true, linked: true, login: "octocat", installed: true, installUrl: "https://github.com/apps/orbis-ai-test/installations/new" });
     state.identities = [{ provider: "email" }];
     expect(await (await status()).json()).toMatchObject({ configured: true, linked: false, installed: false });
     delete process.env.GITHUB_APP_PRIVATE_KEY;

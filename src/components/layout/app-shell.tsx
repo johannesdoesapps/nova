@@ -10,7 +10,7 @@ import { Logo } from "./logo";
 import { useApp } from "./app-context";
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const [sidebarPref, setSidebarPref] = useLocalStorage("nova:sidebar", "open");
+  const [sidebarPref, setSidebarPref] = useLocalStorage("orbis:sidebar", "open");
   const collapsed = sidebarPref === "collapsed";
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
@@ -52,7 +52,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
           <Link href="/"><Logo /></Link>
         </header>
-        <main className="nova-glow min-w-0 flex-1">{children}</main>
+        <main className="orbis-glow min-w-0 flex-1">{children}</main>
       </div>
     </div>
   );

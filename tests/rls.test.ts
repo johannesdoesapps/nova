@@ -305,11 +305,11 @@ describe("council sessions and missions", () => {
 describe("security center", () => {
   it("keeps targets, runs and findings private, and the audit trail append-only", async () => {
     const { run } = await as(ALICE, async () => {
-      await db.query(`insert into public.security_targets (hostname, token) values ('alice.example', 'nova-verify-0123456789abcdef')`);
-      await expect(db.query(`insert into public.security_targets (hostname, token) values ('BAD HOST!', 'nova-verify-0123456789abcdef')`)).rejects.toThrow(/check/);
+      await db.query(`insert into public.security_targets (hostname, token) values ('alice.example', 'orbis-verify-0123456789abcdef')`);
+      await expect(db.query(`insert into public.security_targets (hostname, token) values ('BAD HOST!', 'orbis-verify-0123456789abcdef')`)).rejects.toThrow(/check/);
       const r = await db.query<{ id: string }>(`insert into public.security_runs (agent, action, asset) values ('sentinel', 'scan', 'alice.example') returning id`);
       await db.query(
-        `insert into public.security_findings (run_id, agent, fingerprint, rule_id, title, severity, confidence, asset, evidence_source) values ('${r.rows[0].id}', 'sentinel', 'fp-0000000001', 'headers.hsts-missing', 'HSTS missing', 'medium', 'confirmed', 'alice.example', 'nova:headers')`,
+        `insert into public.security_findings (run_id, agent, fingerprint, rule_id, title, severity, confidence, asset, evidence_source) values ('${r.rows[0].id}', 'sentinel', 'fp-0000000001', 'headers.hsts-missing', 'HSTS missing', 'medium', 'confirmed', 'alice.example', 'orbis:headers')`,
       );
       await expect(
         db.query(`insert into public.security_findings (agent, fingerprint, rule_id, title, severity, confidence, asset, evidence_source) values ('sentinel', 'fp-0000000001', 'x', 'dup', 'low', 'firm', 'a', 'x')`),
@@ -344,7 +344,7 @@ describe("workforce (operators only)", () => {
   it("lets only administrators read or write Workforce data, each seeing only their own", async () => {
     // ALICE was made an admin in the platform settings test above; BOB is a regular user.
     const ids = await as(ALICE, async () => {
-      const p = await db.query<{ id: string }>(`insert into public.wf_projects (name, repo) values ('Orbis', 'acme/nova') returning id`);
+      const p = await db.query<{ id: string }>(`insert into public.wf_projects (name, repo) values ('Orbis', 'acme/orbis') returning id`);
       await expect(db.query(`insert into public.wf_projects (name, repo) values ('Bad', 'not a repo!')`)).rejects.toThrow(/check/);
       const t = await db.query<{ id: string }>(`insert into public.wf_tasks (project_id, title, objective) values ('${p.rows[0].id}', 'Task', 'Do the thing') returning id`);
       await db.query(`insert into public.wf_steps (task_id, key, agent, agent_version, title) values ('${t.rows[0].id}', 'prepare', 'devops', '1.0.0', 'Prepare')`);

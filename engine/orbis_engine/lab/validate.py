@@ -168,7 +168,7 @@ def validate(spec: WorkflowSpec) -> dict[str, Any]:
             if tool.consequential:
                 consequential.append(n.id)
                 if not any(by[a].type == "approval" for a in anc[n.id]):
-                    warnings.append({"node": n.id, "message": f"{tool.name} is consequential: NOVA AI will pause for your approval before it runs."})
+                    warnings.append({"node": n.id, "message": f"{tool.name} is consequential: ORBIS AI will pause for your approval before it runs."})
             if tool.id in ("http.get", "http.post") and not spec.permissions.network_domains:
                 errors.append({"node": n.id, "message": "HTTP tools need allowed network domains."})
         elif n.type == "output":

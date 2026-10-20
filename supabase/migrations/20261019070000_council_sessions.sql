@@ -1,4 +1,4 @@
--- NOVA AI — saved Council and Arena sessions (each model's answer, critiques,
+-- ORBIS AI — saved Council and Arena sessions (each model's answer, critiques,
 -- synthesis, sources, and the user's ratings). Private to their owner.
 create table public.council_sessions (
   id uuid primary key default gen_random_uuid(),

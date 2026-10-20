@@ -1,4 +1,4 @@
-# NOVA AI engine — pinned runtime dependencies
+# ORBIS AI engine — pinned runtime dependencies
 fastapi==0.143.5
 uvicorn==0.38.0
 httpx==0.28.1

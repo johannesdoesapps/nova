@@ -91,7 +91,7 @@ const run = (model = haiku, extra: Partial<Parameters<typeof recordRun>[1]> = {}
 });
 
 afterEach(() => {
-  delete process.env.NOVA_ADMINS_UNLIMITED;
+  delete process.env.ORBIS_ADMINS_UNLIMITED;
 });
 
 describe("usage policy", () => {
@@ -171,7 +171,7 @@ describe("usage policy", () => {
   });
 
   it("can switch the admin exemption off", async () => {
-    process.env.NOVA_ADMINS_UNLIMITED = "false";
+    process.env.ORBIS_ADMINS_UNLIMITED = "false";
     const { auth, rpc } = fakeAuth({ admin: true });
     await enforceLimits(req(), auth, 1, [haiku]);
     expect(rpc[0]![1]).toMatchObject({ p_window_limit: 10 });

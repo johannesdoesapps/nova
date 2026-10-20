@@ -21,7 +21,7 @@ beforeAll(() => {
     "DEEPSEEK_API_KEY",
     "HUGGINGFACE_API_KEY",
     "SEARCH_API_KEY",
-    "NOVA_MODELS",
+    "ORBIS_MODELS",
   ])
     delete process.env[k];
 });

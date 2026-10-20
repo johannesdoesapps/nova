@@ -1,5 +1,5 @@
-<title>NOVA Chat Studio</title>
-<meta name="description" content="Interactive preview of the NOVA chat workspace. Replies are simulated in the browser; the full app streams real model output.">
+<title>ORBIS Chat Studio</title>
+<meta name="description" content="Interactive preview of the ORBIS chat workspace. Replies are simulated in the browser; the full app streams real model output.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif&display=swap" rel="stylesheet">
@@ -483,9 +483,9 @@ textarea.fin { height: auto; padding: 10px 14px; line-height: 1.55; resize: vert
 
   <aside class="side glass" id="side" aria-label="Sidebar">
     <div class="side-top">
-      <button class="brand" id="brand" type="button" aria-label="NOVA, new chat">
+      <button class="brand" id="brand" type="button" aria-label="ORBIS, new chat">
         <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="9" fill="currentColor"/><path d="M10.5 22.5V10l11 12.5V9.5" fill="none" stroke="var(--bg)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="26.5" cy="5.5" r="2.6" fill="var(--accent)"/></svg>
-        <span class="word">NOVA</span>
+        <span class="word">ORBIS</span>
       </button>
       <button class="ib push desktop-only" id="railBtn" type="button" aria-label="Collapse sidebar" title="Collapse sidebar"></button>
       <button class="ib push mobile-only" id="closeDrawer" type="button" aria-label="Close sidebar" title="Close sidebar"></button>
@@ -536,7 +536,7 @@ textarea.fin { height: auto; padding: 10px 14px; line-height: 1.55; resize: vert
         <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="9" fill="currentColor"/><path d="M10.5 22.5V10l11 12.5V9.5" fill="none" stroke="var(--bg)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="26.5" cy="5.5" r="2.6" fill="var(--accent)"/></svg>
         <p class="greet" id="greet"></p>
         <h2>What can I help you explore?</h2>
-        <p class="sub">Research a topic, weigh options, challenge an idea or write code. NOVA tells you when it isn’t sure.</p>
+        <p class="sub">Research a topic, weigh options, challenge an idea or write code. ORBIS tells you when it isn’t sure.</p>
         <div class="hero-slot" id="heroSlot"></div>
         <ul class="sugg" id="sugg" aria-label="Suggested prompts"></ul>
         <p class="note"><span data-i="info"></span>Preview: replies are simulated in your browser. The full app streams answers from your configured model.</p>
@@ -549,7 +549,7 @@ textarea.fin { height: auto; padding: 10px 14px; line-height: 1.55; resize: vert
         <div class="fade"></div>
         <div class="dock-in">
           <button class="jump glass-strong away" id="jump" type="button" aria-label="Scroll to latest" tabindex="-1"></button>
-          <div><div id="dockSlot"></div><p class="disclaimer" id="disc">NOVA can make mistakes. Check important information.</p></div>
+          <div><div id="dockSlot"></div><p class="disclaimer" id="disc">ORBIS can make mistakes. Check important information.</p></div>
         </div>
       </div>
     </section>
@@ -583,7 +583,7 @@ textarea.fin { height: auto; padding: 10px 14px; line-height: 1.55; resize: vert
   <div id="composerWrap">
     <form class="composer glass-strong edge" id="composer" novalidate>
       <ul class="chips" id="chips" hidden aria-label="Attached files"></ul>
-      <label class="sr" for="input">Message NOVA</label>
+      <label class="sr" for="input">Message ORBIS</label>
       <textarea id="input" rows="1" maxlength="12000" placeholder="Ask anything…"></textarea>
       <div class="tools">
         <button class="ib round" id="plusBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Add files and tools" title="Add files and tools"></button>
@@ -657,7 +657,7 @@ textarea.fin { height: auto; padding: 10px 14px; line-height: 1.55; resize: vert
         <div><label class="fl" for="agDesc">Description <span>· shown on the agent’s card</span></label><input class="fin" id="agDesc" maxlength="300" placeholder="What does this agent help with?"></div>
         <div><label class="fl" for="agInstr">Instructions</label>
           <textarea class="fin" id="agInstr" rows="6" maxlength="8000" placeholder="Describe the agent's role, expertise and behaviour.&#10;e.g. You are a patient tutor for first-year statistics. Explain with small worked examples."></textarea>
-          <p class="ferr" id="errInstr" hidden></p><p class="fhint" id="hintInstr">NOVA’s safety rules always apply on top of these instructions.</p></div>
+          <p class="ferr" id="errInstr" hidden></p><p class="fhint" id="hintInstr">ORBIS’s safety rules always apply on top of these instructions.</p></div>
         <fieldset style="border:0;margin:0;padding:0"><legend class="fl">Icon</legend><div class="iconpick" role="radiogroup" aria-label="Icon" id="agIcons"></div></fieldset>
         <fieldset style="border:0;margin:0;padding:0"><legend class="fl">Accent</legend><div class="swatches" role="radiogroup" aria-label="Accent colour" id="agAccents"></div></fieldset>
         <fieldset style="border:0;margin:0;padding:0"><legend class="fl">Capabilities</legend><ul class="caplist" id="agCaps"></ul></fieldset>
@@ -669,7 +669,7 @@ textarea.fin { height: auto; padding: 10px 14px; line-height: 1.55; resize: vert
 
   <dialog id="dlgProjects" aria-labelledby="djT">
     <div class="dlg narrow glass-strong solid edge">
-      <div class="dlg-head"><div><h2 id="djT">Projects</h2><p>Projects collect chats, searches and notes. They need an account, so they are available in the full NOVA app, not in this preview.</p></div><button class="ib sm" type="button" data-close aria-label="Close"></button></div>
+      <div class="dlg-head"><div><h2 id="djT">Projects</h2><p>Projects collect chats, searches and notes. They need an account, so they are available in the full ORBIS app, not in this preview.</p></div><button class="ib sm" type="button" data-close aria-label="Close"></button></div>
       <div class="dlg-foot"><button class="btn quiet" type="button" data-close>Got it</button></div>
     </div>
   </dialog>
@@ -841,7 +841,7 @@ it("cancel stops a pending call", () => {
   $$("[data-i]").forEach((el) => (el.outerHTML = ic(el.dataset.i)));
 
   /* Storage: per-browser conveniences only; the page works without it. */
-  const K = "nova-studio:";
+  const K = "orbis-studio:";
   const load = (k, d) => { try { const v = localStorage.getItem(K + k); return v == null ? d : JSON.parse(v); } catch { return d; } };
   const save = (k, v) => { try { localStorage.setItem(K + k, JSON.stringify(v)); } catch { /* storage unavailable */ } };
 
@@ -858,7 +858,7 @@ it("cancel stops a pending call", () => {
     coding: ["Write working code in fenced blocks with a language tag.", "Explain the key decisions and edge cases.", "Describe how to test the change."],
   };
   const MODELS = [
-    { id: "preview", name: "NOVA Preview", hint: "Simulated replies in this page", ok: true },
+    { id: "preview", name: "ORBIS Preview", hint: "Simulated replies in this page", ok: true },
     { id: "gpt-5-mini", name: "GPT-5 mini", hint: "Needs an API key in the full app", ok: false },
     { id: "gpt-5", name: "GPT-5", hint: "Needs an API key in the full app", ok: false },
     { id: "llama", name: "Llama 3.3 70B Instruct", hint: "Needs an API key in the full app", ok: false },
@@ -1096,7 +1096,7 @@ it("cancel stops a pending call", () => {
     }
     const q = text.replace(/\s+/g, " ").trim().slice(0, 160);
     const lines = [
-      `**Preview reply.** This page runs without an AI model, so it can’t answer “${q}”. In the full NOVA app, the same request goes to your configured model through the server, and the reply streams in here.`,
+      `**Preview reply.** This page runs without an AI model, so it can’t answer “${q}”. In the full ORBIS app, the same request goes to your configured model through the server, and the reply streams in here.`,
       "",
       `### What a connected model would do (${MODES[m].label} mode)`,
       ...STEPS[m].map((s, i) => `${i + 1}. ${s}`),
@@ -1127,8 +1127,8 @@ it("cancel stops a pending call", () => {
     $("#navAgents").toggleAttribute("aria-current", view !== "chat");
     if ($("#navChats").hasAttribute("aria-current")) $("#navChats").setAttribute("aria-current", "page");
     if ($("#navAgents").hasAttribute("aria-current")) $("#navAgents").setAttribute("aria-current", "page");
-    $("#disc").textContent = `${ag ? ag.name : "NOVA"} can make mistakes. Check important information.`;
-    input.placeholder = ag ? `Message ${ag.name}` : empty ? "Ask anything…" : "Message NOVA";
+    $("#disc").textContent = `${ag ? ag.name : "ORBIS"} can make mistakes. Check important information.`;
+    input.placeholder = ag ? `Message ${ag.name}` : empty ? "Ask anything…" : "Message ORBIS";
     if (ag) renderAgentHead(ag, empty ? null : c.title);
     if (ag && empty) renderIntro(ag);
     autosize();
@@ -1142,7 +1142,7 @@ it("cancel stops a pending call", () => {
     }
     const ag = active() && active().agentId ? agentById(active().agentId) : null;
     const tools = (m.tools || []).map((t, i) => `<div class="toolrow"><button type="button" data-tool="${i}" aria-expanded="false"><span class="ti">${ic("chart")}</span><span class="tl">${esc(t.label)}</span>${ic("chev", "chev")}</button><pre hidden>${esc(t.detail)}</pre></div>`).join("");
-    return `<div class="msg ai" data-id="${m.id}"><div class="who">${ag ? avatar(ag, "xs") : MARK}<b>${esc(ag ? ag.name : "NOVA Preview")}</b><span class="tag" title="Generated in your browser, not by a model">Simulated</span></div>${tools}<div class="body"></div><div class="foot"></div></div>`;
+    return `<div class="msg ai" data-id="${m.id}"><div class="who">${ag ? avatar(ag, "xs") : MARK}<b>${esc(ag ? ag.name : "ORBIS Preview")}</b><span class="tag" title="Generated in your browser, not by a model">Simulated</span></div>${tools}<div class="body"></div><div class="foot"></div></div>`;
   }
   function paintAI(m) {
     const el = msgsEl.querySelector(`[data-id="${m.id}"]`);
@@ -1218,8 +1218,8 @@ it("cancel stops a pending call", () => {
     s.title = busy ? "Stop generating" : S.settings.enter ? "Send (Enter)" : "Send (Ctrl/⌘ + Enter)";
     $("#modeBtn").innerHTML = `${ic(MODES[mode].icon)}<span class="modelabel">${MODES[mode].label}</span>`;
     $("#modeBtn").setAttribute("aria-label", `Mode: ${MODES[mode].label}`);
-    $("#modelBtn").innerHTML = `<span>NOVA Preview</span>${ic("down", "sm")}`;
-    $("#modelBtn").setAttribute("aria-label", "Model: NOVA Preview");
+    $("#modelBtn").innerHTML = `<span>ORBIS Preview</span>${ic("down", "sm")}`;
+    $("#modelBtn").setAttribute("aria-label", "Model: ORBIS Preview");
     const web = $("#webChip");
     web.hidden = !(useWeb && mode === "research" && view === "chat");
     web.innerHTML = `${ic("globe", "sm")}Web`;

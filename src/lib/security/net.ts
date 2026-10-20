@@ -50,7 +50,7 @@ export function safeRequest(
       u,
       {
         method: opts.method ?? "GET",
-        headers: { "user-agent": "NovaSentinel/1.0 (+authorized security check)", accept: "*/*", ...opts.headers },
+        headers: { "user-agent": "OrbisSentinel/1.0 (+authorized security check)", accept: "*/*", ...opts.headers },
         lookup: opts.lookup ?? guardedLookup,
         timeout: opts.timeoutMs ?? 8000,
         signal: opts.signal,

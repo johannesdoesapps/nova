@@ -15,7 +15,7 @@ import type { Workspace, WorkspaceFactory } from "./workspace";
  *   exit codes and output to files, so progress survives across requests.
  */
 const ROOT = "/vercel/sandbox";
-const STATE = "/tmp/nova";
+const STATE = "/tmp/orbis";
 
 const RUNNER = `import { spawn } from "node:child_process";
 import { writeFileSync, appendFileSync, mkdirSync } from "node:fs";
@@ -52,9 +52,9 @@ writeFileSync(dir + "/" + jobId + ".json", JSON.stringify({ exitCode: cancelled 
 `;
 
 export function sandboxCredentials() {
-  const token = process.env.NOVA_SANDBOX_TOKEN?.trim();
-  const teamId = process.env.NOVA_SANDBOX_TEAM_ID?.trim();
-  const projectId = process.env.NOVA_SANDBOX_PROJECT_ID?.trim();
+  const token = process.env.ORBIS_SANDBOX_TOKEN?.trim();
+  const teamId = process.env.ORBIS_SANDBOX_TEAM_ID?.trim();
+  const projectId = process.env.ORBIS_SANDBOX_PROJECT_ID?.trim();
   return token && teamId && projectId ? { token, teamId, projectId } : {};
 }
 
@@ -110,7 +110,7 @@ class VercelSandboxWorkspace implements Workspace {
         name: this.name,
         source: { type: "git", url: `https://github.com/${opts.repo}.git`, revision: opts.branch, depth: 1 },
         runtime: "node22",
-        resources: { vcpus: Number(process.env.NOVA_SANDBOX_VCPUS ?? 2) === 4 ? 4 : 2 },
+        resources: { vcpus: Number(process.env.ORBIS_SANDBOX_VCPUS ?? 2) === 4 ? 4 : 2 },
         timeout: 45 * 60_000,
         persistent: false,
         ...sandboxCredentials(),
@@ -125,9 +125,9 @@ class VercelSandboxWorkspace implements Workspace {
       ];
       if (opts.restoreDiff) files.push({ path: `${STATE}/restore.diff`, content: opts.restoreDiff });
       await sb.writeFiles(files);
-      await this.run("git", ["config", "user.email", "workforce@nova.invalid"]);
+      await this.run("git", ["config", "user.email", "workforce@orbis.invalid"]);
       await this.run("git", ["config", "user.name", "Orbis Workforce"]);
-      await this.run("git", ["checkout", "-b", "nova-workforce"]);
+      await this.run("git", ["checkout", "-b", "orbis-workforce"]);
       const cmds = [INSTALL_COMMAND, ...(opts.restoreDiff ? [["git", "apply", "--whitespace=nowarn", `${STATE}/restore.diff`]] : [])];
       await this.startJob("install", cmds, 10 * 60_000);
       return { ready: false as const, detail: "Workspace created; installing dependencies." };
@@ -212,7 +212,7 @@ class VercelSandboxWorkspace implements Workspace {
 export const vercelWorkspaces: WorkspaceFactory = Object.assign((name: string) => new VercelSandboxWorkspace(name), {
   available(): { ok: true } | { ok: false; reason: string } {
     // On Vercel, credentials come from the function's OIDC token automatically.
-    if (process.env.VERCEL || process.env.NOVA_SANDBOX_TOKEN) return { ok: true };
-    return { ok: false, reason: "Isolated workspaces need Vercel Sandbox: run on Vercel, or set NOVA_SANDBOX_TOKEN, NOVA_SANDBOX_TEAM_ID and NOVA_SANDBOX_PROJECT_ID for local development." };
+    if (process.env.VERCEL || process.env.ORBIS_SANDBOX_TOKEN) return { ok: true };
+    return { ok: false, reason: "Isolated workspaces need Vercel Sandbox: run on Vercel, or set ORBIS_SANDBOX_TOKEN, ORBIS_SANDBOX_TEAM_ID and ORBIS_SANDBOX_PROJECT_ID for local development." };
   },
 });

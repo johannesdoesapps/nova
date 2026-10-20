@@ -104,7 +104,7 @@ async function registryFromDatabase(): Promise<ModelInfo[] | null> {
   }
 }
 
-/** Every registered model before admin filtering: model_registry table → NOVA_MODELS env → defaults, plus admin-added models. */
+/** Every registered model before admin filtering: model_registry table → ORBIS_MODELS env → defaults, plus admin-added models. */
 export async function getAllModels(settings?: PlatformSettings): Promise<ModelWithStatus[]> {
   const cfg = settings ?? (await getPlatformSettings());
   const base =

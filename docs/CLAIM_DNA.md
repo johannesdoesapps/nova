@@ -43,7 +43,7 @@ SourceRecord {
   contentKind: "snippet" | "full_text" | "user_pasted",
   text, contentHash,
   reliability: { sourceType, hasDate, ageDays, https, contentKind, textLength, flags[] },
-  provenance: [{ at, actor: "search_provider"|"user"|"nova"|"model", action, detail }]
+  provenance: [{ at, actor: "search_provider"|"user"|"orbis"|"model", action, detail }]
 }
 
 Claim {

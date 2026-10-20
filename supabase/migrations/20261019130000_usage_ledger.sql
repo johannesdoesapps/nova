@@ -1,4 +1,4 @@
--- NOVA AI — usage accounting that can't be raced or double-charged.
+-- ORBIS AI — usage accounting that can't be raced or double-charged.
 --
 -- Every model call is recorded in model_runs with the usage units it was
 -- charged (from the model that actually answered), the request it belongs to
@@ -152,7 +152,7 @@ begin
     raise exception 'Invalid usage request' using errcode = '22023';
   end if;
   -- One reservation at a time per user, so concurrent requests can't both pass.
-  perform pg_advisory_xact_lock(hashtextextended('nova-usage:' || uid::text, 0));
+  perform pg_advisory_xact_lock(hashtextextended('orbis-usage:' || uid::text, 0));
 
   if exists (select 1 from public.usage_holds where user_id = uid and request_id = p_request_id)
      or exists (select 1 from public.model_runs where user_id = uid and request_id = p_request_id) then

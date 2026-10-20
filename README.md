@@ -49,11 +49,11 @@ Requirements: Node.js ≥ 20.9 (tested with Node 22) and Python ≥ 3.11 (tested
 ```bash
 # 1. Web app
 npm install
-cp .env.example .env.local          # set NOVA_ENGINE_SECRET to any long random string
+cp .env.example .env.local          # set ORBIS_ENGINE_SECRET to any long random string
 
 # 2. Python engine (AI Lab, Radar, Workspaces, Integrations)
 npm run engine:setup                # creates engine/.venv and installs requirements
-export NOVA_ENGINE_SECRET=<same value as in .env.local>
+export ORBIS_ENGINE_SECRET=<same value as in .env.local>
 npm run engine                      # http://127.0.0.1:8787  (API docs at /docs)
 npm run engine:worker               # optional: scheduled Radar checks, digests, scheduled workflows
 
@@ -72,16 +72,16 @@ The app starts with zero configuration. Add keys incrementally:
 | `OPENAI_API_KEY` (optional `OPENAI_BASE_URL`) | OpenAI models | platform.openai.com |
 | `HUGGINGFACE_API_KEY` | Open models via HF Inference Providers; higher Hub limits | Fine-grained token with "Make calls to Inference Providers" |
 | `SEARCH_PROVIDER` (`tavily` \| `brave`), `SEARCH_API_KEY` | Live sources for AI Search / Research mode | tavily.com or brave.com/search/api |
-| `NOVA_MODELS` | Override the model list / set verified prices | See below |
-| `NOVA_MAX_COMPARE_MODELS`, `NOVA_DAILY_REQUEST_LIMIT`, `NOVA_RATE_LIMIT_PER_MINUTE` | Cost controls | Defaults: 3 / 200 / 20 |
+| `ORBIS_MODELS` | Override the model list / set verified prices | See below |
+| `ORBIS_MAX_COMPARE_MODELS`, `ORBIS_DAILY_REQUEST_LIMIT`, `ORBIS_RATE_LIMIT_PER_MINUTE` | Cost controls | Defaults: 3 / 200 / 20 |
 | `SENTRY_DSN` | Optional error monitoring | See *Observability* |
-| `NOVA_TRIAL_SECRET` | Keeps blind-trial tokens valid across restarts / instances | Any long random string |
-| `NOVA_ENGINE_URL`, `NOVA_ENGINE_SECRET` | Web ↔ engine connection; the secret signs short-lived user identities and **must match on both services** | `openssl rand -base64 32` |
-| `NOVA_TOKEN_KEYS` (engine) | Encrypts OAuth tokens at rest (`kid:base64key`, newest first for rotation) | `kid1:$(openssl rand -base64 32)` |
-| `NOVA_ENGINE_DATABASE_URL` (engine) | Engine database; SQLite by default, Postgres (Supabase pooler) in production | `postgresql+psycopg://…` |
-| `NOVA_MODEL_PRICES` (engine) | Verified prices for workflow cost limits | `{"openai:gpt-5.6-luna":[0.2,1.2]}` (example only) |
+| `ORBIS_TRIAL_SECRET` | Keeps blind-trial tokens valid across restarts / instances | Any long random string |
+| `ORBIS_ENGINE_URL`, `ORBIS_ENGINE_SECRET` | Web ↔ engine connection; the secret signs short-lived user identities and **must match on both services** | `openssl rand -base64 32` |
+| `ORBIS_TOKEN_KEYS` (engine) | Encrypts OAuth tokens at rest (`kid:base64key`, newest first for rotation) | `kid1:$(openssl rand -base64 32)` |
+| `ORBIS_ENGINE_DATABASE_URL` (engine) | Engine database; SQLite by default, Postgres (Supabase pooler) in production | `postgresql+psycopg://…` |
+| `ORBIS_MODEL_PRICES` (engine) | Verified prices for workflow cost limits | `{"openai:gpt-5.6-luna":[0.2,1.2]}` (example only) |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` (engine) | GitHub OAuth for issue creation (public mirroring works without) | GitHub → Developer settings → OAuth Apps |
-| `NOVA_PRIVACY_PROFILES` | Verified provider data-handling facts used by the Model Directory and privacy-constrained routing | JSON keyed by provider, see `.env.example` |
+| `ORBIS_PRIVACY_PROFILES` | Verified provider data-handling facts used by the Model Directory and privacy-constrained routing | JSON keyed by provider, see `.env.example` |
 
 No service-role key is used anywhere: all database access runs as the signed-in user, so Row Level Security always applies. Settings → Integrations shows which variables are set (booleans only — values never reach the browser).
 
@@ -105,7 +105,7 @@ In Supabase → Authentication → URL Configuration, add `<your-site>/auth/call
 Default models are defined in `src/lib/ai/registry.ts` (Claude, GPT-5.6, Gemini, Grok, DeepSeek and Hugging Face models — see `docs/MODELS.md`). Prices are filled in only where they were verified on the provider's page; the rest ship as `null` and Orbis shows "n/a" rather than inventing numbers. To set or correct prices (USD per 1M tokens) either by inserting rows into `model_registry` (which takes priority) or with:
 
 ```bash
-NOVA_MODELS='[{"id":"openai:gpt-5.6-luna","provider":"openai","providerModelId":"gpt-5.6-luna","displayName":"GPT-5.6 Luna","capabilities":["chat","fast","low-cost"],"contextWindow":1050000,"inputPrice":0.2,"outputPrice":1.2,"lastVerifiedAt":"2026-10-19"}]'
+ORBIS_MODELS='[{"id":"openai:gpt-5.6-luna","provider":"openai","providerModelId":"gpt-5.6-luna","displayName":"GPT-5.6 Luna","capabilities":["chat","fast","low-cost"],"contextWindow":1050000,"inputPrice":0.2,"outputPrice":1.2,"lastVerifiedAt":"2026-10-19"}]'
 ```
 
 (Example values only — copy real figures from the provider's pricing page.) Any OpenAI-compatible endpoint works through `OPENAI_BASE_URL`.
@@ -155,7 +155,7 @@ src/
 supabase/migrations/  SQL schema and RLS
 tests/                Vitest suites
 engine/               Python Orbis engine
-  nova_engine/
+  orbis_engine/
     api/              FastAPI app (all engine endpoints)
     lab/              planner, validator, executor, templates, tests, versions (Part 7)
     radar/            sources, analysis, alerts, digests (Part 8)

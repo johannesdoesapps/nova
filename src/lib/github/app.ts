@@ -57,7 +57,7 @@ async function gh<T>(path: string, token: string, init: RequestInit = {}, f: Fet
       accept: "application/vnd.github+json",
       authorization: `Bearer ${token}`,
       "x-github-api-version": "2022-11-28",
-      "user-agent": "nova-ai",
+      "user-agent": "orbis-ai",
       ...(init.headers ?? {}),
     },
     signal: AbortSignal.timeout(15_000),

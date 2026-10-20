@@ -1,15 +1,15 @@
-# NOVA engine (Python)
+# ORBIS engine (Python)
 
-FastAPI service behind NOVA AI's AI Lab (Part 7), Signal Radar (Part 8) and
+FastAPI service behind ORBIS AI's AI Lab (Part 7), Signal Radar (Part 8) and
 Workspaces / Community / Integrations (Part 9). The Next.js app is the only
 client: it authenticates users and calls the engine with a short-lived
-HMAC-signed `X-Nova-Identity` header.
+HMAC-signed `X-Orbis-Identity` header.
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-export NOVA_ENGINE_SECRET=...            # same value as the web app's
-.venv/bin/python -m nova_engine          # API on 127.0.0.1:8787 (OpenAPI at /docs)
-.venv/bin/python -m nova_engine.worker   # background worker (or --once from cron)
+export ORBIS_ENGINE_SECRET=...            # same value as the web app's
+.venv/bin/python -m orbis_engine          # API on 127.0.0.1:8787 (OpenAPI at /docs)
+.venv/bin/python -m orbis_engine.worker   # background worker (or --once from cron)
 .venv/bin/python -m pytest               # tests
 ```
 

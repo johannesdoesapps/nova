@@ -44,7 +44,7 @@ export interface FindingDraft {
   asset: string;
   location: string | null;
   evidence: Evidence[];
-  /** Which tool produced it: "nova:headers", "nova:code-rules", "osv.dev", "nova:log-analyzer", "ai-review". */
+  /** Which tool produced it: "orbis:headers", "orbis:code-rules", "osv.dev", "orbis:log-analyzer", "ai-review". */
   evidenceSource: string;
   remediation: string;
   references: string[];

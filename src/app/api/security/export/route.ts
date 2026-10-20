@@ -22,7 +22,7 @@ export async function GET(req: Request) {
     return new Response(body, {
       headers: {
         "content-type": q.format === "json" ? "application/json; charset=utf-8" : "text/markdown; charset=utf-8",
-        "content-disposition": `attachment; filename="nova-security-findings-${date}.${q.format}"`,
+        "content-disposition": `attachment; filename="orbis-security-findings-${date}.${q.format}"`,
         "cache-control": "no-store",
       },
     });

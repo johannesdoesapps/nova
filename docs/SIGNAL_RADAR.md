@@ -9,7 +9,7 @@ Opportunity Radar matches those signals against the user's stated interests.
 user presses **Check now** or the Orbis worker process runs. The page tells the
 user which of these is true, using the worker heartbeat.
 
-Code: `engine/nova_engine/radar/*`, `engine/nova_engine/worker.py`, `src/components/radar/radar-view.tsx`.
+Code: `engine/orbis_engine/radar/*`, `engine/orbis_engine/worker.py`, `src/components/radar/radar-view.tsx`.
 
 ---
 
@@ -60,7 +60,7 @@ Fetching safeguards: SSRF guard on every URL and redirect hop, 2 MB response cap
 | weekly | 7 d (+ ≤ 10 min jitter) | same rule |
 | manual | never scheduled | "manual" |
 
-The worker (`python -m nova_engine.worker`, as a loop or `--once` from cron) claims due watches with a row lease, so two workers never check the same watch. Manual checks are limited to 3 per watch per 10 minutes. Every check is recorded (`radar_checks`) with fetched, new, duplicate, upgraded, alerts, errors, web searches and volume spike.
+The worker (`python -m orbis_engine.worker`, as a loop or `--once` from cron) claims due watches with a row lease, so two workers never check the same watch. Manual checks are limited to 3 per watch per 10 minutes. Every check is recorded (`radar_checks`) with fetched, new, duplicate, upgraded, alerts, errors, web searches and volume spike.
 
 ## 5. Baseline and change detection
 

@@ -8,11 +8,11 @@ import { safeRequest, txtRecords } from "./net";
 /**
  * Proof that the user controls a website, checked by the server immediately
  * before every scan (never trusted from the database or the browser):
- *  - http_file: https://HOST/.well-known/nova-security-verification.txt contains the token
- *  - dns_txt:   a TXT record on _nova-verify.HOST (or HOST) contains the token
+ *  - http_file: https://HOST/.well-known/orbis-security-verification.txt contains the token
+ *  - dns_txt:   a TXT record on _orbis-verify.HOST (or HOST) contains the token
  *  - site_admin: an administrator scanning this Orbis deployment's own domain
  */
-export const VERIFY_PATH = "/.well-known/nova-security-verification.txt";
+export const VERIFY_PATH = "/.well-known/orbis-security-verification.txt";
 
 export function siteHosts(): string[] {
   const hosts = new Set<string>();
@@ -37,10 +37,10 @@ export async function proveOwnership(target: Pick<TargetRow, "hostname" | "token
   } catch {
     /* try DNS next */
   }
-  const records = [...(await txtRecords(`_nova-verify.${target.hostname}`)), ...(await txtRecords(target.hostname))];
+  const records = [...(await txtRecords(`_orbis-verify.${target.hostname}`)), ...(await txtRecords(target.hostname))];
   if (records.some((r) => r.includes(target.token))) return { ok: true, method: "dns_txt" };
   return {
     ok: false,
-    reason: `Couldn't confirm you control ${target.hostname}. Publish the token at ${VERIFY_PATH} or in a TXT record on _nova-verify.${target.hostname}, then try again.`,
+    reason: `Couldn't confirm you control ${target.hostname}. Publish the token at ${VERIFY_PATH} or in a TXT record on _orbis-verify.${target.hostname}, then try again.`,
   };
 }

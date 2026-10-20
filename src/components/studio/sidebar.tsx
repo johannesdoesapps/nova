@@ -30,7 +30,7 @@ import type { AppUser } from "@/components/layout/app-context";
 import { cn } from "@/lib/utils";
 import { groupByDate, type ConvSummary } from "./history";
 import type { ThemePref } from "./prefs";
-import { IconButton, iconButtonClass, Kbd, Menu, MenuItem, MenuSeparator, NovaMark, Segmented } from "./ui";
+import { IconButton, iconButtonClass, Kbd, Menu, MenuItem, MenuSeparator, OrbisMark, Segmented } from "./ui";
 
 export interface SidebarProps {
   collapsed: boolean;
@@ -129,7 +129,7 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
             className={cn("flex min-w-0 items-center gap-2.5 rounded-xl px-1.5 py-1 transition hover:opacity-80", rail && "md:hidden")}
             aria-label="Orbis — new chat"
           >
-            <NovaMark className="h-7 w-7 text-s-ink" />
+            <OrbisMark className="h-7 w-7 text-s-ink" />
             <span className="text-[15px] font-semibold tracking-[0.22em]">ORBIS</span>
           </button>
           <IconButton

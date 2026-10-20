@@ -36,7 +36,7 @@ function applyTheme(pref: ThemePref) {
 }
 
 export function useTheme() {
-  const [stored, setStored] = useLocalStorage("nova:theme", "dark");
+  const [stored, setStored] = useLocalStorage("orbis:theme", "dark");
   const pref: ThemePref = stored === "light" || stored === "system" ? stored : "dark";
   const [resolved, setResolved] = useState<"light" | "dark">("dark");
 
@@ -76,7 +76,7 @@ export interface StudioSettings {
 const DEFAULT_SETTINGS: StudioSettings = { enterToSend: true, defaultMode: "research", allowFallback: false };
 
 export function useSettings() {
-  const [value, set] = useStoredJson<StudioSettings>("nova:studio:settings", DEFAULT_SETTINGS, (v): v is StudioSettings => {
+  const [value, set] = useStoredJson<StudioSettings>("orbis:studio:settings", DEFAULT_SETTINGS, (v): v is StudioSettings => {
     const s = v as StudioSettings;
     return !!s && typeof s.enterToSend === "boolean" && (CHAT_MODES as readonly string[]).includes(s.defaultMode);
   });
@@ -93,7 +93,7 @@ export interface SavedPrompt {
 }
 
 export function useSavedPrompts() {
-  const [prompts, set] = useStoredJson<SavedPrompt[]>("nova:studio:prompts", [], (v): v is SavedPrompt[] => Array.isArray(v));
+  const [prompts, set] = useStoredJson<SavedPrompt[]>("orbis:studio:prompts", [], (v): v is SavedPrompt[] => Array.isArray(v));
   const add = useCallback(
     (text: string) => {
       const t = text.trim().slice(0, 4000);
@@ -114,7 +114,7 @@ export type Feedback = "up" | "down";
 /** Thumbs up/down on replies, kept on this device. */
 export function useFeedback() {
   const [map, set] = useStoredJson<Record<string, Feedback>>(
-    "nova:studio:feedback",
+    "orbis:studio:feedback",
     {},
     (v): v is Record<string, Feedback> => !!v && typeof v === "object" && !Array.isArray(v),
   );

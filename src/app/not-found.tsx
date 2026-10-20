@@ -3,7 +3,7 @@ import { Logo } from "@/components/layout/logo";
 
 export default function NotFound() {
   return (
-    <div className="nova-glow grid min-h-dvh place-items-center px-4 text-center">
+    <div className="orbis-glow grid min-h-dvh place-items-center px-4 text-center">
       <div>
         <Logo className="justify-center" />
         <h1 className="mt-8 text-2xl font-semibold">Page not found</h1>

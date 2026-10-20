@@ -46,7 +46,7 @@ describe("Orbis Sentinel checks", () => {
           "content-type": "text/html",
           server: "nginx/1.18.0",
           "set-cookie": ["session_id=abcdef123456; Path=/", "theme=dark; Secure; SameSite=Lax"],
-          "access-control-allow-origin": "https://nova-cors-check.invalid",
+          "access-control-allow-origin": "https://orbis-cors-check.invalid",
           "access-control-allow-credentials": "true",
         },
         body: '<script src="http://cdn.example.net/x.js"></script>',
@@ -255,7 +255,7 @@ describe("coordination and reports", () => {
   });
   it("exports Markdown with severity tallies but no invented score", () => {
     const md = findingsToMarkdown(
-      [{ id: "1", agent: "sentinel", title: "T", description: "D", severity: "high", confidence: "confirmed", rationale: "R", asset: "x", location: null, evidence: [{ source: "s", detail: "d" }], evidence_source: "nova:headers", remediation: "Fix", refs: [], status: "open", verification: "not_verified", verification_note: null, related: [], duplicate_of: null, user_note: null, patch: null, first_seen: "2026-10-19", last_seen: "2026-10-19" }],
+      [{ id: "1", agent: "sentinel", title: "T", description: "D", severity: "high", confidence: "confirmed", rationale: "R", asset: "x", location: null, evidence: [{ source: "s", detail: "d" }], evidence_source: "orbis:headers", remediation: "Fix", refs: [], status: "open", verification: "not_verified", verification_note: null, related: [], duplicate_of: null, user_note: null, patch: null, first_seen: "2026-10-19", last_seen: "2026-10-19" }],
       new Date("2026-10-19T00:00:00Z"),
     );
     expect(md).toContain("| high | 1 |");

@@ -1,4 +1,4 @@
--- NOVA AI — paid plans. One row per paying user; no row means the Free plan.
+-- ORBIS AI — paid plans. One row per paying user; no row means the Free plan.
 -- Users can read their own subscription but never write it: rows are managed
 -- by the payment webhook with the service role.
 create table public.subscriptions (

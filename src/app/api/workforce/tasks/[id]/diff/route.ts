@@ -10,7 +10,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/workforce/tasks
     if (!task) throw new ApiError("not_found", "Task not found.");
     if (!task.diff) throw new ApiError("not_found", "This task has no changes.");
     await store.addEvent({ task_id: id, level: "audit", type: "diff.downloaded", message: "Patch downloaded by the operator." });
-    return new Response(task.diff, { headers: { "content-type": "text/x-diff; charset=utf-8", "content-disposition": `attachment; filename="nova-task-${id.slice(0, 8)}.patch"`, "cache-control": "no-store" } });
+    return new Response(task.diff, { headers: { "content-type": "text/x-diff; charset=utf-8", "content-disposition": `attachment; filename="orbis-task-${id.slice(0, 8)}.patch"`, "cache-control": "no-store" } });
   } catch (err) {
     return wfError(err);
   }

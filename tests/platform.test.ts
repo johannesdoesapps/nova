@@ -10,7 +10,7 @@ import { autoRoute, pickForCapability } from "@/lib/ai/router";
 import type { AIProvider, ModelWithStatus, StreamEvent } from "@/lib/ai/types";
 import { ApiError } from "@/lib/http";
 
-const KEYS = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "DEEPSEEK_API_KEY", "HUGGINGFACE_API_KEY", "NOVA_MODELS"];
+const KEYS = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "DEEPSEEK_API_KEY", "HUGGINGFACE_API_KEY", "ORBIS_MODELS"];
 beforeAll(() => {
   for (const k of KEYS) delete process.env[k];
 });

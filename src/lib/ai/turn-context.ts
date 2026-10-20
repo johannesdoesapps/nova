@@ -49,9 +49,9 @@ export function buildTurnContext(message: string, opts: { timeZone?: string | nu
   return { system: parts.join("\n\n"), tools };
 }
 
-/** The user's time zone as their browser reported it (body field first, then the X-NOVA-Time-Zone header). */
+/** The user's time zone as their browser reported it (body field first, then the X-ORBIS-Time-Zone header). */
 export function requestTimeZone(req: Request, bodyTimeZone?: string | null): string | null {
-  return bodyTimeZone ?? req.headers.get("x-nova-time-zone");
+  return bodyTimeZone ?? req.headers.get("x-orbis-time-zone");
 }
 
 /**

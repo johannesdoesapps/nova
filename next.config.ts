@@ -39,7 +39,7 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Frame-Options", value: "DENY" },
-          // Voice input in the chat composer needs the microphone on NOVA's own pages.
+          // Voice input in the chat composer needs the microphone on ORBIS's own pages.
           { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=()" },
         ],
       },

@@ -7,7 +7,7 @@ an auditable run. People stay in control at three points:
 2. They **publish** an immutable version before anything runs live.
 3. They **approve** every consequential action, sensitive data share and irreversible change, seeing exactly what will happen.
 
-Code: `engine/nova_engine/lab/*` (Python), `engine/nova_engine/security/*`, `src/components/lab/*` (UI), proxied by `src/app/api/engine/[...path]`.
+Code: `engine/orbis_engine/lab/*` (Python), `engine/orbis_engine/security/*`, `src/components/lab/*` (UI), proxied by `src/app/api/engine/[...path]`.
 
 ---
 
@@ -42,7 +42,7 @@ The Composer's right-panel tabs:
 
 ## 3. Data structures
 
-`engine/nova_engine/lab/models.py` (Pydantic; unknown fields are rejected):
+`engine/orbis_engine/lab/models.py` (Pydantic; unknown fields are rejected):
 
 ```python
 WorkflowSpec { name, description, trigger: {type: manual|schedule|webhook|radar_signal, config},
@@ -58,7 +58,7 @@ PlanTask { id, title, description, kind: research|fetch|analyze|draft|transform|
            depends_on, tool, model, needs_approval, approval_reasons, risk: low|medium|high, params }
 ```
 
-Tables (`engine/nova_engine/db.py`):
+Tables (`engine/orbis_engine/db.py`):
 
 - `workflows`: draft, tests, status, latest version.
 - `workflow_versions`: immutable spec and `spec_hash`. Negative numbers are dry-run and test snapshots.

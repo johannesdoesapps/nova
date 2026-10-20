@@ -1,6 +1,6 @@
 # Orbis AI: advanced audit and launch readiness
 
-Date: 2026-10-19. Production: https://nova-supabase.vercel.app (commit 4ef5114).
+Date: 2026-10-19. Production: https://tryorbis.app (commit 4ef5114).
 
 Everything marked "passed" below was executed. Anything not executed is marked as not tested, with the reason. No secrets appear in this report.
 

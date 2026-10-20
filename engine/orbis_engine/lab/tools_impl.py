@@ -43,7 +43,7 @@ def http_get(url: str, allowed: list[str], timeout_s: float = 20) -> dict[str, A
         raise EngineError("forbidden", f"{url} is not on this workflow's allowed domains.")
     assert_public_url(url)
     with httpx.Client(timeout=timeout_s, follow_redirects=False) as c:
-        r = c.get(url, headers={"User-Agent": "NOVA-AI/0.1 (+workflow fetch)"})
+        r = c.get(url, headers={"User-Agent": "ORBIS-AI/0.1 (+workflow fetch)"})
         if r.is_redirect:
             loc = r.headers.get("location", "")
             if not domain_allowed(loc, allowed):

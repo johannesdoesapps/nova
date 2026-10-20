@@ -55,7 +55,7 @@ export type SourceType =
 
 export interface ProvenanceStep {
   at: string;
-  actor: "search_provider" | "user" | "nova" | "model";
+  actor: "search_provider" | "user" | "orbis" | "model";
   action: string;
   detail?: string;
 }
