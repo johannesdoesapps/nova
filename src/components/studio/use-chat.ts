@@ -179,6 +179,7 @@ export function useStudioChat({
           } else if (ev.type === "model") patch((m) => ({ ...m, modelName: ev.model.displayName, routing: undefined }));
           else if (ev.type === "tool") patch((m) => ({ ...m, tools: [...(m.tools ?? []), ev.tool] }));
           else if (ev.type === "sources") patch((m) => ({ ...m, sources: ev.sources }));
+          else if (ev.type === "actions") patch((m) => ({ ...m, actions: ev.actions }));
           else if (ev.type === "notice") patch((m) => ({ ...m, notices: [...(m.notices ?? []), ev.message] }));
           else if (ev.type === "delta") patch((m) => ({ ...m, content: m.content + ev.text }));
           else if (ev.type === "done")

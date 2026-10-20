@@ -2,6 +2,8 @@
 import { memo, useState, type ReactNode } from "react";
 import { BookmarkPlus, ChartColumn, Check, ChevronRight, CircleAlert, Copy, Ellipsis, FileText, FolderPlus, Globe, RefreshCw, Sparkles, ThumbsDown, ThumbsUp, Wrench } from "lucide-react";
 import { Markdown } from "@/components/common/markdown";
+import { ActionCard } from "@/components/connectors/action-card";
+import { BrandIcon } from "@/components/connectors/brand-icon";
 import { cn, formatUsd } from "@/lib/utils";
 import type { Msg } from "./history";
 import type { Feedback } from "./prefs";
@@ -63,6 +65,8 @@ export const MessageView = memo(function MessageView({
 
   const streaming = m.status === "streaming";
   const valid = new Set((m.sources ?? []).map((s) => s.index));
+  // A proposed connector action arrives as a block at the end of the reply; it becomes a review card, not text.
+  const shown = streaming ? m.content.replace(/```orbis-action[\s\S]*$/, "").trimEnd() : m.content;
   return (
     <div className="group/msg s-in">
       <div className="mb-2.5 flex items-center gap-2 text-[12.5px] text-s-ink-3">
@@ -89,16 +93,16 @@ export const MessageView = memo(function MessageView({
 
       {m.tools?.map((t, i) => <ToolRow key={i} tool={t} />)}
 
-      {m.content ? (
+      {shown ? (
         <div className={cn(streaming && "s-caret")}>
           <Markdown
-            text={m.content}
+            text={shown}
             className="s-prose"
             runnable={!streaming}
             validCitations={valid}
             onCitation={(n) => {
               const s = m.sources?.find((x) => x.index === n);
-              if (s) window.open(s.url, "_blank", "noopener,noreferrer");
+              if (s?.url) window.open(s.url, "_blank", "noopener,noreferrer");
             }}
           />
         </div>
@@ -115,21 +119,28 @@ export const MessageView = memo(function MessageView({
 
       {m.sources && m.sources.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-1.5">
-          {m.sources.map((s) => (
-            <a
-              key={s.index}
-              href={s.url}
-              target="_blank"
-              rel="noopener noreferrer nofollow"
-              title={s.title}
-              className="glass inline-flex max-w-[240px] items-center gap-1.5 rounded-full py-1 pl-1 pr-2.5 text-[12px] text-s-ink-2 transition hover:text-s-ink"
-            >
-              <span className="grid h-5 min-w-5 place-items-center rounded-full bg-s-accent-soft px-1 text-[11px] font-semibold text-s-accent">{s.index}</span>
-              <span className="truncate">{s.domain}</span>
-            </a>
-          ))}
+          {m.sources.map((s) => {
+            const label = (
+              <>
+                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-s-accent-soft px-1 text-[11px] font-semibold text-s-accent">{s.index}</span>
+                <span className="truncate">{s.app ? `${s.app} · ${s.title}` : (s.domain ?? s.title)}</span>
+              </>
+            );
+            const cls = "glass inline-flex max-w-[260px] items-center gap-1.5 rounded-full py-1 pl-1 pr-2.5 text-[12px] text-s-ink-2 transition hover:text-s-ink";
+            return s.url ? (
+              <a key={s.index} href={s.url} target="_blank" rel="noopener noreferrer nofollow" title={s.title} className={cls}>
+                {label}
+              </a>
+            ) : (
+              <span key={s.index} title={s.title} className={cls}>
+                {label}
+              </span>
+            );
+          })}
         </div>
       )}
+
+      {!streaming && m.actions?.map((a) => <ActionCard key={a.id} action={a} messageId={m.id} />)}
 
       {m.status === "error" && (
         <div role="alert" className="s-in mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-s-line bg-s-hover px-4 py-3 text-[14px]">
@@ -196,7 +207,7 @@ const TOOL_ICONS: Record<string, ReactNode> = { web_search: <Globe />, data_anal
 /** A tool the server ran for this reply; expandable when it produced output. */
 function ToolRow({ tool }: { tool: NonNullable<Msg["tools"]>[number] }) {
   const [open, setOpen] = useState(false);
-  const icon = TOOL_ICONS[tool.name] ?? <Wrench />;
+  const icon = tool.name.startsWith("connector:") ? <BrandIcon id={tool.name.slice(10)} size={24} className="rounded-lg" /> : (TOOL_ICONS[tool.name] ?? <Wrench />);
   const body = (
     <>
       <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-lg [&_svg]:h-3.5 [&_svg]:w-3.5", tool.status === "ok" ? "bg-s-accent-soft text-s-accent" : "bg-s-hover text-s-danger")}>

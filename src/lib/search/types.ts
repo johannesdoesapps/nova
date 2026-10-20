@@ -6,6 +6,8 @@ export interface SearchSource {
   snippet: string;
   domain: string;
   publishedAt: string | null;
+  /** For results from a connected app (Gmail, Drive…): the app's name. */
+  app?: string;
 }
 
 export interface SearchProviderResult {

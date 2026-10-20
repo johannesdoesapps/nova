@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bookmark, Bot, Cpu, Flag, ListPlus, MessageSquare, MessagesSquare, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, SquarePen, Swords, Users } from "lucide-react";
+import { Bookmark, Bot, Code2, Cpu, Flag, ListPlus, MessageSquare, MessagesSquare, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, SquarePen, Swords, Users, Plug } from "lucide-react";
 import { useCatalog } from "@/components/common/model-picker";
 import { useModelChoice } from "./use-model-choice";
 import { jsonFetch } from "@/hooks/use-ndjson";
@@ -102,6 +102,8 @@ function Palette({
       { id: "security", group: "Actions", label: "Security Team: scan, investigate or audit", icon: <ShieldCheck />, keywords: "security sentinel threat hunter code guardian vulnerability scan audit logs", run: go("/agents/security") },
       { id: "chats", group: "Go to", label: "Chats", icon: <MessagesSquare />, run: go("/chat") },
       { id: "missions", group: "Go to", label: "Mission Control", icon: <Flag />, run: go("/missions") },
+      { id: "code", group: "Go to", label: "Code", icon: <Code2 />, keywords: "projects editor terminal preview ide", run: go("/code") },
+      { id: "connectors", group: "Go to", label: "Connectors", icon: <Plug />, keywords: "integrations apps gmail drive google calendar slack notion github outlook onedrive hubspot figma wikipedia connect", run: go("/connectors") },
       { id: "agents", group: "Go to", label: "Agents", icon: <Bot />, run: go("/agents") },
       { id: "prompts", group: "Go to", label: "Saved prompts", icon: <Bookmark />, run: onOpenPrompts },
       { id: "settings", group: "Go to", label: "Settings", icon: <Settings2 />, keywords: "preferences theme", run: onOpenSettings },

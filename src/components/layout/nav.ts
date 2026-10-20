@@ -40,7 +40,7 @@ export const NAV: NavItem[] = [
   { href: "/workspaces", label: "Workspaces", icon: Layers },
   { href: "/projects", label: "Research Projects", icon: FolderKanban },
   { href: "/community", label: "Community", icon: Users },
-  { href: "/integrations", label: "Integrations", icon: Plug },
+  { href: "/connectors", label: "Connectors", icon: Plug },
   { href: "/simulator", label: "What-If Simulator", icon: GitBranch, soon: true },
   { href: "/graph", label: "Knowledge Graph", icon: Network, soon: true },
   { href: "/settings", label: "Settings", icon: Settings },

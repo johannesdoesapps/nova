@@ -6,6 +6,7 @@
  */
 import { jsonFetch } from "@/hooks/use-ndjson";
 import type { ChatMode } from "@/lib/ai/modes";
+import type { ProposedAction } from "@/lib/connectors/catalog";
 import type { SearchSource } from "@/lib/search/types";
 import type { ChatAttachment, ToolRecord } from "./chat-client";
 
@@ -29,6 +30,8 @@ export interface Msg {
   sources?: SearchSource[];
   tools?: ToolRecord[];
   notices?: string[];
+  /** Changes in connected apps the reply proposed, for the user to confirm. */
+  actions?: ProposedAction[];
   attachments?: string[];
   /** User messages, this session only: the attached files, so a regenerate can resend them. */
   files?: ChatAttachment[];
@@ -60,7 +63,7 @@ type ServerMessage = {
   model_id: string | null;
   /** Display name for model_id, added by the conversation API. */
   model_name?: string | null;
-  usage_metadata: { sources?: SearchSource[]; attachments?: string[]; tools?: ToolRecord[] } | null;
+  usage_metadata: { sources?: SearchSource[]; attachments?: string[]; tools?: ToolRecord[]; actions?: ProposedAction[] } | null;
 };
 
 /** Signed-in history. `listUrl` selects ordinary chats or one agent's conversations. */
@@ -91,6 +94,7 @@ export const serverHistory: HistoryStore = {
           simulated: m.model_id?.startsWith("demo:"),
           sources: m.usage_metadata?.sources,
           tools: m.usage_metadata?.tools,
+          actions: m.usage_metadata?.actions,
           attachments: m.usage_metadata?.attachments,
         })),
     };

@@ -305,6 +305,12 @@ export interface RunRecord {
   tools?: string[];
   /** A short error code or message for failed calls (no prompt content). */
   error?: string | null;
+  /**
+   * A helper call inside a request (e.g. choosing which connected apps to search):
+   * its cost counts against budgets, but it uses no allowance units and leaves
+   * the request's reservation to the main call.
+   */
+  auxiliary?: boolean;
 }
 
 /**
@@ -338,9 +344,9 @@ async function recordRunUnsafe(auth: AuthContext & { mode: "authenticated" }, ru
   const ticket = tickets.get(auth);
   const [entitlement, settings] = await Promise.all([entitlementFor(auth), getPlatformSettings()]);
   const refunded = run.status === "error" && !run.response;
-  const reserved = ticket && !ticket.recorded ? ticket.estCostUsd : null;
-  if (ticket) ticket.recorded = true;
-  const units = refunded ? 0 : modelUnits(run.model, settings.modelUnits[run.model.id], entitlement?.billing.tierUnits);
+  const reserved = ticket && !ticket.recorded && !run.auxiliary ? ticket.estCostUsd : null;
+  if (ticket && !run.auxiliary) ticket.recorded = true;
+  const units = refunded || run.auxiliary ? 0 : modelUnits(run.model, settings.modelUnits[run.model.id], entitlement?.billing.tierUnits);
   // Billable extras: each web search adds its cost to the run.
   const searches = run.tools?.filter((t) => t === "web_search").length ?? 0;
   const tokenCost = estimateCost(run.model, run.usage);
@@ -375,7 +381,7 @@ async function recordRunUnsafe(auth: AuthContext & { mode: "authenticated" }, ru
     tools: run.tools?.length ? run.tools : null,
   });
   if (error) reportError(error, { where: "recordRun" });
-  if (ticket?.units) {
+  if (ticket?.units && !run.auxiliary) {
     const fin = await auth.supabase.rpc("usage_finish", { p_request_id: ticket.requestId, p_state: "settled" });
     if (fin.error) reportError(fin.error, { where: "usage_finish" });
   }

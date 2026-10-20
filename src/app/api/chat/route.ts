@@ -14,6 +14,8 @@ import { stripInvalidCitations } from "@/lib/search/grounding";
 import type { SearchSource } from "@/lib/search/types";
 import { webSearch } from "@/lib/search/web";
 import { buildTurnContext } from "@/lib/ai/turn-context";
+import { chatConnectors } from "@/lib/connectors/chat";
+import { extractAction, type ProposedAction } from "@/lib/connectors/router";
 import { enforceLimits, planLimits, recordRun, releaseUsage, shouldSaveAllowance } from "@/lib/usage";
 import { chatRequest } from "@/lib/validation";
 
@@ -134,6 +136,23 @@ export async function POST(req: Request) {
         }
       }
 
+      // The user's connected apps (Drive, Gmail, Slack…), when the message needs them.
+      const webUsed = sources.length > 0;
+      let connectors: Awaited<ReturnType<typeof chatConnectors>> | null = null;
+      if (auth.mode === "authenticated") {
+        connectors = await chatConnectors(auth, body.message, { firstIndex: sources.reduce((n, s) => Math.max(n, s.index), 0), timeZone: body.timeZone, signal });
+        const cx = connectors.ctx;
+        if (cx) {
+          for (const tool of cx.tools) send({ type: "tool", tool });
+          turnTools.push(...new Set(cx.tools.filter((t) => t.status === "ok").map((t) => t.name)));
+          if (cx.sources.length) {
+            sources = [...sources, ...cx.sources];
+            send({ type: "sources", sources });
+          }
+          system += `\n\n${cx.system}`;
+        }
+      }
+
       // Fresh, trusted context for this turn: time, time-tool results, live-data honesty.
       const turn = buildTurnContext(body.message, { timeZone: body.timeZone, liveSources: sources.length > 0 });
       system += `\n\n${turn.system}`;
@@ -185,17 +204,37 @@ export async function POST(req: Request) {
           servedModel,
           requestedModel,
           routingReason: model.id === choice.model.id ? routingReason : `Fallback from ${choice.model.displayName}. ${routingReason}`,
-          tools: [...turnTools, ...(sources.length ? ["web_search"] : [])],
+          tools: [...turnTools, ...(webUsed ? ["web_search"] : [])],
           error: failure,
         });
+        await connectors?.record();
       }
 
       if (sources.length) text = stripInvalidCitations(text, sources);
 
+      // A write action the answer proposed becomes a card the user reviews and confirms; nothing runs here.
+      let actions: ProposedAction[] = [];
+      if (connectors?.ctx?.actions.length) {
+        const ex = extractAction(text, connectors.ctx.actions, () => crypto.randomUUID());
+        text = ex.text;
+        if (ex.action) {
+          actions = [ex.action];
+          send({ type: "actions", actions });
+        }
+      } else if (text.includes("```orbis-action")) {
+        text = extractAction(text, [], () => "").text;
+      }
+
       let assistantMessageId: string | null = null;
       if (auth.mode === "authenticated" && conversationId) {
         try {
-          const usageMeta = { ...usage, estimatedCost: estimateCost(model, usage), sources: sources.map(({ index, url, title }) => ({ index, url, title })), attachments: body.attachments?.map((a) => a.name) ?? [] };
+          const usageMeta = {
+            ...usage,
+            estimatedCost: estimateCost(model, usage),
+            sources: sources.map((s) => ({ index: s.index, url: s.url, title: s.title, ...(s.app ? { app: s.app } : {}) })),
+            attachments: body.attachments?.map((a) => a.name) ?? [],
+            ...(actions.length ? { actions } : {}),
+          };
           const rows = await addMessages(auth.supabase, conversationId, [
             ...(replacing ? [] : [{ role: "user" as const, content: body.message, usage_metadata: { attachments: body.attachments?.map((a) => a.name) ?? [] } }]),
             { role: "assistant", content: text, model_id: model.id, usage_metadata: usageMeta },

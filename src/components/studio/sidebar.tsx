@@ -16,6 +16,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
+  Plug,
   Search,
   Settings2,
   SlidersHorizontal,
@@ -39,7 +40,7 @@ export interface SidebarProps {
   mobileOpen: boolean;
   onCloseMobile: () => void;
   /** Which workspace is open, for the nav's active state. */
-  section: "chats" | "agents" | "admin" | "council" | "arena" | "missions" | "workforce" | "code";
+  section: "chats" | "agents" | "admin" | "council" | "arena" | "missions" | "workforce" | "code" | "connectors";
   conversations: ConvSummary[] | null;
   listError: string | null;
   activeId: string | null;
@@ -189,6 +190,7 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
           <ul className={cn("flex flex-col gap-0.5", rail && "md:items-center")}>
             <NavItem rail={rail} icon={<MessagesSquare />} label="Chats" href="/chat" active={p.section === "chats"} onClick={p.onCloseMobile} />
             <NavItem rail={rail} icon={<Code2 />} label="Code" href="/code" active={p.section === "code"} onClick={p.onCloseMobile} />
+            <NavItem rail={rail} icon={<Plug />} label="Connectors" href="/connectors" active={p.section === "connectors"} onClick={p.onCloseMobile} />
             <NavItem rail={rail} icon={<Users />} label="Council" href="/council" active={p.section === "council"} onClick={p.onCloseMobile} />
             <NavItem rail={rail} icon={<Swords />} label="Arena" href="/arena" active={p.section === "arena"} onClick={p.onCloseMobile} />
             <NavItem rail={rail} icon={<Flag />} label="Missions" href="/missions" active={p.section === "missions"} onClick={p.onCloseMobile} />

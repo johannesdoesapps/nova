@@ -13,6 +13,7 @@
  */
 import { postNdjson } from "@/hooks/use-ndjson";
 import type { ChatMode } from "@/lib/ai/modes";
+import type { ProposedAction } from "@/lib/connectors/catalog";
 import type { SearchSource } from "@/lib/search/types";
 
 export interface ChatAttachment {
@@ -53,6 +54,7 @@ export type ChatEvent =
   | { type: "meta"; conversationId: string | null; persisted: boolean; model: ModelRef; routing?: { auto: true; mode: string; reason: string } | null }
   | { type: "model"; model: ModelRef }
   | { type: "sources"; sources: SearchSource[] }
+  | { type: "actions"; actions: ProposedAction[] }
   | { type: "notice"; level?: string; message: string }
   | { type: "tool"; tool: ToolRecord }
   | { type: "delta"; text: string }
