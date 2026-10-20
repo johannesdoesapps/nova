@@ -33,6 +33,14 @@ describe("progress stages", () => {
     expect(stageSummary(blocks[4]!)).toBe("Tests passed (3 passed): npm test");
   });
 
+  it("count the agent checking its own diff as reviewing, not exploring", () => {
+    const blocks = groupStages([ev("command", "Tests passed: npm test", { command: "npm test", exitCode: 0 }), ev("inspect", "Looked at the diff (1 file)"), ev("summary", "Finished")]);
+    expect(blocks.map((b) => b.stage)).toEqual(["check", "review"]);
+    expect(stageSummary(blocks[1]!)).toBe("Finished");
+    expect(stageSummary(groupStages([ev("inspect", "Checked the run's changes")])[0]!)).toBe("Checked its changes");
+    expect(stageSummary(groupStages([ev("inspect", "Inspected the project")])[0]!)).toBe("Inspected the project");
+  });
+
   it("show only what happened: no edit or check stage for a read-only answer", () => {
     const blocks = groupStages([ev("status", "Started with GPT"), ev("inspect", "Inspected the project"), ev("summary", "Finished")]);
     expect(blocks.map((b) => b.stage)).toEqual(["understand", "explore", "review"]);

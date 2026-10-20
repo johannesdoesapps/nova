@@ -933,7 +933,7 @@ export function CodeWorkspace({ id }: { id: string }) {
             {status}
             {running ? (
               <>
-                <Btn onClick={() => void sessionAction("extend")} disabled={starting} title={`Keep the computer on for ${block} more minutes`}>
+                <Btn onClick={() => void sessionAction("extend")} disabled={starting} title={`Keep the computer on for ${block} more minutes`} className="hidden sm:inline-flex">
                   <Plus className="h-3.5 w-3.5" /> {block} min
                 </Btn>
                 <Btn onClick={() => void sessionAction("stop")} title="Turn the project's computer off">

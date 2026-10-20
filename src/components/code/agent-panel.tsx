@@ -138,7 +138,8 @@ export interface StageBlock {
 /** Which stage an event belongs to; null for events that join the current stage (notes, answers, errors). */
 function stageOfEvent(e: AgentEvent): StageId | null {
   if (e.kind === "status" && e.title.startsWith("Started with")) return "understand";
-  if (e.kind === "inspect") return "explore";
+  // Looking at its own diff or status is the agent reviewing its work, not exploring the project.
+  if (e.kind === "inspect") return /^(Checked the run's changes|Looked at the diff)/.test(e.title) ? "review" : "explore";
   if (e.kind === "plan") return "plan";
   if (e.kind === "edit" || e.kind === "revert" || e.kind === "git") return "edit";
   if (e.kind === "command") return "check";
@@ -192,7 +193,7 @@ export function stageSummary(b: StageBlock): string {
       const reads = b.events.filter((e) => e.title.startsWith("Read "));
       const files = new Set(reads.flatMap((e) => e.title.slice(5).split(", ")));
       const searches = b.events.filter((e) => e.title.startsWith("Searched")).length;
-      return [files.size && `read ${plural(files.size, "file")}`, searches && plural(searches, "search")].filter(Boolean).join(", ") || plural(n("inspect"), "look");
+      return [files.size && `read ${plural(files.size, "file")}`, searches && plural(searches, "search")].filter(Boolean).join(", ") || (b.events[0]?.title ?? "");
     }
     case "plan":
       return b.events.find((e) => e.kind === "plan")?.title ?? "";
@@ -208,7 +209,7 @@ export function stageSummary(b: StageBlock): string {
       return [ran.length - blocked && `ran ${plural(ran.length - blocked, "command")}`, blocked && `${blocked} blocked`].filter(Boolean).join(", ");
     }
     case "review":
-      return "Finished";
+      return n("summary") ? "Finished" : "Checked its changes";
   }
 }
 
