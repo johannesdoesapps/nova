@@ -10,7 +10,7 @@ import { safeRequest, txtRecords } from "./net";
  * before every scan (never trusted from the database or the browser):
  *  - http_file: https://HOST/.well-known/nova-security-verification.txt contains the token
  *  - dns_txt:   a TXT record on _nova-verify.HOST (or HOST) contains the token
- *  - site_admin: an administrator scanning this Nova deployment's own domain
+ *  - site_admin: an administrator scanning this Orbis deployment's own domain
  */
 export const VERIFY_PATH = "/.well-known/nova-security-verification.txt";
 

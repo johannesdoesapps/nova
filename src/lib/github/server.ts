@@ -10,7 +10,7 @@ export interface GitHubContext {
   installation: Installation | null;
 }
 
-/** The signed-in user's GitHub link and NOVA installation, looked up from their verified sign-in. */
+/** The signed-in user's GitHub link and Orbis installation, looked up from their verified sign-in. */
 export async function githubContext(): Promise<GitHubContext & { userId: string }> {
   const auth = await requireUser();
   if (!limiter("github", 60, 60_000).check(`u:${auth.user.id}`, 1).ok) {
@@ -28,6 +28,6 @@ export async function requireRepoAccess(): Promise<string> {
   const ctx = await githubContext();
   if (!ctx.cfg) throw new ApiError("not_configured", "GitHub isn't set up on this site yet.");
   if (!ctx.identity) throw new ApiError("forbidden", "Connect your GitHub account first.");
-  if (!ctx.installation) throw new ApiError("forbidden", "Choose which repositories NOVA may read first.");
+  if (!ctx.installation) throw new ApiError("forbidden", "Choose which repositories Orbis may read first.");
   return installationToken(ctx.cfg, ctx.installation.id);
 }

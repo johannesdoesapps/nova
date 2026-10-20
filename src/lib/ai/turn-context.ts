@@ -6,7 +6,7 @@
 import { timeContext, timePrompt, timeSystemBlock } from "../time/context";
 import type { ChatMessage } from "./types";
 
-/** A tool NOVA ran on the server for this turn, as shown under the reply. */
+/** A tool Orbis ran on the server for this turn, as shown under the reply. */
 export interface TurnTool {
   name: string;
   label: string;
@@ -36,7 +36,7 @@ export function buildTurnContext(message: string, opts: { timeZone?: string | nu
   if (time.calls.length) {
     tools.push({
       name: "time",
-      label: `Checked NOVA's clock · ${ctx.timeZone ?? "UTC"}`,
+      label: `Checked Orbis's clock · ${ctx.timeZone ?? "UTC"}`,
       status: "ok",
       detail: time.calls.map((c) => `${c.call} → ${c.result}`).join("\n"),
     });
@@ -49,7 +49,7 @@ export function buildTurnContext(message: string, opts: { timeZone?: string | nu
   return { system: parts.join("\n\n"), tools };
 }
 
-/** The user's time zone as their browser reported it (body field first, then the X-Nova-Time-Zone header). */
+/** The user's time zone as their browser reported it (body field first, then the X-NOVA-Time-Zone header). */
 export function requestTimeZone(req: Request, bodyTimeZone?: string | null): string | null {
   return bodyTimeZone ?? req.headers.get("x-nova-time-zone");
 }

@@ -7,7 +7,7 @@ import { jsonLd, pageMetadata, siteUrl } from "@/lib/seo";
 import chatShot from "../../../public/product/chat.webp";
 
 export const metadata = pageMetadata({
-  title: "NOVA — AI assistant, custom agents and multi-model workspace",
+  title: "Orbis — AI assistant, custom agents and multi-model workspace",
   description:
     "Chat with Claude and GPT models, use specialised or custom AI agents, compare models side by side, plan projects and check your own site and code — free to start.",
   path: "/",
@@ -18,7 +18,7 @@ const BENEFITS = [
   {
     icon: Layers,
     title: "Several leading models, one workspace",
-    text: "Claude and GPT models side by side. Leave it on Auto and NOVA picks a model for each message — and tells you why.",
+    text: "Claude and GPT models side by side. Leave it on Auto and Orbis picks a model for each message — and tells you why.",
   },
   {
     icon: Bot,
@@ -48,11 +48,11 @@ const TRUST = [
 export default function HomePage() {
   const url = siteUrl();
   const structured = [
-    { "@context": "https://schema.org", "@type": "WebSite", name: "NOVA", url },
+    { "@context": "https://schema.org", "@type": "WebSite", name: "Orbis", url },
     {
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
-      name: "NOVA",
+      name: "Orbis",
       url,
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
@@ -77,7 +77,7 @@ export default function HomePage() {
             <span className="block">Agents that help you get work done.</span>
           </h1>
           <p className="mk-rise mx-auto mt-6 max-w-2xl text-[17px] leading-relaxed text-muted sm:text-[19px]">
-            NOVA brings leading AI models, specialised agents and planning tools together — for research, writing, coding and security checks — and shows you which model answered and why.
+            Orbis brings leading AI models, specialised agents and planning tools together — for research, writing, coding and security checks — and shows you which model answered and why.
           </p>
           <div className="mk-rise mt-9 flex flex-wrap items-center justify-center gap-3">
             <PrimaryCta />
@@ -89,19 +89,19 @@ export default function HomePage() {
           <div className="lux-card overflow-hidden rounded-[22px] p-1.5 sm:p-2">
             <Image
               src={chatShot}
-              alt="NOVA's chat studio: a question about multi-tenant database security answered by Claude Sonnet 5.5, with the reply's model name shown above it and saved conversations listed in the sidebar."
+              alt="Orbis's chat studio: a question about multi-tenant database security answered by Claude Sonnet 5.5, with the reply's model name shown above it and saved conversations listed in the sidebar."
               priority
               sizes="(min-width: 1100px) 1024px, 100vw"
               className="h-auto w-full rounded-[16px]"
             />
           </div>
-          <figcaption className="mt-3 text-center text-xs text-muted">NOVA&rsquo;s chat studio with an example conversation.</figcaption>
+          <figcaption className="mt-3 text-center text-xs text-muted">Orbis&rsquo;s chat studio with an example conversation.</figcaption>
         </figure>
       </section>
 
       {/* Benefits */}
       <section aria-labelledby="why-title" className="mx-auto max-w-6xl px-5 py-20 sm:px-8">
-        <SectionHeading id="why-title" eyebrow="Why NOVA" title="Use the right model for each task — and see its work" />
+        <SectionHeading id="why-title" eyebrow="Why Orbis" title="Use the right model for each task — and see its work" />
         <ul className="mt-12 grid gap-5 md:grid-cols-3">
           {BENEFITS.map((b) => (
             <li key={b.title} className="rounded-2xl border border-border bg-panel p-6">
@@ -118,7 +118,7 @@ export default function HomePage() {
         <SectionHeading
           id="features-title"
           eyebrow="Features"
-          title="What you can do with NOVA today"
+          title="What you can do with Orbis today"
           intro="Each feature is marked with its status. Anything not generally available says so."
         />
         <ul className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -164,7 +164,7 @@ export default function HomePage() {
           title="Straight answers about your data"
           intro={
             <>
-              What NOVA stores, where your messages go and what agents are allowed to do.{" "}
+              What Orbis stores, where your messages go and what agents are allowed to do.{" "}
               <Link href="/security" className="text-fg underline underline-offset-4 hover:text-accent-2">
                 Read Security &amp; data
               </Link>

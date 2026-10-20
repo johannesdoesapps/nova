@@ -6,7 +6,7 @@ import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
   title: "Features",
-  description: "Everything NOVA can do today — AI assistant, coding assistant, custom agents, model comparison, Mission Control, security agents and the Autonomous Developer preview — with each feature's status.",
+  description: "Everything Orbis can do today — AI assistant, coding assistant, custom agents, model comparison, Mission Control, security agents and the Autonomous Developer preview — with each feature's status.",
   path: "/features",
 });
 
@@ -14,9 +14,9 @@ export default function FeaturesPage() {
   return (
     <>
       <section className="mx-auto max-w-6xl px-5 pt-16 pb-8 sm:px-8 sm:pt-20">
-        <h1 className="text-balance max-w-3xl font-serif text-[44px] leading-[1.05] tracking-[-0.01em] text-fg sm:text-[56px]">NOVA features</h1>
+        <h1 className="text-balance max-w-3xl font-serif text-[44px] leading-[1.05] tracking-[-0.01em] text-fg sm:text-[56px]">Orbis features</h1>
         <p className="mt-5 max-w-2xl text-[17px] leading-relaxed text-muted">
-          What each part of NOVA does, who it&rsquo;s for and what its limits are. Every feature is labelled{" "}
+          What each part of Orbis does, who it&rsquo;s for and what its limits are. Every feature is labelled{" "}
           {Object.values(STATUS_LABEL).slice(0, 3).join(", ").replace(/, ([^,]*)$/, " or $1")}.
         </p>
       </section>
@@ -40,7 +40,7 @@ export default function FeaturesPage() {
         </ul>
       </section>
       <section className="mx-auto max-w-6xl px-5 py-12 sm:px-8">
-        <SectionHeading title="Not built yet" intro="Ideas on NOVA's roadmap that you can't use today: a knowledge graph, visual workflows, conversation branching and a privacy center. They'll appear here with a status when they're ready to try." />
+        <SectionHeading title="Not built yet" intro="Ideas on Orbis's roadmap that you can't use today: a knowledge graph, visual workflows, conversation branching and a privacy center. They'll appear here with a status when they're ready to try." />
       </section>
       <CtaBand />
     </>

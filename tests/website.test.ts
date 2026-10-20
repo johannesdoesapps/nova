@@ -38,7 +38,7 @@ describe("content", () => {
   it("keeps titles unique and short enough for search results", () => {
     const titles = [...FEATURES.map((f) => f.title), ...GUIDES.map((g) => g.title)];
     expect(new Set(titles).size).toBe(titles.length);
-    for (const t of titles) expect(`${t} · NOVA`.length, t).toBeLessThanOrEqual(70);
+    for (const t of titles) expect(`${t} · Orbis`.length, t).toBeLessThanOrEqual(70);
     for (const d of [...FEATURES, ...GUIDES].map((x) => x.description)) expect(d.length).toBeLessThanOrEqual(200);
   });
 

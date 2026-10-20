@@ -8,7 +8,7 @@ import { limiter } from "@/lib/rate-limit";
 
 const query = z.object({ id: z.string().regex(HUB_REPO_ID).max(200) });
 
-/** GET /api/discover/model?id=org/name — model detail + whether NOVA can run it. */
+/** GET /api/discover/model?id=org/name — model detail + whether Orbis can run it. */
 export async function GET(req: Request) {
   try {
     if (!limiter("discover", 60, 60_000).check(clientIp(req)).ok) {
@@ -21,7 +21,7 @@ export async function GET(req: Request) {
       model: detail,
       nova: runnable
         ? { runnable: runnable.available, registryId: runnable.id, reason: runnable.available ? null : runnable.unavailableReason }
-        : { runnable: false, registryId: null, reason: "This model is not in NOVA's model registry, so it cannot be run here yet." },
+        : { runnable: false, registryId: null, reason: "This model is not in Orbis's model registry, so it cannot be run here yet." },
     });
   } catch (err) {
     return errorResponse(err);

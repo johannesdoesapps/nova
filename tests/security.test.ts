@@ -36,7 +36,7 @@ const fakeRequest = (routes: Record<string, Fake>) =>
     return { url, status: r.status, headers: r.headers ?? {}, body: r.body ?? "", truncated: false };
   });
 
-describe("Nova Sentinel checks", () => {
+describe("Orbis Sentinel checks", () => {
   it("reports missing headers, weak cookies and reflected CORS from real responses only", async () => {
     const { runSentinel } = await import("@/lib/security/sentinel");
     const req = fakeRequest({
@@ -107,7 +107,7 @@ describe("Nova Sentinel checks", () => {
   });
 });
 
-describe("Nova Code Guardian rules", () => {
+describe("Orbis Code Guardian rules", () => {
   const files = [
     { path: "src/api/user.ts", content: "const q = await db.query(`SELECT * FROM users WHERE id = ${req.query.id}`);\nres.redirect(req.query.next);\n// eval(x) in a comment is ignored\nconst out = eval(input);" },
     { path: "src/config.ts", content: 'export const key = "AKIAIOSFODNN7EXAMPLA";\nconst password = "hunter2hunter2";\nconst apiKey = "your_api_key_here";' },
@@ -175,7 +175,7 @@ describe("dependency checks (OSV)", () => {
   });
 });
 
-describe("Nova Threat Hunter", () => {
+describe("Orbis Threat Hunter", () => {
   const ssh = [
     ...Array.from({ length: 12 }, (_, i) => `Oct 18 03:1${i % 10}:0${i % 10} web sshd[99${i}]: Failed password for ${["root", "admin", "deploy", "ubuntu", "git", "oracle"][i % 6]} from 203.0.113.9 port 4${i} ssh2`),
     "Oct 18 03:30:00 web sshd[1200]: Accepted password for deploy from 203.0.113.9 port 5000 ssh2",

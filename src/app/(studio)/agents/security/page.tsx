@@ -3,7 +3,7 @@ import { SecurityView } from "@/components/security/security-view";
 
 export const metadata: Metadata = {
   title: "Security Team",
-  description: "Nova Sentinel, Threat Hunter and Code Guardian: website checks, log investigation and secure code review.",
+  description: "Orbis Sentinel, Threat Hunter and Code Guardian: website checks, log investigation and secure code review.",
 };
 
 export default function SecurityPage() {

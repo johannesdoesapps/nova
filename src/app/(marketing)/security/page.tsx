@@ -5,7 +5,7 @@ import { pageMetadata } from "@/lib/seo";
 export const metadata = pageMetadata({
   title: "Security & data",
   description:
-    "How NOVA stores your conversations, which AI providers receive your messages, what agents may and may not do, how code runs in isolated sandboxes, and how to delete your data.",
+    "How Orbis stores your conversations, which AI providers receive your messages, what agents may and may not do, how code runs in isolated sandboxes, and how to delete your data.",
   path: "/security",
 });
 
@@ -14,14 +14,14 @@ const SECTIONS: { id: string; title: string; points: React.ReactNode[] }[] = [
     id: "accounts",
     title: "Accounts and sign-in",
     points: [
-      "Accounts are managed by Supabase Auth. Passwords are never stored by NOVA itself; Supabase stores only a secure hash.",
-      "Google sign-in, when enabled, uses Google's own sign-in page — NOVA never sees your Google password.",
+      "Accounts are managed by Supabase Auth. Passwords are never stored by Orbis itself; Supabase stores only a secure hash.",
+      "Google sign-in, when enabled, uses Google's own sign-in page — Orbis never sees your Google password.",
       "The site is served over HTTPS only, with security headers that stop it being framed by other sites.",
     ],
   },
   {
     id: "storage",
-    title: "What NOVA stores",
+    title: "What Orbis stores",
     points: [
       "Your conversations, custom agents, missions, Council and Arena sessions and projects, so you can come back to them.",
       "A usage record for each AI request: the model, token counts, estimated cost and the first part of the prompt and reply (up to 4,000 and 8,000 characters). These records enforce your plan limits.",
@@ -41,7 +41,7 @@ const SECTIONS: { id: string; title: string; points: React.ReactNode[] }[] = [
     id: "agents",
     title: "What agents can and can't do",
     points: [
-      "Assistants and agents write, explain, plan and review inside NOVA. They don't send emails, make purchases, or change your accounts or systems.",
+      "Assistants and agents write, explain, plan and review inside Orbis. They don't send emails, make purchases, or change your accounts or systems.",
       "In Mission Control the AI drafts tasks but can't mark them complete — only you can.",
       "The Security Team scans a website only after you prove you own it, never follows redirects to other domains, and never reaches private network addresses. It doesn't apply fixes for you.",
     ],
@@ -60,7 +60,7 @@ const SECTIONS: { id: string; title: string; points: React.ReactNode[] }[] = [
     points: [
       "Delete any conversation from the sidebar at any time.",
       "Account deletion isn't self-service yet. Until it is, the site operator can delete an account and its data on request.",
-      "NOVA shows no advertising.",
+      "Orbis shows no advertising.",
     ],
   },
 ];
@@ -71,7 +71,7 @@ export default function SecurityPage() {
       <article className="mx-auto max-w-3xl px-5 pt-16 pb-6 sm:px-8 sm:pt-20">
         <h1 className="text-balance font-serif text-[44px] leading-[1.05] tracking-[-0.01em] text-fg sm:text-[56px]">Security &amp; data</h1>
         <p className="mt-5 text-[17px] leading-relaxed text-muted">
-          Plain answers about what NOVA stores, who processes your messages and what its agents are allowed to do. This page describes how the product works today.
+          Plain answers about what Orbis stores, who processes your messages and what its agents are allowed to do. This page describes how the product works today.
         </p>
         <nav aria-label="On this page" className="mt-8 rounded-2xl border border-border bg-panel p-5">
           <h2 className="text-sm font-medium text-fg">On this page</h2>

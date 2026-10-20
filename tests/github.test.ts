@@ -149,6 +149,6 @@ describe("sign in with GitHub and connecting it", () => {
     expect(oauthErrorCode("access_denied", null, "github-link")).toBe("github_link_failed");
     expect(oauthErrorCode("access_denied")).toBe("google_cancelled");
     expect(exchangeFailureCode("github-link")).toBe("github_link_failed");
-    expect(LOGIN_MESSAGES.github_in_use.text).toMatch(/already connected to another NOVA account/);
+    expect(LOGIN_MESSAGES.github_in_use.text).toMatch(/already connected to another Orbis account/);
   });
 });

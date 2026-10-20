@@ -91,7 +91,7 @@ function LauncherBody({ mode, onClose, targets, onTargetsChanged, onFinished }: 
       {mode === "coordinated" ? (
         <div className="space-y-3">
           <p className="text-[13.5px] text-s-ink-2">
-            Choose at least two agents. They run in order — Sentinel, then Threat Hunter, then Code Guardian — then Nova links related findings and writes one report. Steps that are skipped or fail are reported as such.
+            Choose at least two agents. They run in order — Sentinel, then Threat Hunter, then Code Guardian — then Orbis links related findings and writes one report. Steps that are skipped or fail are reported as such.
           </p>
           {ORDER.map((a) => (
             <section key={a} className={cn("rounded-2xl border p-4 transition", include[a] ? "border-s-line-strong" : "border-s-line opacity-70")}>

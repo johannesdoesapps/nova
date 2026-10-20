@@ -136,7 +136,7 @@ export interface ProjectRow {
 }
 
 export function ProjectsPanel({ projects, onChanged }: { projects: ProjectRow[]; onChanged: () => void }) {
-  const [form, setForm] = useState({ name: "Nova", repo: "", branch: "main" });
+  const [form, setForm] = useState({ name: "Orbis", repo: "", branch: "main" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const add = async () => {

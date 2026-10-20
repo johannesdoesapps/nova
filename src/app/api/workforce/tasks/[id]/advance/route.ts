@@ -3,7 +3,7 @@ import { advance } from "@/lib/workforce/commander";
 import { requireOperator, wfError } from "@/lib/workforce/server";
 import { requireUuid } from "@/lib/http";
 
-// One bounded tick of Nova Commander. Long checks run detached in the
+// One bounded tick of Orbis Commander. Long checks run detached in the
 // sandbox, so ticks stay short; the dashboard calls this while a task is active.
 export const maxDuration = 300;
 

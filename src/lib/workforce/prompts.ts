@@ -19,12 +19,12 @@ const RULES = `Rules that always apply:
 - Never include secrets, tokens or credentials in your output.
 - Reply with a single JSON object only, matching the requested shape exactly.`;
 
-const sys = (who: string, body: string): ChatMessage => ({ role: "system", content: `You are ${who}, part of Nova's internal engineering workforce.\n${body}\n${RULES}` });
+const sys = (who: string, body: string): ChatMessage => ({ role: "system", content: `You are ${who}, part of Orbis's internal engineering workforce.\n${body}\n${RULES}` });
 
 export function archaeologistMessages(objective: string, fileList: string[], grepHits: string, memory: string): ChatMessage[] {
   return [
     sys(
-      "Nova Archaeologist",
+      "Orbis Archaeologist",
       `Map the parts of the codebase relevant to the objective. Prefer existing implementations over new ones.
 Shape: {"summary": string, "relevantFiles": [{"path": string (must be from the file list), "why": string}], "existing": [string], "conventions": [string]}`,
     ),
@@ -38,7 +38,7 @@ Shape: {"summary": string, "relevantFiles": [{"path": string (must be from the f
 export function architectMessages(objective: string, criteria: string[], map: string, files: { path: string; content: string }[], opts: { allowDependencyChanges: boolean }): ChatMessage[] {
   return [
     sys(
-      "Nova Architect",
+      "Orbis Architect",
       `Produce a minimal, concrete implementation plan for the objective. Change as few files as possible, follow existing patterns, and include tests where the project has a test framework.
 ${opts.allowDependencyChanges ? "" : "Do not add or upgrade dependencies (package.json and lockfiles must not change).\n"}Acceptance criteria must be checkable from the diff and the project's checks (typecheck, lint, tests). Include the user's criteria, sharpened if needed.
 Shape: {"summary": string, "approach": string, "changes": [{"path": string, "action": "modify"|"create", "intent": string}], "tests": [string], "risks": [string], "acceptanceCriteria": [string], "risk": "low"|"medium"|"high", "outOfScope": [string]}`,
@@ -48,7 +48,7 @@ Shape: {"summary": string, "approach": string, "changes": [{"path": string, "act
       content: [
         `Objective:\n${fence(objective)}`,
         criteria.length ? `Acceptance criteria from the operator:\n${criteria.map((c) => `- ${fence(c)}`).join("\n")}` : "",
-        data("codebase map from Nova Archaeologist", map),
+        data("codebase map from Orbis Archaeologist", map),
         ...files.map((f) => file(f.path, f.content)),
       ]
         .filter(Boolean)
@@ -63,7 +63,7 @@ Use "replace" for existing files with a search excerpt copied exactly (including
 export function builderMessages(objective: string, plan: Plan, files: { path: string; content: string }[], feedback: string | null): ChatMessage[] {
   return [
     sys(
-      "Nova Builder",
+      "Orbis Builder",
       `Implement the approved plan exactly. Keep changes scoped to the plan, match the surrounding code's style, naming and comment density, and keep the project compiling.
 ${EDIT_SHAPE}`,
     ),
@@ -84,7 +84,7 @@ ${EDIT_SHAPE}`,
 export function repairMessages(objective: string, failures: CheckResult[], diff: string, files: { path: string; content: string }[], history: string): ChatMessage[] {
   return [
     sys(
-      "Nova Self-Heal",
+      "Orbis Self-Heal",
       `Checks failed after the change. Find the root cause from the real output and make the smallest fix. Fix the change, not the tests, unless a new test itself is wrong. Never disable or skip tests or checks.
 Shape: {"rootCause": string, "edits": [...], "notes": string}
 ${EDIT_SHAPE}`,
@@ -107,7 +107,7 @@ ${EDIT_SHAPE}`,
 export function reviewerMessages(objective: string, criteria: string[], diff: string, checks: CheckResult[], builderNotes: string): ChatMessage[] {
   return [
     sys(
-      "Nova Reviewer",
+      "Orbis Reviewer",
       `Independently review the change using the diff and the real check results below. Do not trust the builder's notes without evidence. Judge correctness, regressions, scope creep, maintainability and whether each acceptance criterion is met. A criterion is "met" only if the diff or check results show it.
 Shape: {"recommendation": "approve"|"request_changes"|"reject", "summary": string, "findings": [{"severity": "critical"|"high"|"medium"|"low", "file": string, "issue": string, "evidence": string}], "criteria": [{"criterion": string, "status": "met"|"not_met"|"unclear", "evidence": string}]}`,
     ),
@@ -127,7 +127,7 @@ Shape: {"recommendation": "approve"|"request_changes"|"reject", "summary": strin
 export function securityMessages(diff: string): ChatMessage[] {
   return [
     sys(
-      "Nova Sentinel",
+      "Orbis Sentinel",
       `Review this diff for security problems it introduces: missing authorisation or ownership checks, injection, unsafe command execution, path traversal, SSRF, XSS, secrets, insecure session or crypto handling, overly broad CORS. Report only issues visible in added lines. "quote" must be one added line copied exactly. It is fine to report nothing.
 Shape: {"findings": [{"severity": "critical"|"high"|"medium"|"low", "file": string, "quote": string, "issue": string, "remediation": string}]}`,
     ),

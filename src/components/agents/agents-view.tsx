@@ -97,7 +97,7 @@ export function AgentsView() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[16px] font-semibold tracking-[-0.01em]">Security Team</p>
-              <p className="mt-0.5 text-[13.5px] text-s-ink-2">Nova Sentinel, Threat Hunter and Code Guardian — website checks, log investigations and secure code review that work together.</p>
+              <p className="mt-0.5 text-[13.5px] text-s-ink-2">Orbis Sentinel, Threat Hunter and Code Guardian — website checks, log investigations and secure code review that work together.</p>
             </div>
             <span className="inline-flex h-9 shrink-0 items-center gap-1.5 self-start rounded-xl border border-s-line-strong px-3.5 text-[13px] font-medium transition group-hover:border-transparent group-hover:bg-s-accent group-hover:text-s-accent-ink sm:self-center">
               Open security workspace <ArrowRight className="h-3.5 w-3.5" />
@@ -143,7 +143,7 @@ export function AgentsView() {
               to create agents and chat with them.
             </p>
           ) : ready?.persistence === "local" ? (
-            <p className="mt-4 text-[13px] text-s-ink-3">You’re using NOVA without an account, so agents you create are saved in this browser only.</p>
+            <p className="mt-4 text-[13px] text-s-ink-3">You’re using Orbis without an account, so agents you create are saved in this browser only.</p>
           ) : null}
 
           <div className="mt-6">

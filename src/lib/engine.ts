@@ -6,7 +6,7 @@ import { ApiError } from "./http";
 import { reportError } from "./observability";
 
 /**
- * Bridge to the Python NOVA engine (AI Lab, Radar, Workspaces, Integrations).
+ * Bridge to the Python Orbis engine (AI Lab, Radar, Workspaces, Integrations).
  * The browser never talks to the engine: every call goes through Next.js,
  * which authenticates the user and signs a short-lived identity with
  * NOVA_ENGINE_SECRET. Guests get a random, httpOnly guest id cookie so their
@@ -42,7 +42,7 @@ export async function engineIdentity(): Promise<{ sub: string; email: string | n
 
 export async function engineFetch(path: string, init: { method?: string; body?: string; query?: string; requestId?: string } = {}): Promise<Response> {
   const { url, secret } = engineConfig();
-  if (!secret) throw new ApiError("not_configured", "The NOVA engine is not configured. Set NOVA_ENGINE_SECRET (and NOVA_ENGINE_URL) for both the web app and the engine.");
+  if (!secret) throw new ApiError("not_configured", "The Orbis engine is not configured. Set NOVA_ENGINE_SECRET (and NOVA_ENGINE_URL) for both the web app and the engine.");
   const who = await engineIdentity();
   try {
     return await fetch(`${url}/${path}${init.query ? `?${init.query}` : ""}`, {
@@ -50,7 +50,7 @@ export async function engineFetch(path: string, init: { method?: string; body?: 
       body: init.body,
       headers: {
         "Content-Type": "application/json",
-        "X-Nova-Identity": signIdentity(who.sub, secret, who.email, who.name),
+        "X-NOVA-Identity": signIdentity(who.sub, secret, who.email, who.name),
         ...(init.requestId ? { "X-Request-Id": init.requestId } : {}),
       },
       signal: AbortSignal.timeout(120_000),
@@ -58,7 +58,7 @@ export async function engineFetch(path: string, init: { method?: string; body?: 
     });
   } catch {
     // The address and start command are for operators (logs), not visitors.
-    reportError(new Error(`NOVA engine not reachable at ${url}`), { where: "engine" });
+    reportError(new Error(`Orbis engine not reachable at ${url}`), { where: "engine" });
     throw new ApiError("not_configured", "This feature's service isn't available right now. Please try again later.");
   }
 }

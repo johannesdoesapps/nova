@@ -38,7 +38,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 /** A shareable Markdown report. Counts are plain tallies of the listed findings; there is no score. */
 export function findingsToMarkdown(findings: ExportFinding[], now: Date): string {
-  const lines: string[] = [`# Nova security findings`, ``, `Generated ${now.toISOString().slice(0, 16).replace("T", " ")} UTC. ${findings.length} finding(s).`, ``];
+  const lines: string[] = [`# Orbis security findings`, ``, `Generated ${now.toISOString().slice(0, 16).replace("T", " ")} UTC. ${findings.length} finding(s).`, ``];
   lines.push(`| Severity | Count |`, `|---|---|`);
   for (const s of SEVERITIES) lines.push(`| ${s} | ${findings.filter((f) => f.severity === s).length} |`);
   lines.push(``, `Severity is how serious the issue would be if real; confidence is how sure the tool is that it is real. These are tallies, not a security score.`, ``);

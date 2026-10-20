@@ -12,7 +12,7 @@ import { publicEnv } from "@/lib/env";
 
 export const metadata: Metadata = {
   title: "Sign in or create an account",
-  description: "Sign in to NOVA or create a free account with your email address.",
+  description: "Sign in to Orbis or create a free account with your email address.",
   alternates: { canonical: "/login" },
   // An app screen, not content: keep it out of search results but let crawlers follow its links.
   robots: { index: false, follow: true },

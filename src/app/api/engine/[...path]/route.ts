@@ -25,7 +25,7 @@ async function proxy(req: Request, ctx: RouteContext<"/api/engine/[...path]">) {
     const path = decoded.map((p) => encodeURIComponent(p)).join("/");
     if (!ALLOWED.test(path)) throw new ApiError("not_found", "Unknown engine endpoint.");
     // Changes need a signed-in account (guests can only read). The engine's own AI calls aren't metered by
-    // NOVA's allowance, so asking it to use a model is limited to administrators.
+    // Orbis's allowance, so asking it to use a model is limited to administrators.
     const mutating = req.method !== "GET" && req.method !== "HEAD" && path !== "connectors/oauth/callback";
     const accounts = Boolean(publicEnv.supabaseUrl && publicEnv.supabaseKey);
     const auth = mutating && accounts ? await getAuth() : null;

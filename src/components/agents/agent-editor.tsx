@@ -213,7 +213,7 @@ function EditorForm({
           <p className={errorText}>{errors.instructions}</p>
         ) : (
           <p id="agent-instructions-hint" className="mt-1.5 text-[12.5px] text-s-ink-3">
-            NOVA’s safety rules always apply on top of these instructions.
+            Orbis’s safety rules always apply on top of these instructions.
           </p>
         )}
       </div>

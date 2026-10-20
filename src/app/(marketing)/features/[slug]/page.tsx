@@ -91,7 +91,7 @@ export default async function FeaturePage({ params }: PageProps<"/features/[slug
         </section>
 
         <section aria-labelledby="more" className="mx-auto max-w-4xl px-5 py-10 sm:px-8">
-          <h2 id="more" className="text-2xl font-medium text-fg">More from NOVA</h2>
+          <h2 id="more" className="text-2xl font-medium text-fg">More from Orbis</h2>
           <ul className="mt-6 grid gap-4 sm:grid-cols-3">
             {others.map((o) => (
               <li key={o.slug}>

@@ -4,7 +4,7 @@
  * The current instant comes from the server's clock for each request (never
  * from conversation history or the model's training data). The user's time
  * zone is the browser's IANA zone when it sent a valid one. When a message is
- * about dates or times, NOVA runs its time tools on the server
+ * about dates or times, Orbis runs its time tools on the server
  * (get_current_time, convert_time, calculate_date) and gives the model the
  * results, so answers don't depend on the model doing time-zone arithmetic.
  */
@@ -26,12 +26,12 @@ export function timeContext(timeZone: string | null | undefined, now: Date = new
 export function timeSystemBlock(ctx: TimeContext): string {
   const utc = `${ctx.now.toISOString().slice(0, 16).replace("T", " ")} UTC`;
   const lines = [
-    "Time context (from NOVA's server clock for this message; it replaces anything earlier in the conversation):",
+    "Time context (from Orbis's server clock for this message; it replaces anything earlier in the conversation):",
     ctx.timeZone
       ? `- User's local time: ${formatZoned(ctx.now, ctx.timeZone)} — time zone ${ctx.timeZone}, from the user's browser.`
       : "- The user's time zone is unknown (their browser didn't provide one). When an answer depends on local time, give it in UTC and say so, or ask which city they're in.",
     `- Current UTC time: ${utc}.`,
-    "- For dates and times use this context and any <tool_result tool=\"time\"> results; don't work them out from memory. You may say the time comes from NOVA's clock; never claim you checked any other source.",
+    "- For dates and times use this context and any <tool_result tool=\"time\"> results; don't work them out from memory. You may say the time comes from Orbis's clock; never claim you checked any other source.",
   ];
   return lines.join("\n");
 }
@@ -190,7 +190,7 @@ export function runTimeTools(message: string, ctx: TimeContext): ToolCall[] {
   calls.push(...convertTimes(message, zones, userTz, ctx.now));
   calls.push(...calculateDates(message, userTz ?? "UTC", ctx.now));
   const unknown = zones.length === 0 && /\b(?:time|date|day)\b.*\bin\s+([A-Z][\w-]*(?:\s+[A-Z][\w-]*)*)\s*[?.!]*\s*$/.exec(message);
-  if (unknown) calls.push({ call: `get_current_time("${unknown[1]}")`, result: "Not run: NOVA couldn't match this place to a time zone. Ask the user for the country or a nearby major city." });
+  if (unknown) calls.push({ call: `get_current_time("${unknown[1]}")`, result: "Not run: Orbis couldn't match this place to a time zone. Ask the user for the country or a nearby major city." });
   return calls;
 }
 
@@ -198,10 +198,10 @@ export function runTimeTools(message: string, ctx: TimeContext): ToolCall[] {
 export function timeToolBlock(calls: ToolCall[]): string {
   if (!calls.length) return "";
   return [
-    '<tool_result tool="time" source="NOVA server clock">',
+    '<tool_result tool="time" source="Orbis server clock">',
     ...calls.map((c) => `${c.call} → ${c.result}`),
     "</tool_result>",
-    "These results were computed by NOVA's time tools for this message from the IANA time-zone database (daylight saving time included). Use them as given.",
+    "These results were computed by Orbis's time tools for this message from the IANA time-zone database (daylight saving time included). Use them as given.",
   ].join("\n");
 }
 

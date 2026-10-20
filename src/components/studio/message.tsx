@@ -67,7 +67,7 @@ export const MessageView = memo(function MessageView({
     <div className="group/msg s-in">
       <div className="mb-2.5 flex items-center gap-2 text-[12.5px] text-s-ink-3">
         {assistantAvatar ?? <NovaMark className="h-[18px] w-[18px] text-s-ink" />}
-        <span className="font-medium text-s-ink-2">{assistantName ?? m.modelName ?? "NOVA"}</span>
+        <span className="font-medium text-s-ink-2">{assistantName ?? m.modelName ?? "Orbis"}</span>
         {assistantName && m.modelName && <span className="hidden sm:inline">· {m.modelName}</span>}
         {m.routing && (
           <span title={m.routing} className="inline-flex items-center gap-1 rounded-full bg-s-accent-soft px-2 py-px text-[11px] text-s-accent">

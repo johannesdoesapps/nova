@@ -50,7 +50,7 @@ export function ResetPasswordForm({ url, supabaseKey, email }: { url: string; su
   return (
     <div>
       <h1 className="font-serif text-[34px] leading-[1.05] tracking-[-0.01em]">Choose a new password</h1>
-      <p className="mt-1 text-sm text-muted">{email ? `For ${email}.` : "For your NOVA account."} You’ll stay signed in afterwards.</p>
+      <p className="mt-1 text-sm text-muted">{email ? `For ${email}.` : "For your Orbis account."} You’ll stay signed in afterwards.</p>
       <form
         className="mt-5 space-y-3"
         onSubmit={(e) => {

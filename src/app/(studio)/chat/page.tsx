@@ -4,7 +4,7 @@ import { Studio } from "@/components/studio/studio";
 
 export const metadata: Metadata = {
   title: "Chat",
-  description: "Chat with NOVA: research, analysis, critique and code, with cited sources when the web is used.",
+  description: "Chat with Orbis: research, analysis, critique and code, with cited sources when the web is used.",
 };
 
 export const viewport: Viewport = {

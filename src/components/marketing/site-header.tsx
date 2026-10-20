@@ -35,7 +35,7 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-bg/80 backdrop-blur-xl supports-[backdrop-filter]:bg-bg/65">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-5 sm:px-8">
-        <Link href="/" aria-label="NOVA home" className="rounded-lg">
+        <Link href="/" aria-label="Orbis home" className="rounded-lg">
           <Logo />
         </Link>
         <nav aria-label="Main" className="hidden md:block">

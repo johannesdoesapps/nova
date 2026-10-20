@@ -1,7 +1,7 @@
 import { fingerprint, type Confidence, type FindingDraft, type Severity } from "./types";
 
 /**
- * Nova Threat Hunter's log analysis. Parses web access logs (combined/common),
+ * Orbis Threat Hunter's log analysis. Parses web access logs (combined/common),
  * SSH auth logs and JSON lines, then applies transparent, threshold-based
  * detections. Every finding states what was observed (facts from the log)
  * separately from what it might mean (hypotheses).

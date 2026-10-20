@@ -17,7 +17,7 @@ export function ConversationPane({
   busy,
   conversationId,
   composer,
-  footnote = "NOVA can make mistakes. Check important information.",
+  footnote = "Orbis can make mistakes. Check important information.",
   thinkingLabel,
   feedback,
   onRetry,

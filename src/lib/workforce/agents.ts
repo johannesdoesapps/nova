@@ -31,7 +31,7 @@ export interface AgentDef {
 export const AGENTS: AgentDef[] = [
   {
     id: "commander",
-    name: "Nova Commander",
+    name: "Orbis Commander",
     role: "Orchestration and verification",
     version: "1.0.0",
     kind: "deterministic",
@@ -45,7 +45,7 @@ export const AGENTS: AgentDef[] = [
   },
   {
     id: "archaeologist",
-    name: "Nova Archaeologist",
+    name: "Orbis Archaeologist",
     role: "Codebase mapping",
     version: "1.0.0",
     kind: "hybrid",
@@ -59,7 +59,7 @@ export const AGENTS: AgentDef[] = [
   },
   {
     id: "architect",
-    name: "Nova Architect",
+    name: "Orbis Architect",
     role: "Requirements and implementation plan",
     version: "1.0.0",
     kind: "model",
@@ -73,7 +73,7 @@ export const AGENTS: AgentDef[] = [
   },
   {
     id: "builder",
-    name: "Nova Builder",
+    name: "Orbis Builder",
     role: "Implementation",
     version: "1.0.0",
     kind: "hybrid",
@@ -87,7 +87,7 @@ export const AGENTS: AgentDef[] = [
   },
   {
     id: "qa_hunter",
-    name: "Nova QA Hunter",
+    name: "Orbis QA Hunter",
     role: "Testing",
     version: "1.0.0",
     kind: "deterministic",
@@ -101,7 +101,7 @@ export const AGENTS: AgentDef[] = [
   },
   {
     id: "self_heal",
-    name: "Nova Self-Heal",
+    name: "Orbis Self-Heal",
     role: "Failure diagnosis and repair",
     version: "1.0.0",
     kind: "hybrid",
@@ -115,7 +115,7 @@ export const AGENTS: AgentDef[] = [
   },
   {
     id: "reviewer",
-    name: "Nova Reviewer",
+    name: "Orbis Reviewer",
     role: "Independent code review",
     version: "1.0.0",
     kind: "model",
@@ -129,21 +129,21 @@ export const AGENTS: AgentDef[] = [
   },
   {
     id: "sentinel",
-    name: "Nova Sentinel",
+    name: "Orbis Sentinel",
     role: "Security review of changes",
     version: "1.0.0",
     kind: "hybrid",
     status: "active",
     responsibilities: ["Runs secret and insecure-code rules on changed files", "Reviews the diff for auth, injection and unsafe execution risks", "Blocks delivery on serious findings per policy"],
     output: "Security findings with severity and evidence",
-    tools: ["Nova code & secret rules", "git diff"],
+    tools: ["Orbis code & secret rules", "git diff"],
     permissions: ["read_repo", "model_calls"],
     defaultModel: "auto:deep",
     limits: { timeoutMs: 120_000, maxAttempts: 2, maxOutputTokens: 3000 },
   },
   {
     id: "devops",
-    name: "Nova DevOps",
+    name: "Orbis DevOps",
     role: "Workspace, build and release readiness",
     version: "1.0.0",
     kind: "deterministic",
@@ -157,7 +157,7 @@ export const AGENTS: AgentDef[] = [
   },
   {
     id: "optimizer",
-    name: "Nova Optimizer",
+    name: "Orbis Optimizer",
     role: "Performance measurement",
     version: "0.0.0",
     kind: "hybrid",
@@ -172,7 +172,7 @@ export const AGENTS: AgentDef[] = [
   },
   {
     id: "visual",
-    name: "Nova Visual",
+    name: "Orbis Visual",
     role: "Rendered UI verification",
     version: "0.0.0",
     kind: "hybrid",

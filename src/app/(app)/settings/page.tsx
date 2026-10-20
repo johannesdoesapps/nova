@@ -25,7 +25,7 @@ export default async function SettingsPage() {
           ) : integrations.supabase ? (
             <p className="mt-2 text-sm text-muted"><Link href="/login" className="text-accent hover:underline">Sign in</Link> to manage your account.</p>
           ) : (
-            <p className="mt-2 text-sm text-muted">Accounts are disabled until Supabase is configured. NOVA is running in guest/demo mode — nothing is saved.</p>
+            <p className="mt-2 text-sm text-muted">Accounts are disabled until Supabase is configured. Orbis is running in guest/demo mode — nothing is saved.</p>
           )}
           {auth.mode !== "authenticated" && <SettingsClient themeOnly />}
         </Card>

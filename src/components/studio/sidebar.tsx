@@ -127,10 +127,10 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
             type="button"
             onClick={p.onNewChat}
             className={cn("flex min-w-0 items-center gap-2.5 rounded-xl px-1.5 py-1 transition hover:opacity-80", rail && "md:hidden")}
-            aria-label="NOVA — new chat"
+            aria-label="Orbis — new chat"
           >
             <NovaMark className="h-7 w-7 text-s-ink" />
-            <span className="text-[15px] font-semibold tracking-[0.22em]">NOVA</span>
+            <span className="text-[15px] font-semibold tracking-[0.22em]">ORBIS</span>
           </button>
           <IconButton
             label={rail ? "Expand sidebar" : "Collapse sidebar"}

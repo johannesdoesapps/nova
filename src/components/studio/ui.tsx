@@ -383,8 +383,8 @@ export function NovaMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
       <rect x="1" y="1" width="30" height="30" rx="9" fill="currentColor" />
-      <path d="M10.5 22.5V10l11 12.5V9.5" fill="none" stroke="var(--s-bg)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="26.5" cy="5.5" r="2.6" fill="var(--s-brand)" />
+      <circle cx="16" cy="16" r="7" fill="none" stroke="var(--s-bg)" strokeWidth="2.4" />
+      <circle cx="20.95" cy="11.05" r="2.9" fill="var(--s-brand)" stroke="currentColor" strokeWidth="1.6" />
     </svg>
   );
 }

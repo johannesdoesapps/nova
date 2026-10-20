@@ -157,7 +157,7 @@ export function integrationStatus(): IntegrationStatus[] {
     },
     {
       id: "engine",
-      label: "NOVA engine (Python)",
+      label: "Orbis engine (Python)",
       configured: Boolean(clean(process.env.NOVA_ENGINE_SECRET)),
       envVars: ["NOVA_ENGINE_URL", "NOVA_ENGINE_SECRET"],
       purpose: "AI Lab workflows, Signal Radar, Workspaces, Community and Integrations",

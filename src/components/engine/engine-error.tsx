@@ -5,7 +5,7 @@ import { Notice } from "@/components/ui/primitives";
 export function EngineError({ message }: { message: string }) {
   const down = /not reachable|not configured/i.test(message);
   return (
-    <Notice tone={down ? "warning" : "danger"} title={down ? "The NOVA engine isn't running" : "Something went wrong"}>
+    <Notice tone={down ? "warning" : "danger"} title={down ? "The Orbis engine isn't running" : "Something went wrong"}>
       {message}
       {down && (
         <span className="mt-2 block">

@@ -126,7 +126,7 @@ stateDiagram-v2
 
 Tool registry (`security/policy.py`):
 
-| Tool | Risk | Data leaves NOVA AI | Default grant | Implementation |
+| Tool | Risk | Data leaves Orbis AI | Default grant | Implementation |
 |---|---|---|---|---|
 | `web.search` | read | yes (query) | ✓ | real (Tavily/Brave), honest empty result without a key |
 | `http.get` | read | yes | ✓ | real, allow-listed domains plus SSRF guard |
@@ -192,7 +192,7 @@ Errors are always `{"error": {"code", "message", "details"}}` with stable codes 
 ```mermaid
 flowchart LR
   B[Browser] -->|session cookie| N[Next.js /api/engine proxy]
-  N -->|X-Nova-Identity HMAC, 2-min TTL| A[FastAPI engine]
+  N -->|X-Orbis-Identity HMAC, 2-min TTL| A[FastAPI engine]
   A --> P[Planner]
   A --> V[Validator]
   A --> X[Executor thread pool]

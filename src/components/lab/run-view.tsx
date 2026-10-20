@@ -192,7 +192,7 @@ export function ApprovalsInbox() {
   const [err, setErr] = useState<string | null>(null);
   return (
     <div className="mx-auto max-w-5xl px-4 pb-16 pt-8 sm:px-6">
-      <PageHeader title="Approvals" description="Runs waiting for you. NOVA AI never sends, posts, deletes or shares sensitive data without an approval for that exact content." />
+      <PageHeader title="Approvals" description="Runs waiting for you. Orbis AI never sends, posts, deletes or shares sensitive data without an approval for that exact content." />
       <SectionTabs tabs={LAB_TABS} />
       {ap.error && <EngineError message={ap.error} />}
       {err && <Notice tone="danger" className="mb-3">{err}</Notice>}

@@ -110,7 +110,7 @@ export async function enforceLimits(
   // Plan access and the site-wide cap first, with a clear explanation.
   checkModelAccess(entitlement, models, available);
   if (!unlimited) {
-    if (billing.aiPaused) throw new ApiError("quota_exceeded", "AI requests are paused on NOVA for a moment while we check something. Please try again later.", { scope: "paused" });
+    if (billing.aiPaused) throw new ApiError("quota_exceeded", "AI requests are paused on Orbis for a moment while we check something. Please try again later.", { scope: "paused" });
     await checkSiteCap(all);
   }
 
@@ -122,7 +122,7 @@ export async function enforceLimits(
   const estCostUsd = estimateRequestUsd(priced, inputTokens, maxOutputTokens, all) + Math.max(0, opts.extraCostUsd ?? 0);
   const estTokens = priced.length * (inputTokens + maxOutputTokens);
   if (!unlimited && billing.maxRequestCostUsd > 0 && estCostUsd > billing.maxRequestCostUsd) {
-    throw new ApiError("bad_request", `This request is too large: it could cost more than NOVA allows for one message. Shorten it, attach less, or choose a lower-cost model.`, { scope: "request", estimateUsd: Math.round(estCostUsd * 100) / 100 });
+    throw new ApiError("bad_request", `This request is too large: it could cost more than Orbis allows for one message. Shorten it, attach less, or choose a lower-cost model.`, { scope: "request", estimateUsd: Math.round(estCostUsd * 100) / 100 });
   }
   const econ = unlimited ? null : planEconomics(billing, entitlement.plan, entitlement.interval);
   const premium = !!models?.some((m) => modelTier(m) !== "standard");
@@ -170,7 +170,7 @@ export async function enforceLimits(
     resets_at?: string;
   };
   if (!r.ok && r.reason === "duplicate") {
-    throw new ApiError("conflict", "This message was already sent. NOVA won't run or charge it twice.");
+    throw new ApiError("conflict", "This message was already sent. Orbis won't run or charge it twice.");
   }
   if (!r.ok) {
     if (unlimited) {
@@ -190,7 +190,7 @@ export async function enforceLimits(
     if (r.reason === "budget") {
       if (r.scope === "site") {
         reportError(new Error("Site-wide monthly AI spending limit reached"), { where: "usage.site_cap" });
-        throw new ApiError("quota_exceeded", "NOVA has reached its AI usage limit for this month. Please try again later.", { ...details, scope: "site" });
+        throw new ApiError("quota_exceeded", "Orbis has reached its AI usage limit for this month. Please try again later.", { ...details, scope: "site" });
       }
       if (r.scope === "daily") {
         throw new ApiError("quota_exceeded", `You've used today's share of your ${plan.label} plan's AI allowance. It resets at midnight UTC.${upgradeHint}`, { ...details, scope: "daily", resetsAt: r.resets_at ? new Date(r.resets_at).toISOString() : null });

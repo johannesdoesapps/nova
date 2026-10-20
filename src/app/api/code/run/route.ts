@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     const input = await parseJsonBody(req, body, MAX_CODE_CHARS * 2 + 4_000);
     const auth = await requireUser();
     const lang = codeLanguage(input.language);
-    if (!lang) throw new ApiError("bad_request", "NOVA can run Python, JavaScript, TypeScript and Bash code.");
+    if (!lang) throw new ApiError("bad_request", "Orbis can run Python, JavaScript, TypeScript and Bash code.");
     if (!codeRunsAvailable()) throw new ApiError("not_configured", "Running code isn't set up on this server.");
     if (!limiter("code-run", 10, 60_000).check(`u:${auth.user.id}`, 1).ok) {
       throw new ApiError("rate_limited", "Too many code runs in a minute. Please wait a moment.");

@@ -116,7 +116,7 @@ export function PricingPlans({
                     </BillingButton>
                   ) : signedIn ? (
                     <a href="/chat" className={secondaryBtn}>
-                      Open NOVA
+                      Open Orbis
                     </a>
                   ) : (
                     <PrimaryCta className="w-full justify-center" />

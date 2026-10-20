@@ -188,7 +188,7 @@ export function ArenaView() {
       <div className="s-scroll min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[1180px] px-4 pb-24 pt-2 sm:px-8">
           <div className="s-in">
-            <h1 className="font-serif text-[clamp(34px,5vw,46px)] leading-[1.05] tracking-[-0.01em]">Nova Arena</h1>
+            <h1 className="font-serif text-[clamp(34px,5vw,46px)] leading-[1.05] tracking-[-0.01em]">Orbis Arena</h1>
             <p className="mt-2 max-w-2xl text-[15.5px] text-s-ink-2">Send one prompt to several models, compare them side by side — blind if you like — and keep the best answer.</p>
           </div>
 

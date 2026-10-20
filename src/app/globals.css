@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* NOVA design tokens — deep black, charcoal, smoked glass and pearl, matching the chat studio. */
+/* Orbis design tokens — deep black, charcoal, smoked glass and pearl, matching the chat studio. */
 :root {
   --bg: #0b0b0d;
   --bg-elev: #141417;

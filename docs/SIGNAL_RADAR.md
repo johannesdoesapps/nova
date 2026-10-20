@@ -6,7 +6,7 @@ developments from speculation, a transparent score, and the time it last looked.
 Opportunity Radar matches those signals against the user's stated interests.
 
 **No false promise of continuous monitoring.** Checks happen only when the
-user presses **Check now** or the NOVA worker process runs. The page tells the
+user presses **Check now** or the Orbis worker process runs. The page tells the
 user which of these is true, using the worker heartbeat.
 
 Code: `engine/nova_engine/radar/*`, `engine/nova_engine/worker.py`, `src/components/radar/radar-view.tsx`.

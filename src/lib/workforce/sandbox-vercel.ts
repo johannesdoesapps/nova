@@ -6,7 +6,7 @@ import type { Workspace, WorkspaceFactory } from "./workspace";
 
 /**
  * Vercel Sandbox backend: one disposable Firecracker microVM per task.
- * - The repository is cloned by the platform; nothing from Nova's own
+ * - The repository is cloned by the platform; nothing from Orbis's own
  *   environment (API keys, database credentials) is passed in.
  * - Network: npm registry only while installing (with lifecycle scripts
  *   disabled), denied afterwards; a check may open specific domains
@@ -126,7 +126,7 @@ class VercelSandboxWorkspace implements Workspace {
       if (opts.restoreDiff) files.push({ path: `${STATE}/restore.diff`, content: opts.restoreDiff });
       await sb.writeFiles(files);
       await this.run("git", ["config", "user.email", "workforce@nova.invalid"]);
-      await this.run("git", ["config", "user.name", "Nova Workforce"]);
+      await this.run("git", ["config", "user.name", "Orbis Workforce"]);
       await this.run("git", ["checkout", "-b", "nova-workforce"]);
       const cmds = [INSTALL_COMMAND, ...(opts.restoreDiff ? [["git", "apply", "--whitespace=nowarn", `${STATE}/restore.diff`]] : [])];
       await this.startJob("install", cmds, 10 * 60_000);

@@ -41,7 +41,7 @@ export function FingerprintView() {
           <div className="mb-5 grid gap-3 sm:grid-cols-3">
             <Stat label="Blind trials" value={fp.totals.trials} hint={`≥ ${fp.options.minPairTrials} per model pair before a preference is reported`} />
             <Stat label="Benchmark runs" value={fp.totals.benchmarkRuns} hint={`≥ ${fp.options.minBenchmarkItems} scored items per model before a measurement counts`} />
-            <Stat label="Tracked calls (30 days)" value={history.guest ? "—" : fp.totals.usageRows} hint={history.guest ? "Usage tracking needs an account" : "From every NOVA feature"} />
+            <Stat label="Tracked calls (30 days)" value={history.guest ? "—" : fp.totals.usageRows} hint={history.guest ? "Usage tracking needs an account" : "From every Orbis feature"} />
           </div>
           {history.error && <Notice tone="danger" className="mb-4">{history.error}</Notice>}
           {active.length === 0 ? (
@@ -174,7 +174,7 @@ function RoutePlanner({ history, names }: { history: ReturnType<typeof useIntelH
   return (
     <Card className="mt-6 p-4">
       <div className="flex items-center gap-2 text-sm font-medium"><Route className="h-4 w-4 text-accent" /> Routing planner</div>
-      <p className="mt-1 text-xs text-muted">See which model NOVA would route a prompt to under your constraints, why, and what it falls back to if a provider fails.</p>
+      <p className="mt-1 text-xs text-muted">See which model Orbis would route a prompt to under your constraints, why, and what it falls back to if a provider fails.</p>
       <Textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={3} className="mt-3" placeholder="A prompt to route…" maxLength={12000} aria-label="Prompt to route" />
       <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
         <Select value={prefer} onChange={(e) => setPrefer(e.target.value as "personal" | "general")} aria-label="Evidence to trust first">

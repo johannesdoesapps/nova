@@ -26,7 +26,7 @@ function demoText(params: GenerateParams): string {
     "",
     ...intro,
     "",
-    "> Demo replies come from a fixed template on the server. They show how NOVA lays out an answer and contain no analysis of your question.",
+    "> Demo replies come from a fixed template on the server. They show how Orbis lays out an answer and contain no analysis of your question.",
     "",
     "### Connect a provider",
     hasSources

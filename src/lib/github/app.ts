@@ -3,9 +3,9 @@ import { createSign } from "node:crypto";
 import { ApiError } from "@/lib/http";
 
 /**
- * NOVA's GitHub App: users install it on the repositories they choose, and
- * NOVA reads files from those repositories with short-lived installation
- * tokens. Read-only ("Contents: read"); NOVA never writes to GitHub.
+ * Orbis's GitHub App: users install it on the repositories they choose, and
+ * Orbis reads files from those repositories with short-lived installation
+ * tokens. Read-only ("Contents: read"); Orbis never writes to GitHub.
  *
  * Configuration (Vercel, Sensitive): GITHUB_APP_ID, GITHUB_APP_SLUG and
  * GITHUB_APP_PRIVATE_KEY (the .pem, with real or "\n" line breaks).
@@ -13,7 +13,7 @@ import { ApiError } from "@/lib/http";
  *
  * Whose installation is it? Not something the browser says: on every request
  * the installation is looked up from the GitHub account linked to the user's
- * NOVA sign-in (verified by Supabase Auth) and its owner's id must match.
+ * Orbis sign-in (verified by Supabase Auth) and its owner's id must match.
  */
 
 const API = "https://api.github.com";
@@ -32,7 +32,7 @@ export function githubAppConfig(env: Record<string, string | undefined> = proces
   return { appId, slug, privateKey: key };
 }
 
-/** Where users choose the repositories NOVA may read. */
+/** Where users choose the repositories Orbis may read. */
 export function installUrl(cfg: GitHubAppConfig): string {
   return `https://github.com/apps/${cfg.slug}/installations/new`;
 }
@@ -118,7 +118,7 @@ export async function installationToken(cfg: GitHubAppConfig, installationId: nu
   const hit = tokens.get(installationId);
   if (hit && hit.expires - 5 * 60_000 > now) return hit.token;
   const r = await gh<{ token: string; expires_at: string }>(`/app/installations/${installationId}/access_tokens`, appJwt(cfg, now), { method: "POST" }, f);
-  if (!r.data) throw new ApiError("not_found", "NOVA isn't installed on that GitHub account any more.");
+  if (!r.data) throw new ApiError("not_found", "Orbis isn't installed on that GitHub account any more.");
   tokens.set(installationId, { token: r.data.token, expires: Date.parse(r.data.expires_at) || now + 30 * 60_000 });
   return r.data.token;
 }
@@ -162,7 +162,7 @@ export const MAX_FILE_BYTES = 100_000;
 
 export async function repoTree(token: string, repo: string, f: Fetch = fetch): Promise<{ branch: string; files: TreeFile[]; truncated: boolean }> {
   const meta = await gh<{ default_branch: string }>(`/repos/${repo}`, token, {}, f);
-  if (!meta.data) throw new ApiError("not_found", "That repository isn't available to NOVA. Check which repositories you gave NOVA access to on GitHub.");
+  if (!meta.data) throw new ApiError("not_found", "That repository isn't available to Orbis. Check which repositories you gave Orbis access to on GitHub.");
   const branch = meta.data.default_branch;
   const t = await gh<{ tree: { path: string; type: string; size?: number }[]; truncated: boolean }>(`/repos/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`, token, {}, f);
   const files = (t.data?.tree ?? [])

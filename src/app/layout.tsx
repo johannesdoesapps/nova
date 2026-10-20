@@ -5,14 +5,14 @@ import { SITE_NAME, siteUrl } from "@/lib/seo";
 import "./globals.css";
 
 const DESCRIPTION =
-  "NOVA is an AI workspace with Claude and GPT models, specialised and custom AI agents, model comparison, project planning and security agents.";
+  "Orbis is an AI workspace with Claude and GPT models, specialised and custom AI agents, model comparison, project planning and security agents.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
-  title: { default: "NOVA — AI assistant and agent workspace", template: "%s · NOVA" },
+  title: { default: "Orbis — AI assistant and agent workspace", template: "%s · Orbis" },
   description: DESCRIPTION,
   applicationName: SITE_NAME,
-  openGraph: { type: "website", siteName: SITE_NAME, locale: "en_US", title: "NOVA — AI assistant and agent workspace", description: DESCRIPTION },
+  openGraph: { type: "website", siteName: SITE_NAME, locale: "en_US", title: "Orbis — AI assistant and agent workspace", description: DESCRIPTION },
   twitter: { card: "summary_large_image" },
   formatDetection: { telephone: false, email: false, address: false },
 };

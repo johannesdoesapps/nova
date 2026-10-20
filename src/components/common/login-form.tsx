@@ -8,8 +8,8 @@ import { Button, Input, Notice } from "@/components/ui/primitives";
 type Mode = "signin" | "signup";
 
 const COPY: Record<Mode, { title: string; subtitle: string; divider: string }> = {
-  signin: { title: "Welcome back to NOVA", subtitle: "Sign in to save conversations, searches and projects.", divider: "or continue with email" },
-  signup: { title: "Create your NOVA account", subtitle: "Save conversations, searches and projects across devices.", divider: "or sign up with email" },
+  signin: { title: "Welcome back to Orbis", subtitle: "Sign in to save conversations, searches and projects.", divider: "or continue with email" },
+  signup: { title: "Create your Orbis account", subtitle: "Save conversations, searches and projects across devices.", divider: "or sign up with email" },
 };
 
 export function LoginForm({
@@ -63,7 +63,7 @@ export function LoginForm({
     setProviderBusy(true);
     try {
       // Supabase runs the OAuth flow with PKCE and checks state (and, for
-      // Google, the OpenID nonce); NOVA never sees Google or GitHub credentials.
+      // Google, the OpenID nonce); Orbis never sees Google or GitHub credentials.
       const { error } = await browserSupabase(url, supabaseKey).auth.signInWithOAuth(
         provider === "google"
           ? {

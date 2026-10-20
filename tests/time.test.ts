@@ -81,7 +81,7 @@ describe("time service", () => {
     const ctx = timeContext(undefined, at("2026-10-19T10:00:00Z"));
     expect(timeSystemBlock(ctx)).toMatch(/time zone is unknown/);
     expect(timeContext("Mars/Olympus", at("2026-10-19T10:00:00Z")).timeZone).toBeNull();
-    expect(results("what time is it in Gotham City", null, at("2026-10-19T10:00:00Z")).at(-1)).toMatch(/Not run: NOVA couldn't match this place/);
+    expect(results("what time is it in Gotham City", null, at("2026-10-19T10:00:00Z")).at(-1)).toMatch(/Not run: Orbis couldn't match this place/);
   });
 
   it("validates zone names and recognises places and abbreviations", () => {

@@ -52,7 +52,7 @@ export function SecondaryCta({ children, href, className }: { children: ReactNod
   );
 }
 
-export function CtaBand({ title = "Start with NOVA today", text = "Create a free account in under a minute. No credit card needed." }: { title?: string; text?: string }) {
+export function CtaBand({ title = "Start with Orbis today", text = "Create a free account in under a minute. No credit card needed." }: { title?: string; text?: string }) {
   return (
     <section aria-labelledby="cta-title" className="mx-auto max-w-6xl px-5 py-20 sm:px-8">
       <div className="lux-card rounded-[28px] px-6 py-14 text-center sm:px-12">
@@ -75,7 +75,7 @@ export function SiteFooter() {
     <footer className="border-t border-border">
       <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 sm:px-8 md:grid-cols-[1.3fr_1fr_1fr_1fr]">
         <div>
-          <Link href="/" aria-label="NOVA home" className="inline-block rounded-lg">
+          <Link href="/" aria-label="Orbis home" className="inline-block rounded-lg">
             <Logo />
           </Link>
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted">
@@ -88,7 +88,7 @@ export function SiteFooter() {
           links={[{ href: "/docs", label: "Documentation" }, ...GUIDES.slice(0, 4).map((g) => ({ href: `/docs/${g.slug}`, label: g.short }))]}
         />
         <FooterColumn
-          title="NOVA"
+          title="Orbis"
           links={[
             { href: "/pricing", label: "Pricing" },
             { href: "/security", label: "Security & data" },
@@ -98,7 +98,7 @@ export function SiteFooter() {
         />
       </div>
       <div className="border-t border-border">
-        <p className="mx-auto max-w-6xl px-5 py-6 text-xs text-muted sm:px-8">© {year} NOVA. AI can make mistakes — check important information.</p>
+        <p className="mx-auto max-w-6xl px-5 py-6 text-xs text-muted sm:px-8">© {year} Orbis. AI can make mistakes — check important information.</p>
       </div>
     </footer>
   );

@@ -15,7 +15,7 @@ import { AUTONOMY } from "./types";
  */
 export async function requireOperator(): Promise<{ auth: Extract<AuthContext, { mode: "authenticated" }>; rt: Runtime; store: SupabaseStore }> {
   const auth = await requireUser();
-  if (!(await isAdmin(auth))) throw new ApiError("forbidden", "The Workforce is limited to Nova operators (administrators).");
+  if (!(await isAdmin(auth))) throw new ApiError("forbidden", "The Workforce is limited to Orbis operators (administrators).");
   const store = new SupabaseStore(auth.supabase, auth.user.id);
   return { auth, store, rt: { store, models: novaModelRunner(auth), workspaces: vercelWorkspaces } };
 }

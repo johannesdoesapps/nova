@@ -73,8 +73,8 @@ export function TemplatesGallery() {
 
 const RISK_COPY: Record<Tool["risk"], string> = {
   read: "Reads data",
-  internal_write: "Writes inside NOVA AI",
-  external_send: "Sends or posts outside NOVA AI — always asks first",
+  internal_write: "Writes inside Orbis AI",
+  external_send: "Sends or posts outside Orbis AI — always asks first",
   irreversible: "Cannot be undone — always asks first",
 };
 
@@ -101,7 +101,7 @@ export function ToolsPermissions() {
         {cat.data?.tools.map((t) => (
           <Card key={t.id} className="flex flex-wrap items-center gap-3 p-3">
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2"><span className="font-medium">{t.name}</span><span className="font-mono text-xs text-faint">{t.id}</span><Badge tone={t.consequential ? "warning" : "default"}>{RISK_COPY[t.risk]}</Badge>{t.data_egress && <Badge>data leaves NOVA AI</Badge>}{t.implementation !== "real" && <Badge tone="warning">{t.implementation === "needs_config" ? "simulated until configured" : t.implementation}</Badge>}{t.connector && <Badge>needs {t.connector} connection</Badge>}</div>
+              <div className="flex flex-wrap items-center gap-2"><span className="font-medium">{t.name}</span><span className="font-mono text-xs text-faint">{t.id}</span><Badge tone={t.consequential ? "warning" : "default"}>{RISK_COPY[t.risk]}</Badge>{t.data_egress && <Badge>data leaves Orbis AI</Badge>}{t.implementation !== "real" && <Badge tone="warning">{t.implementation === "needs_config" ? "simulated until configured" : t.implementation}</Badge>}{t.connector && <Badge>needs {t.connector} connection</Badge>}</div>
               <p className="mt-1 text-sm text-muted">{t.description}</p>
               {t.notes && <p className="text-xs text-faint">{t.notes}</p>}
             </div>

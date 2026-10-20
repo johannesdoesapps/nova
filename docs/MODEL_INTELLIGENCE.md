@@ -127,7 +127,7 @@ Rankings are only used for ordering. Decisions always come from pairwise interva
 
 ## 9. Privacy considerations
 
-- **Data-handling profiles default to "Not verified".** Provider policies change and depend on account tier and contract, so NOVA does not ship claims about them. Operators record confirmed facts with source URL and date in `NOVA_PRIVACY_PROFILES`, and the router can require them.
+- **Data-handling profiles default to "Not verified".** Provider policies change and depend on account tier and contract, so Orbis does not ship claims about them. Operators record confirmed facts with source URL and date in `NOVA_PRIVACY_PROFILES`, and the router can require them.
 - Trial and benchmark records (which include prompts) are private to the user via RLS and can be deleted individually or exported.
 - Prompts are hashed (`promptHash`) so identical prompts can be compared without exposing text in aggregates.
 - Guests' evaluation data stays in their browser. The routing planner receives it only when it is used, and it is not stored.

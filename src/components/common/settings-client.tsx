@@ -37,7 +37,7 @@ export function SettingsClient({ email, displayName, themeOnly }: { email?: stri
     <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
       <div>
         <div className="text-sm">Appearance</div>
-        <div className="text-xs text-faint">Dark is the default NOVA theme.</div>
+        <div className="text-xs text-faint">Dark is the default Orbis theme.</div>
       </div>
       <div className="flex rounded-lg border border-border p-0.5">
         <button onClick={() => applyTheme("dark")} aria-pressed={theme === "dark"} className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs ${theme === "dark" ? "bg-accent-soft text-fg" : "text-muted"}`}><Moon className="h-3.5 w-3.5" /> Dark</button>

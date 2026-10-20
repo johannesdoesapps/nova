@@ -201,7 +201,7 @@ export async function checkSiteCap(all: ModelInfo[], now = Date.now()): Promise<
     usd = costOfRuns((data ?? []) as RunCost[], all);
     siteSpendCache = { at: now, month, usd };
   }
-  if (usd >= cap) throw new ApiError("quota_exceeded", "NOVA has reached its AI usage limit for this month. Please try again next month.", { scope: "site", budget: true });
+  if (usd >= cap) throw new ApiError("quota_exceeded", "Orbis has reached its AI usage limit for this month. Please try again next month.", { scope: "site", budget: true });
 }
 
 /** The lowest-cost model the plan may use (what economy mode allows). */

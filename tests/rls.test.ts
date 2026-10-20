@@ -344,7 +344,7 @@ describe("workforce (operators only)", () => {
   it("lets only administrators read or write Workforce data, each seeing only their own", async () => {
     // ALICE was made an admin in the platform settings test above; BOB is a regular user.
     const ids = await as(ALICE, async () => {
-      const p = await db.query<{ id: string }>(`insert into public.wf_projects (name, repo) values ('Nova', 'acme/nova') returning id`);
+      const p = await db.query<{ id: string }>(`insert into public.wf_projects (name, repo) values ('Orbis', 'acme/nova') returning id`);
       await expect(db.query(`insert into public.wf_projects (name, repo) values ('Bad', 'not a repo!')`)).rejects.toThrow(/check/);
       const t = await db.query<{ id: string }>(`insert into public.wf_tasks (project_id, title, objective) values ('${p.rows[0].id}', 'Task', 'Do the thing') returning id`);
       await db.query(`insert into public.wf_steps (task_id, key, agent, agent_version, title) values ('${t.rows[0].id}', 'prepare', 'devops', '1.0.0', 'Prepare')`);

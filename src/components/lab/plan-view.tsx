@@ -101,7 +101,7 @@ export function PlanView() {
   const tools = catalog.data?.tools ?? [];
   return (
     <div className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6">
-      <PageHeader title="AI Lab" description="Describe an outcome. NOVA AI proposes a plan you can edit — tasks, dependencies, tools and models — then turns it into a workflow you control. Nothing runs until you publish and start it." />
+      <PageHeader title="AI Lab" description="Describe an outcome. Orbis AI proposes a plan you can edit — tasks, dependencies, tools and models — then turns it into a workflow you control. Nothing runs until you publish and start it." />
       <SectionTabs tabs={LAB_TABS} />
       {catalog.error && <div className="mb-4"><EngineError message={catalog.error} /></div>}
 
@@ -184,7 +184,7 @@ export function PlanView() {
             </div>
             <Button onClick={build} loading={busy === "build"}>Build workflow <ArrowRight className="h-4 w-4" /></Button>
           </div>
-          <p className="flex items-center gap-1.5 text-xs text-faint"><AlertTriangle className="h-3.5 w-3.5" /> Approval requirements come from NOVA AI&apos;s policy, not from the plan: editing a task can&apos;t remove the gate on sending, posting or deleting.</p>
+          <p className="flex items-center gap-1.5 text-xs text-faint"><AlertTriangle className="h-3.5 w-3.5" /> Approval requirements come from Orbis AI&apos;s policy, not from the plan: editing a task can&apos;t remove the gate on sending, posting or deleting.</p>
         </div>
       )}
     </div>

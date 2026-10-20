@@ -12,7 +12,7 @@ Code blocks in chat and agent replies tagged `python`, `javascript`, `typescript
 4. **Runs in a fresh Vercel Sandbox microVM** (`src/lib/code/run.ts`):
    - One VM per run, 1 vCPU and 2 GB.
    - **No network.**
-   - Nothing from NOVA's environment is passed in.
+   - Nothing from Orbis's environment is passed in.
    - The program gets no input and is killed at the time limit (30 s by default).
    - Output files are capped, and the first 64 KB of stdout and stderr are returned.
    - The VM is stopped as soon as the run ends.

@@ -51,7 +51,7 @@ export function DirectoryView() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-16 pt-8 sm:px-6">
-      <PageHeader title="Model Directory" description="Every model NOVA can call, with where its price came from, when it was last checked, what is known about data handling, and which versions you have actually been served." actions={<Button variant="secondary" onClick={runSync} loading={busy}><RefreshCw className="h-4 w-4" /> Check provider model lists</Button>} />
+      <PageHeader title="Model Directory" description="Every model Orbis can call, with where its price came from, when it was last checked, what is known about data handling, and which versions you have actually been served." actions={<Button variant="secondary" onClick={runSync} loading={busy}><RefreshCw className="h-4 w-4" /> Check provider model lists</Button>} />
       <SectionTabs tabs={INTEL_TABS} />
       {error && <Notice tone="danger" className="mb-4">{error}</Notice>}
       {!rows ? <Skeleton className="h-48" /> : (

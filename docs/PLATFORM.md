@@ -1,12 +1,12 @@
-# NOVA platform features
+# Orbis platform features
 
 What each signature feature does, what it needs, and its honest limits.
 
 | Feature | Where | Needs | Without it |
 |---|---|---|---|
 | Smart Router | Model menu → Smart Router (Auto, Quick, Deep, Research, Coding) | At least one AI key | Only the models you configured are ever chosen |
-| Nova Council | `/council` | 2+ AI models configured | Works with a single provider's models (e.g. two OpenAI models) |
-| Nova Arena | `/arena` | 2+ AI models configured | — |
+| Orbis Council | `/council` | 2+ AI models configured | Works with a single provider's models (e.g. two OpenAI models) |
+| Orbis Arena | `/arena` | 2+ AI models configured | — |
 | Mission Control | `/missions` | Supabase accounts (sign-in) | Page asks the visitor to sign in |
 | Truth Layer | Shield button under any AI reply | `SEARCH_PROVIDER` + `SEARCH_API_KEY` (Tavily or Brave) | Claims are listed by type and marked **Not verified** |
 | Council web sources | Toggle on `/council` | `SEARCH_PROVIDER` + `SEARCH_API_KEY` | Toggle is disabled with the reason shown |
@@ -20,7 +20,7 @@ the pool of configured models (low-cost, reasoning, coding), then routes by task
 When a user is close to their usage limit, Auto prefers low-cost models and says so.
 The reason for every choice is shown under the reply.
 
-## Nova Council
+## Orbis Council
 1. Each selected model answers independently, in parallel (`/api/council/answer`).
 2. Deep mode: each model reviews the anonymised answers ("Response A/B…") (`/api/council/critique`).
 3. A chair model writes a synthesis listing agreements, disagreements and what needs checking (`/api/council/synthesize`).
@@ -28,7 +28,7 @@ The reason for every choice is shown under the reply.
 Every step shows the model, latency, tokens and estimated cost. A failed model doesn't stop
 the others and can be retried on its own. Sessions are saved per user (`council_sessions`, RLS).
 
-## Nova Arena
+## Orbis Arena
 Blind mode hides model names until you reveal them. Rate 1–5, pick a winner, ask any
 model to improve its answer, or get a comparison summary. Ratings are saved with the session.
 

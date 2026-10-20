@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { publicEnv } from "./env";
 
-export const SITE_NAME = "NOVA";
+export const SITE_NAME = "Orbis";
 
 /** The production address from configuration (NEXT_PUBLIC_SITE_URL), without a trailing slash. */
 export function siteUrl(): string {
@@ -13,7 +13,7 @@ export function absoluteUrl(path: string): string {
 }
 
 /** The generated social preview (src/app/opengraph-image.tsx); listed explicitly because a page's own openGraph replaces the inherited one. */
-const OG_IMAGE = { url: "/opengraph-image", width: 1200, height: 630, alt: "NOVA — AI assistant and agent workspace" };
+const OG_IMAGE = { url: "/opengraph-image", width: 1200, height: 630, alt: "Orbis — AI assistant and agent workspace" };
 
 /** Metadata for a public page: unique title and description, canonical URL and social previews. */
 export function pageMetadata({ title, description, path, absoluteTitle = false }: { title: string; description: string; path: string; absoluteTitle?: boolean }): Metadata {

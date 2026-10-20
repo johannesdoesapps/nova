@@ -5,7 +5,7 @@ import type { AuthContext } from "../auth";
 import { recordRunLater } from "../usage";
 import { estimateTokens, type ModelRunner, type ResolvedModel } from "./models";
 
-/** Production model access: Nova's provider registry, Auto routing and usage records. */
+/** Production model access: Orbis's provider registry, Auto routing and usage records. */
 export function novaModelRunner(auth: AuthContext): ModelRunner {
   const cache = new Map<string, Awaited<ReturnType<typeof resolveModelChoice>>["model"]>();
   return {

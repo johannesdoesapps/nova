@@ -1,4 +1,4 @@
-# NOVA: API costs, usage limits and plan prices
+# Orbis: API costs, usage limits and plan prices
 
 Calculated on **2026-10-19**. The calculations are in code, not just in this document:
 
@@ -8,7 +8,7 @@ Calculated on **2026-10-19**. The calculations are in code, not just in this doc
 
 The tests in `tests/plans-billing.test.ts` reproduce these numbers.
 
-Admins can change every assumption in **Admin → Plans & pricing**, where a usage calculator shows the results live. **Admin → Finance** shows real costs, revenue and averages once people use NOVA.
+Admins can change every assumption in **Admin → Plans & pricing**, where a usage calculator shows the results live. **Admin → Finance** shows real costs, revenue and averages once people use Orbis.
 
 ## 1. Configured models and verified prices
 
@@ -26,7 +26,7 @@ These are the models in `src/lib/ai/registry.ts` that are live on this site (Ant
 | Claude Opus 5.5 (`claude-opus-5-5`) | Premium | $4.00 | $0.20 | $5.00 | $20.00 | — |
 | GPT-5.6 Sol (`gpt-5.6-sol`) | Premium | $4.00 | $0.40 | $5.00 | $20.00 | over 272k tokens: $8 / $30 |
 
-All prices are USD per 1 million tokens. Cache-write prices are for 5-minute caching. Web search on either provider costs $10 per 1,000 searches. NOVA's own web search is configured at $0.01 per search.
+All prices are USD per 1 million tokens. Cache-write prices are for 5-minute caching. Web search on either provider costs $10 per 1,000 searches. Orbis's own web search is configured at $0.01 per search.
 
 The registry also lists Gemini, Grok and DeepSeek models. They aren't configured on this site, so they aren't offered or priced here.
 

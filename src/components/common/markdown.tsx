@@ -24,7 +24,7 @@ export function Markdown({
   onCitation?: (n: number) => void;
   validCitations?: Set<number>;
   className?: string;
-  /** Offer a Run button on code blocks NOVA can execute (not while the text is still streaming). */
+  /** Offer a Run button on code blocks Orbis can execute (not while the text is still streaming). */
   runnable?: boolean;
 }) {
   const blocks = parseBlocks(text);

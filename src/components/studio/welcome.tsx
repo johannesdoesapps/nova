@@ -57,7 +57,7 @@ export function Welcome({
         What can I help you explore?
       </h1>
       <p className="s-in mt-3 max-w-md text-balance text-center text-[15.5px] leading-relaxed text-s-ink-2 [animation-delay:120ms]">
-        Research a topic, weigh options, challenge an idea or write code. NOVA tells you when it isn’t sure.
+        Research a topic, weigh options, challenge an idea or write code. Orbis tells you when it isn’t sure.
       </p>
 
       <div className="s-in mt-9 w-full [animation-delay:160ms]">{composer}</div>

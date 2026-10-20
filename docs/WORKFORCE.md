@@ -1,7 +1,7 @@
-# Nova Workforce — internal AI engineering workforce
+# Orbis Workforce — internal AI engineering workforce
 
 `/workforce` (operators only). Specialised agents analyse, plan, build, test, repair,
-review, security-check and verify changes to Nova — or any registered npm project — in
+review, security-check and verify changes to Orbis — or any registered npm project — in
 isolated workspaces. People approve what matters; nothing is pushed, merged or deployed.
 
 ## Architecture (inside the existing Next.js app)
@@ -10,10 +10,10 @@ isolated workspaces. People approve what matters; nothing is pushed, merged or d
 Dashboard (/workforce, /workforce/tasks/[id])
    │  REST: /api/workforce/*  (admin-only; RLS enforces it again in Postgres)
    ▼
-Nova Commander  src/lib/workforce/commander.ts   persistent state machine, ticks under a lease
+Orbis Commander  src/lib/workforce/commander.ts   persistent state machine, ticks under a lease
    ├─ Agent registry        agents.ts           ids, versions, permissions, limits, models
    ├─ Executors             executors.ts        one per step type; the only code that touches tools
-   ├─ Model adapter         models.ts / models-nova.ts   Nova providers + Auto routing, budgets, schema validation
+   ├─ Model adapter         models.ts / models-nova.ts   Orbis providers + Auto routing, budgets, schema validation
    ├─ Workspace manager     workspace.ts / sandbox-vercel.ts   Vercel Sandbox microVM per task
    ├─ Allow-listed checks   checks.ts           only package.json scripts; no arbitrary commands
    ├─ Store                 store.ts / supabase-store.ts   wf_* tables (tasks, steps, events, approvals, memory)
@@ -21,7 +21,7 @@ Nova Commander  src/lib/workforce/commander.ts   persistent state machine, ticks
    └─ Report                report.ts           built from stored results, never by a model
 ```
 
-Reused from Nova: Supabase auth + RLS (`is_admin()`), the multi-provider AI layer, Auto
+Reused from Orbis: Supabase auth + RLS (`is_admin()`), the multi-provider AI layer, Auto
 routing and usage records (`model_runs`, purpose `workforce`), the glass UI and the Security
 Team's secret/code rules. The Python engine (`engine/`) has a workflow runtime but isn't
 deployed, so the Workforce runs in the web app and mirrors its patterns (hash-bound
@@ -74,7 +74,7 @@ verifying → completed, plus failed, blocked, cancelled, needs attention and pa
 
 ## Isolation and safety
 
-- One disposable Vercel Sandbox (Firecracker microVM) per task, 45-minute timeout; no Nova
+- One disposable Vercel Sandbox (Firecracker microVM) per task, 45-minute timeout; no Orbis
   secrets or environment variables are passed in.
 - Commands are argv arrays from a fixed allow-list (`npm ci`, `npm run <existing script>`,
   `npx next typegen`, fixed git subcommands). Models never choose commands.
@@ -93,7 +93,7 @@ verifying → completed, plus failed, blocked, cancelled, needs attention and pa
   is the next step.
 - **Delivery**: changes are delivered as a reviewed diff/patch. Pushing a branch or opening a
   pull request needs a GitHub token with write access and is not implemented yet.
-- **Nova Optimizer** and **Nova Visual** are registered as not available (no benchmark harness;
+- **Orbis Optimizer** and **Orbis Visual** are registered as not available (no benchmark harness;
   no headless browser in the sandbox yet). Nothing is claimed for them.
 - Only npm projects on GitHub; private repositories need `GITHUB_TOKEN`.
 - Costs are estimates; sandbox time is reported as minutes, not dollars.
@@ -131,7 +131,7 @@ live deployment against `johannesdoesapps/nova`, with Claude models:
 ## Stage 2 and 3 readiness
 
 - **Autonomous Developer** = the same runtime pointed at any registered repository; nothing
-  is Nova-specific except the default project.
+  is Orbis-specific except the default project.
 - **Customer platform (not built yet)**. Minimum work before exposing it:
   1. Tenancy: add `org_id` to wf_* tables and RLS by org membership instead of `is_admin()`;
      internal operator privileges must never apply to customer agents.

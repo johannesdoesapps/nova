@@ -4,18 +4,18 @@ Three things, each working on its own:
 
 1. **Continue with GitHub** on the sign-in page.
    - Uses Supabase Auth's GitHub provider, like Google.
-   - NOVA asks only for the public profile and email (`read:user user:email`).
+   - Orbis asks only for the public profile and email (`read:user user:email`).
    - The button only appears once GitHub is switched on in Supabase.
-2. **Connect GitHub** for people who already have a NOVA account. It's in the chat composer: `+` → **Add from GitHub**.
+2. **Connect GitHub** for people who already have an Orbis account. It's in the chat composer: `+` → **Add from GitHub**.
    - Uses Supabase `linkIdentity`, which needs **manual linking** switched on in Supabase.
-   - If that GitHub account already belongs to another NOVA user, they see "That GitHub account is already connected to another NOVA account."
-3. **Add from GitHub** in the chat composer. Users install NOVA's **GitHub App** on the repositories they choose, then pick files to attach to a message. The usual limits apply: up to 3 files, about 150 KB of text per message.
+   - If that GitHub account already belongs to another Orbis user, they see "That GitHub account is already connected to another Orbis account."
+3. **Add from GitHub** in the chat composer. Users install Orbis's **GitHub App** on the repositories they choose, then pick files to attach to a message. The usual limits apply: up to 3 files, about 150 KB of text per message.
    - Access is read-only: the app asks only for *Contents: read* (plus *Metadata: read*, which GitHub requires).
-   - NOVA never writes to GitHub.
+   - Orbis never writes to GitHub.
 
 ## How access is checked
 
-On every request, NOVA:
+On every request, Orbis:
 1. Reads the GitHub account linked to the signed-in user from Supabase Auth (`getUser().identities`). The browser can't change this.
 2. Looks up the app's installation on that account (`GET /users/{login}/installation`, as the app).
 3. Uses the installation only if its owner's **numeric account id** matches. A renamed or reused login therefore can't pick up someone else's installation.
@@ -34,7 +34,7 @@ Endpoints (signed-in users, 60 requests a minute):
 | Endpoint | Returns |
 | --- | --- |
 | `GET /api/github/status` | Whether GitHub is configured, linked and installed, plus the install and manage links |
-| `GET /api/github/repos` | Repositories the user shared with NOVA |
+| `GET /api/github/repos` | Repositories the user shared with Orbis |
 | `GET /api/github/tree?repo=owner/name` | Text files on the default branch |
 | `GET /api/github/file?repo=owner/name&path=…` | One file. Paths with `..`, a leading `/`, `\` or NUL are refused before GitHub is called. |
 
@@ -45,7 +45,7 @@ GitHub's own error text is never shown to users, because it can name private rep
 ### A. Sign-in: GitHub OAuth App → Supabase
 
 1. In GitHub, go to **Settings → Developer settings → OAuth Apps → New OAuth App**.
-   - **Application name:** NOVA
+   - **Application name:** Orbis
    - **Homepage URL:** `https://nova-supabase.vercel.app`
    - **Authorization callback URL:** the one Supabase shows in **Authentication → Sign In / Providers → GitHub**. It looks like `https://<project-ref>.supabase.co/auth/v1/callback`.
 2. Create it. Copy the **Client ID**, then **Generate a new client secret** and copy it.
@@ -57,7 +57,7 @@ The sign-in button appears within about a minute; no redeploy is needed.
 ### B. Repository access: GitHub App → Vercel
 
 1. In GitHub, go to **Settings → Developer settings → GitHub Apps → New GitHub App**.
-   - **GitHub App name:** something unique, e.g. `NOVA AI johannes`. The web address of the app ("slug") comes from this name.
+   - **GitHub App name:** something unique, e.g. `Orbis AI johannes`. The web address of the app ("slug") comes from this name.
    - **Homepage URL:** `https://nova-supabase.vercel.app`
    - **Setup URL:** `https://nova-supabase.vercel.app/chat`. Tick **Redirect on update**.
    - **Webhook:** untick **Active**.

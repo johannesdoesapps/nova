@@ -1,5 +1,5 @@
 /**
- * Nova Workforce runtime: Commander scheduling, approvals, budgets, repairs,
+ * Orbis Workforce runtime: Commander scheduling, approvals, budgets, repairs,
  * cancellation, recovery and verification — with an in-memory store, fake
  * models and a fake workspace (no network, no real sandbox). These are mocked
  * unit/integration tests; the real end-to-end run is documented separately.
@@ -315,7 +315,7 @@ describe("Commander: limits, approvals and control", () => {
     const r = await run(rt, t.id);
     expect(r.status).toBe("failed");
     expect(models.counts.architect).toBe(4); // 2 attempts × (call + one correction)
-    expect(r.status_reason).toMatch(/Nova Architect failed/);
+    expect(r.status_reason).toMatch(/Orbis Architect failed/);
   });
 
   it("rejects plans that touch protected files and edits outside the plan", async () => {
@@ -378,7 +378,7 @@ describe("Commander: limits, approvals and control", () => {
     const t = await newTask(rt, store);
     const r = await run(rt, t.id);
     expect(r.status).toBe("needs_attention");
-    expect(r.status_reason).toMatch(/Nova Architect is disabled/);
+    expect(r.status_reason).toMatch(/Orbis Architect is disabled/);
     store.settings = parseSettings({ maxAutonomy: "execute" });
     const first = ws();
     expect(first.stopped).toBe(false);

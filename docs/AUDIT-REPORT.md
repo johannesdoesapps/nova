@@ -1,4 +1,4 @@
-# NOVA AI: advanced audit and launch readiness
+# Orbis AI: advanced audit and launch readiness
 
 Date: 2026-10-19. Production: https://nova-supabase.vercel.app (commit 4ef5114).
 

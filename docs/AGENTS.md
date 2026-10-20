@@ -69,7 +69,7 @@ Every turn goes through `POST /api/agents/chat` and then `runAgentTurn` in `src/
    - Each tool emits a `tool` event, which appears as an expandable row above the reply.
    - A tool failure becomes a notice. The turn continues.
 5. **Build the system prompt:**
-   - NOVA's base rules come first.
+   - Orbis's base rules come first.
    - Then the agent's name and its enabled tools.
    - Then the owner's instructions, inside `<agent_instructions>` tags. Tags inside them are escaped, so the instructions can't override the rules.
    - Tool results and attached files go inside `<tool_result>` and `<document>` tags, marked as untrusted.

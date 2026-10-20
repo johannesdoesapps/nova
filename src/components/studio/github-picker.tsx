@@ -20,12 +20,12 @@ async function getJson<T>(url: string): Promise<{ ok: true; data: T } | { ok: fa
     if (!res.ok) return { ok: false, status: res.status, message: body?.error?.message ?? "Something went wrong. Please try again." };
     return { ok: true, data: body as T };
   } catch {
-    return { ok: false, status: 0, message: "Couldn't reach NOVA. Check your connection and try again." };
+    return { ok: false, status: 0, message: "Couldn't reach Orbis. Check your connection and try again." };
   }
 }
 
 /**
- * "Add from GitHub": pick files from a repository the user let NOVA read and
+ * "Add from GitHub": pick files from a repository the user let Orbis read and
  * add them to the message as attachments. Walks the user through connecting
  * GitHub and choosing repositories when that hasn't happened yet.
  */
@@ -132,7 +132,7 @@ export function GitHubPicker({
   const button = "inline-flex items-center justify-center gap-2 rounded-full bg-s-ink px-4 py-2 text-[13.5px] font-medium text-s-bg transition hover:opacity-90 disabled:opacity-50";
 
   return (
-    <Dialog open={open} onClose={onClose} title="Add files from GitHub" description="NOVA reads only the repositories you choose, and never changes them." width={560}>
+    <Dialog open={open} onClose={onClose} title="Add files from GitHub" description="Orbis reads only the repositories you choose, and never changes them." width={560}>
       {error && <p role="alert" className="mb-3 rounded-xl border border-s-line px-3 py-2 text-[13px] text-s-danger">{error}</p>}
 
       {needsSignIn ? (
@@ -143,7 +143,7 @@ export function GitHubPicker({
         <p className="text-[13.5px] text-s-ink-2">GitHub isn’t set up on this site yet.</p>
       ) : !status.linked ? (
         <div className="space-y-3">
-          <p className="text-[13.5px] text-s-ink-2">Connect your GitHub account first. NOVA only sees your public profile and email at this step.</p>
+          <p className="text-[13.5px] text-s-ink-2">Connect your GitHub account first. Orbis only sees your public profile and email at this step.</p>
           <button type="button" onClick={() => void connect()} disabled={busy} className={button}>
             <GitHubLogo className="h-4 w-4" /> Connect GitHub
           </button>
@@ -151,7 +151,7 @@ export function GitHubPicker({
       ) : !status.installed ? (
         <div className="space-y-3">
           <p className="text-[13.5px] text-s-ink-2">
-            Connected as <b>@{status.login}</b>. Now choose which repositories NOVA may read. You can pick just one, and change it any time on GitHub.
+            Connected as <b>@{status.login}</b>. Now choose which repositories Orbis may read. You can pick just one, and change it any time on GitHub.
           </p>
           {status.installUrl && (
             <a href={status.installUrl} className={button}>
@@ -168,7 +168,7 @@ export function GitHubPicker({
               aria-label="Repository"
               className="min-w-0 flex-1 rounded-xl border border-s-line bg-transparent px-3 py-2 text-[13.5px]"
             >
-              <option value="">{repos === null ? "Loading repositories…" : repos.length ? "Choose a repository" : "No repositories shared with NOVA"}</option>
+              <option value="">{repos === null ? "Loading repositories…" : repos.length ? "Choose a repository" : "No repositories shared with Orbis"}</option>
               {repos?.map((r) => (
                 <option key={r.fullName} value={r.fullName}>
                   {r.fullName}

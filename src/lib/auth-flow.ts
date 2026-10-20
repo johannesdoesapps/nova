@@ -12,7 +12,7 @@ export function safeNext(n: string | string[] | null | undefined): string {
   return v;
 }
 
-/** Where people go after signing in when no specific page was requested: the chat, NOVA's main workspace. */
+/** Where people go after signing in when no specific page was requested: the chat, Orbis's main workspace. */
 export const DEFAULT_AFTER_SIGN_IN = "/chat";
 
 /** The page to open after sign-in: the requested same-site path, or the chat. */
@@ -37,7 +37,7 @@ export type OAuthVia = "google" | "github" | "github-link";
 
 /**
  * Messages the sign-in page can show. The page only accepts these codes in its
- * URL, so a crafted link can't put arbitrary text on NOVA's sign-in screen.
+ * URL, so a crafted link can't put arbitrary text on Orbis's sign-in screen.
  */
 export const LOGIN_MESSAGES = {
   google_cancelled: { tone: "danger", text: "Google sign-in was cancelled. You can try again or use your email instead." },
@@ -48,7 +48,7 @@ export const LOGIN_MESSAGES = {
   github_cancelled: { tone: "danger", text: "GitHub sign-in was cancelled. You can try again or use your email instead." },
   github_unavailable: { tone: "danger", text: "GitHub sign-in isn't available right now. Please use your email and password." },
   github_failed: { tone: "danger", text: "GitHub sign-in couldn't be completed. Please try again, or use your email instead." },
-  github_in_use: { tone: "danger", text: "That GitHub account is already connected to another NOVA account." },
+  github_in_use: { tone: "danger", text: "That GitHub account is already connected to another Orbis account." },
   github_link_failed: { tone: "danger", text: "GitHub couldn't be connected. Please try again." },
   signup_closed: { tone: "danger", text: "New sign-ups are closed right now." },
   email_confirmed: { tone: "success", text: "Your email is confirmed. Sign in with your password to continue." },
@@ -108,7 +108,7 @@ export function exchangeFailureCode(via: string | null, hadCode = true, next = "
 export function friendlyAuthError(message: string | undefined, mode: "signin" | "signup" | "reset"): string {
   const m = (message ?? "").toLowerCase();
   if (m.includes("invalid login credentials"))
-    return "Wrong email or password. If you signed up with Google, use “Continue with Google”. New to NOVA? Choose “Sign up” below.";
+    return "Wrong email or password. If you signed up with Google, use “Continue with Google”. New to Orbis? Choose “Sign up” below.";
   if (m.includes("email not confirmed")) return "Confirm your email first: open the link we sent you, then sign in.";
   if (m.includes("already registered")) return "An account with this email already exists. Sign in instead.";
   if (m.includes("rate limit") || m.includes("too many"))

@@ -18,7 +18,7 @@ Code: `engine/nova_engine/workspace/*`, `engine/nova_engine/connectors/*`, `src/
 | **Team lead** | Create a workspace → invite teammates (editor) and stakeholders (commenter) → tasks with status → stakeholders comment on documents → resolve threads → restore an earlier version of a document after a bad edit. |
 | **Engineer** | Connect GitHub (public mirror or OAuth) → issues sync into the workspace as tasks → a workflow drafts a new issue from notes, which needs approval before it is created. |
 | **Researcher** | Follow arXiv topics in Radar → save signals into a **knowledge collection** → publish the collection to Community (after the sensitive-data scan) → others fork it into their own workspaces. |
-| **Leaving or switching tools** | Export JSON (optionally with full history) → import elsewhere or into another NOVA instance with a dry-run preview → disconnect integrations with "delete synced data". |
+| **Leaving or switching tools** | Export JSON (optionally with full history) → import elsewhere or into another Orbis instance with a dry-run preview → disconnect integrations with "delete synced data". |
 
 ## 2. Workspace model
 

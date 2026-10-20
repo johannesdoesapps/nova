@@ -313,7 +313,7 @@ function ReportView(props: {
           {(Object.keys(STATUS_META) as (keyof typeof STATUS_META)[]).map((k) => (s.byStatus[k] ? <span key={k} className="inline-flex items-center gap-1"><StatusBadge status={k} /><span className="text-xs tabular-nums text-muted">{s.byStatus[k]}</span></span> : null))}
         </div>
         <div className="mt-3 space-y-2">
-          {s.snippetOnly && <Notice tone="warning" title="Checked against snippets only">The sources are search snippets, not full documents. Claims may be supported or contradicted by parts of the pages NOVA never saw.</Notice>}
+          {s.snippetOnly && <Notice tone="warning" title="Checked against snippets only">The sources are search snippets, not full documents. Claims may be supported or contradicted by parts of the pages Orbis never saw.</Notice>}
           {report.sources.length === 0 && <Notice tone="warning" title="No sources">Without source text every factual claim shows as “No evidence found”. That says nothing about whether the claims are true.</Notice>}
           {props.notices.map((n) => <Notice key={n} tone="info">{n}</Notice>)}
           {props.error && <Notice tone="danger">{props.error}</Notice>}
@@ -531,7 +531,7 @@ function SourceInspector({ source, quote, onClose }: { source: SourceRecord; quo
           </ol>
         </div>
         <div className="mt-4">
-          <div className="text-xs font-medium">Text NOVA checked against</div>
+          <div className="text-xs font-medium">Text Orbis checked against</div>
           <div className="mt-1 whitespace-pre-wrap rounded-xl border border-border bg-bg-elev p-3 text-sm leading-6">
             {idx >= 0 ? (
               <>

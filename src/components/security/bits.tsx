@@ -17,11 +17,11 @@ export const AGENT_TINT: Record<string, string> = {
   coordinated: "from-s-accent/25 to-transparent text-s-ink",
 };
 export const AGENT_NAME: Record<string, string> = {
-  sentinel: "Nova Sentinel",
-  threat_hunter: "Nova Threat Hunter",
-  code_guardian: "Nova Code Guardian",
-  incident_responder: "Nova Incident Responder",
-  threat_intel: "Nova Threat Intelligence",
+  sentinel: "Orbis Sentinel",
+  threat_hunter: "Orbis Threat Hunter",
+  code_guardian: "Orbis Code Guardian",
+  incident_responder: "Orbis Incident Responder",
+  threat_intel: "Orbis Threat Intelligence",
   coordinated: "Coordinated investigation",
 };
 

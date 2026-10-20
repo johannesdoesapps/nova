@@ -50,7 +50,7 @@ export function NewTaskDialog({ open, onClose, projects, maxAutonomy, defaultBud
   };
 
   return (
-    <Dialog open={open} onClose={onClose} title="New engineering task" description="Nova Commander plans it, the specialist agents build and check it in an isolated workspace, and nothing ships without you." width={620}>
+    <Dialog open={open} onClose={onClose} title="New engineering task" description="Orbis Commander plans it, the specialist agents build and check it in an isolated workspace, and nothing ships without you." width={620}>
       {projects.length === 0 ? (
         <p className="text-[14px] text-s-ink-2">Register a project first (Projects tab).</p>
       ) : (

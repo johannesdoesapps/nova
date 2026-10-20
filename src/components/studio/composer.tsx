@@ -164,7 +164,7 @@ export function Composer(p: ComposerProps) {
           </ul>
         )}
 
-        <label htmlFor="studio-input" className="sr-only">Message NOVA</label>
+        <label htmlFor="studio-input" className="sr-only">Message Orbis</label>
         <textarea
           id="studio-input"
           ref={inputRef}
@@ -186,7 +186,7 @@ export function Composer(p: ComposerProps) {
           }}
           rows={1}
           maxLength={12000}
-          placeholder={speech.listening ? "Listening…" : (p.placeholder ?? (p.variant === "hero" ? "Ask anything…" : "Message NOVA"))}
+          placeholder={speech.listening ? "Listening…" : (p.placeholder ?? (p.variant === "hero" ? "Ask anything…" : "Message Orbis"))}
           className={cn(
             "s-scroll block w-full resize-none bg-transparent px-3 text-s-ink outline-none placeholder:text-s-ink-3 focus-visible:outline-none",
             p.variant === "hero" ? "min-h-[64px] pb-2 pt-3 text-[16.5px] leading-relaxed" : "min-h-[44px] pb-1.5 pt-2.5 text-[16px] leading-relaxed",

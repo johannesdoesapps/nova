@@ -305,7 +305,7 @@ describe("AI budget guard", () => {
     const daily = fakeAuth({ plan: PRO, reserve: () => ({ ok: false, reason: "budget", scope: "daily", resets_at: "2026-10-20T00:00:00Z" }) });
     expect((await fail(enforceLimits(req(), daily.auth, 1, [haiku]))).message).toMatch(/today's share/);
     const site = fakeAuth({ plan: PRO, reserve: () => ({ ok: false, reason: "budget", scope: "site" }) });
-    expect((await fail(enforceLimits(req(), site.auth, 1, [haiku]))).message).toMatch(/NOVA has reached its AI usage limit/);
+    expect((await fail(enforceLimits(req(), site.auth, 1, [haiku]))).message).toMatch(/Orbis has reached its AI usage limit/);
   });
 
   it("doesn't apply to administrators", async () => {

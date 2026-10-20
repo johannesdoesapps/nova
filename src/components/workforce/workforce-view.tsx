@@ -96,8 +96,8 @@ export function WorkforceView() {
         <div className="grid flex-1 place-items-center px-6 text-center">
           <div className="max-w-md">
             <ShieldAlert className="mx-auto h-8 w-8 text-s-ink-3" />
-            <h1 className="mt-4 font-serif text-[32px]">Nova Workforce</h1>
-            <p className="mt-2 text-[15px] text-s-ink-2">The internal AI workforce is limited to Nova operators.{!integrations.supabase ? " Accounts aren't set up on this site." : user ? " Your account isn't an operator." : ""}</p>
+            <h1 className="mt-4 font-serif text-[32px]">Orbis Workforce</h1>
+            <p className="mt-2 text-[15px] text-s-ink-2">The internal AI workforce is limited to Orbis operators.{!integrations.supabase ? " Accounts aren't set up on this site." : user ? " Your account isn't an operator." : ""}</p>
             {!user && integrations.supabase && (
               <Link href="/login?next=/workforce" className="mt-5 inline-flex h-10 items-center rounded-full bg-s-accent px-5 text-[14px] font-medium text-s-accent-ink">
                 Sign in
@@ -117,8 +117,8 @@ export function WorkforceView() {
         <div className="mx-auto w-full max-w-[1180px] px-4 pb-24 pt-2 sm:px-8">
           <div className="s-in flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
             <div>
-              <h1 className="font-serif text-[clamp(34px,5vw,46px)] leading-[1.05] tracking-[-0.01em]">Nova Workforce</h1>
-              <p className="mt-2 max-w-2xl text-[15.5px] text-s-ink-2">Specialised agents that plan, build, test, review and verify changes to Nova in isolated workspaces — with you approving what matters.</p>
+              <h1 className="font-serif text-[clamp(34px,5vw,46px)] leading-[1.05] tracking-[-0.01em]">Orbis Workforce</h1>
+              <p className="mt-2 max-w-2xl text-[15.5px] text-s-ink-2">Specialised agents that plan, build, test, review and verify changes to Orbis in isolated workspaces — with you approving what matters.</p>
             </div>
             <div className="flex gap-2">
               {data && (

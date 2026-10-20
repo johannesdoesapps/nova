@@ -25,7 +25,7 @@ export function RadarView() {
   const err = meta.error ?? watches.error;
   return (
     <div className="mx-auto max-w-7xl px-4 pb-16 pt-8 sm:px-6">
-      <PageHeader title="Signal Radar" description="Follow topics, questions, projects, sources, industries and technologies. NOVA AI compares each check with a recorded baseline and surfaces what actually changed — with citations, labels and the time it last looked." actions={<Button onClick={() => { setTab("watches"); setCreating(true); }}><Plus className="h-4 w-4" /> Follow something</Button>} />
+      <PageHeader title="Signal Radar" description="Follow topics, questions, projects, sources, industries and technologies. Orbis AI compares each check with a recorded baseline and surfaces what actually changed — with citations, labels and the time it last looked." actions={<Button onClick={() => { setTab("watches"); setCreating(true); }}><Plus className="h-4 w-4" /> Follow something</Button>} />
       {err && <div className="mb-4"><EngineError message={err} /></div>}
       {meta.data && (
         <Notice tone={meta.data.status.scheduler_running ? "success" : "warning"} title={meta.data.status.scheduler_running ? "Scheduled checks are running" : "No continuous monitoring on this server"} className="mb-4">
@@ -189,7 +189,7 @@ function WatchForm({ meta, onClose, onSaved }: { meta: Meta; onClose: () => void
         <label className="flex items-center gap-1"><input type="checkbox" checked={f.include_speculative_alerts} onChange={(e) => setF({ ...f, include_speculative_alerts: e.target.checked })} /> Instant alerts for speculation too</label>
         <label className="flex items-center gap-1"><input type="checkbox" checked={f.private_mode} onChange={(e) => setF({ ...f, private_mode: e.target.checked })} /> Private (never send my query to third parties)</label>
       </div>
-      <p className="text-[11px] text-faint">The first check records a baseline and raises no alerts. Checks happen on the schedule only while the NOVA worker is running; you can always press “Check now”.</p>
+      <p className="text-[11px] text-faint">The first check records a baseline and raises no alerts. Checks happen on the schedule only while the Orbis worker is running; you can always press “Check now”.</p>
       {err && <EngineError message={err} />}
       <Button onClick={save} disabled={!f.name.trim()}>Start following</Button>
     </Card>

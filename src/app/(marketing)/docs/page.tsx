@@ -6,7 +6,7 @@ import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
   title: "Documentation and guides",
-  description: "Step-by-step guides for NOVA: getting started, choosing a model, building custom agents, comparing models, planning with Mission Control and running security checks.",
+  description: "Step-by-step guides for Orbis: getting started, choosing a model, building custom agents, comparing models, planning with Mission Control and running security checks.",
   path: "/docs",
 });
 
@@ -15,7 +15,7 @@ export default function DocsPage() {
     <>
       <section className="mx-auto max-w-5xl px-5 pt-16 pb-8 sm:px-8 sm:pt-20">
         <h1 className="text-balance font-serif text-[44px] leading-[1.05] tracking-[-0.01em] text-fg sm:text-[56px]">Documentation</h1>
-        <p className="mt-5 max-w-2xl text-[17px] leading-relaxed text-muted">Practical guides to getting more out of NOVA, written for the features that exist today.</p>
+        <p className="mt-5 max-w-2xl text-[17px] leading-relaxed text-muted">Practical guides to getting more out of Orbis, written for the features that exist today.</p>
       </section>
       <section aria-labelledby="guides" className="mx-auto max-w-5xl px-5 pb-12 sm:px-8">
         <h2 id="guides" className="text-xl font-medium text-fg">Guides</h2>

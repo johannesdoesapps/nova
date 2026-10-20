@@ -5,7 +5,7 @@ import { parseModelJson } from "./schemas";
 /**
  * Model access for agents. The runtime never talks to providers directly:
  * it goes through this interface, which the production adapter implements
- * with Nova's existing provider registry, routing and usage records.
+ * with Orbis's existing provider registry, routing and usage records.
  */
 export interface ResolvedModel {
   id: string;

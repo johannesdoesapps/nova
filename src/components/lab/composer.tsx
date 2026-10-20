@@ -356,7 +356,7 @@ function Settings({ spec, catalog, update, validation }: { spec: Spec; catalog: 
         {spec.trigger.type === "schedule" && <Field label="Every"><Select value={String(spec.trigger.config.every ?? "daily")} onChange={(e) => set({ trigger: { ...spec.trigger, config: { ...spec.trigger.config, every: e.target.value } } })} className="w-full"><option>hourly</option><option>daily</option><option>weekly</option></Select></Field>}
         {spec.trigger.type === "radar_signal" && <Field label="Radar watch id"><Input value={String(spec.trigger.config.watch_id ?? "")} onChange={(e) => set({ trigger: { ...spec.trigger, config: { watch_id: e.target.value } } })} className="h-8 font-mono text-xs" /></Field>}
       </div>
-      {spec.trigger.type !== "manual" && <p className="text-[11px] text-faint">Scheduled and signal triggers run only while the NOVA worker process is running, and stop at every approval gate until you approve.</p>}
+      {spec.trigger.type !== "manual" && <p className="text-[11px] text-faint">Scheduled and signal triggers run only while the Orbis worker process is running, and stop at every approval gate until you approve.</p>}
 
       <div>
         <div className="mb-1 flex items-center justify-between text-xs text-muted">Inputs <Button size="sm" variant="ghost" onClick={() => set({ inputs: [...spec.inputs, { name: `input_${spec.inputs.length + 1}`, type: "string", required: true, sensitive: false }] })}><Plus className="h-3 w-3" /></Button></div>
@@ -368,7 +368,7 @@ function Settings({ spec, catalog, update, validation }: { spec: Spec; catalog: 
               <button type="button" aria-label="Remove input" onClick={() => set({ inputs: spec.inputs.filter((_, j) => j !== k) })}><X className="h-3.5 w-3.5 text-faint" /></button>
               <label className="col-span-3 flex gap-3 text-[11px] text-muted">
                 <span className="flex items-center gap-1"><input type="checkbox" checked={i.required} onChange={(e) => set({ inputs: spec.inputs.map((x, j) => (j === k ? { ...x, required: e.target.checked } : x)) })} /> required</span>
-                <span className="flex items-center gap-1"><input type="checkbox" checked={i.sensitive} onChange={(e) => set({ inputs: spec.inputs.map((x, j) => (j === k ? { ...x, sensitive: e.target.checked } : x)) })} /> sensitive (masked in logs, gated before leaving NOVA)</span>
+                <span className="flex items-center gap-1"><input type="checkbox" checked={i.sensitive} onChange={(e) => set({ inputs: spec.inputs.map((x, j) => (j === k ? { ...x, sensitive: e.target.checked } : x)) })} /> sensitive (masked in logs, gated before leaving Orbis)</span>
               </label>
             </div>
           ))}

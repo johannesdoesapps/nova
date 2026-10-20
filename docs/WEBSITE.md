@@ -1,6 +1,6 @@
 # Public website (`src/app/(marketing)`)
 
-The homepage and public pages explain NOVA to visitors and search engines. The
+The homepage and public pages explain Orbis to visitors and search engines. The
 signed-in app (chat, agents, Council, Arena, Missions, Workforce, Admin) is unchanged
 and is kept out of search results.
 
@@ -10,7 +10,7 @@ and is kept out of search results.
 | `/features`, `/features/<slug>` | One page per capability: what it does, who it's for, how to use it, limits |
 | `/pricing` | Free plan (live) and Pro (not on sale yet — no price is shown until there is one) |
 | `/docs`, `/docs/<slug>` | Practical guides, each linked to its feature page |
-| `/security` | What NOVA stores, where messages go, what agents may do, code execution, your control |
+| `/security` | What Orbis stores, where messages go, what agents may do, code execution, your control |
 
 ## Editing content
 

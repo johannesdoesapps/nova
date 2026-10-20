@@ -10,7 +10,7 @@ import { ACTIVE_STATUSES, TERMINAL_STATUSES, type Autonomy, type CheckResult, ty
 import type { WorkspaceFactory } from "./workspace";
 
 /**
- * Nova Commander — the orchestrator. Tasks advance in bounded "ticks" under a
+ * Orbis Commander — the orchestrator. Tasks advance in bounded "ticks" under a
  * lease, so a task survives function restarts and is never run by two
  * workers at once. All state lives in the store; nothing depends on chat
  * history or memory of a previous request.

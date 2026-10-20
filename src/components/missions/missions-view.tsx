@@ -119,7 +119,7 @@ export function MissionsView() {
         <div className="mx-auto w-full max-w-[1040px] px-4 pb-24 pt-2 sm:px-8">
           <div className="s-in">
             <h1 className="font-serif text-[clamp(34px,5vw,46px)] leading-[1.05] tracking-[-0.01em]">Mission Control</h1>
-            <p className="mt-2 max-w-2xl text-[15.5px] text-s-ink-2">Describe a goal. Nova drafts a plan you can edit, then tracks the work and lets AI draft the tasks it can help with.</p>
+            <p className="mt-2 max-w-2xl text-[15.5px] text-s-ink-2">Describe a goal. Orbis drafts a plan you can edit, then tracks the work and lets AI draft the tasks it can help with.</p>
           </div>
 
           {!plan && (

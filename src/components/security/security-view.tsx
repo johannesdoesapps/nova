@@ -279,7 +279,7 @@ export function SecurityView() {
                 ))}
               {tab === "targets" && data && (
                 <div className="space-y-3">
-                  <p className="text-[13.5px] text-s-ink-2">Websites Nova Sentinel may scan. Ownership is proved with a token and re-checked before every scan.</p>
+                  <p className="text-[13.5px] text-s-ink-2">Websites Orbis Sentinel may scan. Ownership is proved with a token and re-checked before every scan.</p>
                   {data.targets.length === 0 ? (
                     <p className="rounded-[22px] border border-dashed border-s-line-strong px-6 py-8 text-center text-[14px] text-s-ink-2">No websites yet. Add one from Scan website.</p>
                   ) : (

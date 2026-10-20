@@ -1,4 +1,4 @@
-# Nova Security Team
+# Orbis Security Team
 
 `/agents/security` — three cybersecurity agents that work alone or together. Scanners
 produce the findings; AI models only explain them, propose fixes, and write reports.
@@ -7,16 +7,16 @@ produce the findings; AI models only explain them, propose fixes, and write repo
 
 | Agent | Action | Real tools it uses | Never does |
 |---|---|---|---|
-| **Nova Sentinel** | Scan website | Built-in header/config checks (HTTPS, HSTS, CSP, framing, nosniff, cookies, CORS, version disclosure, mixed scripts, security.txt); exposed-file checks (`.env`, `.git`, backups, server-status…) in *active* scope only | Scan a site without fresh proof of ownership; follow redirects to other domains; reach private/internal addresses |
-| **Nova Threat Hunter** | Investigate threat | Log analyzer for web access logs (combined/common), SSH auth logs and JSON lines; AbuseIPDB reputation when `ABUSEIPDB_API_KEY` is set | Claim continuous monitoring; call an event a confirmed attack from a guess |
-| **Nova Code Guardian** | Audit code | Secret & insecure-code rules (JS/TS, Python, PHP); OSV.dev dependency vulnerabilities (package-lock, yarn.lock, requirements.txt, package.json ranges); GitHub snapshots; AI review whose quoted code must exist in your files | Apply, commit or deploy patches |
+| **Orbis Sentinel** | Scan website | Built-in header/config checks (HTTPS, HSTS, CSP, framing, nosniff, cookies, CORS, version disclosure, mixed scripts, security.txt); exposed-file checks (`.env`, `.git`, backups, server-status…) in *active* scope only | Scan a site without fresh proof of ownership; follow redirects to other domains; reach private/internal addresses |
+| **Orbis Threat Hunter** | Investigate threat | Log analyzer for web access logs (combined/common), SSH auth logs and JSON lines; AbuseIPDB reputation when `ABUSEIPDB_API_KEY` is set | Claim continuous monitoring; call an event a confirmed attack from a guess |
+| **Orbis Code Guardian** | Audit code | Secret & insecure-code rules (JS/TS, Python, PHP); OSV.dev dependency vulnerabilities (package-lock, yarn.lock, requirements.txt, package.json ranges); GitHub snapshots; AI review whose quoted code must exist in your files | Apply, commit or deploy patches |
 
 **Coordinated investigation** runs the selected agents in order (Sentinel → Threat Hunter →
 Code Guardian, each as its own cancellable request), links related findings with transparent
 rules (e.g. SQL-injection code ↔ SQL-injection attempts in logs; an exposed file ↔ requests for
 it in logs), then writes one report. Skipped or failed steps are reported as such.
 
-**Planned agents** (shown as "Planned", not launchable): Nova Incident Responder and Nova
+**Planned agents** (shown as "Planned", not launchable): Orbis Incident Responder and Orbis
 Threat Intelligence. To add one: add its entry in `src/lib/security/agents.ts`, a runner in
 `src/lib/security/runners.ts`, a route under `src/app/api/security/`, and a form in
 `src/components/security/forms.tsx`. Findings, history, the dashboard and exports pick it up
@@ -42,7 +42,7 @@ dashboard shows plain counts of open findings by severity.
   Security isolates each user's targets, runs, findings and audit trail.
 - **Website ownership** is proved by a token at `/.well-known/nova-security-verification.txt`
   or a TXT record on `_nova-verify.<domain>`, re-checked by the server immediately before
-  every scan. Administrators may scan this Nova deployment's own domain without a token.
+  every scan. Administrators may scan this Orbis deployment's own domain without a token.
   Every scan also requires an explicit "I'm authorised" confirmation.
 - **SSRF protection**: only ports 80/443, public DNS names, no credentials in URLs; each
   connection's resolved IP is checked at connect time (blocks private, loopback, link-local,
@@ -72,4 +72,4 @@ dashboard shows plain counts of open findings by severity.
 
 OWASP ZAP, Semgrep, Trivy and Wazuh need a separate, isolated scanner runner (containers with
 their own resource limits) — they cannot run inside Vercel serverless functions. Domain/URL
-reputation services are not connected either. Nova does not monitor systems continuously.
+reputation services are not connected either. Orbis does not monitor systems continuously.

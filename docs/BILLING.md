@@ -41,7 +41,7 @@ Stripe webhooks are processed once per event id (`stripe_events`); paid invoices
    - URL: `https://nova-supabase.vercel.app/api/stripe/webhook`;
    - events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.paused`, `customer.subscription.resumed`, `invoice.paid`, `invoice.payment_failed` and `refund.created`;
    - copy the **Signing secret** (`whsec_…`).
-4. **Settings → Billing → Customer portal:** turn it on (lets subscribers cancel, change card and see invoices). Plan changes happen on NOVA's pricing page.
+4. **Settings → Billing → Customer portal:** turn it on (lets subscribers cancel, change card and see invoices). Plan changes happen on Orbis's pricing page.
 5. **Supabase → Project Settings → API Keys:** copy the **secret / service_role** key. It lets the webhook update a user's plan; never share it.
 6. **In Vercel → Settings → Environment Variables (Production, Sensitive)**, add:
    - `STRIPE_SECRET_KEY`
@@ -50,7 +50,7 @@ Stripe webhooks are processed once per event id (`stripe_events`); paid invoices
 
    Then **redeploy**.
 
-The four prices (Pro and Max, monthly and yearly, products "NOVA Pro" and "NOVA Max") are created in Stripe automatically on first use. They are found by lookup key, for example `nova_pro_month_usd_2000`. Changing a price in the admin creates a new Stripe price for new checkouts and plan changes; existing subscribers keep their price until they change plan.
+The four prices (Pro and Max, monthly and yearly, products "Orbis Pro" and "Orbis Max") are created in Stripe automatically on first use. They are found by lookup key, for example `nova_pro_month_usd_2000`. Changing a price in the admin creates a new Stripe price for new checkouts and plan changes; existing subscribers keep their price until they change plan.
 
 Until all three keys are set, the pricing page says "Coming soon" and checkout is off.
 
@@ -62,7 +62,7 @@ Until all three keys are set, the pricing page says "Coming soon" and checkout i
   - **Downgrades** apply now, and the unused part is credited to the next invoice.
   - **Free** cancels at the end of the paid period.
 - **Manage subscription:** `POST /api/billing/portal` opens Stripe's billing portal (card, invoices, cancel).
-- **The webhook keeps NOVA in sync.** Paid access is never granted from the checkout success page. `POST /api/stripe/webhook`:
+- **The webhook keeps Orbis in sync.** Paid access is never granted from the checkout success page. `POST /api/stripe/webhook`:
   - handles each event once (`stripe_events`);
   - records paid invoices (excluding tax), refunds and failed payments in `billing_ledger`, which Finance uses for collected revenue;
   - checks Stripe's signature;

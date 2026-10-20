@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "NOVA — AI assistant and agent workspace";
+export const alt = "Orbis — AI assistant and agent workspace";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -24,10 +24,10 @@ export default function OpengraphImage() {
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           <svg width="64" height="64" viewBox="0 0 32 32">
             <rect x="1" y="1" width="30" height="30" rx="9" fill="#f2f1ee" />
-            <path d="M10.5 22.5V10l11 12.5V9.5" fill="none" stroke="#0b0b0d" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx="26.5" cy="5.5" r="2.6" fill="#a59cf0" />
+            <circle cx="16" cy="16" r="7" fill="none" stroke="#0b0b0d" strokeWidth="2.4" />
+            <circle cx="20.95" cy="11.05" r="2.9" fill="#a59cf0" stroke="#f2f1ee" strokeWidth="1.6" />
           </svg>
-          <div style={{ fontSize: 34, letterSpacing: 10, fontWeight: 600 }}>NOVA</div>
+          <div style={{ fontSize: 34, letterSpacing: 10, fontWeight: 600 }}>ORBIS</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
           <div style={{ fontSize: 76, lineHeight: 1.05, letterSpacing: -2, maxWidth: 980 }}>One AI workspace. Agents that help you get work done.</div>

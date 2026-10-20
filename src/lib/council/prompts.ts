@@ -2,7 +2,7 @@ import { ASSISTANT_BASE } from "../ai/modes";
 import type { ChatMessage } from "../ai/types";
 
 /**
- * Prompts for Nova Council and Arena. Answers are labelled "Response A/B/…"
+ * Prompts for Orbis Council and Arena. Answers are labelled "Response A/B/…"
  * rather than by model name so critiques and syntheses judge content, not
  * brands (and so blind comparisons stay blind).
  */

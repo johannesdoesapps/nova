@@ -1,17 +1,17 @@
-# NOVA AI
+# Orbis AI
 
 **Discover Knowledge. Access AI. Turn Ideas into Action.**
 
-NOVA AI is an AI research and model-intelligence platform: cited web search, chat, model comparison and blind trials, claim-level fact-checking, an AI Lab for approval-gated workflows, a Signal Radar that reports what changed, and shared project workspaces with integrations.
+Orbis AI is an AI research and model-intelligence platform: cited web search, chat, model comparison and blind trials, claim-level fact-checking, an AI Lab for approval-gated workflows, a Signal Radar that reports what changed, and shared project workspaces with integrations.
 
 It is two services:
 
 | Service | Language | Role |
 |---|---|---|
 | **Web app** (`/`) | TypeScript · Next.js 16 · React 19 · Tailwind | UI, Supabase auth, search, chat, Claim DNA, Model Intelligence, and the signed proxy to the engine |
-| **NOVA engine** (`/engine`) | **Python 3.11+** · FastAPI · SQLAlchemy | AI Lab workflow execution, Signal Radar monitoring, workspaces, community and connectors, plus a background worker |
+| **Orbis engine** (`/engine`) | **Python 3.11+** · FastAPI · SQLAlchemy | AI Lab workflow execution, Signal Radar monitoring, workspaces, community and connectors, plus a background worker |
 
-Everything runs without API keys in a clearly-labelled demo mode, and switches to real integrations as keys are added. The architecture and launch roadmap are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). To put NOVA online, follow [`docs/DEPLOY.md`](docs/DEPLOY.md).
+Everything runs without API keys in a clearly-labelled demo mode, and switches to real integrations as keys are added. The architecture and launch roadmap are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). To put Orbis online, follow [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ---
 
@@ -102,7 +102,7 @@ In Supabase → Authentication → URL Configuration, add `<your-site>/auth/call
 
 ### Models and prices
 
-Default models are defined in `src/lib/ai/registry.ts` (Claude, GPT-5.6, Gemini, Grok, DeepSeek and Hugging Face models — see `docs/MODELS.md`). Prices are filled in only where they were verified on the provider's page; the rest ship as `null` and NOVA shows "n/a" rather than inventing numbers. To set or correct prices (USD per 1M tokens) either by inserting rows into `model_registry` (which takes priority) or with:
+Default models are defined in `src/lib/ai/registry.ts` (Claude, GPT-5.6, Gemini, Grok, DeepSeek and Hugging Face models — see `docs/MODELS.md`). Prices are filled in only where they were verified on the provider's page; the rest ship as `null` and Orbis shows "n/a" rather than inventing numbers. To set or correct prices (USD per 1M tokens) either by inserting rows into `model_registry` (which takes priority) or with:
 
 ```bash
 NOVA_MODELS='[{"id":"openai:gpt-5.6-luna","provider":"openai","providerModelId":"gpt-5.6-luna","displayName":"GPT-5.6 Luna","capabilities":["chat","fast","low-cost"],"contextWindow":1050000,"inputPrice":0.2,"outputPrice":1.2,"lastVerifiedAt":"2026-10-19"}]'
@@ -154,7 +154,7 @@ src/
   proxy.ts            session refresh + protected-page redirects
 supabase/migrations/  SQL schema and RLS
 tests/                Vitest suites
-engine/               Python NOVA engine
+engine/               Python Orbis engine
   nova_engine/
     api/              FastAPI app (all engine endpoints)
     lab/              planner, validator, executor, templates, tests, versions (Part 7)
@@ -190,7 +190,7 @@ Key decisions:
 1. Push this repository to GitHub and import it in Vercel (framework: Next.js; defaults are fine).
 2. Add the environment variables from `.env.example` in Vercel → Settings → Environment Variables. Set `NEXT_PUBLIC_SITE_URL` to the production URL.
 3. Apply the Supabase migration and add `https://<your-domain>/auth/callback` to Supabase's redirect URLs.
-4. Set spending limits in the OpenAI / Hugging Face / Tavily dashboards in addition to NOVA's own quotas.
+4. Set spending limits in the OpenAI / Hugging Face / Tavily dashboards in addition to Orbis's own quotas.
 5. Deploy. Streaming routes declare `maxDuration = 60`; adjust to your Vercel plan.
 
 ### Observability

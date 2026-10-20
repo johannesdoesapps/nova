@@ -1,7 +1,7 @@
 # Part 4 — Claim DNA & Research Intelligence
 
-Claim DNA is NOVA's evidence-centred layer. It turns an answer or report into
-discrete claims, links each claim to the evidence NOVA can actually see, and
+Claim DNA is Orbis's evidence-centred layer. It turns an answer or report into
+discrete claims, links each claim to the evidence Orbis can actually see, and
 records how every judgement was made so it can be inspected, challenged and
 replayed.
 
@@ -22,7 +22,7 @@ browser), `src/app/api/claims/*`, `src/components/research/*`, and the migration
 |---|---|---|
 | `/claims` | **Claim DNA workspace** | Paste an answer and its sources, or arrive from AI Search with **Check claims**. Choose *Rules only* (free, deterministic) or *Rules + model judgement*. Includes a fictional example. |
 | `/claims` (report) | **Report view** | Summary headline and status counts. Warnings for snippet-only or missing sources. A *How to read this* explainer. The answer with each claim underlined by status. Six workflow tabs. A claim detail panel. A source list. |
-| (drawer) | **Source inspector** | Full text NOVA checked against, with the quote highlighted. Type, date, content kind, content hash. Reliability indicators (facts, not a score). Provenance timeline. Link to the original. |
+| (drawer) | **Source inspector** | Full text Orbis checked against, with the quote highlighted. Type, date, content kind, content hash. Reliability indicators (facts, not a score). Provenance timeline. Link to the original. |
 | `/claims/arena` | **Hypothesis Arena** | Competing explanations, each with editable predictions. A standings table, a verdict box, evidence recording, and suggested claims from a linked report. |
 | `/claims/replay` | **Research Replay** | Timeline of recorded steps (actor, determinism, hashes, duration, output snapshot). Exact replay, what-if replays (leave sources out) and, for model runs, a live re-run. Shows step-by-step diffs and which conclusions changed. |
 
@@ -151,4 +151,4 @@ How to tell whether Claim DNA works, and keep it honest:
 - Rule-based stance detection is lexical. It misses paraphrase, sarcasm and subtle hedging. Model mode helps, but only within quote verification.
 - AI Search provides snippets, not full pages. Reports say so prominently and cap the estimate.
 - Source-type classification uses domain lists, which are incomplete; anything unrecognised is shown as "unknown".
-- Arena evidence is user-recorded. NOVA does not run the tests the predictions describe.
+- Arena evidence is user-recorded. Orbis does not run the tests the predictions describe.

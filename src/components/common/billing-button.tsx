@@ -8,7 +8,7 @@ type Action = "upgrade" | "change" | "manage";
 /**
  * Subscribe (Stripe Checkout), change an existing subscription's plan or
  * billing interval, or open Stripe's billing portal. Checkout and the portal
- * are Stripe's hosted pages; card details never touch NOVA.
+ * are Stripe's hosted pages; card details never touch Orbis.
  */
 export function BillingButton({
   action,

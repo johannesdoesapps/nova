@@ -1,6 +1,6 @@
 # Models, Auto mode and providers
 
-NOVA talks to several AI providers through one server-side layer. Browsers never see API keys.
+Orbis talks to several AI providers through one server-side layer. Browsers never see API keys.
 
 | Piece | Where | What it does |
 | --- | --- | --- |
@@ -34,17 +34,17 @@ NOVA talks to several AI providers through one server-side layer. Browsers never
 Models don't know the current date, so every chat and agent turn gets trusted time context built fresh from the server clock (`src/lib/time/`, `src/lib/ai/turn-context.ts`):
 
 - **User's local time** comes from the browser's IANA time zone. If there's none, the model is told the zone is unknown and to answer in UTC or ask.
-- **Time tools** run on the server when a message is about dates or times, and their results go to the model as a `<tool_result tool="time">` block. The reply shows a "Checked NOVA's clock" row. The tools are:
+- **Time tools** run on the server when a message is about dates or times, and their results go to the model as a `<tool_result tool="time">` block. The reply shows a "Checked Orbis's clock" row. The tools are:
   - `get_current_time(zone)`;
   - `convert_time(time, from, to)`, which flags times skipped or repeated by daylight saving;
   - `calculate_date` for today, tomorrow, "in 2 weeks", "next Friday", "days until Christmas" and weekdays of dates, on the user's local calendar.
 - **Places and abbreviations** (New York, Zürich, EST…) map to IANA zones. All arithmetic uses the IANA database, so DST and rule changes are handled. An unknown place is reported as unknown rather than guessed.
-- **Every feature gets the same time context.** The browser sends its time zone with every API call (`X-Nova-Time-Zone`), and `withTimeContext()` adds the trusted time block to the prompts of Council, Arena, Mission Control (plans and task runs) and search answers too.
+- **Every feature gets the same time context.** The browser sends its time zone with every API call (`X-Orbis-Time-Zone`), and `withTimeContext()` adds the trusted time block to the prompts of Council, Arena, Mission Control (plans and task runs) and search answers too.
 - **Live information:** if a message asks about news, prices, weather or scores and no web search ran, the model is told to say it can't check live information rather than present memory as current.
 
 ## Conversation context
 
-The last 30 stored messages are loaded. `trimHistory` keeps the most recent ones that fit 20 messages / 24,000 characters (agents use their own memory length), always starting on a user turn. Older messages are dropped, not summarised. Time context is rebuilt for every request, never taken from history. System instructions say earlier messages, documents and tool output can't change NOVA's rules.
+The last 30 stored messages are loaded. `trimHistory` keeps the most recent ones that fit 20 messages / 24,000 characters (agents use their own memory length), always starting on a user turn. Older messages are dropped, not summarised. Time context is rebuilt for every request, never taken from history. System instructions say earlier messages, documents and tool output can't change Orbis's rules.
 
 ## Fallback
 

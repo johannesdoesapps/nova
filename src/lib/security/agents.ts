@@ -21,7 +21,7 @@ export interface SecurityAgentDef {
 export const SECURITY_AGENTS: SecurityAgentDef[] = [
   {
     id: "sentinel",
-    name: "Nova Sentinel",
+    name: "Orbis Sentinel",
     role: "Website security assessment",
     description: "Checks websites you own for missing security headers, insecure cookies and configuration, and exposed sensitive files.",
     icon: "radar",
@@ -38,7 +38,7 @@ export const SECURITY_AGENTS: SecurityAgentDef[] = [
   },
   {
     id: "threat_hunter",
-    name: "Nova Threat Hunter",
+    name: "Orbis Threat Hunter",
     role: "Suspicious activity investigation",
     description: "Analyses log files you upload for brute-force logins, password spraying, scanners and attack payloads, and builds an incident timeline.",
     icon: "crosshair",
@@ -55,7 +55,7 @@ export const SECURITY_AGENTS: SecurityAgentDef[] = [
   },
   {
     id: "code_guardian",
-    name: "Nova Code Guardian",
+    name: "Orbis Code Guardian",
     role: "Secure code review and fixes",
     description: "Reviews source code for secrets and insecure patterns, checks dependencies against known vulnerabilities, and proposes fixes for your review.",
     icon: "code",
@@ -72,7 +72,7 @@ export const SECURITY_AGENTS: SecurityAgentDef[] = [
   },
   {
     id: "incident_responder",
-    name: "Nova Incident Responder",
+    name: "Orbis Incident Responder",
     role: "Containment and recovery",
     description: "Will organise evidence and timelines, guide containment and recovery, and track incident tasks.",
     icon: "siren",
@@ -83,7 +83,7 @@ export const SECURITY_AGENTS: SecurityAgentDef[] = [
   },
   {
     id: "threat_intel",
-    name: "Nova Threat Intelligence",
+    name: "Orbis Threat Intelligence",
     role: "Indicator enrichment and advisories",
     description: "Will enrich indicators from trusted intelligence sources and link advisories to your findings.",
     icon: "globe",

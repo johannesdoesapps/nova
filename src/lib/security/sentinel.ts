@@ -3,7 +3,7 @@ import { header, headerList, safeRequest, type SafeResponse } from "./net";
 import { fingerprint, maskSecret, type FindingDraft, type Severity, type Confidence } from "./types";
 
 /**
- * Nova Sentinel's checks. "passive" makes ordinary page requests only
+ * Orbis Sentinel's checks. "passive" makes ordinary page requests only
  * (home page over https and http, security.txt). "active" also requests a
  * short list of sensitive paths and confirms exposure by their content.
  */

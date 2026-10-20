@@ -34,7 +34,7 @@ export function CommunityView() {
   };
   return (
     <div className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6">
-      <PageHeader title="Community" description="Reusable workflow templates, Radar watches and knowledge collections shared by NOVA AI users. Forking makes your own copy; nothing runs or connects automatically." actions={<Button onClick={() => setPublishing(true)}><Share2 className="h-4 w-4" /> Publish</Button>} />
+      <PageHeader title="Community" description="Reusable workflow templates, Radar watches and knowledge collections shared by Orbis AI users. Forking makes your own copy; nothing runs or connects automatically." actions={<Button onClick={() => setPublishing(true)}><Share2 className="h-4 w-4" /> Publish</Button>} />
       {list.error && <div className="mb-4"><EngineError message={list.error} /></div>}
       {msg && <Notice tone={msg.tone} className="mb-4">{msg.text}</Notice>}
       {publishing && <Publish signedIn={Boolean(user)} onClose={() => setPublishing(false)} onDone={(t) => { setPublishing(false); setMsg({ tone: "success", text: t }); void list.reload(); }} />}

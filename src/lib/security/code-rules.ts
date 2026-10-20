@@ -1,7 +1,7 @@
 import { fingerprint, maskSecret, type Confidence, type FindingDraft, type Severity } from "./types";
 
 /**
- * Nova Code Guardian's built-in rules: fast pattern checks for secrets and
+ * Orbis Code Guardian's built-in rules: fast pattern checks for secrets and
  * insecure code. Patterns can't prove exploitability, so each rule declares
  * its confidence honestly; the finding text says what to check.
  */

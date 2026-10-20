@@ -127,7 +127,7 @@ export function SentinelForm({ value, onChange, targets, onTargetsChanged }: { v
       {selected && !selected.verified_at && (
         <div className="rounded-2xl border border-s-line bg-s-hover/60 p-4 text-[13px] text-s-ink-2">
           <p className="font-medium text-s-ink">Prove you control {selected.hostname}</p>
-          <p className="mt-1">Do one of these, then press Check. (Administrators can scan this Nova site’s own domain without this step.)</p>
+          <p className="mt-1">Do one of these, then press Check. (Administrators can scan this Orbis site’s own domain without this step.)</p>
           <ol className="mt-2 list-decimal space-y-1 pl-5">
             <li>
               Publish a file at <code className="rounded bg-s-hover px-1">https://{selected.hostname}{VERIFY_PATH}</code> containing the token, or
@@ -247,7 +247,7 @@ export function HunterForm({ value, onChange }: { value: HunterValue; onChange: 
         </label>
         <input id="hunter-asset" value={value.asset} onChange={(e) => onChange({ ...value, asset: e.target.value })} placeholder="e.g. web-server-1" className={inputCls} />
       </div>
-      <p className="text-[12.5px] text-s-ink-3">Logs are analysed in this request and only findings with short evidence excerpts are saved. Nova does not monitor your systems continuously.</p>
+      <p className="text-[12.5px] text-s-ink-3">Logs are analysed in this request and only findings with short evidence excerpts are saved. Orbis does not monitor your systems continuously.</p>
     </div>
   );
 }
@@ -327,7 +327,7 @@ export function GuardianForm({ value, onChange }: { value: GuardianValue; onChan
             Project name
           </label>
           <input id="guardian-asset" value={value.asset} onChange={(e) => onChange({ ...value, asset: e.target.value })} placeholder="e.g. nova-ai" className={inputCls} />
-          <p className="mt-1.5 text-[12.5px] text-s-ink-3">Use the same name for later audits so Nova can tell which findings were fixed.</p>
+          <p className="mt-1.5 text-[12.5px] text-s-ink-3">Use the same name for later audits so Orbis can tell which findings were fixed.</p>
         </div>
       )}
       <div className="space-y-2.5">

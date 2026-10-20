@@ -160,7 +160,7 @@ export function DiscoverView() {
     <div className="mx-auto max-w-7xl px-4 pb-16 pt-8 sm:px-6">
       <PageHeader
         title="Model Discovery"
-        description="Live results from the Hugging Face Hub. Discovering a model here does not mean NOVA can run it — only models in the registry with a configured provider can be used in Chat and Battle."
+        description="Live results from the Hugging Face Hub. Discovering a model here does not mean Orbis can run it — only models in the registry with a configured provider can be used in Chat and Battle."
       />
 
       <div className="mb-4 flex gap-1 rounded-xl border border-border bg-panel p-1 sm:w-fit" role="tablist">
@@ -350,7 +350,7 @@ function DetailDrawer({ id, onClose }: { id: string; onClose: () => void }) {
               <div className="mb-1 text-xs font-medium uppercase tracking-wider text-faint">From the model card</div>
               <p className="text-sm leading-relaxed text-muted">{d.model.summary ?? "No summary could be extracted from the model card."}</p>
             </div>
-            <Notice tone={d.nova.runnable ? "success" : "info"} title={d.nova.runnable ? "Runnable in NOVA" : "Not runnable in NOVA yet"}>
+            <Notice tone={d.nova.runnable ? "success" : "info"} title={d.nova.runnable ? "Runnable in Orbis" : "Not runnable in Orbis yet"}>
               {d.nova.runnable ? "This model is in the registry with a configured provider. Select it in Chat or Model Battle." : d.nova.reason}
             </Notice>
             {d.model.tags.length > 0 && (

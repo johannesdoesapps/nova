@@ -25,14 +25,14 @@ async function callback(query: string) {
 }
 
 describe("redirect safety", () => {
-  it("keeps same-site paths and rejects anything that could leave NOVA", () => {
+  it("keeps same-site paths and rejects anything that could leave Orbis", () => {
     expect(safeNext("/missions/42?tab=log")).toBe("/missions/42?tab=log");
     for (const bad of ["https://evil.example", "//evil.example", "/\\evil.example", "/\\\\evil", "javascript:alert(1)", "/ok\nSet-Cookie:x", "", null, undefined, "chat"])
       expect(safeNext(bad as string)).toBe("/");
     expect(safeNext(["/a", "/b"])).toBe("/a");
   });
 
-  it("sends Google back to NOVA's callback with only a safe next path", () => {
+  it("sends Google back to Orbis's callback with only a safe next path", () => {
     const u = new URL(oauthRedirectTo("https://nova.example", "/workforce"));
     expect(u.origin + u.pathname).toBe("https://nova.example/auth/callback");
     expect(u.searchParams.get("via")).toBe("google");

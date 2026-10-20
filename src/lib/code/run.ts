@@ -6,7 +6,7 @@ import { CODE_OUTPUT_LIMIT, codeLanguage, type CodeRunResult } from "./languages
 /**
  * Runs a snippet from a chat code block in a disposable Vercel Sandbox
  * microVM: one VM per run, no network, 1 vCPU, a hard time limit and a cap on
- * output. Nothing from NOVA's own environment (keys, database credentials) is
+ * output. Nothing from Orbis's own environment (keys, database credentials) is
  * passed in, and the VM is stopped as soon as the run ends.
  */
 

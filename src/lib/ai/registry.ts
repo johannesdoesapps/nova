@@ -5,7 +5,7 @@ import type { ModelInfo, ModelWithStatus, ProviderId } from "./types";
  * Default model registry.
  *
  * Prices are `null` unless copied from the provider's pricing page (with the
- * date in lastVerifiedAt): pricing changes often and NOVA must not show
+ * date in lastVerifiedAt): pricing changes often and Orbis must not show
  * invented numbers. Set verified prices (USD per 1M tokens)
  * through the NOVA_MODELS env var or the `model_registry` table, and they
  * will flow into cost estimates automatically.

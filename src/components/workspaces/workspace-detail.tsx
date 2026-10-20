@@ -152,7 +152,7 @@ function ItemPanel({ wid, itemId, canEdit, canComment, onChanged, onDeleted }: {
   return (
     <Card className="space-y-3 p-4">
       <div className="flex items-center gap-2"><Badge>{x.type}</Badge><span className="text-xs text-faint">version {x.current_version}</span>{canEdit && <Button size="sm" variant="ghost" className="ml-auto" aria-label="Delete item" onClick={async () => { if (!window.confirm("Delete this item?")) return; setErr(null); try { await engine.del(`workspaces/${wid}/items/${itemId}`); onDeleted(); } catch (e) { setErr((e as Error).message); } }}><Trash2 className="h-3.5 w-3.5" /></Button>}</div>
-      {x.source?.untrusted ? <Notice tone="warning">This content came from outside NOVA AI ({String(x.source.connector ?? (x.source.imported ? "import" : "community"))}). Workflows treat it as untrusted data.</Notice> : null}
+      {x.source?.untrusted ? <Notice tone="warning">This content came from outside Orbis AI ({String(x.source.connector ?? (x.source.imported ? "import" : "community"))}). Workflows treat it as untrusted data.</Notice> : null}
       <Input value={cur.title} onChange={(e) => setDraft({ ...cur, title: e.target.value })} disabled={!canEdit} className="h-9 font-medium" aria-label="Title" />
       {fields.map((f) => (
         <label key={f} className="block space-y-1">
@@ -266,7 +266,7 @@ function Sharing({ w, run }: { w: Ws; run: (fn: () => Promise<unknown>) => Promi
   const can = w.permissions.create_share_links;
   return (
     <div className="max-w-3xl space-y-3">
-      <Notice tone="info">Share links give read-only access ({role}) to anyone with the link, until they expire or you revoke them. The link token is shown once; NOVA AI stores only its hash.</Notice>
+      <Notice tone="info">Share links give read-only access ({role}) to anyone with the link, until they expire or you revoke them. The link token is shown once; Orbis AI stores only its hash.</Notice>
       {can ? (
         <Card className="flex flex-wrap items-center gap-2 p-3">
           <Select value={role} onChange={(e) => setRole(e.target.value)} aria-label="Access"><option value="viewer">Can view</option><option value="commenter">Can view (comment role, for signed-in members later)</option></Select>

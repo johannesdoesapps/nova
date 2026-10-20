@@ -27,7 +27,7 @@ export function reportMessages(agentName: string, role: string, context: string,
   return [
     {
       role: "system",
-      content: `You are ${agentName}, part of Nova's security team (${role}). Write a concise report in Markdown for the person who owns this system, in plain language.
+      content: `You are ${agentName}, part of Orbis's security team (${role}). Write a concise report in Markdown for the person who owns this system, in plain language.
 ${RULES}
 Structure: "## Summary" (2–4 sentences), "## Priorities" (ordered list of what to fix first and why, referencing finding numbers), "## Observed vs. unconfirmed" (what the tools directly observed vs. what is a hypothesis or needs checking), "## Next steps". Keep severity labels exactly as given. If there are no findings, say so plainly and mention what was and wasn't checked.`,
     },
@@ -39,7 +39,7 @@ export function unifiedReportMessages(sections: string): ChatMessage[] {
   return [
     {
       role: "system",
-      content: `You are Nova, coordinating a security team of specialised agents. Combine their results into one security report in Markdown.
+      content: `You are Orbis, coordinating a security team of specialised agents. Combine their results into one security report in Markdown.
 ${RULES}
 Only mention agents and steps that appear in the data; if a step was skipped or failed, say so. Point out where findings from different agents are related (for example a vulnerable code path and attack attempts against it in logs) and be explicit that a relation is a hypothesis unless the evidence shows it directly.
 Structure: "## Summary", "## Connected findings", "## What to fix first", "## Gaps in this investigation", "## Next steps".`,
@@ -71,7 +71,7 @@ export function aiReviewMessages(files: SourceFile[]): ChatMessage[] {
   return [
     {
       role: "system",
-      content: `You are Nova Code Guardian, a careful application security reviewer.
+      content: `You are Orbis Code Guardian, a careful application security reviewer.
 ${RULES}
 Review the files for real security vulnerabilities: injection, broken authentication or authorisation (missing ownership checks, IDOR), unsafe handling of secrets or sessions, SSRF, path traversal, XSS, insecure deserialisation, missing input validation on trust boundaries.
 Report only issues with a concrete code location. Do not report style issues or generic advice. It is fine to report nothing.
@@ -137,7 +137,7 @@ export function fixMessages(items: { n: number; title: string; location: string;
   return [
     {
       role: "system",
-      content: `You are Nova Code Guardian. Propose minimal, safe fixes for the listed vulnerabilities for a developer to review. Nothing you write will be applied automatically.
+      content: `You are Orbis Code Guardian. Propose minimal, safe fixes for the listed vulnerabilities for a developer to review. Nothing you write will be applied automatically.
 ${RULES}
 For each item give a unified diff against the given file (--- a/path, +++ b/path, @@ hunks) changing only what is needed, and a short regression test (in the project's language and a common test framework) that would fail before the fix and pass after. If a safe fix needs information you don't have, say so in "notes" and leave "patch" empty.
 Reply with JSON only: {"fixes":[{"n":number,"patch":string,"test":string,"notes":string}]}`,

@@ -3,7 +3,7 @@ import { isAdmin } from "../admin";
 import type { AuthContext } from "../auth";
 
 /**
- * Tool registry. Built-in tools run inside Nova (plain HTTP and text analysis,
+ * Tool registry. Built-in tools run inside Orbis (plain HTTP and text analysis,
  * no shell commands). External scanners need their own isolated runner and
  * are listed as not connected until one is configured — never simulated.
  */
@@ -50,6 +50,6 @@ export async function securityTools(auth?: AuthContext): Promise<SecurityTool[]>
     { id: "zap", name: "OWASP ZAP", kind: "external", description: "Full dynamic application scanning.", envVars: ["ZAP runner (planned)"], available: false, reason: externalReason },
     { id: "semgrep", name: "Semgrep", kind: "external", description: "Deep static analysis with community rules.", envVars: ["Semgrep runner (planned)"], available: false, reason: externalReason },
     { id: "trivy", name: "Trivy", kind: "external", description: "Container, IaC and filesystem scanning.", envVars: ["Trivy runner (planned)"], available: false, reason: externalReason },
-    { id: "wazuh", name: "Wazuh", kind: "external", description: "Continuous monitoring and alert feeds.", envVars: ["Wazuh manager (planned)"], available: false, reason: "Not connected. Nova does not monitor systems continuously; it analyses logs you upload." },
+    { id: "wazuh", name: "Wazuh", kind: "external", description: "Continuous monitoring and alert feeds.", envVars: ["Wazuh manager (planned)"], available: false, reason: "Not connected. Orbis does not monitor systems continuously; it analyses logs you upload." },
   ];
 }

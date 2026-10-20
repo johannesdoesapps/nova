@@ -6,7 +6,7 @@ import { serviceSupabase } from "../supabase/admin";
 
 /**
  * Pro subscriptions through Stripe. Checkout and the billing portal run on
- * Stripe's hosted pages, so card details never touch NOVA. The webhook is the
+ * Stripe's hosted pages, so card details never touch Orbis. The webhook is the
  * only thing that changes a user's plan: it re-reads the subscription from
  * Stripe and writes it with the service role.
  */
@@ -21,13 +21,13 @@ export function billingConfigured(): boolean {
 export function stripeClient(): Stripe | null {
   const key = serverEnv().stripeSecretKey;
   if (!key) return null;
-  client ??= new Stripe(key, { appInfo: { name: "NOVA" } });
+  client ??= new Stripe(key, { appInfo: { name: "Orbis" } });
   return client;
 }
 
 export type PaidPlan = "pro" | "max";
 
-/** Identifies a NOVA price in Stripe; includes the amount, so a price change creates a new price. */
+/** Identifies an Orbis price in Stripe; includes the amount, so a price change creates a new price. */
 export const priceLookupKey = (plan: PaidPlan, interval: BillingInterval, cents: number) => `nova_${plan}_${interval}_usd_${cents}`;
 
 /** Parse a lookup key back into plan and interval. */
@@ -50,7 +50,7 @@ export async function planPriceId(stripe: Stripe, billing: BillingSettings, plan
     recurring: { interval },
     lookup_key: key,
     metadata: { nova_plan: plan, nova_interval: interval },
-    product_data: { name: `NOVA ${p.label}` },
+    product_data: { name: `Orbis ${p.label}` },
   });
   return price.id;
 }
@@ -136,7 +136,7 @@ export async function syncSubscription(stripe: Stripe, subscriptionId: string, u
   return "saved";
 }
 
-/** The NOVA user for a Stripe customer, from the stored subscription. */
+/** The Orbis user for a Stripe customer, from the stored subscription. */
 export async function userForCustomer(customer: string | { id: string } | null | undefined): Promise<string | null> {
   const id = typeof customer === "string" ? customer : customer?.id;
   const db = serviceSupabase();

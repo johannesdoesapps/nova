@@ -1,6 +1,6 @@
-# Deploying NOVA publicly
+# Deploying Orbis publicly
 
-This guide puts NOVA on the internet as a real app, with sign-in, saved history, Agents and real AI answers. You'll use three services, all with free tiers to start:
+This guide puts Orbis on the internet as a real app, with sign-in, saved history, Agents and real AI answers. You'll use three services, all with free tiers to start:
 
 | Service | Role | Required? |
 | --- | --- | --- |
@@ -28,7 +28,7 @@ Total time is about 30–45 minutes the first time.
 ## Step 2: Create the Supabase project (accounts and database)
 
 1. At https://supabase.com, go to **New project**. Choose a region near your users and save the database password.
-2. Apply NOVA's database schema (tables, row-level security, agents) from the `nova-ai` folder:
+2. Apply Orbis's database schema (tables, row-level security, agents) from the `nova-ai` folder:
    ```bash
    npx supabase login
    npx supabase link --project-ref YOUR-PROJECT-REF   # shown in Project Settings → General
@@ -110,7 +110,7 @@ Chat and Agents don't need it.
 ## Safety and cost notes
 
 - **Without Supabase:**
-  - In production, NOVA **refuses** to spend your AI key on anonymous visitors. Visitors see "This site isn't accepting anonymous AI requests yet."
+  - In production, Orbis **refuses** to spend your AI key on anonymous visitors. Visitors see "This site isn't accepting anonymous AI requests yet."
   - To override this, set `NOVA_ALLOW_GUEST_AI=1`. That isn't recommended: anyone could then use your credit.
 - **Rate limits:**
   - The per-minute limiter is in memory, so each Vercel instance counts separately.

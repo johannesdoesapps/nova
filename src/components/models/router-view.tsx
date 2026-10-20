@@ -46,7 +46,7 @@ export function RouterView({ models }: { models: ModelWithStatus[] }) {
     <div className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6">
       <PageHeader
         title="Model Router"
-        description="Every model NOVA can call, with its provider, capabilities and context window. Prices appear only when a verified figure is configured."
+        description="Every model Orbis can call, with its provider, capabilities and context window. Prices appear only when a verified figure is configured."
       />
 
       <Card className="p-4">

@@ -14,12 +14,12 @@ export const dynamic = "force-dynamic";
 const d = DEFAULT_BILLING.plans;
 export const metadata = pageMetadata({
   title: "Pricing",
-  description: `NOVA is free to start. Pro is $${d.pro.priceUsd} and Max $${d.max.priceUsd} per month (USD), with more usage and access to larger Claude and GPT models.`,
+  description: `Orbis is free to start. Pro is $${d.pro.priceUsd} and Max $${d.max.priceUsd} per month (USD), with more usage and access to larger Claude and GPT models.`,
   path: "/pricing",
 });
 
 const BLURBS: Record<PricingPlan["id"], string> = {
-  free: "Try NOVA with the fastest, lowest-cost models.",
+  free: "Try Orbis with the fastest, lowest-cost models.",
   pro: "For everyday work, with larger Claude and GPT models.",
   max: "For heavy use, with the most capable models and longer replies.",
 };
@@ -86,7 +86,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
           Each plan includes a monthly AI allowance, with a part reserved for advanced models. Message counts are estimates for a typical message (about{" "}
           {Math.round((billing.scenario.inputTokens * 0.75) / 100) * 100} words of context and a {Math.round((billing.scenario.outputTokens * 0.75) / 50) * 50}-word reply); longer
           conversations use more. When the advanced-model part is used, Auto and the fast models keep working; when the whole
-          allowance is used, NOVA pauses until your billing month renews. Upgrades are charged pro-rata right away; downgrades are credited to your next invoice.
+          allowance is used, Orbis pauses until your billing month renews. Upgrades are charged pro-rata right away; downgrades are credited to your next invoice.
         </p>
       </section>
 
@@ -101,7 +101,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
             Your 5-hour window starts with your first message and resets five hours later. The weekly limit counts the last seven days. Auto always uses the lowest-cost model your
             plan includes; a model you pick yourself is kept until you change it.
           </p>
-          <p>Nova Council and Nova Arena ask several models at once, so each model&rsquo;s reply counts. Your current usage and reset times are always shown in the app.</p>
+          <p>Orbis Council and Orbis Arena ask several models at once, so each model&rsquo;s reply counts. Your current usage and reset times are always shown in the app.</p>
         </div>
       </section>
       <CtaBand />

@@ -52,7 +52,7 @@ export async function checkRunAllowance(auth: Authed, requestId: string): Promis
   if (billing.codeRunsSiteMonthly > 0 && Number(s.site_runs) > billing.codeRunsSiteMonthly) {
     await releaseRun(auth, requestId);
     reportError(new Error("Site-wide monthly code run limit reached"), { where: "code_run.site_cap" });
-    throw new ApiError("quota_exceeded", "NOVA has reached its limit for running code this month. Please try again next month.", { scope: "code_site" });
+    throw new ApiError("quota_exceeded", "Orbis has reached its limit for running code this month. Please try again next month.", { scope: "code_site" });
   }
   if (unlimited) return { left: null, limit: null };
   const limit = entitlement.limits.codeRunsPerPeriod;
