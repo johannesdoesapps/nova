@@ -74,6 +74,8 @@ describe("test results", () => {
     });
     expect(parseTestOutput("FAIL: test_neg (test_sum.TestSum)\nRan 4 tests in 0.001s\n\nFAILED (failures=1)")).toMatchObject({ framework: "unittest", passed: 3, failed: 1 });
     expect(parseTestOutput("not ok 2 - adds negatives\n# tests 3\n# pass 2\n# fail 1")).toMatchObject({ framework: "node:test", passed: 2, failed: 1, failures: ["adds negatives"] });
+    const spec = "✔ adds positives (0.4ms)\n✖ adds negatives (1.2ms)\n  AssertionError [ERR_ASSERTION]: -1 == -3\nℹ tests 2\nℹ suites 0\nℹ pass 1\nℹ fail 1\nℹ skipped 0\n\n✖ failing tests:\n\ntest at test/calc.test.js:9:1\n✖ adds negatives (1.2ms)\n";
+    expect(parseTestOutput(spec)).toMatchObject({ framework: "node:test", passed: 1, failed: 1, skipped: 0, failures: ["adds negatives"] });
     expect(parseTestOutput("  3 passing (12ms)\n  1 failing")).toMatchObject({ framework: "mocha", passed: 3, failed: 1 });
     expect(parseTestOutput("hello world")).toMatchObject({ framework: null, passed: null, failed: null });
     // Colour codes don't get in the way.

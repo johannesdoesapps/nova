@@ -95,13 +95,13 @@ export function parseTestOutput(output: string): Pick<TestResult, "framework" | 
     out.passed = Math.max(0, total - out.failed - out.skipped);
     out.failures = [...text.matchAll(/^(?:FAIL|ERROR): (.+)$/gm)].map((x) => x[1]!.trim());
   }
-  // node:test (TAP summary): "# pass 4" / "# fail 1"
-  else if ((m = text.match(/^# pass (\d+)/m))) {
+  // node:test, TAP ("# pass 4") or spec reporter ("ℹ pass 4", "✖ name (1.2ms)")
+  else if ((m = text.match(/^(?:#|ℹ) pass (\d+)/m))) {
     out.framework = "node:test";
     out.passed = Number(m[1]);
-    out.failed = num(text.match(/^# fail (\d+)/m)?.[1]) ?? 0;
-    out.skipped = num(text.match(/^# skipped (\d+)/m)?.[1]) ?? 0;
-    out.failures = [...text.matchAll(/^not ok \d+ - (.+)$/gm)].map((x) => x[1]!.trim());
+    out.failed = num(text.match(/^(?:#|ℹ) fail (\d+)/m)?.[1]) ?? 0;
+    out.skipped = num(text.match(/^(?:#|ℹ) skipped (\d+)/m)?.[1]) ?? 0;
+    out.failures = [...text.matchAll(/^not ok \d+ - (.+)$/gm), ...text.matchAll(/^\s*✖ (?!failing tests)(.+?)(?: \([\d.]+m?s\))?$/gm)].map((x) => x[1]!.trim());
   }
   // Mocha: "4 passing" / "1 failing"
   else if ((m = text.match(/^\s*(\d+) passing/m))) {
