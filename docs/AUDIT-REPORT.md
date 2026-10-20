@@ -152,8 +152,8 @@ The recorded costs were checked by hand against the token counts.
 
 | Plan | Monthly AI budget | Worst-case contribution margin |
 | --- | --- | --- |
-| Pro, $20 (raised from $15 on 2026-10-19) | $4.52 | 64.1% |
-| Max, $100 (lowered from $110 on 2026-10-19) | $28.73 | 65.2% |
+| Pro, $20 (raised from $15 on 2026-10-19) | $4.12 (after $0.47 set aside for code runs) | 63.7% |
+| Max, $100 (lowered from $110 on 2026-10-19) | $26.74 (after $2.34 for code runs) | 64.8% |
 
 The 60% margin is a target the limits enforce. It is not a guarantee, and it is not net profit: fixed overhead is $0 until you enter it. Full scenarios are in `docs/PRICING.md`.
 
