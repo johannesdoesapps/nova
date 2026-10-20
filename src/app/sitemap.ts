@@ -17,5 +17,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     page("/docs", 0.7),
     ...GUIDES.map((g) => page(`/docs/${g.slug}`, 0.6)),
     page("/security", 0.5),
+    page("/privacy", 0.3, "yearly"),
+    page("/terms", 0.3, "yearly"),
   ];
 }

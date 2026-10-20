@@ -76,7 +76,7 @@ const SECTIONS: { id: string; title: string; points: React.ReactNode[] }[] = [
       "Delete or archive any conversation from the sidebar. Delete a code project, and its files and agent runs go with it.",
       "Revert any coding agent run, or a single file it changed, from the Changes panel.",
       "Disconnect any connected app from Connectors at any time.",
-      "Account deletion isn't self-service yet. Until it is, the site operator can delete an account and its data on request.",
+      "Account deletion isn't self-service yet. Until it is, email support@tryorbis.app and your account and its data are deleted within 30 days.",
       "Orbis shows no advertising.",
     ],
   },
@@ -111,7 +111,9 @@ export default function SecurityPage() {
           </section>
         ))}
         <p className="mt-12 text-sm text-muted">
-          A formal privacy policy and terms of service are being prepared and will be linked from every page once published. See also{" "}
+          This page explains how Orbis works. The formal documents are our{" "}
+          <Link href="/privacy" className="underline underline-offset-4 hover:text-fg">Privacy Policy</Link> and{" "}
+          <Link href="/terms" className="underline underline-offset-4 hover:text-fg">Terms of Service</Link>. See also{" "}
           <Link href="/features/security-agents" className="underline underline-offset-4 hover:text-fg">the Security Team</Link> for checking your own site and code.
         </p>
       </article>

@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { browserSupabase } from "@/lib/supabase/client";
@@ -217,6 +218,13 @@ export function LoginForm({
         {error && <Notice tone="danger">{error}</Notice>}
         {info && <Notice tone="success">{info}</Notice>}
         <Button type="submit" className="w-full" loading={busy} disabled={googleBusy}>{mode === "signin" ? "Sign in" : "Create account"}</Button>
+        {mode === "signup" && (
+          <p className="text-center text-xs leading-relaxed text-muted">
+            By creating an account you agree to the{" "}
+            <Link href="/terms" className="underline underline-offset-2 hover:text-fg">Terms of Service</Link> and confirm you&apos;ve read the{" "}
+            <Link href="/privacy" className="underline underline-offset-2 hover:text-fg">Privacy Policy</Link>. You must be 13 or older; under 18s need a parent&apos;s or guardian&apos;s permission.
+          </p>
+        )}
         <p className="text-center text-xs text-muted">
           {mode === "signin" ? "Don’t have an account?" : "Already have an account?"}{" "}
           <button

@@ -79,10 +79,14 @@ No analytics provider is configured, so no tracking code is included. To add one
 
 ## Still needed from the site owner
 
-- **Privacy policy and terms of service.** None exist yet; the Security & data page
-  describes how the product works, but it is not a legal policy. Once written, add
-  `/privacy` and `/terms` pages and link them in the footer (`SiteFooter` in
-  `src/components/marketing/parts.tsx`) and on the sign-up form.
+- **Privacy Policy and Terms of Service** are published at `/privacy` and `/terms`
+  (content in `src/content/legal.ts`). They're linked in the footer, on the sign-up form and from
+  Security & data. They are drafts based on how Orbis actually works and should be reviewed by a
+  lawyer. Two facts are still missing and should be filled in `LEGAL` once known:
+  - `operatorName`, the registered business name;
+  - `address`, a postal address. UK e-commerce rules require a name and a geographic address for an online service.
+
+  Make sure support@tryorbis.app receives mail, and change `updated` whenever the meaning changes.
 - **Contact details** (an email address or form) for support and data requests —
   account deletion currently needs the operator.
 - **Pro plan price**, when it goes on sale (shown on `/pricing` and the homepage).

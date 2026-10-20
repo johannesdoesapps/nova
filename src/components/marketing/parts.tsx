@@ -98,7 +98,17 @@ export function SiteFooter() {
         />
       </div>
       <div className="border-t border-border">
-        <p className="mx-auto max-w-6xl px-5 py-6 text-xs text-muted sm:px-8">© {year} Orbis. AI can make mistakes — check important information.</p>
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-6 text-xs text-muted sm:px-8">
+          <p>© {year} Orbis. AI can make mistakes — check important information.</p>
+          <nav aria-label="Legal" className="flex gap-5">
+            <Link href="/privacy" className="transition-colors hover:text-fg">
+              Privacy Policy
+            </Link>
+            <Link href="/terms" className="transition-colors hover:text-fg">
+              Terms of Service
+            </Link>
+          </nav>
+        </div>
       </div>
     </footer>
   );

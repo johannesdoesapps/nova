@@ -60,3 +60,30 @@ describe("site content", () => {
     expect(FAQ.find((f) => f.q === "Is Orbis free?")?.a).toContain(`$${PLANS.pro.priceUsd}/month`);
   });
 });
+
+describe("legal pages", () => {
+  it("link only to real pages and name the contact address", async () => {
+    const { PRIVACY, TERMS, LEGAL } = await import("@/content/legal");
+    const known = new Set([...pages, "/privacy", "/terms"]);
+    for (const doc of [PRIVACY, TERMS]) {
+      const text = JSON.stringify(doc);
+      for (const m of text.matchAll(/\]\((\/[^)]*)\)/g)) expect(known.has(m[1]!), m[1]).toBe(true);
+      expect(text).toContain(LEGAL.email);
+      expect(new Set(doc.map((s) => s.id)).size).toBe(doc.length);
+    }
+  });
+
+  it("state the minimum age and disclose the AI providers and where data is stored", async () => {
+    const { PRIVACY, TERMS, LEGAL } = await import("@/content/legal");
+    expect(LEGAL.minimumAge).toBe(13);
+    const privacy = JSON.stringify(PRIVACY);
+    for (const word of ["Anthropic", "OpenAI", "Supabase", "Vercel", "United States", "Information Commissioner", "13"]) expect(privacy, word).toContain(word);
+    expect(JSON.stringify(TERMS)).toContain("England and Wales");
+  });
+
+  it("are in the sitemap", async () => {
+    const { default: sitemap } = await import("@/app/sitemap");
+    const urls = sitemap().map((e) => new URL(e.url).pathname);
+    expect(urls).toEqual(expect.arrayContaining(["/privacy", "/terms"]));
+  });
+});
