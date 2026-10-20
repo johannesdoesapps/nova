@@ -14,6 +14,8 @@ const PROTECTED_PREFIXES = ["/projects"];
  */
 export async function proxy(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith("/api/")) return guardApi(request);
+  const canonical = canonicalRedirect(request);
+  if (canonical) return canonical;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const key =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
@@ -46,6 +48,26 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(login);
   }
   return response;
+}
+
+/**
+ * In production, page visits on a *.vercel.app address go to the site's own
+ * domain (NEXT_PUBLIC_SITE_URL): sign-in returns there, so a session started on
+ * another host would not survive the round trip. API calls are left alone.
+ */
+export function canonicalRedirect(request: NextRequest, env: Record<string, string | undefined> = process.env): NextResponse | null {
+  if (env.VERCEL_ENV !== "production") return null;
+  if (request.method !== "GET" && request.method !== "HEAD") return null;
+  let site: URL;
+  try {
+    site = new URL(env.NEXT_PUBLIC_SITE_URL ?? "");
+  } catch {
+    return null;
+  }
+  const host = (request.headers.get("host") ?? request.nextUrl.host).toLowerCase();
+  if (!host.endsWith(".vercel.app") || site.host.endsWith(".vercel.app") || host === site.host) return null;
+  const to = new URL(request.nextUrl.pathname + request.nextUrl.search, site.origin);
+  return NextResponse.redirect(to, 308);
 }
 
 /** Endpoints other sites legitimately call (verified by their own signature). */

@@ -191,3 +191,19 @@ describe("CSRF guard for API changes", () => {
     expect(guardApi(make("/api/chat", "POST", {})).headers.get("x-middleware-next")).toBe("1"); // non-browser client
   });
 });
+
+describe("canonical domain redirect", () => {
+  it("sends production page visits on *.vercel.app to the site's own domain, and leaves everything else alone", async () => {
+    const { canonicalRedirect } = await import("@/proxy");
+    const { NextRequest } = await import("next/server");
+    const env = { VERCEL_ENV: "production", NEXT_PUBLIC_SITE_URL: "https://tryorbis.app" };
+    const req = (url: string, method = "GET") => new NextRequest(url, { method, headers: { host: new URL(url).host } });
+    const r = canonicalRedirect(req("https://orbis-old.vercel.app/pricing?plan=pro"), env);
+    expect(r?.status).toBe(308);
+    expect(r?.headers.get("location")).toBe("https://tryorbis.app/pricing?plan=pro");
+    expect(canonicalRedirect(req("https://tryorbis.app/pricing"), env)).toBeNull();
+    expect(canonicalRedirect(req("https://orbis-old.vercel.app/x", "POST"), env)).toBeNull();
+    expect(canonicalRedirect(req("https://orbis-old.vercel.app/x"), { ...env, VERCEL_ENV: "preview" })).toBeNull();
+    expect(canonicalRedirect(req("https://orbis-old.vercel.app/x"), { VERCEL_ENV: "production", NEXT_PUBLIC_SITE_URL: "https://orbis-old.vercel.app" })).toBeNull();
+  });
+});
