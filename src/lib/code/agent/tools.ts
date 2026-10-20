@@ -56,6 +56,8 @@ export interface AgentEnv {
   changes(): Promise<RunChange[]>;
   checkpoints: { list(): Promise<Checkpoint[]>; create(label: string, files: Record<string, string | null>): Promise<Checkpoint> };
   project?: { runCommand: string };
+  /** Whether the user has stopped the run (checked right before anything that changes the project). */
+  cancelled?: () => Promise<boolean>;
   /** Write activity to the log as it happens (so the page shows it live). */
   emit?: (events: NewEvent[]) => Promise<void>;
   lookupDocs?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]>;
@@ -109,6 +111,9 @@ export function isSecretPath(path: string): boolean {
     name,
   );
 }
+
+/** Actions that change the project or run something: re-checked against Stop right before they run. */
+const CHANGES_PROJECT = new Set(["write_file", "edit_file", "delete_file", "restore_checkpoint", "run_command", "run_tests"]);
 
 const READ_ONLY_REFUSED = new Set(["write_file", "edit_file", "delete_file", "restore_checkpoint", "create_checkpoint", "run_command", "run_tests", "propose_plan"]);
 
@@ -327,6 +332,10 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
     if (raw === null) {
       result(id, tool, false, "Invalid arguments: they must be a JSON object.");
       continue;
+    }
+    if (CHANGES_PROJECT.has(tool) && env.cancelled && (await env.cancelled())) {
+      skipRest(i, "the run was stopped.");
+      return done({ status: "cancelled", pending: null });
     }
     if (state.readOnly && READ_ONLY_REFUSED.has(tool)) {
       result(id, tool, false, "Not allowed: this run is read-only. Answer the user with finish instead.");

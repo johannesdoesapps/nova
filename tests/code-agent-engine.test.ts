@@ -106,6 +106,8 @@ const db = {
   events: [] as (AgentEvent & { runId: string })[],
   changes: [] as (AgentChange & { runId: string })[],
   checkpoints: [] as { id: string; runId: string; label: string; files: Record<string, string | null>; createdAt: string }[],
+  /** Set to make the user's Stop land just before the next write to a run (between the engine's read and its write). */
+  stopBeforeNextWrite: false,
 };
 vi.mock("@/lib/code/agent/runs", async (orig) => {
   const real = await orig<typeof import("@/lib/code/agent/runs")>();
@@ -114,11 +116,22 @@ vi.mock("@/lib/code/agent/runs", async (orig) => {
     if (!r) throw new Error("no run");
     return r;
   };
+  const stopIfDue = (id: string) => {
+    if (db.stopBeforeNextWrite) Object.assign(get(id), { status: "cancelled", pending: null });
+    db.stopBeforeNextWrite = false;
+  };
   return {
     ...real,
     getRun: async (_a: unknown, id: string) => structuredClone(get(id)),
     runStatus: async (_a: unknown, id: string) => get(id).status,
     updateRun: async (_a: unknown, id: string, patch: Partial<RunRow>) => {
+      stopIfDue(id);
+      Object.assign(get(id), structuredClone(patch), { updated_at: new Date().toISOString() });
+      return structuredClone(get(id));
+    },
+    updateRunIfNotCancelled: async (_a: unknown, id: string, patch: Partial<RunRow>) => {
+      stopIfDue(id);
+      if (get(id).status === "cancelled") return null;
       Object.assign(get(id), structuredClone(patch), { updated_at: new Date().toISOString() });
       return structuredClone(get(id));
     },
@@ -213,6 +226,7 @@ beforeEach(() => {
   generate.mockClear();
   releaseUsage.mockClear();
   recordRunLater.mockClear();
+  db.stopBeforeNextWrite = false;
   files = new Map([
     ["package.json", '{"name":"calc","scripts":{"test":"vitest run"}}'],
     ["sum.js", "export const sum = (a, b) => a - b;\n"],
@@ -474,6 +488,46 @@ describe("recovery", () => {
     expect(r.run.status).toBe("cancelled");
     expect(files.has("sum.js")).toBe(true);
     expect(run(id).report).toMatchObject({ outcome: "cancelled", verification: "not_run", files: [] });
+  });
+
+  it("keeps a run stopped mid-step stopped: no further edits, commands or model turns", async () => {
+    const id = working();
+    // The user presses Stop while the first command runs.
+    commandOutput = () => {
+      db.runs.get(id)!.status = "cancelled";
+      return { output: "", exitCode: 0 };
+    };
+    script.turns.push(
+      turn("Check, then fix.", call("run_command", { command: "npm test" }), call("edit_file", { path: "sum.js", search: "a - b", replace: "a + b" }), call("run_tests")),
+      turn("Done.", call("finish", { summary: "ok" })),
+    );
+    const r = await stepRun(req(), auth, id);
+    expect(r.run.status).toBe("cancelled");
+    expect(run(id).status).toBe("cancelled");
+    expect(files.get("sum.js")).toContain("a - b");
+    expect(commands).toEqual(["npm test"]);
+    expect(toolTurn).toHaveBeenCalledTimes(1);
+    expect(run(id).locked_until).toBeNull();
+    expect((await stepRun(req(), auth, id)).skipped).toBe("not_working");
+  });
+
+  it("doesn't let the end of a step overwrite a Stop that lands while it's saving", async () => {
+    const id = working();
+    commandOutput = () => {
+      db.stopBeforeNextWrite = true;
+      return { output: "", exitCode: 0 };
+    };
+    script.turns.push(
+      turn("Look first.", call("run_command", { command: "ls" })),
+      turn("Fix.", call("edit_file", { path: "sum.js", search: "a - b", replace: "a + b" })),
+    );
+    const r = await stepRun(req(), auth, id);
+    expect(run(id).status).toBe("cancelled");
+    expect(r.run.status).toBe("cancelled");
+    expect(toolTurn).toHaveBeenCalledTimes(1);
+    expect(files.get("sum.js")).toContain("a - b");
+    expect(run(id).locked_until).toBeNull();
+    expect(run(id).report).toMatchObject({ outcome: "cancelled" });
   });
 
   it("cancels a run that's waiting, and writes its report", async () => {

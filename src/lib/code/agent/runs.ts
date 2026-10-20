@@ -162,6 +162,23 @@ export async function updateRun(auth: Authed, runId: string, patch: RunPatch): P
   return data as RunRow;
 }
 
+/**
+ * Save a step's outcome only if the user hasn't stopped the run meanwhile, in
+ * one conditional update (so a Stop can never be overwritten). Null when the
+ * run was stopped.
+ */
+export async function updateRunIfNotCancelled(auth: Authed, runId: string, patch: RunPatch): Promise<RunRow | null> {
+  const { data, error } = await auth.supabase
+    .from("code_agent_runs")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", runId)
+    .neq("status", "cancelled")
+    .select(RUN_COLS)
+    .maybeSingle();
+  if (error) throw dbError(error, "code.agent.update");
+  return (data as RunRow | null) ?? null;
+}
+
 /** How long one step may hold a run (a step takes at most a model call and one command). */
 export const STEP_LOCK_MS = 5 * 60_000;
 

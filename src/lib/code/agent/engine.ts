@@ -47,6 +47,7 @@ import {
   type NewEvent,
   type RunPatch,
   type RunRow,
+  updateRunIfNotCancelled,
 } from "./runs";
 import { isTestCommand, testResult, type TestResult } from "./test-results";
 import { toolSchemas, type ToolContext } from "./tool-specs";
@@ -255,6 +256,7 @@ function realEnv(c: EnvContext): AgentEnv {
     checkpoints: { list: () => listCheckpoints(auth, run.id), create: (label, files) => createCheckpoint(auth, run.id, label, files) },
     project: { runCommand: project.runCommand },
     emit: (events) => addEvents(auth, run.id, events),
+    cancelled: async () => (await runStatus(auth, run.id)) === "cancelled",
   };
   if (c.docs) {
     env.lookupDocs = async (query) => {
@@ -323,16 +325,13 @@ export interface StepResult {
 
 /** Finish a step: save the run unless the user stopped it meanwhile, and write the report when it ended. */
 async function finishStep(auth: Authed, runId: string, patch: RunPatch, unresolved: string[] = []): Promise<RunRow> {
-  const status = await runStatus(auth, runId);
-  let row: RunRow;
-  if (status === "cancelled") {
-    // The user's stop stands: the step's records are kept, its status and summary aren't.
+  let row = await updateRunIfNotCancelled(auth, runId, { ...patch, locked_until: null });
+  if (!row) {
+    // The user's stop stands: the step's records are kept, its status, waiting state and summary aren't.
     const kept: RunPatch = { ...patch };
     delete kept.status;
     delete kept.summary;
     row = await updateRun(auth, runId, { ...kept, locked_until: null, pending: null });
-  } else {
-    row = await updateRun(auth, runId, { ...patch, locked_until: null });
   }
   if (ENDED_STATUSES.includes(row.status)) return (await finalize(auth, runId, unresolved)) ?? row;
   return row;
@@ -654,7 +653,7 @@ async function respond(auth: Authed, row: RunRow, input: RespondInput): Promise<
   const working = workingStatus(row);
   const done = async (patch: RunPatch, events: NewEvent[]) => {
     await addEvents(auth, row.id, events);
-    return updateRun(auth, row.id, { pending: null, ...patch, locked_until: null });
+    return (await updateRunIfNotCancelled(auth, row.id, { pending: null, ...patch, locked_until: null })) ?? updateRun(auth, row.id, { locked_until: null });
   };
 
   switch (pending.kind) {
