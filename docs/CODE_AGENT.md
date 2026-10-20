@@ -43,6 +43,21 @@ Screens: `src/components/code/agent-panel.tsx` and `changes-panel.tsx`.
 - **Report.** When a run ends, the server builds a report from its records: files changed, commands and exit codes, the latest test run, and whether the work is verified (tests passed after the last change).
 - **Stop.** `POST …/cancel` stops the run. If a command is running, it is killed. A step that's in progress notices within seconds and ends.
 
+## Permission modes
+
+The task box offers four presets of the run's options (the server enforces each):
+
+| Mode | Options | What the agent may do |
+| --- | --- | --- |
+| **Ask first** (default) | plan approval on, safe commands | Read and plan; after the plan is approved, edit files and run tests, builds and installs; ask before other commands |
+| **Review every change** | plan approval, edit review, every command asks | Nothing changes without an approval for the plan, each set of edits and each command |
+| **Work on its own** | no plan approval, safe commands | Edit and run tests, builds and installs without asking; still asks before other commands; blocked commands never run |
+| **Read-only** | `readOnly: true`, commands off | Read and answer only; edit, restore, checkpoint, command and plan tools aren't offered and are refused by the server |
+
+## What the page shows
+
+Progress is grouped into plain-English stages built only from the run's events: *Understanding your request* (the run started), *Exploring the project* (inspections), *Planning the changes* (a plan), *Editing files* (edits, restores), *Running checks* (commands and tests, blocked commands in red), *Reviewing the results* (finished). A stage appears only once an event of that kind exists. Each stage shows the agent's own notes and a one-line summary; **Details** lists the underlying events and command output. When a session ends, the report offers **Review changes**, **Open** a changed file, **Run tests** (the detected test command, in the terminal) and **Undo all changes**.
+
 ## Safety
 
 - **Isolation.** Commands run only in the project's own workspace computer (see CODE_WORKSPACE.md):

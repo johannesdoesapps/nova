@@ -102,7 +102,10 @@ The **Changes** panel lists every agent run with per-file diffs. A whole run or 
 
 ### Layout
 
-On larger screens, the files panel, the terminal and the side panel (Agent, Quick edit, Changes, Preview) can be resized by dragging, or with the arrow keys on the handles. The files panel and terminal can also be hidden. Sizes are remembered in the browser. Phones show one pane at a time.
+- **Start screen** (`/code`): what Code does, the three steps (choose a project, describe the task, review the result), recent projects to continue, and three ways to start: **Try an example** (an ordinary Node.js project with a calculator whose tests fail, with the task filled in), **Import from GitHub**, or **New project** from a template. `/code?new=1` opens the template form.
+- **Workspace** (`/code/[id]`): the coding agent is the main view. On the left, **Files** (with search) and **Sessions** (each task given to the agent; open one to see its progress and report, or start a new one). On the right, an optional panel opens on demand: **Editor**, **Changes** (diffs, checkpoints, undo, push to GitHub), **Preview**, **Terminal** and **Quick edit** (advanced). Panels resize by dragging or with the arrow keys on the handles; sizes are remembered in the browser.
+- **Phones** show one pane at a time with tabs, starting on the agent, which stays mounted so a session keeps going while you look at files.
+- The app sidebar shows the user's projects instead of chats while in Code.
 
 ### Quick edit (AI editor)
 
