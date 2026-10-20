@@ -1,33 +1,70 @@
 "use client";
-import { useSyncExternalStore, type ReactNode } from "react";
-import { CodeXml, Scale, ShieldQuestionMark, Telescope } from "lucide-react";
+import Link from "next/link";
+import { useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
+import { ArrowRight, Bot, CodeXml, FileText, ListChecks, Telescope } from "lucide-react";
+import { useLocalStorage } from "@/hooks/use-local-storage";
 import type { ChatMode } from "@/lib/ai/modes";
 import { OrbisMark } from "./ui";
 
-const SUGGESTIONS: { icon: ReactNode; title: string; prompt: string; mode: ChatMode }[] = [
+type Goal = "ask" | "documents" | "build" | "agent" | "plan";
+
+/** First steps by what the user wants to do: prompts to send or start from, and the workspace that fits. */
+const GOALS: {
+  id: Goal;
+  label: string;
+  icon: ReactNode;
+  intro: string;
+  link?: { href: string; label: string; text: string };
+  prompts: { title: string; prompt: string; mode: ChatMode; draft?: boolean }[];
+}[] = [
   {
+    id: "ask",
+    label: "Ask or research",
     icon: <Telescope />,
-    title: "Explain a concept",
-    prompt: "Explain retrieval-augmented generation and when it actually helps.",
-    mode: "research",
+    intro: "Ask anything. Auto picks a model and says why under the reply.",
+    prompts: [
+      { title: "Explain a concept", prompt: "Explain retrieval-augmented generation and give me a practical example.", mode: "research" },
+      { title: "Compare options", prompt: "Compare a modular monolith with microservices for a five-person team.", mode: "analyst" },
+      { title: "Stress-test an idea", prompt: "Challenge my plan to launch an AI study tool for university students.", mode: "critic" },
+    ],
   },
   {
-    icon: <Scale />,
-    title: "Compare options",
-    prompt: "Compare a modular monolith with microservices for a five-person team.",
-    mode: "analyst",
+    id: "documents",
+    label: "Write or analyse documents",
+    icon: <FileText />,
+    intro: "Attach a document with the paperclip (or drag it in), then start from one of these.",
+    prompts: [
+      { title: "Summarise a document", prompt: "Analyse this document and summarise its key findings.", mode: "analyst", draft: true },
+      { title: "Draft something", prompt: "Draft a clear, friendly email announcing a product update to our customers.", mode: "research" },
+      { title: "Improve writing", prompt: "Edit this for clarity and concision, and explain your main changes:\n\n", mode: "critic", draft: true },
+    ],
   },
   {
-    icon: <ShieldQuestionMark />,
-    title: "Stress-test an idea",
-    prompt: "Challenge my plan to launch an AI study tool for university students.",
-    mode: "critic",
-  },
-  {
+    id: "build",
+    label: "Build or debug software",
     icon: <CodeXml />,
-    title: "Write code",
-    prompt: "Write a TypeScript debounce function with tests.",
-    mode: "coding",
+    intro: "Ask here for code you can run in the chat, or open Code for a project the agent can edit and test.",
+    link: { href: "/code", label: "Open Code", text: "Create or import a project, and let the agent plan, edit and run its tests." },
+    prompts: [
+      { title: "Write code", prompt: "Write a TypeScript debounce function with tests.", mode: "coding" },
+      { title: "Find bugs", prompt: "Inspect this code and identify potential bugs:\n\n", mode: "coding", draft: true },
+    ],
+  },
+  {
+    id: "agent",
+    label: "Create an agent",
+    icon: <Bot />,
+    intro: "Agents keep their own instructions, default model and history.",
+    link: { href: "/agents?create=1", label: "Create an agent", text: "Describe how it should work, or start from a built-in agent." },
+    prompts: [{ title: "Help me write instructions", prompt: "Help me write instructions for an AI agent that reviews my blog drafts for clarity and tone.", mode: "research" }],
+  },
+  {
+    id: "plan",
+    label: "Plan a project",
+    icon: <ListChecks />,
+    intro: "Turn a goal into milestones and tasks you can work through.",
+    link: { href: "/missions", label: "Open Mission Control", text: "Describe a goal; Orbis proposes a plan you edit, and drafts the tasks it can." },
+    prompts: [{ title: "Quick plan in chat", prompt: "Turn this goal into an actionable plan: launch a weekly newsletter within six weeks.", mode: "analyst" }],
   },
 ];
 
@@ -37,13 +74,20 @@ export function Welcome({
   name,
   composer,
   onPick,
+  onDraft,
   notice,
 }: {
   name: string | null;
   composer: ReactNode;
   onPick: (prompt: string, mode: ChatMode) => void;
+  /** Put a prompt in the composer to finish (e.g. after attaching a file). */
+  onDraft?: (prompt: string, mode: ChatMode) => void;
   notice?: ReactNode;
 }) {
+  const [goal, setGoal] = useState<Goal>("ask");
+  // New here: a one-line introduction until the first message is sent.
+  const [welcomed, setWelcomed] = useLocalStorage("orbis:welcomed");
+  const g = GOALS.find((x) => x.id === goal)!;
   // The hour is only known in the browser; render nothing on the server.
   const hour = useSyncExternalStore(noSubscribe, () => new Date().getHours(), () => null);
   const part = hour === null ? null : hour < 5 || hour >= 18 ? "Good evening" : hour < 12 ? "Good morning" : "Good afternoon";
@@ -57,30 +101,82 @@ export function Welcome({
         What can I help you explore?
       </h1>
       <p className="s-in mt-3 max-w-md text-balance text-center text-[15.5px] leading-relaxed text-s-ink-2 [animation-delay:120ms]">
-        Research a topic, weigh options, challenge an idea or write code. Orbis tells you when it isn’t sure.
+        {welcomed ? "Research a topic, work with documents, write code or plan a project." : "New here? Orbis gives you several AI models, a coding agent and planning tools in one place. Pick what you want to do first."}
       </p>
 
       <div className="s-in mt-9 w-full [animation-delay:160ms]">{composer}</div>
 
-      <ul className="mt-5 grid w-full gap-2 sm:grid-cols-2" aria-label="Suggested prompts">
-        {SUGGESTIONS.map((s, i) => (
-          <li key={s.title} className="s-in" style={{ animationDelay: `${200 + i * 40}ms` }}>
-            <button
-              type="button"
-              onClick={() => onPick(s.prompt, s.mode)}
-              className="group flex h-full w-full items-start gap-3 rounded-2xl border border-s-line p-3.5 text-left transition duration-200 hover:border-s-line-strong hover:bg-s-glass active:scale-[0.99]"
-            >
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-s-line text-s-ink-2 transition group-hover:text-s-accent [&_svg]:h-4 [&_svg]:w-4">
-                {s.icon}
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[13.5px] font-medium">{s.title}</span>
-                <span className="mt-0.5 block text-[13px] leading-snug text-s-ink-3 group-hover:text-s-ink-2">{s.prompt}</span>
-              </span>
-            </button>
-          </li>
+      <div
+        role="tablist"
+        aria-label="What do you want to do?"
+        className="s-in mt-5 flex w-full gap-1.5 overflow-x-auto pb-1 [animation-delay:200ms] sm:flex-wrap sm:justify-center"
+        onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
+          const dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+          if (!dir) return;
+          e.preventDefault();
+          const i = (GOALS.findIndex((x) => x.id === goal) + dir + GOALS.length) % GOALS.length;
+          setGoal(GOALS[i]!.id);
+          e.currentTarget.querySelector<HTMLButtonElement>(`[data-goal="${GOALS[i]!.id}"]`)?.focus();
+        }}
+      >
+        {GOALS.map((x) => (
+          <button
+            key={x.id}
+            type="button"
+            role="tab"
+            data-goal={x.id}
+            id={`goal-${x.id}`}
+            aria-selected={goal === x.id}
+            aria-controls="goal-panel"
+            tabIndex={goal === x.id ? 0 : -1}
+            onClick={() => setGoal(x.id)}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] transition [&_svg]:h-3.5 [&_svg]:w-3.5 ${goal === x.id ? "border-s-line-strong bg-s-hover text-s-ink" : "border-s-line text-s-ink-3 hover:text-s-ink"}`}
+          >
+            {x.icon}
+            {x.label}
+          </button>
         ))}
-      </ul>
+      </div>
+
+      <div id="goal-panel" role="tabpanel" aria-labelledby={`goal-${goal}`} className="mt-3 w-full">
+        <p className="mb-2.5 text-center text-[13px] text-s-ink-3">{g.intro}</p>
+        <ul className="grid w-full gap-2 sm:grid-cols-2">
+          {g.link && (
+            <li>
+              <Link href={g.link.href} className="group flex h-full w-full items-start gap-3 rounded-2xl border border-s-line-strong bg-s-glass p-3.5 text-left transition duration-200 hover:border-s-accent/60">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-s-accent text-s-accent-ink [&_svg]:h-4 [&_svg]:w-4">{g.icon}</span>
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1 text-[13.5px] font-medium">
+                    {g.link.label} <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+                  </span>
+                  <span className="mt-0.5 block text-[13px] leading-snug text-s-ink-3 group-hover:text-s-ink-2">{g.link.text}</span>
+                </span>
+              </Link>
+            </li>
+          )}
+          {g.prompts.map((p) => (
+            <li key={p.title}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!welcomed) setWelcomed("1");
+                  if (p.draft && onDraft) onDraft(p.prompt, p.mode);
+                  else onPick(p.prompt, p.mode);
+                }}
+                className="group flex h-full w-full items-start gap-3 rounded-2xl border border-s-line p-3.5 text-left transition duration-200 hover:border-s-line-strong hover:bg-s-glass active:scale-[0.99]"
+              >
+                <span className="min-w-0">
+                  <span className="block text-[13.5px] font-medium">
+                    {p.title}
+                    {p.draft && <span className="ml-1.5 text-[11.5px] font-normal text-s-ink-3">· fills in the box</span>}
+                  </span>
+                  <span className="mt-0.5 block text-[13px] leading-snug text-s-ink-3 group-hover:text-s-ink-2">{p.prompt.trim()}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       {notice && <div className="s-in mt-7 text-center text-[12.5px] text-s-ink-3 [animation-delay:380ms]">{notice}</div>}
     </div>

@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ArrowRight, CircleAlert, Code2, Copy, Crosshair, Ellipsis, Pencil, Plus, Radar, Search, Trash2 } from "lucide-react";
 import { useModels } from "@/components/common/model-picker";
@@ -25,7 +25,9 @@ export function AgentsView() {
   const models = useModels();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-  const [editor, setEditor] = useState<{ editing: AgentConfig | null; draft: AgentInput | null } | null>(null);
+  // ?create=1 (from the chat's "Create an agent") opens the editor straight away.
+  const params = useSearchParams();
+  const [editor, setEditor] = useState<{ editing: AgentConfig | null; draft: AgentInput | null } | null>(() => (params.has("create") ? { editing: null, draft: null } : null));
   const [toDelete, setToDelete] = useState<AgentConfig | null>(null);
 
   const blockedGuest = integrations.supabase && !user;

@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Info } from "lucide-react";
+import { useLocalStorage } from "@/hooks/use-local-storage";
 import { defaultModelId, useCatalog } from "@/components/common/model-picker";
 import { AUTO_MODEL_ID, isAutoId } from "@/lib/ai/platform";
 import { useModelChoice } from "./use-model-choice";
@@ -89,6 +90,11 @@ export function Studio() {
   };
 
   const empty = chat.messages.length === 0 && chat.load.status === "idle";
+  // After the first message, the welcome screen stops introducing Orbis.
+  const [welcomed, setWelcomed] = useLocalStorage("orbis:welcomed");
+  useEffect(() => {
+    if (!empty && !welcomed) setWelcomed("1");
+  }, [empty, welcomed, setWelcomed]);
   const demo = !integrations.anthropic && !integrations.openai && !integrations.google && !integrations.xai && !integrations.deepseek && !integrations.huggingface;
 
   const composer = (variant: "hero" | "dock") => (
@@ -140,6 +146,11 @@ export function Studio() {
             name={user?.displayName?.split(" ")[0] ?? null}
             composer={composer("hero")}
             onPick={(prompt, mode: ChatMode) => void chat.send(prompt, { mode })}
+            onDraft={(prompt, mode: ChatMode) => {
+              chat.setMode(mode);
+              setInput(prompt);
+              requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("main textarea")?.focus());
+            }}
             notice={notice}
           />
         </div>

@@ -10,12 +10,16 @@ export const STATUS_LABEL: Record<Status, string> = {
   available: "Available",
   beta: "Beta",
   preview: "Private preview",
-  planned: "Planned",
+  planned: "Coming soon",
 };
+
+/** The three ways Orbis is used, and how the homepage groups its features. */
+export type PillarId = "think" | "build" | "execute";
 
 export interface Feature {
   slug: string;
   name: string;
+  pillar: PillarId;
   /** <title>: what someone would search for. */
   title: string;
   description: string;
@@ -29,124 +33,189 @@ export interface Feature {
   steps: string[];
   limits: string[];
   guide?: string;
+  /** A real screenshot of the feature (public/product), with what it shows. */
+  image?: { src: string; alt: string; width: number; height: number };
 }
 
 export const FEATURES: Feature[] = [
   {
     slug: "ai-assistant",
-    name: "AI Assistant",
-    title: "AI Assistant with Claude and GPT models",
+    name: "AI Chat",
+    pillar: "think",
+    title: "AI Chat with Claude and GPT models in one workspace",
     description:
-      "Chat with Claude and GPT models in one workspace. Orbis's Smart Router picks a suitable model for each question and tells you why, with saved history and usage you can see.",
+      "Chat with Claude and GPT models in one place. Auto picks a model for each message and says why, or choose one yourself. Searchable history, file uploads and code you can run.",
     status: "available",
-    tagline: "One chat for several leading AI models — with the model and the reason it was chosen shown on every reply.",
-    audience: "Anyone who writes, researches or learns with AI and wants to use more than one model without juggling subscriptions.",
+    tagline: "One chat for several leading AI models — with the model, and the reason it was chosen, shown on every reply.",
+    audience: "Anyone who writes, researches or learns with AI and wants more than one model without juggling subscriptions.",
     appPath: "/chat",
-    appLabel: "Open the assistant",
+    appLabel: "Open Chat",
     highlights: [
-      { title: "Smart Router", text: "Auto mode chooses a model for each message — Quick, Deep, Research or Coding — and shows the reason under the reply. You can always pick a model yourself." },
-      { title: "Claude and GPT in one place", text: "Switch between Claude (Anthropic) and GPT (OpenAI) models from the same composer. Your conversation history stays in one list." },
-      { title: "Saved, searchable history", text: "Conversations are saved to your account. Rename, delete or move them into a project from the sidebar." },
-      { title: "Files and voice", text: "Attach files by button, drag-and-drop or paste, and dictate with voice input where your browser supports it." },
-      { title: "Command palette", text: "Press Ctrl+K (⌘K on Mac) to jump to a conversation, switch model or go to another part of Orbis." },
-      { title: "Visible usage", text: "Every reply shows which model answered, plus an estimated cost where the model's price is known. Your plan usage is always visible." },
+      { title: "Auto or your choice", text: "Auto chooses a model for each message — Quick, Deep, Research or Coding — and shows the reason under the reply. Or pick a Claude or GPT model yourself." },
+      { title: "History you can manage", text: "Conversations are saved to your account and searchable. Rename, archive, delete or move them into a project. Edit a question you sent to get a new answer." },
+      { title: "Files and code", text: "Attach documents by button, drag-and-drop or paste. Code blocks in replies have a Run button that runs Python, JavaScript, TypeScript or Bash in an isolated computer." },
+      { title: "Replies your way", text: "Choose short, normal or detailed replies, and a precise, balanced or creative style. Copy, regenerate or stop any reply." },
+      { title: "Connected apps", text: "With Connectors, chat can look things up in apps you connect and cite them. Anything that changes an app waits for you to confirm it." },
+      { title: "Visible usage", text: "Every reply names the model that wrote it, and your plan's usage and reset times are always one click away." },
     ],
-    steps: ["Create a free account.", "Ask anything — leave the model on Auto or choose one.", "Read why the model was chosen, then continue, retry with another model or save the answer."],
+    steps: ["Create a free account.", "Ask anything — leave the model on Auto or choose one.", "Read why the model was chosen, then continue, edit your question, regenerate or try another model."],
     limits: [
-      "Live web search and the Truth Layer's source checks need a search provider that this site hasn't enabled yet; without it, answers don't cite live sources and claims are marked “not verified”.",
-      "Usage is limited per plan (see Pricing). Larger models use more of your allowance than low-cost ones.",
+      "Live web search isn't enabled on tryorbis.app yet, so answers don't cite live web sources. Research mode says so when it applies.",
+      "Usage is limited per plan (see Pricing). Larger models use more of your allowance than fast ones.",
     ],
     guide: "getting-started",
-  },
-  {
-    slug: "ai-coding-assistant",
-    name: "AI Coding Assistant",
-    title: "AI Coding Assistant for explaining, fixing and reviewing code",
-    description:
-      "Debug, explain and review code with Orbis's Coding Agent and Coding mode. It finds the root cause first, writes code in clear blocks, and never claims to have run code it hasn't.",
-    status: "available",
-    tagline: "Root cause first, then the fix — from a coding assistant that's honest about what it hasn't run.",
-    audience: "Developers and students who want a second pair of eyes on bugs, code reviews and unfamiliar codebases.",
-    appPath: "/agents",
-    appLabel: "Open the Coding Agent",
-    highlights: [
-      { title: "Coding Agent", text: "A built-in agent tuned for code: explains the root cause before the fix, keeps code in fenced blocks and states assumptions." },
-      { title: "Coding mode in the Smart Router", text: "Auto · Coding narrows the choice to models suited to programming tasks." },
-      { title: "Paste or attach files", text: "Share snippets or whole files; the agent analyses what you give it." },
-      { title: "Second opinions", text: "Ask the same question to several models side by side with Orbis Arena or Orbis Council and compare the answers." },
-    ],
-    steps: ["Open Agents and choose the Coding Agent (or pick Auto · Coding in chat).", "Paste the error, the code and what you expected.", "Review the explanation and the proposed change before using it."],
-    limits: [
-      "The assistant does not run your code or tests. Check suggestions before you use them.",
-      "For automated changes that are actually built and tested, see the Autonomous Developer (private preview).",
-    ],
-    guide: "custom-agents",
-  },
-  {
-    slug: "ai-agents",
-    name: "Customizable AI Agents",
-    title: "Customizable AI Agents — built-in and your own",
-    description:
-      "Use Orbis's built-in Research, Coding, Writing, Data Analyst, Creative and General agents, or create your own with custom instructions, default model and starter prompts.",
-    status: "available",
-    tagline: "Specialised assistants with their own instructions, tools and history — use ours or build your own.",
-    audience: "People who repeat the same kind of task and want an assistant that already knows how they like it done.",
-    appPath: "/agents",
-    appLabel: "Browse agents",
-    highlights: [
-      { title: "Six built-in agents", text: "Research, Coding, Writing, Data Analyst, Creative and General Assistant — each with its own instructions, temperature and starter prompts." },
-      { title: "Your own agents", text: "Write instructions (20–8,000 characters), pick an icon, colour, default model and up to four starter prompts." },
-      { title: "Customise a copy", text: "Start from any built-in agent and change what you need; the original stays untouched." },
-      { title: "Separate history", text: "Each agent keeps its own conversations next to your general chats." },
-    ],
-    steps: ["Open Agents.", "Pick a built-in agent, or choose “Create agent” and describe how it should work.", "Chat with it; edit its instructions whenever you want."],
-    limits: ["Agents use the same models and usage limits as the assistant.", "Agents can't take actions outside Orbis."],
-    guide: "custom-agents",
+    image: { src: "/product/chat.webp", alt: "Orbis Chat answering a question about row-level security versus permission checks in application code; the reply is labelled Claude Haiku 5.5 with an Auto badge.", width: 2400, height: 1500 },
   },
   {
     slug: "multi-model",
     name: "Council & Arena",
+    pillar: "think",
     title: "Compare AI models side by side — Orbis Council and Orbis Arena",
     description:
-      "Ask several AI models the same question. Orbis Council combines their answers into one synthesis with agreements and disagreements; Orbis Arena lets you compare them blind and pick a winner.",
+      "Ask several AI models the same question. Council combines their answers into one synthesis that lists where they agree and disagree; Arena lets you compare them blind and pick a winner.",
     status: "available",
-    tagline: "Don't trust one model's answer — see where several agree, and where they don't.",
+    tagline: "Don't rely on one model's answer — see where several agree, and where they don't.",
     audience: "Anyone making a decision from AI output who wants a cross-check before relying on it.",
     appPath: "/council",
-    appLabel: "Open Orbis Council",
+    appLabel: "Open Council",
     highlights: [
       { title: "Council", text: "Each model answers independently; in Deep mode they review each other's anonymised answers; a chair model writes a synthesis listing agreements, disagreements and what still needs checking." },
       { title: "Arena", text: "Blind mode hides model names until you reveal them. Rate answers, pick a winner, or ask a model to improve its answer." },
-      { title: "Every step visible", text: "Model, latency, tokens and estimated cost are shown for each step. A failed model doesn't stop the others." },
+      { title: "Every step visible", text: "Model, time, tokens and estimated cost are shown for each step. A failed model doesn't stop the others." },
     ],
     steps: ["Open Council or Arena.", "Choose two or more models and ask your question.", "Read the synthesis or compare the answers, then save the session."],
-    limits: ["Each model's answer counts against your usage, so a Council costs more than a single reply."],
+    limits: [
+      "Models comparing answers is a cross-check, not independent verification: they can share the same mistake.",
+      "Each model's answer counts against your usage, so a Council costs more than a single reply.",
+    ],
     guide: "council-and-arena",
+    image: { src: "/product/council.webp", alt: "Orbis Council: three models answered a question about monoliths and microservices, and a chair model's synthesis recommends a modular monolith, with its time, tokens and cost shown.", width: 2400, height: 1500 },
+  },
+  {
+    slug: "ai-coding-assistant",
+    name: "Code",
+    pillar: "build",
+    title: "Code workspace with an AI coding agent that runs your tests",
+    description:
+      "A code workspace with an editor, terminal and live preview, and a coding agent that plans, edits, runs your tests and fixes failures — with approvals and changes you can revert.",
+    status: "beta",
+    tagline: "Describe a change. The agent plans it, edits your files, runs the tests — and shows you every step and every diff.",
+    audience: "Developers, students and makers who want AI help that works on real files and checks its work by running it.",
+    appPath: "/code",
+    appLabel: "Open Code",
+    highlights: [
+      { title: "A real workspace", text: "Create a project (blank, Python, Node.js or website) or import one from GitHub. Edit files, run commands in a terminal and see your app in a live preview." },
+      { title: "A coding agent", text: "It reads the code, proposes a plan for you to approve, edits files, runs tests and builds, reads the errors and tries again — then summarises what it did and what's left." },
+      { title: "You stay in control", text: "Tests, builds and installs run on their own; other commands ask you first; a few (like deleting everything, deploying or git push) never run. You can review each set of edits before it's saved, and Stop at any time." },
+      { title: "Every change reviewable", text: "The Changes panel shows each run's edits as diffs. Revert a whole run or one file. Push the project to a new GitHub branch when you're ready." },
+      { title: "Isolated computer", text: "Commands run on the project's own short-lived computer with internet limited to npm and PyPI, and none of Orbis's keys inside." },
+      { title: "Quick edits too", text: "Ask for one change and accept or reject the proposed diff, without starting an agent run." },
+    ],
+    steps: ["Open Code and create or import a project.", "In the Agent panel, describe the change and approve the plan.", "Watch it work, answer its questions, then review or revert the changes."],
+    limits: [
+      "Beta. The agent works while the page is open; it pauses if you close it, and you can continue later.",
+      "Each agent step counts like one chat message; commands use your plan's workspace minutes (Free: 20 a month).",
+      "The computer can't reach the internet beyond npm and PyPI, and programs that wait for keyboard input don't work.",
+      "Push to GitHub needs Orbis's GitHub app with write access, which isn't set up on tryorbis.app yet.",
+    ],
+    guide: "code-agent",
+    image: { src: "/product/code-agent.webp", alt: "Orbis Code: a Python project in the editor and the coding agent's finished run — files read, plan approved, one-line fix to cart.py, tests passed, summary.", width: 2400, height: 1457 },
+  },
+  {
+    slug: "autonomous-developer",
+    name: "Autonomous Developer",
+    pillar: "build",
+    title: "Autonomous Developer — AI agents that plan, code and verify",
+    description:
+      "Orbis's AI Workforce plans a change to a GitHub repository, writes it in an isolated sandbox, runs the project's real type checks, lint, tests and build, and reports what passed. Private preview.",
+    status: "preview",
+    tagline: "A team of agents that plan, write and verify a change — and only call it done when the checks pass.",
+    audience: "Orbis's own team today. It isn't open for sign-up yet.",
+    appPath: "/workforce",
+    appLabel: "Open Workforce (admins)",
+    highlights: [
+      { title: "A team of agents", text: "One maps the code, one plans, one writes the change, QA runs the checks, and a reviewer and a security agent review it." },
+      { title: "Isolated sandbox", text: "Each task runs in its own sandbox with network access cut off after dependencies install." },
+      { title: "Human approval", text: "You approve the plan before any code is written; high-risk plans always need a person." },
+      { title: "Verified, not just generated", text: "A task is only marked verified when the project's real checks pass. Budgets cap spending per task." },
+    ],
+    steps: ["Register a GitHub repository.", "Describe the change and approve the plan.", "Review the verified diff and report; nothing is pushed for you."],
+    limits: ["Private preview: available to the site's administrators only.", "Supports npm projects on GitHub. It doesn't open pull requests or push code."],
+    guide: "autonomous-developer",
+  },
+  {
+    slug: "ai-agents",
+    name: "Agents",
+    pillar: "execute",
+    title: "AI agents — built-in specialists and your own custom agents",
+    description:
+      "Use Orbis's built-in Research, Coding, Writing, Data Analyst, Creative and General agents, or create your own with custom instructions, a default model and starter prompts.",
+    status: "available",
+    tagline: "Specialised assistants with their own instructions and history — use ours or build your own.",
+    audience: "People who repeat the same kind of task and want an assistant that already knows how they like it done.",
+    appPath: "/agents",
+    appLabel: "Browse agents",
+    highlights: [
+      { title: "Six built-in agents", text: "Research, Coding, Writing, Data Analyst, Creative and General — each with its own instructions and starter prompts." },
+      { title: "Your own agents", text: "Write instructions (20–8,000 characters), pick an icon, colour, default model and up to four starter prompts." },
+      { title: "Customise a copy", text: "Start from any built-in agent and change what you need; the original stays untouched." },
+      { title: "Separate history", text: "Each agent keeps its own conversations next to your general chats." },
+    ],
+    steps: ["Open Agents.", "Pick a built-in agent, or choose Create agent and describe how it should work.", "Chat with it; edit its instructions whenever you want."],
+    limits: ["Agents use the same models and usage limits as Chat.", "Chat agents write, explain and plan; they don't take actions in other apps on their own."],
+    guide: "custom-agents",
   },
   {
     slug: "mission-control",
     name: "Mission Control",
-    title: "Mission Control — turn goals into AI-drafted plans",
+    pillar: "execute",
+    title: "Mission Control — turn goals into plans and AI-drafted tasks",
     description:
-      "Turn a goal into an editable plan of milestones and tasks, and let AI draft the tasks it can help with. You stay in control: nothing is saved or completed without you.",
+      "Turn a goal into an editable plan of milestones and tasks, and let AI draft the tasks it can help with. You decide what's saved and what's done.",
     status: "available",
     tagline: "From a goal to a plan you can work through — with AI drafting the parts it can.",
     audience: "Founders, students and teams planning projects who want structure without a heavy project-management tool.",
     appPath: "/missions",
     appLabel: "Open Mission Control",
     highlights: [
-      { title: "Plan from a goal", text: "Describe what you want to achieve; Orbis proposes milestones and tasks with priorities, which you can edit before saving." },
+      { title: "Plan from a goal", text: "Describe what you want to achieve; Orbis proposes milestones and tasks with priorities, which you edit before saving." },
       { title: "AI drafts, you decide", text: "Tasks marked “AI can draft this” can be drafted by any model. Drafts are saved to the mission and every attempt is logged." },
-      { title: "You mark progress", text: "The AI never marks tasks complete and is told it can't take real-world actions." },
+      { title: "You mark progress", text: "The AI never marks tasks complete. Progress is yours to track." },
     ],
     steps: ["Open Mission Control and describe your goal.", "Edit the proposed plan and press Create.", "Ask AI to draft tasks, edit the drafts, and tick tasks off yourself."],
-    limits: ["Mission Control plans and drafts; it does not send emails, book things or act outside Orbis."],
+    limits: ["Mission Control plans and drafts. It doesn't run tasks on its own or act outside Orbis."],
     guide: "mission-control",
+    image: { src: "/product/missions.webp", alt: "Mission Control: a proposed six-week plan for launching a newsletter, with weekly milestones and prioritised tasks, some marked “AI can draft”.", width: 2400, height: 1500 },
+  },
+  {
+    slug: "connectors",
+    name: "Connectors",
+    pillar: "execute",
+    title: "Connectors — use your apps' content in Orbis, with permission",
+    description:
+      "Connect apps so chat can search and cite them — Wikipedia today; Google, Microsoft, Slack, Notion, GitHub and more awaiting setup. Any change to an app waits for your OK.",
+    status: "beta",
+    tagline: "Bring your apps' content into your answers — read-only by default, and nothing changes without your OK.",
+    audience: "People whose work lives across documents, email, chat and code, and who want answers that draw on it.",
+    appPath: "/connectors",
+    appLabel: "Open Connectors",
+    highlights: [
+      { title: "Search what you connect", text: "Chat decides when a question needs one of your apps, searches it, and cites what it used. You can set each app to Auto, only when mentioned, or off." },
+      { title: "Your permission, your scopes", text: "Apps connect with their own sign-in (OAuth). Orbis asks for the narrowest access each feature needs, and writing is a separate switch that starts off." },
+      { title: "Confirm every change", text: "When the AI suggests drafting an email, creating an event or posting a message, you see exactly what it will do and confirm it first." },
+      { title: "Tokens locked away", text: "Access tokens are encrypted on the server and never sent to your browser. Disconnect any app at any time." },
+    ],
+    steps: ["Open Connectors.", "Turn on an available app and sign in to it.", "Ask in chat — Orbis searches the app when it helps and shows its sources."],
+    limits: [
+      "On tryorbis.app, Wikipedia is ready to use. The other apps are built but each needs Orbis's own app registration with that provider first; until then they're marked “Not set up yet”.",
+    ],
+    guide: "connectors",
   },
   {
     slug: "security-agents",
     name: "Security Team",
-    title: "AI Security Agents for website, log and code checks",
+    pillar: "execute",
+    title: "AI security agents for website, log and code checks",
     description:
       "Three security agents — Sentinel (website checks), Threat Hunter (log analysis) and Code Guardian (code and dependency audits) — that use real scanners and explain what they find.",
     status: "beta",
@@ -156,42 +225,53 @@ export const FEATURES: Feature[] = [
     appLabel: "Open the Security Team",
     highlights: [
       { title: "Orbis Sentinel", text: "Checks a website you own for HTTPS, security headers, cookies, CORS and exposed files — only after you prove ownership." },
-      { title: "Orbis Threat Hunter", text: "Analyses web and SSH logs you upload for suspicious patterns, with IP reputation when configured." },
+      { title: "Orbis Threat Hunter", text: "Analyses web and SSH logs you upload for suspicious patterns." },
       { title: "Orbis Code Guardian", text: "Scans code for leaked secrets and risky patterns, and checks dependencies against the OSV vulnerability database." },
-      { title: "Findings you can trust", text: "Every finding has severity, confidence, evidence and a fix. AI reviews only count when the quoted code really exists in your files." },
+      { title: "Findings with evidence", text: "Every finding has severity, confidence, evidence and a fix. AI reviews only count when the quoted code really exists in your files." },
     ],
     steps: ["Open Security Team.", "Verify a site you own, upload logs, or point Code Guardian at code.", "Review findings, then export a report."],
-    limits: [
-      "Website scans require proof that you own the site, and never reach private network addresses.",
-      "It is a point-in-time check, not continuous monitoring, and it never applies patches for you.",
-    ],
+    limits: ["Website scans require proof that you own the site and never reach private network addresses.", "It's a point-in-time check, not continuous monitoring, and it never applies fixes for you."],
     guide: "security-team",
   },
+];
+
+export interface Pillar {
+  id: PillarId;
+  label: string;
+  title: string;
+  text: string;
+  href: string;
+  cta: string;
+}
+
+export const PILLARS: Pillar[] = [
   {
-    slug: "autonomous-developer",
-    name: "Autonomous Developer",
-    title: "Autonomous Developer — AI agents that plan, code and test",
-    description:
-      "Orbis's AI Workforce plans a code change, writes it in an isolated sandbox, runs the project's real type checks, lint, tests and build, and reports what passed. Currently a private preview.",
-    status: "preview",
-    tagline: "Agents that plan, write and test a change — and only call it done when the checks pass.",
-    audience: "Orbis's own team today. Broader access will be announced; it isn't open for sign-up yet.",
-    appPath: "/workforce",
-    appLabel: "Open Workforce (admins)",
-    highlights: [
-      { title: "A team of agents", text: "An Archaeologist maps the code, an Architect plans, a Builder writes the change, QA runs the checks, a Reviewer and a Security agent review it." },
-      { title: "Isolated sandbox", text: "Each task runs in its own sandbox with network access cut off after dependencies install." },
-      { title: "Human approval", text: "You approve the plan before any code is written; high-risk plans always need a person." },
-      { title: "Verified, not just generated", text: "A task is only marked verified when the project's real checks pass. Budgets cap spending per task." },
-    ],
-    steps: ["Register a GitHub repository.", "Describe the change and approve the plan.", "Review the verified diff and report; nothing is pushed for you."],
-    limits: [
-      "Private preview: available to the site's administrators only.",
-      "Supports npm projects on GitHub. It does not open pull requests or push code yet.",
-    ],
-    guide: "autonomous-developer",
+    id: "think",
+    label: "Think",
+    title: "Think through complex problems.",
+    text: "Explore ideas, analyse documents and compare AI perspectives — with the model behind every answer named, so you know what you're relying on.",
+    href: "/features/ai-assistant",
+    cta: "Explore Chat",
+  },
+  {
+    id: "build",
+    label: "Build",
+    title: "Build real things with AI.",
+    text: "Understand code, implement features and fix bugs with an agent that runs your tests on an isolated computer — and shows every change as a diff you can revert.",
+    href: "/features/ai-coding-assistant",
+    cta: "Explore Code",
+  },
+  {
+    id: "execute",
+    label: "Execute",
+    title: "Turn plans into progress.",
+    text: "Break goals into tasks, use specialised agents and bring in your connected apps — with the AI drafting and you deciding what's done.",
+    href: "/features/ai-agents",
+    cta: "Explore Agents",
   },
 ];
+
+export const featuresIn = (pillar: PillarId) => FEATURES.filter((f) => f.pillar === pillar);
 
 export const featureBySlug = (slug: string) => FEATURES.find((f) => f.slug === slug);
 
@@ -216,7 +296,7 @@ export const GUIDES: Guide[] = [
       { heading: "Create your account", body: ["Go to Sign up and enter your email address and a password of at least 8 characters. Once your account is ready you're taken to the chat.", "Every new account starts on the Free plan."] },
       { heading: "Ask your first question", body: ["Type in the composer at the bottom of the chat and press Enter. Shift+Enter adds a new line.", "Leave the model on Auto and Orbis picks one for you; the reason appears under the reply."] },
       { heading: "Choose a model yourself", body: ["Open the model menu in the composer to pick a specific Claude or GPT model, or a Smart Router mode: Quick for short questions, Deep for harder reasoning, Research for sourced answers, Coding for programming."] },
-      { heading: "Find things quickly", body: ["Press Ctrl+K (⌘K on Mac) to open the command palette: jump to a past conversation, switch model, or go to Agents, Mission Control and the rest of Orbis.", "The sidebar lists your conversations by date. Use the menu next to a conversation to rename or delete it."] },
+      { heading: "Find things quickly", body: ["Press Ctrl+K (⌘K on Mac) to open the command palette: jump to a past conversation, switch model, or go to Agents, Mission Control and the rest of Orbis.", "The sidebar lists your conversations by date. Use the menu next to a conversation to rename, archive or delete it. Hover over a question you sent to edit it."] },
       { heading: "Know your limits", body: ["Each plan has a 5-hour and a weekly allowance. A message to a low-cost model uses 1 unit; larger models use more. When you're close to a limit, Auto prefers low-cost models and says so."] },
     ],
   },
@@ -243,6 +323,33 @@ export const GUIDES: Guide[] = [
       { heading: "Write good instructions", body: ["Say who the agent is for, what it should always do and what it should avoid. Instructions can be 20 to 8,000 characters.", "Concrete rules work better than adjectives: “Answer in under 150 words, then list sources” beats “be concise”."] },
       { heading: "Pick a default model and starters", body: ["Choose the model the agent uses by default — or Auto — and add up to four starter prompts that appear when you open it."] },
       { heading: "Use it", body: ["Each agent keeps its own conversation history. You can edit, duplicate or delete your custom agents at any time."] },
+    ],
+  },
+  {
+    slug: "code-agent",
+    short: "Coding agent",
+    title: "Using the coding agent in Code",
+    description: "Ask Orbis's coding agent to change a project: approve its plan, let it run tests, answer its questions, and review or revert what it changed.",
+    feature: "ai-coding-assistant",
+    sections: [
+      { heading: "Start a project", body: ["Open Code and create a project from a template (blank, Python, Node.js or website), or import one of your GitHub repositories.", "Your files are saved to your account. The project's computer — where commands and the preview run — starts only when you, or the agent, need it."] },
+      { heading: "Describe the change", body: ["In the Agent panel, say what you want, as you would to a colleague: “Add tests for the cart and make them pass”, or “Fix the crash when the list is empty”.", "Choose whether to see the plan first (on by default), whether to review each set of edits before it's saved, and which commands may run without asking."] },
+      { heading: "Approve, answer, watch", body: ["The agent reads the relevant files and proposes a plan. Nothing changes until you approve it.", "It then edits files and runs tests or builds. Commands outside the safe list (tests, builds, installs and read-only commands) wait for your OK; deleting everything, deploying and git push never run.", "If it needs the computer, it asks you to start it. Starting it uses workspace minutes from your plan."] },
+      { heading: "Review and revert", body: ["When it finishes you get a summary of what it changed, what it ran and what's left. Open Changes to see every edited file as a diff.", "Revert a whole run or a single file. If you changed a file since, Orbis warns you before overwriting it."] },
+      { heading: "What it costs", body: ["Each step the agent takes counts like one chat message on your plan; the run shows its step count. Commands use workspace minutes, counted in 10-minute blocks."] },
+    ],
+  },
+  {
+    slug: "connectors",
+    short: "Connecting apps",
+    title: "Connecting apps to Orbis",
+    description: "How Connectors work: what Orbis can read once you connect an app, how it asks before changing anything, and how to disconnect.",
+    feature: "connectors",
+    sections: [
+      { heading: "Connect an app", body: ["Open Connectors, choose an app and turn it on. Apps that need a sign-in send you to that app's own sign-in page; Orbis never sees your password.", "On tryorbis.app, Wikipedia is ready to use. Other apps show “Not set up yet” until Orbis has registered with that provider."] },
+      { heading: "Ask in chat", body: ["Chat searches a connected app when your question needs it, and cites what it used. Set an app to “Only when I mention it” or “Off” if you prefer."] },
+      { heading: "Changes need your OK", body: ["Writing to an app is a separate switch that starts off. When it's on and the AI suggests an action — a draft email, a calendar event, a message — you see exactly what it will do and confirm it first."] },
+      { heading: "Disconnect", body: ["Disconnect an app on its Connectors page at any time. Orbis deletes its stored access and, where the app supports it, revokes it too."] },
     ],
   },
   {
@@ -299,18 +406,22 @@ export const GUIDES: Guide[] = [
 
 export const guideBySlug = (slug: string) => GUIDES.find((g) => g.slug === slug);
 
+const codeLine = (id: "free" | "pro" | "max") =>
+  `Code: ${PLANS[id].codeProjects} projects, ${PLANS[id].workspaceMinutesPerPeriod.toLocaleString("en-US")} computer minutes a month`;
+
 export const PRICING = {
-  free: { name: PLANS.free.label, price: PLANS.free.priceUsd, window: PLANS.free.windowUnits, weekly: PLANS.free.weeklyUnits, models: "Fast, low-cost Claude and GPT models" },
-  pro: { name: PLANS.pro.label, price: PLANS.pro.priceUsd, window: PLANS.pro.windowUnits, weekly: PLANS.pro.weeklyUnits, models: "Adds Claude Sonnet and GPT Terra" },
-  max: { name: PLANS.max.label, price: PLANS.max.priceUsd, window: PLANS.max.windowUnits, weekly: PLANS.max.weeklyUnits, models: "Adds Claude Opus and GPT Sol" },
+  free: { name: PLANS.free.label, price: PLANS.free.priceUsd, window: PLANS.free.windowUnits, weekly: PLANS.free.weeklyUnits, models: "Fast, low-cost Claude and GPT models", code: codeLine("free") },
+  pro: { name: PLANS.pro.label, price: PLANS.pro.priceUsd, window: PLANS.pro.windowUnits, weekly: PLANS.pro.weeklyUnits, models: "Adds Claude Sonnet and GPT Terra", code: codeLine("pro") },
+  max: { name: PLANS.max.label, price: PLANS.max.priceUsd, window: PLANS.max.windowUnits, weekly: PLANS.max.weeklyUnits, models: "Adds Claude Opus and GPT Sol", code: codeLine("max") },
 };
 
 export const FAQ: { q: string; a: string }[] = [
-  { q: "What is Orbis?", a: "Orbis is a web workspace for working with AI: a multi-model assistant, specialised and custom agents, tools to compare models, a planner that turns goals into tasks, and security agents for checking your own site and code." },
-  { q: "Which AI models does Orbis use?", a: "This site offers Claude models from Anthropic and GPT models from OpenAI, and can add Gemini (Google) and Grok (xAI). Each reply shows which model answered." },
-  { q: "Is Orbis free?", a: `Yes. The Free plan includes ${PLANS.free.windowUnits} usage units per 5-hour window and ${PLANS.free.weeklyUnits} per week. A message to a low-cost model uses 1 unit; larger models use more. Pro ($${PLANS.pro.priceUsd}/month) and Max ($${PLANS.max.priceUsd}/month) give more usage and larger models. No plan is unlimited.` },
-  { q: "Do I need a credit card to sign up?", a: "No. You sign up with an email address and password and start on the Free plan." },
-  { q: "What happens to my conversations?", a: "They're saved to your account so you can come back to them, and only you can read them. Your messages are sent to the AI provider of the model that answers them, which each reply names. See Security & data for details." },
-  { q: "Can Orbis's agents take actions for me?", a: "No. Orbis's assistants and agents write, explain, plan and review. They don't send emails, make purchases or change your systems. The Autonomous Developer writes code changes in an isolated sandbox and never pushes them for you." },
-  { q: "Is the Autonomous Developer available?", a: "Not yet for everyone. It's a private preview used by the site's administrators while it matures." },
-];
+  { q: "What is Orbis?", a: "Orbis is a web workspace for working with AI: chat with several leading models, compare their answers, build and fix software with a coding agent that runs your tests, use specialised or custom agents, and turn goals into plans." },
+  { q: "Which AI models does Orbis use?", a: "On tryorbis.app: Claude models from Anthropic and GPT models from OpenAI. Orbis can also use Gemini, Grok and DeepSeek when they're switched on. Every reply names the model that wrote it." },
+  { q: "Is Orbis free?", a: `Yes. The Free plan includes ${PLANS.free.windowUnits} usage units per 5-hour window and ${PLANS.free.weeklyUnits} per week, with fast models. A message to a fast model uses 1 unit; larger models use more. Pro ($${PLANS.pro.priceUsd}/month) and Max ($${PLANS.max.priceUsd}/month) add usage and larger models. No plan is unlimited.` },
+  { q: "Do I need a credit card to sign up?", a: "No. You sign up with an email address and password (or Google, where enabled) and start on the Free plan." },
+  { q: "What happens to my conversations and code?", a: "They're saved to your account so you can come back to them, and only you can read them. Your messages are sent to the provider of the model that answers, which each reply names. See Security & data for details." },
+  { q: "Can Orbis's agents take actions for me?", a: "Only within limits you can see. The coding agent edits your Orbis project and runs commands on that project's isolated computer — tests and builds on their own, anything else after you approve, and some never. Changes to connected apps (like drafting an email) always wait for your confirmation. Chat agents and Mission Control write, explain and plan; they don't act on their own." },
+  { q: "Does the coding agent really run my tests?", a: "Yes — on the project's own short-lived computer. You see each command, its exit code and its output. If a command couldn't run, the agent says so instead of claiming it passed." },
+  { q: "What happens when I reach my limit?", a: "Orbis tells you which limit you reached and when it resets. The 5-hour window and weekly allowance reset on their own; nothing is charged automatically and no plan is upgraded without you." },
+]

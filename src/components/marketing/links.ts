@@ -1,5 +1,8 @@
+/** The header's links: the three main products, then the pages people check before signing up. */
 export const NAV = [
-  { href: "/features", label: "Features" },
+  { href: "/features/ai-assistant", label: "Chat" },
+  { href: "/features/ai-coding-assistant", label: "Code" },
+  { href: "/features/ai-agents", label: "Agents" },
   { href: "/pricing", label: "Pricing" },
   { href: "/docs", label: "Docs" },
   { href: "/security", label: "Security" },

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight, Check, Info } from "lucide-react";
@@ -47,6 +48,14 @@ export default async function FeaturePage({ params }: PageProps<"/features/[slug
             {!preview && guide && <SecondaryCta href={`/docs/${guide.slug}`}>Read the guide</SecondaryCta>}
           </div>
         </header>
+
+        {f.image && (
+          <figure className="mx-auto max-w-5xl px-5 pb-6 sm:px-8">
+            <div className="lux-card overflow-hidden rounded-[20px] p-1.5">
+              <Image src={f.image.src} alt={f.image.alt} width={f.image.width} height={f.image.height} sizes="(min-width: 1100px) 1024px, 100vw" className="h-auto w-full rounded-[14px]" />
+            </div>
+          </figure>
+        )}
 
         <section aria-labelledby="what" className="mx-auto max-w-4xl px-5 py-10 sm:px-8">
           <h2 id="what" className="text-2xl font-medium text-fg">What it does</h2>

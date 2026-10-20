@@ -6,27 +6,32 @@ and is kept out of search results.
 
 | URL | What it is |
 |---|---|
-| `/` | Homepage: hero with a real product screenshot, benefits, features with status, how it works, security & data, pricing, FAQ |
+| `/` | Homepage: hero with a real capture of the coding agent, "See it work" (real captures of Chat, Code, Council and Mission Control), the Think / Build / Execute pillars with feature status, trust, pricing summary, FAQ |
 | `/features`, `/features/<slug>` | One page per capability: what it does, who it's for, how to use it, limits |
-| `/pricing` | Free plan (live) and Pro (not on sale yet — no price is shown until there is one) |
+| `/pricing` | Free, Pro and Max from the live plan settings; a comparison table, usage examples and what happens at a limit. Pro and Max show "Payments are being set up" until Stripe is configured |
 | `/docs`, `/docs/<slug>` | Practical guides, each linked to its feature page |
 | `/security` | What Orbis stores, where messages go, what agents may do, code execution, your control |
 
 ## Editing content
 
-All public copy lives in **`src/content/site.ts`**: `FEATURES`, `GUIDES`, `FAQ` and the
-pricing numbers (read from `src/lib/plans.ts`, so limits never drift from what's enforced).
+All public copy lives in **`src/content/site.ts`**: `FEATURES` (each in a `pillar`: think,
+build or execute), `PILLARS`, `GUIDES`, `FAQ` and the pricing numbers (read from
+`src/lib/plans.ts`, so limits never drift from what's enforced). The homepage's product
+captures and the coding agent's recorded steps are in **`src/content/demos.ts`**.
 
 - **Add a feature page:** add an entry to `FEATURES` with a `status` — `available`,
-  `beta`, `preview` or `planned`. Never mark something available that users can't use.
+  `beta`, `preview` or `planned` (shown as "Coming soon"). Never mark something available
+  that users can't use.
   The page, the homepage card, the footer link and the sitemap entry appear automatically.
 - **Add a guide:** add an entry to `GUIDES` (with `short` for navigation and `feature`
   to link it to its feature page). Write for a real question someone has; prefer one
   good guide over several thin ones.
-- **Product screenshot:** `public/product/chat.webp` is a real capture of the chat studio
-  with an example conversation (taken from a local run against a mock database). Retake it
-  when the interface changes, and keep the `alt` text in `src/app/(marketing)/page.tsx`
-  describing what the image actually shows.
+- **Product captures** (`public/product/*.webp`) are real screenshots of tryorbis.app, taken
+  by a script that signs in with a test account and runs the actual feature (the coding agent
+  fixing a failing test, a chat reply, a Council, a Mission Control plan). Admin-only links, the
+  test account's name and old test chats are hidden before capture; nothing else is altered.
+  Retake them when the interface changes, and update the `alt` text, captions and the recorded
+  agent steps in `src/content/demos.ts` to match.
 
 ## SEO in place
 

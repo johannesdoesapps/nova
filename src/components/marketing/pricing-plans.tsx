@@ -85,7 +85,7 @@ export function PricingPlans({
                 {isCurrent ? (
                   <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-[11.5px] font-medium text-accent">Your plan</span>
                 ) : p.id === "pro" ? (
-                  <span className="rounded-full border border-border-strong px-2.5 py-0.5 text-[11.5px] text-muted">Most popular</span>
+                  <span className="rounded-full border border-border-strong px-2.5 py-0.5 text-[11.5px] text-muted">Recommended</span>
                 ) : null}
               </div>
               <p className="mt-2 text-[14.5px] leading-relaxed text-muted">{p.blurb}</p>

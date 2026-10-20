@@ -840,6 +840,13 @@ export function CodeWorkspace({ id }: { id: string }) {
   const agentView = <AgentPanel projectId={id} computerOn={running} startComputer={startComputer} onFilesChanged={reloadFiles} onShowChanges={showChanges} />;
   const changesView = <ChangesPanel key={focusRun ?? "all"} projectId={id} sourceRepo={project?.sourceRepo ?? null} focusRun={focusRun} onFilesChanged={reloadFiles} />;
   const sideView = (s: Side) => (s === "agent" ? agentView : s === "ai" ? aiView : s === "changes" ? changesView : previewView);
+  // The agent panel stays mounted while other panes are shown, so a run keeps going (and keeps its view).
+  const withAgent = (shown: Side | null, other: ReactNode) => (
+    <>
+      <div className={cn("h-full min-h-0", shown !== "agent" && "hidden")}>{agentView}</div>
+      {shown !== "agent" && other}
+    </>
+  );
 
   const PANES: { id: Pane; label: string }[] = [
     { id: "agent", label: "Agent" },
@@ -930,7 +937,10 @@ export function CodeWorkspace({ id }: { id: string }) {
             ))}
           </div>
           <div className="min-h-0 flex-1 overflow-hidden border-t border-s-line">
-            {pane === "files" ? treeView : pane === "editor" ? editorView : pane === "terminal" ? terminalView : sideView(pane)}
+            {withAgent(
+              pane === "agent" ? "agent" : null,
+              pane === "files" ? treeView : pane === "editor" ? editorView : pane === "terminal" ? terminalView : pane === "agent" ? null : sideView(pane),
+            )}
           </div>
         </>
       ) : (
@@ -982,7 +992,7 @@ export function CodeWorkspace({ id }: { id: string }) {
                 </button>
               ))}
             </div>
-            {right && <div className="min-h-0 flex-1">{sideView(right)}</div>}
+            <div className={cn("min-h-0 flex-1", !right && "hidden")}>{withAgent(right, right && right !== "agent" ? sideView(right) : null)}</div>
           </aside>
         </div>
       )}

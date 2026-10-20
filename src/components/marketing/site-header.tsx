@@ -38,7 +38,7 @@ export function SiteHeader() {
         <Link href="/" aria-label="Orbis home" className="rounded-lg">
           <Logo />
         </Link>
-        <nav aria-label="Main" className="hidden md:block">
+        <nav aria-label="Main" className="hidden lg:block">
           <ul className="flex items-center gap-1">
             {NAV.map((n) => (
               <li key={n.href}>
@@ -56,7 +56,7 @@ export function SiteHeader() {
             ))}
           </ul>
         </nav>
-        <div className="ml-auto hidden items-center gap-2 md:flex">
+        <div className="ml-auto hidden items-center gap-2 lg:flex">
           <Link href={SIGN_IN_HREF} className="rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:text-fg">
             Sign in
           </Link>
@@ -67,7 +67,7 @@ export function SiteHeader() {
         <button
           ref={button}
           type="button"
-          className="ml-auto inline-grid h-10 w-10 place-items-center rounded-lg text-fg hover:bg-panel-2 md:hidden"
+          className="ml-auto inline-grid h-10 w-10 place-items-center rounded-lg text-fg hover:bg-panel-2 lg:hidden"
           aria-expanded={open}
           aria-controls="mobile-nav"
           aria-label={open ? "Close menu" : "Open menu"}
@@ -79,7 +79,7 @@ export function SiteHeader() {
           {open ? <X className="h-5 w-5" aria-hidden /> : <Menu className="h-5 w-5" aria-hidden />}
         </button>
       </div>
-      <nav id="mobile-nav" aria-label="Main" hidden={!open} className="border-t border-border px-5 pb-5 md:hidden">
+      <nav id="mobile-nav" aria-label="Main" hidden={!open} className="border-t border-border px-5 pb-5 lg:hidden">
         <ul className="py-2">
           {NAV.map((n) => (
             <li key={n.href}>

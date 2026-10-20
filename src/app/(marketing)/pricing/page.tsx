@@ -73,6 +73,24 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
 
   const current = entitlement ? { plan: entitlement.plan, interval: entitlement.interval } : null;
   const tu = billing.tierUnits;
+  const P = Object.fromEntries(PLAN_IDS.map((id) => [id, planOf(billing, id)])) as Record<(typeof PLAN_IDS)[number], ReturnType<typeof planOf>>;
+  const fmt = (n: number) => n.toLocaleString("en-US");
+  const words = (tokens: number) => `about ${fmt(Math.round((tokens * 0.75) / 50) * 50)} words`;
+  const tierNames: Record<ModelTier, string> = { standard: "fast", advanced: "advanced", premium: "premium" };
+  const ROWS: { label: string; cells: (id: (typeof PLAN_IDS)[number]) => string }[] = [
+    { label: "Price", cells: (id) => (P[id].priceUsd === 0 ? "Free" : `$${fmt(P[id].priceUsd)}/month or $${fmt(chargeUsd(P[id], "year"))}/year`) },
+    { label: "Usage per 5 hours", cells: (id) => `${fmt(P[id].windowUnits)} units` },
+    { label: "Usage per week", cells: (id) => `${fmt(P[id].weeklyUnits)} units` },
+    { label: "Messages per day", cells: (id) => (P[id].dailyMessages > 0 ? fmt(P[id].dailyMessages) : "No daily cap") },
+    { label: "Models", cells: (id) => P[id].tiers.map((t) => tierNames[t]).join(", ") },
+    { label: "Longest reply", cells: (id) => words(P[id].maxOutputTokens) },
+    { label: "Run code in chat", cells: (id) => `${fmt(P[id].codeRunsPerPeriod)} runs/month` },
+    { label: "Code projects", cells: (id) => fmt(P[id].codeProjects) },
+    { label: "Workspace computer", cells: (id) => `${fmt(P[id].workspaceMinutesPerPeriod)} min/month` },
+    { label: "Coding agent", cells: () => "Included (each step counts as a message)" },
+    { label: "Web searches", cells: (id) => (P[id].webSearchesPerPeriod > 0 ? `${fmt(P[id].webSearchesPerPeriod)}/month, once search is enabled` : "Not included") },
+    { label: "Agents, Council, Arena, Mission Control, Connectors", cells: () => "Included" },
+  ];
   return (
     <>
       <section className="mx-auto max-w-5xl px-5 pt-16 pb-6 text-center sm:px-8 sm:pt-20">
@@ -93,6 +111,42 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
         </p>
       </section>
 
+      <section aria-labelledby="compare" className="mx-auto max-w-6xl px-5 py-14 sm:px-8">
+        <h2 id="compare" className="text-2xl font-medium text-fg">Compare plans</h2>
+        <p className="mt-2 text-[15px] text-muted">Read from the same settings Orbis uses to enforce limits, so this table always matches what you get.</p>
+        <div className="s-scroll mt-6 overflow-x-auto rounded-2xl border border-border">
+          <table className="w-full min-w-[640px] border-collapse text-left text-[14px]">
+            <caption className="sr-only">What each plan includes</caption>
+            <thead>
+              <tr className="border-b border-border bg-panel">
+                <th scope="col" className="w-[28%] px-4 py-3 font-medium text-muted">
+                  <span className="sr-only">Feature</span>
+                </th>
+                {PLAN_IDS.map((id) => (
+                  <th key={id} scope="col" className="px-4 py-3 font-medium text-fg">
+                    {P[id].label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {ROWS.map((r) => (
+                <tr key={r.label} className="border-b border-border last:border-0">
+                  <th scope="row" className="px-4 py-3 align-top font-normal text-muted">
+                    {r.label}
+                  </th>
+                  {PLAN_IDS.map((id) => (
+                    <td key={id} className="px-4 py-3 align-top text-fg">
+                      {r.cells(id)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section aria-labelledby="units" className="mx-auto max-w-3xl px-5 py-14 sm:px-8">
         <h2 id="units" className="text-2xl font-medium text-fg">How usage units work</h2>
         <div className="mt-5 space-y-4 text-[15px] leading-relaxed text-muted">
@@ -106,6 +160,31 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
           </p>
           <p>Orbis Council and Orbis Arena ask several models at once, so each model&rsquo;s reply counts. Your current usage and reset times are always shown in the app.</p>
         </div>
+
+        <h3 className="mt-10 text-lg font-medium text-fg">What different tasks use</h3>
+        <p className="mt-2 text-[14px] text-muted">Examples, not guarantees: real use depends on the models you pick and how long your conversations get.</p>
+        <dl className="mt-5 divide-y divide-border rounded-2xl border border-border bg-panel text-[15px]">
+          {[
+            ["A quick question to a fast model", `${tu.standard} unit.`],
+            ["The same question to an advanced or premium model", `${tu.advanced} or ${tu.premium} units.`],
+            ["A long conversation, or one with big attachments", "The same units per message, but more of your monthly AI allowance, because more text is sent with each message."],
+            ["A Council with three models", "One message per model's answer, plus the chair model's summary (and the models' reviews of each other in Deep mode)."],
+            ["A coding agent run", "One message per step the agent takes (a small bug fix is typically a handful of steps), plus workspace computer time, counted in 10-minute blocks."],
+            ["Running code from a chat reply", "One code run from your monthly runs. It uses no usage units."],
+          ].map(([k, v]) => (
+            <div key={k} className="grid gap-1 px-5 py-4 sm:grid-cols-[1fr_1.4fr] sm:gap-6">
+              <dt className="text-fg">{k}</dt>
+              <dd className="text-muted">{v}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <h3 className="mt-10 text-lg font-medium text-fg">When you reach a limit</h3>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-[15px] leading-relaxed text-muted marker:text-muted">
+          <li>Orbis tells you which limit you reached and when it resets. The 5-hour window and the weekly allowance reset on their own.</li>
+          <li>If the advanced-model part of your monthly allowance runs out, Auto and the fast models keep working.</li>
+          <li>Nothing is charged automatically and your plan never changes without you. You can cancel or switch plans at any time from your account.</li>
+        </ul>
       </section>
       <CtaBand />
     </>

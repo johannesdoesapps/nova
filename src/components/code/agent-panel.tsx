@@ -230,7 +230,7 @@ export function AgentPanel({
         <div className="ml-auto flex items-center gap-1">
           {run && !ended && (
             <button type="button" onClick={() => void stop()} className="inline-flex h-7 items-center gap-1 rounded-full border border-s-line px-2.5 text-[12px] text-s-ink-2 hover:border-s-danger hover:text-s-danger">
-              <Square className="h-3 w-3" /> Stop
+              <Square className="h-3 w-3" /> Stop agent
             </button>
           )}
           {ended && (
@@ -294,7 +294,7 @@ export function AgentPanel({
                 disabled={!request.trim() || starting}
                 className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-full bg-s-accent px-3.5 text-[12.5px] font-medium text-s-accent-ink transition hover:brightness-110 disabled:opacity-40"
               >
-                <Bot className="h-3.5 w-3.5" /> {starting ? "Starting…" : "Start"}
+                <Bot className="h-3.5 w-3.5" /> {starting ? "Starting…" : "Start agent"}
               </button>
             </div>
             <p className="mt-3 text-[11.5px] leading-snug text-s-ink-3">

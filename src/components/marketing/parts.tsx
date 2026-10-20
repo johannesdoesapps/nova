@@ -79,10 +79,10 @@ export function SiteFooter() {
             <Logo />
           </Link>
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted">
-            An AI workspace with several leading models, specialised agents and tools that show their work.
+            One workspace for AI chat, coding and agents — with every model named and every change reviewable.
           </p>
         </div>
-        <FooterColumn title="Product" links={FEATURES.map((f) => ({ href: `/features/${f.slug}`, label: f.name }))} />
+        <FooterColumn title="Product" links={[{ href: "/features", label: "All features" }, ...FEATURES.map((f) => ({ href: `/features/${f.slug}`, label: f.name }))]} />
         <FooterColumn
           title="Resources"
           links={[{ href: "/docs", label: "Documentation" }, ...GUIDES.slice(0, 4).map((g) => ({ href: `/docs/${g.slug}`, label: g.short }))]}
