@@ -29,6 +29,7 @@ const body = z.object({
       approvePlans: z.boolean().optional(),
       reviewEdits: z.boolean().optional(),
       commands: z.enum(["safe", "ask", "off"]).optional(),
+      readOnly: z.boolean().optional(),
     })
     .optional(),
   stepLimit: z.number().int().min(3).max(MAX_STEP_LIMIT).optional(),
@@ -50,7 +51,10 @@ export async function POST(req: Request, ctx: Ctx) {
     const row = await createRun(auth, {
       projectId: id,
       request: input.request,
-      options: { modelId: o.modelId ?? null, approvePlans: o.approvePlans ?? true, reviewEdits: o.reviewEdits ?? false, commands: o.commands ?? "safe" },
+      // A read-only run never plans, edits or runs anything, so its other switches are fixed.
+      options: o.readOnly
+        ? { modelId: o.modelId ?? null, approvePlans: false, reviewEdits: false, commands: "off", readOnly: true }
+        : { modelId: o.modelId ?? null, approvePlans: o.approvePlans ?? true, reviewEdits: o.reviewEdits ?? false, commands: o.commands ?? "safe", readOnly: false },
       stepLimit: input.stepLimit ?? DEFAULT_STEP_LIMIT,
     });
     return NextResponse.json({ run: toRunView(row) }, { status: 201 });

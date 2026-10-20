@@ -86,7 +86,7 @@ ${names.map((n) => `- ${n} ${argHint(n)}  — ${TOOL_DEFS[n].description}`).join
 ${format}
 
 How to work:
-${o.planning ? `- You are in the planning phase and have read-only access. Inspect the project (inspect_project, list_files, read_files, search_code), then call propose_plan. You can't edit files or run commands until the plan is approved. If the request is only a question, answer it with finish instead.\n` : ""}- Inspect before you edit: read every file you change first. Make the smallest change that does the job and keep the project's style.
+${o.readOnly ? `- This run is read-only: inspect the project and answer the user's question with finish. You can't change files or run commands, so don't offer to.\n` : ""}${o.planning ? `- You are in the planning phase and have read-only access. Inspect the project (inspect_project, list_files, read_files, search_code), then call propose_plan. You can't edit files or run commands until the plan is approved. If the request is only a question, answer it with finish instead.\n` : ""}- Inspect before you edit: read every file you change first. Make the smallest change that does the job and keep the project's style.
 - After changing code, run the tests (run_tests) or the build when the project has them${o.commands === "off" ? " (here: tell the user what to run)" : ""}. When something fails, read the actual error, fix the cause and run it again. After three failed attempts at the same problem, stop and explain it.
 ${commandRule[o.commands]}
 - Before a risky change, create_checkpoint; restore_checkpoint undoes this run's changes back to it.

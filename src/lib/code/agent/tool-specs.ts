@@ -11,6 +11,8 @@ import type { CommandMode } from "./types";
 
 export interface ToolContext {
   commands: CommandMode;
+  /** A read-only run: no edits, restores, commands or plans are offered. */
+  readOnly?: boolean;
   docs: boolean;
   github: boolean;
   approvePlans: boolean;
@@ -111,8 +113,11 @@ export function isToolName(name: string): name is ToolName {
   return Object.hasOwn(TOOL_DEFS, name);
 }
 
+const READ_ONLY_HIDDEN = new Set<string>(["write_file", "edit_file", "delete_file", "restore_checkpoint", "create_checkpoint", "run_command", "run_tests", "propose_plan"]);
+
 export function toolsFor(c: ToolContext): ToolName[] {
   return TOOL_NAMES.filter((n) => {
+    if (c.readOnly && READ_ONLY_HIDDEN.has(n)) return false;
     const def: ToolDef = TOOL_DEFS[n];
     return !def.when || def.when(c);
   });

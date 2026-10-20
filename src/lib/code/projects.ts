@@ -175,3 +175,45 @@ export interface FileChange {
   before: string | null;
   after: string | null;
 }
+
+/**
+ * "Try an example": a small calculator whose tests fail, created as an
+ * ordinary Node.js project, so a first-time user can watch the agent find the
+ * bug, fix it and run the tests.
+ */
+export const EXAMPLE_PROJECT = {
+  name: "Example: calculator with a bug",
+  template: "node" as TemplateId,
+  runCommand: "npm test",
+  task: "The tests fail. Find the bug, fix it, and make the tests pass. Don't change the tests.",
+  files: {
+    "package.json": `{
+  "name": "calculator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}
+`,
+    "README.md": "# Calculator\n\nA tiny calculator library. Run the tests with `npm test`.\n",
+    "src/calc.js": "export function add(a, b) {\n  return a - b;\n}\n\nexport function multiply(a, b) {\n  return a * b;\n}\n",
+    "test/calc.test.js": `import test from "node:test";
+import assert from "node:assert/strict";
+import { add, multiply } from "../src/calc.js";
+
+test("adds two numbers", () => {
+  assert.equal(add(2, 3), 5);
+});
+
+test("adds negative numbers", () => {
+  assert.equal(add(-1, -2), -3);
+});
+
+test("multiplies", () => {
+  assert.equal(multiply(4, 5), 20);
+});
+`,
+  } as Record<string, string>,
+};

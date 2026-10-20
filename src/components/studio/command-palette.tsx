@@ -2,13 +2,26 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bookmark, Bot, Code2, Cpu, Flag, ListPlus, MessageSquare, MessagesSquare, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, SquarePen, Swords, Users, Plug } from "lucide-react";
+import { Bookmark, Code2, Cpu, Flag, ListPlus, MessageSquare, Search, Settings2, ShieldCheck, Sparkles, SquarePen } from "lucide-react";
 import { useCatalog } from "@/components/common/model-picker";
 import { useModelChoice } from "./use-model-choice";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import { autoIdFor, ROUTER_MODES } from "@/lib/ai/platform";
 import { cn } from "@/lib/utils";
 import type { ConvSummary } from "./history";
+import { navFor, type Section } from "./nav";
+
+/** Extra search words for the "Go to" entries. */
+const GO_KEYWORDS: Partial<Record<Section, string>> = {
+  chat: "chats conversations ask",
+  code: "projects editor terminal preview ide agent",
+  missions: "mission control project plan",
+  council: "compare models several",
+  arena: "blind battle compare vote",
+  connectors: "integrations apps gmail drive google calendar slack notion github outlook onedrive hubspot figma wikipedia connect",
+  admin: "models providers keys",
+  workforce: "commander tasks agents builder developer",
+};
 
 interface Command {
   id: string;
@@ -95,21 +108,18 @@ function Palette({
     };
     const list: Command[] = [
       { id: "new", group: "Actions", label: "New chat", hint: "Ctrl Shift O", icon: <SquarePen />, run: onNewChat },
-      { id: "council", group: "Actions", label: "Ask the Council", icon: <Users />, keywords: "compare models several", run: go("/council") },
-      { id: "arena", group: "Actions", label: "Open Arena", icon: <Swords />, keywords: "blind battle compare vote", run: go("/arena") },
+      { id: "code-new", group: "Actions", label: "New coding project", icon: <Code2 />, keywords: "code project build fix bug agent", run: go("/code?new=1") },
       { id: "mission-new", group: "Actions", label: "New mission", icon: <Flag />, keywords: "project plan goal mission control", run: go("/missions") },
       { id: "task", group: "Actions", label: "Create a task in a mission", icon: <ListPlus />, keywords: "todo task", run: go("/missions") },
       { id: "security", group: "Actions", label: "Security Team: scan, investigate or audit", icon: <ShieldCheck />, keywords: "security sentinel threat hunter code guardian vulnerability scan audit logs", run: go("/agents/security") },
-      { id: "chats", group: "Go to", label: "Chats", icon: <MessagesSquare />, run: go("/chat") },
-      { id: "missions", group: "Go to", label: "Mission Control", icon: <Flag />, run: go("/missions") },
-      { id: "code", group: "Go to", label: "Code", icon: <Code2 />, keywords: "projects editor terminal preview ide", run: go("/code") },
-      { id: "connectors", group: "Go to", label: "Connectors", icon: <Plug />, keywords: "integrations apps gmail drive google calendar slack notion github outlook onedrive hubspot figma wikipedia connect", run: go("/connectors") },
-      { id: "agents", group: "Go to", label: "Agents", icon: <Bot />, run: go("/agents") },
+      // The same destinations, labels and icons as the sidebar.
+      ...navFor(isAdmin).map((e) => {
+        const Icon = e.icon;
+        return { id: `go-${e.id}`, group: "Go to", label: e.label, hint: e.hint, icon: <Icon />, keywords: GO_KEYWORDS[e.id] ?? "", run: go(e.href) };
+      }),
       { id: "prompts", group: "Go to", label: "Saved prompts", icon: <Bookmark />, run: onOpenPrompts },
       { id: "settings", group: "Go to", label: "Settings", icon: <Settings2 />, keywords: "preferences theme", run: onOpenSettings },
     ];
-    if (isAdmin) list.push({ id: "admin", group: "Go to", label: "Admin", icon: <SlidersHorizontal />, keywords: "models providers keys", run: go("/admin") });
-    if (isAdmin) list.push({ id: "workforce", group: "Go to", label: "Workforce (internal AI engineers)", icon: <Bot />, keywords: "workforce commander tasks agents builder developer", run: go("/workforce") });
     if (catalog?.auto.enabled) {
       for (const m of ROUTER_MODES) {
         list.push({ id: `auto-${m.id}`, group: "Switch model", label: m.id === "balanced" ? "Auto" : `Auto · ${m.label}`, hint: m.blurb, icon: <Sparkles />, keywords: "smart router model", run: pickModel(autoIdFor(m.id)) });

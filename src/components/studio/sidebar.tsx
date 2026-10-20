@@ -1,37 +1,12 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
-import {
-  Archive,
-  Bookmark,
-  Bot,
-  Code2,
-  Ellipsis,
-  Flag,
-  LogIn,
-  LogOut,
-  MessagesSquare,
-  Monitor,
-  Moon,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Pencil,
-  Plug,
-  Search,
-  Settings2,
-  SlidersHorizontal,
-  SquarePen,
-  Sun,
-  Swords,
-  Trash2,
-  Users,
-  Workflow,
-  X,
-} from "lucide-react";
+import { Archive, Bookmark, Code2, Ellipsis, FolderPlus, LogIn, LogOut, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Search, Settings2, SquarePen, Sun, Trash2, X } from "lucide-react";
 import type { AppUser } from "@/components/layout/app-context";
 import { cn } from "@/lib/utils";
 import { groupByDate, type ConvSummary } from "./history";
+import { navFor, type NavEntry, type Section } from "./nav";
 import type { ThemePref } from "./prefs";
 import { IconButton, iconButtonClass, Kbd, Menu, MenuItem, MenuSeparator, OrbisMark, Segmented } from "./ui";
 
@@ -41,7 +16,7 @@ export interface SidebarProps {
   mobileOpen: boolean;
   onCloseMobile: () => void;
   /** Which workspace is open, for the nav's active state. */
-  section: "chats" | "agents" | "admin" | "council" | "arena" | "missions" | "workforce" | "code" | "connectors";
+  section: Section;
   conversations: ConvSummary[] | null;
   listError: string | null;
   activeId: string | null;
@@ -102,6 +77,9 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
   const searching = !!onSearch && !!query.trim() && found?.q.toLowerCase() !== query.trim().toLowerCase();
 
   const rail = p.collapsed;
+  // In Code, the sidebar is about projects; everywhere else, about chats.
+  const inCode = p.section === "code";
+  const entries = navFor(!!p.user?.isAdmin);
   const expandAndSearch = () => {
     p.onToggleCollapsed();
     requestAnimationFrame(() => searchRef.current?.focus());
@@ -149,41 +127,34 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
           </IconButton>
         </div>
 
-        {/* Mode: Chat or Code */}
-        <div className={cn("shrink-0 px-3 pb-2", rail && "md:hidden")}>
-          <div role="group" aria-label="Mode" className="grid grid-cols-2 gap-0.5 rounded-xl bg-s-hover p-0.5">
-            {(
-              [
-                { id: "chat", label: "Chat", href: "/chat", icon: <MessagesSquare className="h-3.5 w-3.5" />, on: p.section === "chats" },
-                { id: "code", label: "Code", href: "/code", icon: <Code2 className="h-3.5 w-3.5" />, on: p.section === "code" },
-              ] as const
-            ).map((m) => (
-              <Link
-                key={m.id}
-                href={m.href}
-                onClick={p.onCloseMobile}
-                aria-current={m.on ? "page" : undefined}
-                className={cn("flex h-8 items-center justify-center gap-1.5 rounded-[10px] text-[13px] font-medium transition", m.on ? "bg-s-bg text-s-ink shadow-sm" : "text-s-ink-3 hover:text-s-ink")}
-              >
-                {m.icon}
-                {m.label}
-              </Link>
-            ))}
-          </div>
-        </div>
-
         {/* Primary actions */}
         <div className={cn("flex shrink-0 flex-col gap-1 px-3 pb-2", rail && "md:items-center md:px-0")}>
           {rail ? (
-            <>
-              <IconButton label="New chat" onClick={p.onNewChat} className="hidden md:inline-grid">
-                <SquarePen />
-              </IconButton>
-              <IconButton label="Search chats" onClick={expandAndSearch} className="hidden md:inline-grid">
-                <Search />
-              </IconButton>
-            </>
+            inCode ? (
+              <Link href="/code?new=1" onClick={p.onCloseMobile} aria-label="New project" title="New project" className={cn(iconButtonClass(), "hidden md:inline-grid")}>
+                <FolderPlus />
+              </Link>
+            ) : (
+              <>
+                <IconButton label="New chat" onClick={p.onNewChat} className="hidden md:inline-grid">
+                  <SquarePen />
+                </IconButton>
+                <IconButton label="Search chats" onClick={expandAndSearch} className="hidden md:inline-grid">
+                  <Search />
+                </IconButton>
+              </>
+            )
           ) : null}
+          {inCode ? (
+            <Link
+              href="/code?new=1"
+              onClick={p.onCloseMobile}
+              className={cn("glass group flex h-10 items-center gap-2.5 rounded-xl px-3 text-[14px] font-medium transition hover:border-s-line-strong hover:bg-s-glass-strong active:scale-[0.99]", rail && "md:hidden")}
+            >
+              <FolderPlus className="h-[17px] w-[17px] text-s-ink-2 transition group-hover:text-s-ink" />
+              New project
+            </Link>
+          ) : (
           <div className={cn("flex flex-col gap-1", rail && "md:hidden")}>
             <button
               type="button"
@@ -210,23 +181,27 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
               </span>
             </div>
           </div>
+          )}
         </div>
 
         <nav aria-label="Main" className={cn("shrink-0 px-3 pb-2", rail && "md:px-0")}>
-          <ul className={cn("flex flex-col gap-0.5", rail && "md:items-center")}>
-            <NavItem rail={rail} icon={<MessagesSquare />} label="Chats" href="/chat" active={p.section === "chats"} onClick={p.onCloseMobile} />
-            <NavItem rail={rail} icon={<Code2 />} label="Code" href="/code" active={p.section === "code"} onClick={p.onCloseMobile} />
-            <NavItem rail={rail} icon={<Plug />} label="Connectors" href="/connectors" active={p.section === "connectors"} onClick={p.onCloseMobile} />
-            <NavItem rail={rail} icon={<Users />} label="Council" href="/council" active={p.section === "council"} onClick={p.onCloseMobile} />
-            <NavItem rail={rail} icon={<Swords />} label="Arena" href="/arena" active={p.section === "arena"} onClick={p.onCloseMobile} />
-            <NavItem rail={rail} icon={<Flag />} label="Missions" href="/missions" active={p.section === "missions"} onClick={p.onCloseMobile} />
-            <NavItem rail={rail} icon={<Bot />} label="Agents" href="/agents" active={p.section === "agents"} onClick={p.onCloseMobile} />
-            {p.user?.isAdmin && (
-              <>
-                <NavItem rail={rail} icon={<Workflow />} label="Workforce" href="/workforce" active={p.section === "workforce"} onClick={p.onCloseMobile} />
-                <NavItem rail={rail} icon={<SlidersHorizontal />} label="Admin" href="/admin" active={p.section === "admin"} onClick={p.onCloseMobile} />
-              </>
-            )}
+          {(["main", "tools", "admin"] as const).map((group) => {
+            const items = entries.filter((e) => e.group === group);
+            if (!items.length) return null;
+            return (
+              <div key={group} className={cn(group !== "main" && "mt-2")}>
+                {group !== "main" && (
+                  <h2 className={cn("px-3 pb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-s-ink-3", rail && "md:sr-only")}>{group === "tools" ? "Tools" : "Admin"}</h2>
+                )}
+                <ul className={cn("flex flex-col gap-0.5", rail && "md:items-center")}>
+                  {items.map((e) => (
+                    <NavLink key={e.id} entry={e} rail={rail} active={p.section === e.id} onClick={p.onCloseMobile} />
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+          <ul className={cn("mt-2 flex flex-col gap-0.5", rail && "md:items-center")}>
             <NavItem rail={rail} icon={<Bookmark />} label="Saved prompts" onClick={p.onOpenPrompts} />
             <NavItem rail={rail} icon={<Settings2 />} label="Settings" onClick={p.onOpenSettings} />
           </ul>
@@ -236,7 +211,9 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
 
         {/* History */}
         <div className={cn("s-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-2", rail && "md:invisible")}>
-          {p.listError ? (
+          {inCode ? (
+            <RecentProjects signedIn={!!p.user} onNavigate={p.onCloseMobile} />
+          ) : p.listError ? (
             <p className="px-3 py-2 text-[13px] text-s-ink-3">History couldn’t load: {p.listError}</p>
           ) : p.conversations === null ? (
             <div className="space-y-2.5 px-3 pt-3" aria-label="Loading chats">
@@ -279,7 +256,65 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
   );
 }
 
-function NavItem({ rail, icon, label, href, onClick, active }: { rail: boolean; icon: ReactNode; label: string; href?: string; onClick?: () => void; active?: boolean }) {
+function NavLink({ entry, rail, active, onClick }: { entry: NavEntry; rail: boolean; active: boolean; onClick: () => void }) {
+  const Icon = entry.icon;
+  return <NavItem rail={rail} icon={<Icon />} label={entry.label} href={entry.href} active={active} onClick={onClick} hint={entry.hint} />;
+}
+
+/** In Code, the sidebar lists the user's projects (most recently edited first) instead of chats. */
+function RecentProjects({ signedIn, onNavigate }: { signedIn: boolean; onNavigate: () => void }) {
+  const pathname = usePathname();
+  const [projects, setProjects] = useState<{ id: string; name: string }[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!signedIn) return;
+    let alive = true;
+    fetch("/api/code/projects")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((j: { projects: { id: string; name: string }[] }) => alive && setProjects(j.projects))
+      .catch(() => alive && setFailed(true));
+    return () => {
+      alive = false;
+    };
+    // Re-read on navigation so new and renamed projects show up.
+  }, [signedIn, pathname]);
+  if (!signedIn) return <p className="px-3 py-3 text-[13px] leading-relaxed text-s-ink-3">Sign in to keep projects.</p>;
+  if (failed) return <p className="px-3 py-3 text-[13px] text-s-ink-3">Projects couldn’t load.</p>;
+  if (!projects)
+    return (
+      <div className="space-y-2.5 px-3 pt-3" aria-label="Loading projects">
+        {[70, 56, 80].map((w, i) => (
+          <div key={i} className="s-skeleton h-3.5" style={{ width: `${w}%` }} />
+        ))}
+      </div>
+    );
+  if (!projects.length) return <p className="px-3 py-3 text-[13px] leading-relaxed text-s-ink-3">No projects yet.</p>;
+  return (
+    <section className="mt-1">
+      <h3 className="px-3 pb-1 text-[11.5px] font-medium text-s-ink-3">Projects</h3>
+      <ul className="flex flex-col gap-px">
+        {projects.slice(0, 30).map((pr) => {
+          const active = pathname === `/code/${pr.id}`;
+          return (
+            <li key={pr.id}>
+              <Link
+                href={`/code/${pr.id}`}
+                onClick={onNavigate}
+                aria-current={active ? "page" : undefined}
+                className={cn("flex h-9 items-center gap-2 rounded-xl px-3 text-[13.5px] transition hover:bg-s-hover", active ? "bg-s-hover text-s-ink" : "text-s-ink-2")}
+              >
+                <Code2 className="h-3.5 w-3.5 shrink-0 text-s-ink-3" />
+                <span className="truncate">{pr.name}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function NavItem({ rail, icon, label, href, onClick, active, hint }: { rail: boolean; icon: ReactNode; label: string; href?: string; onClick?: () => void; active?: boolean; hint?: string }) {
   const cls = cn(
     "flex h-9 items-center gap-3 rounded-xl px-3 text-[13.5px] text-s-ink-2 transition duration-200 hover:bg-s-hover hover:text-s-ink active:scale-[0.98] [&_svg]:h-[17px] [&_svg]:w-[17px] [&_svg]:shrink-0",
     active && "bg-s-hover font-medium text-s-ink",
@@ -294,7 +329,7 @@ function NavItem({ rail, icon, label, href, onClick, active }: { rail: boolean; 
   return (
     <li>
       {href ? (
-        <Link href={href} onClick={onClick} className={cls} aria-current={active ? "page" : undefined} title={rail ? label : undefined}>
+        <Link href={href} onClick={onClick} className={cls} aria-current={active ? "page" : undefined} title={rail ? `${label} — ${hint ?? ""}`.replace(/ — $/, "") : hint}>
           {body}
         </Link>
       ) : (

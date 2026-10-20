@@ -9,6 +9,7 @@ import { CommandPalette } from "./command-palette";
 import { ArchivedDialog, DeleteDialog, PromptsDialog, SettingsDialog } from "./dialogs";
 import { localHistory, serverHistory, type ConvSummary, type HistoryStore } from "./history";
 import { useFeedback, useSavedPrompts, useSettings, useTheme, type Feedback, type StudioSettings } from "./prefs";
+import { sectionFor } from "./nav";
 import { Sidebar } from "./sidebar";
 import { IconButton } from "./ui";
 
@@ -198,7 +199,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
           onToggleCollapsed={() => setRailStored(collapsed ? "0" : "1")}
           mobileOpen={mobileOpen}
           onCloseMobile={() => setMobileOpen(false)}
-          section={(["agents", "admin", "council", "arena", "missions", "workforce", "code", "connectors"] as const).find((s) => pathname.startsWith(`/${s}`)) ?? "chats"}
+          section={sectionFor(pathname)}
           conversations={conversations}
           listError={listError}
           activeId={activeChat}

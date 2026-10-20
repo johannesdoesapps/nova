@@ -36,9 +36,11 @@ export interface RunOptions {
   /** Show each set of file edits and wait for approval before saving them. */
   reviewEdits: boolean;
   commands: CommandMode;
+  /** Look and explain only: the server refuses every edit and command. */
+  readOnly?: boolean;
 }
 
-export const DEFAULT_OPTIONS: RunOptions = { modelId: null, approvePlans: true, reviewEdits: false, commands: "safe" };
+export const DEFAULT_OPTIONS: RunOptions = { modelId: null, approvePlans: true, reviewEdits: false, commands: "safe", readOnly: false };
 
 export interface AgentPlan {
   summary: string;

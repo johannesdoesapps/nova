@@ -436,11 +436,12 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
     await addEvents(auth, row.id, [{ kind: "status", title: "Recovered from an interrupted step; the agent will check what already happened" }]);
   }
 
-  const planApproved = !opts.approvePlans || !!row.plan?.approved;
-  const ctx: ToolContext = { commands: opts.commands, docs, github, approvePlans: opts.approvePlans };
+  const readOnly = !!opts.readOnly;
+  const planApproved = !readOnly && (!opts.approvePlans || !!row.plan?.approved);
+  const ctx: ToolContext = { commands: readOnly ? "off" : opts.commands, docs, github, approvePlans: opts.approvePlans, readOnly };
   const native = usesNativeTools(model);
   const maxOutputTokens = limits.maxOutputTokens;
-  const system = `${systemPrompt({ ...ctx, planning: !planApproved, reviewEdits: opts.reviewEdits, native })}
+  const system = `${systemPrompt({ ...ctx, planning: !readOnly && !planApproved, reviewEdits: opts.reviewEdits, native })}
 - Keep each reply under about ${(maxOutputTokens * 3).toLocaleString("en-US")} characters. Write big files in parts over several steps (write_file the first part, then edit_file to add the rest).`;
   const history = trimTranscript(transcript, Math.max(24_000, limits.historyChars));
   const promptChars = system.length + history.reduce((n, m) => n + messageSize(m), 0);
@@ -569,7 +570,7 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
 
   const env = realEnv({ auth, run: row, project, docs, github, webSearches });
   if (reply.thought) await addEvents(auth, row.id, [{ kind: "note", title: clipText(reply.thought, 380) }]);
-  const outcome = await runActions(reply, { planApproved, approvePlans: opts.approvePlans, reviewEdits: opts.reviewEdits, commands: opts.commands, lastTests: row.tests?.last ?? null }, env);
+  const outcome = await runActions(reply, { planApproved, approvePlans: opts.approvePlans, reviewEdits: opts.reviewEdits, commands: ctx.commands, lastTests: row.tests?.last ?? null, readOnly }, env);
   record(webSearches.count ? ["web_search"] : []);
 
   const tests = outcome.tests.length ? addTests(row.tests, outcome.tests) : row.tests;

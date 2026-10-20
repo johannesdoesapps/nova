@@ -1,9 +1,9 @@
 "use client";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
-  Bot,
   ChevronDown,
   ChevronRight,
   Eye,
@@ -11,8 +11,8 @@ import {
   FilePlus2,
   Folder,
   History,
-  PanelBottomClose,
-  PanelBottomOpen,
+  ListChecks,
+  PanelRightOpen,
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
@@ -32,9 +32,11 @@ import {
 import { useCatalog } from "@/components/common/model-picker";
 import { StudioHeader, useStudio } from "@/components/studio/frame";
 import { ModelSelector } from "@/components/studio/model-selector";
-import { validProjectPath, type FileChange, type ProjectSummary } from "@/lib/code/projects";
+import { detectTestCommand } from "@/lib/code/agent/test-results";
+import type { RunView } from "@/lib/code/agent/types";
+import { EXAMPLE_PROJECT, validProjectPath, type FileChange, type ProjectSummary } from "@/lib/code/projects";
 import { cn } from "@/lib/utils";
-import { AgentPanel } from "./agent-panel";
+import { AgentPanel, SessionsList } from "./agent-panel";
 import { api, CodeApiError, plainText, post, type AiResult, type Allowance, type JobRead, type ProjectData, type Session } from "./api";
 import { ChangesPanel } from "./changes-panel";
 import { FileDiff } from "./diff-view";
@@ -56,8 +58,10 @@ interface Entry {
   note?: string;
 }
 
-type Pane = "files" | "editor" | "terminal" | "agent" | "ai" | "changes" | "preview";
-type Side = "agent" | "ai" | "changes" | "preview";
+/** Phones show one pane at a time. */
+type Pane = "agent" | "sessions" | "files" | "editor" | "changes" | "preview" | "terminal" | "ai";
+/** Larger screens: the optional panel beside the agent. */
+type Side = "editor" | "changes" | "preview" | "terminal" | "ai";
 
 /** Sizes the user dragged, remembered in this browser (and in memory when storage is unavailable). */
 const sizeMemory = new Map<string, number>();
@@ -205,14 +209,19 @@ export function CodeWorkspace({ id }: { id: string }) {
   const [command, setCommand] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const [histAt, setHistAt] = useState<number | null>(null);
-  const [right, setRight] = useState<Side | null>("agent");
+  // The agent is the main view; the editor, changes, preview, terminal and quick edit open beside it on demand.
+  const [right, setRight] = useState<Side | null>(null);
   const [focusRun, setFocusRun] = useState<string | null>(null);
   const [filesOpen, setFilesOpen] = useState(true);
-  const [terminalOpen, setTerminalOpen] = useState(true);
-  const [leftW, setLeftW] = useStoredSize("orbis.code.left", 232, 160, 420);
-  const [rightW, setRightW] = useStoredSize("orbis.code.right", 400, 300, 760);
-  const [termH, setTermH] = useStoredSize("orbis.code.terminal", 240, 96, 640);
-  const [pane, setPane] = useState<Pane>("editor");
+  const [leftTab, setLeftTab] = useState<"files" | "sessions">("files");
+  const [leftW, setLeftW] = useStoredSize("orbis.code.left", 240, 180, 420);
+  const [rightW, setRightW] = useStoredSize("orbis.code.right2", 520, 320, 900);
+  const [pane, setPane] = useState<Pane>("agent");
+  // Coding sessions (agent runs): which one is open, and a counter so the list refreshes.
+  const [select, setSelect] = useState<{ runId: string | null; n: number } | null>(null);
+  const [activeRun, setActiveRun] = useState<RunView | null>(null);
+  const [sessionsVersion, setSessionsVersion] = useState(0);
+  const initialRequest = useSearchParams().get("task") === "example" ? EXAMPLE_PROJECT.task : undefined;
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [newFile, setNewFile] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -362,6 +371,7 @@ export function CodeWorkspace({ id }: { id: string }) {
       setActive(path);
       setNewFile(null);
       setPane("editor");
+      setRight("editor");
     } catch (e) {
       setError(e as CodeApiError);
     }
@@ -450,6 +460,7 @@ export function CodeWorkspace({ id }: { id: string }) {
     if (!c) return;
     setError(null);
     setPane("terminal");
+    setRight("terminal");
     setHistory((h) => [...h.filter((x) => x !== c), c].slice(-50));
     setHistAt(null);
     const key = ++entryKey.current;
@@ -551,6 +562,23 @@ export function CodeWorkspace({ id }: { id: string }) {
   };
 
   const startComputer = async () => !!(running || (await sessionAction("start")));
+  const openFile = (path: string) => {
+    setActive(path);
+    setPane("editor");
+    setRight("editor");
+  };
+  const testCommand = useMemo(() => detectTestCommand(paths.map((path) => ({ path, content: saved[path] ?? "" }))), [paths, saved]);
+  const onRunChange = useCallback((r: RunView | null) => {
+    setActiveRun((prev) => {
+      // A new session, or one whose status changed: the sessions list shows it.
+      if (prev?.id !== r?.id || prev?.status !== r?.status) setSessionsVersion((v) => v + 1);
+      return r;
+    });
+  }, []);
+  const openSession = (runId: string | null) => {
+    setSelect((s) => ({ runId, n: (s?.n ?? 0) + 1 }));
+    setPane("agent");
+  };
   const showChanges = (runId: string) => {
     setFocusRun(runId);
     setRight("changes");
@@ -594,7 +622,9 @@ export function CodeWorkspace({ id }: { id: string }) {
   const treeView = (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between px-3 py-2">
-        <span className="text-[11.5px] font-medium uppercase tracking-[0.08em] text-s-ink-3">Files</span>
+        <span className="text-[11.5px] text-s-ink-3">
+          {paths.length} file{paths.length === 1 ? "" : "s"} · the agent can read and change these
+        </span>
         <button type="button" onClick={() => setNewFile("")} aria-label="New file" title="New file" className="grid h-7 w-7 place-items-center rounded-lg text-s-ink-2 hover:bg-s-hover">
           <FilePlus2 className="h-4 w-4" />
         </button>
@@ -621,10 +651,7 @@ export function CodeWorkspace({ id }: { id: string }) {
       )}
       <FileSearch
         files={{ ...saved, ...drafts }}
-        onOpen={(p) => {
-          setActive(p);
-          setPane("editor");
-        }}
+        onOpen={openFile}
       >
         <div className="s-scroll min-h-0 flex-1 overflow-y-auto px-1 pb-3">
           {paths.length === 0 && project && <p className="px-3 py-2 text-[12.5px] text-s-ink-3">No files yet.</p>}
@@ -635,10 +662,7 @@ export function CodeWorkspace({ id }: { id: string }) {
             dirty={drafts}
             collapsed={collapsed}
             onToggle={(p) => setCollapsed((c) => (c.has(p) ? new Set([...c].filter((x) => x !== p)) : new Set([...c, p])))}
-            onOpen={(p) => {
-              setActive(p);
-              setPane("editor");
-            }}
+            onOpen={openFile}
             onRename={renameFile}
             onDelete={deleteFile}
           />
@@ -846,32 +870,60 @@ export function CodeWorkspace({ id }: { id: string }) {
     </div>
   );
 
-  const agentView = <AgentPanel projectId={id} computerOn={running} startComputer={startComputer} onFilesChanged={reloadFiles} onShowChanges={showChanges} />;
-  const changesView = <ChangesPanel key={focusRun ?? "all"} projectId={id} sourceRepo={project?.sourceRepo ?? null} focusRun={focusRun} onFilesChanged={reloadFiles} />;
-  const sideView = (s: Side) => (s === "agent" ? agentView : s === "ai" ? aiView : s === "changes" ? changesView : previewView);
-  // The agent panel stays mounted while other panes are shown, so a run keeps going (and keeps its view).
-  const withAgent = (shown: Side | null, other: ReactNode) => (
-    <>
-      <div className={cn("h-full min-h-0", shown !== "agent" && "hidden")}>{agentView}</div>
-      {shown !== "agent" && other}
-    </>
+  const agentView = (
+    <AgentPanel
+      key={select?.n ?? 0}
+      projectId={id}
+      computerOn={running}
+      startComputer={startComputer}
+      onFilesChanged={reloadFiles}
+      onShowChanges={showChanges}
+      initialRunId={select ? select.runId : undefined}
+      onRunChange={onRunChange}
+      initialRequest={initialRequest}
+      onOpenFile={openFile}
+      testCommand={testCommand}
+      onRunTests={() => testCommand && void run(testCommand)}
+    />
   );
+  const sessionsView = <SessionsList projectId={id} activeId={activeRun?.id ?? null} version={sessionsVersion} onOpen={(runId) => openSession(runId)} onNew={() => openSession(null)} />;
+  const changesView = <ChangesPanel key={focusRun ?? "all"} projectId={id} sourceRepo={project?.sourceRepo ?? null} focusRun={focusRun} onFilesChanged={reloadFiles} />;
+  const sideView = (s: Side) => (s === "editor" ? editorView : s === "changes" ? changesView : s === "preview" ? previewView : s === "terminal" ? terminalView : aiView);
 
-  const PANES: { id: Pane; label: string }[] = [
-    { id: "agent", label: "Agent" },
-    { id: "files", label: "Files" },
-    { id: "editor", label: "Editor" },
-    { id: "terminal", label: "Terminal" },
-    { id: "changes", label: "Changes" },
-    { id: "preview", label: "Preview" },
-    { id: "ai", label: "Quick edit" },
+  const SIDES: { id: Side; label: string; icon: ReactNode; hint: string }[] = [
+    { id: "editor", label: "Editor", icon: <FileIcon className="h-4 w-4" />, hint: "Read and edit the project's files" },
+    { id: "changes", label: "Changes", icon: <History className="h-4 w-4" />, hint: "What each session changed: diffs, checkpoints, undo, push to GitHub" },
+    { id: "preview", label: "Preview", icon: <Eye className="h-4 w-4" />, hint: "See your running app" },
+    { id: "terminal", label: "Terminal", icon: <TerminalIcon className="h-4 w-4" />, hint: "Run commands on the project's computer" },
+    { id: "ai", label: "Quick edit", icon: <Sparkles className="h-4 w-4" />, hint: "One-shot AI edit you accept or reject (advanced)" },
   ];
-  const SIDES: { id: Side; label: string; icon: ReactNode }[] = [
-    { id: "agent", label: "Agent", icon: <Bot className="h-4 w-4" /> },
-    { id: "ai", label: "Quick edit", icon: <Sparkles className="h-4 w-4" /> },
-    { id: "changes", label: "Changes", icon: <History className="h-4 w-4" /> },
-    { id: "preview", label: "Preview", icon: <Eye className="h-4 w-4" /> },
-  ];
+  const PANES: { id: Pane; label: string }[] = [{ id: "agent", label: "Agent" }, { id: "sessions", label: "Sessions" }, { id: "files", label: "Files" }, ...SIDES.map((x) => ({ id: x.id as Pane, label: x.label }))];
+
+  const leftPanel = (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 gap-1 p-1.5" role="tablist" aria-label="Project">
+        {(
+          [
+            { id: "files", label: "Files", icon: <FileIcon className="h-3.5 w-3.5" /> },
+            { id: "sessions", label: "Sessions", icon: <ListChecks className="h-3.5 w-3.5" /> },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={leftTab === t.id}
+            onClick={() => setLeftTab(t.id)}
+            className={cn("inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg text-[12.5px]", leftTab === t.id ? "bg-s-hover text-s-ink" : "text-s-ink-3 hover:text-s-ink")}
+          >
+            {t.icon}
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="min-h-0 flex-1">{leftTab === "files" ? treeView : sessionsView}</div>
+    </div>
+  );
 
   return (
     <>
@@ -884,16 +936,16 @@ export function CodeWorkspace({ id }: { id: string }) {
                 <Btn onClick={() => void sessionAction("extend")} disabled={starting} title={`Keep the computer on for ${block} more minutes`}>
                   <Plus className="h-3.5 w-3.5" /> {block} min
                 </Btn>
-                <Btn onClick={() => void sessionAction("stop")} title="Turn the computer off">
+                <Btn onClick={() => void sessionAction("stop")} title="Turn the project's computer off">
                   <Power className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Stop</span>
                 </Btn>
               </>
             ) : (
-              <Btn onClick={() => void sessionAction("start")} disabled={starting} title={`Turn on a computer for ${block} minutes`}>
-                <Power className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{starting ? "Starting…" : "Start"}</span>
+              <Btn onClick={() => void sessionAction("start")} disabled={starting} title={`Turn on the project's private computer for ${block} minutes (to run code, tests and the preview)`}>
+                <Power className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{starting ? "Starting…" : "Start computer"}</span>
               </Btn>
             )}
-            <Btn primary onClick={() => void runProject()} disabled={starting || !project} title={project?.runCommand ? `Runs: ${project.runCommand}` : "Set the command Run uses"}>
+            <Btn onClick={() => void runProject()} disabled={starting || !project} title={project?.runCommand ? `Runs: ${project.runCommand}` : "Set the command Run uses"}>
               <Play className="h-3.5 w-3.5" /> Run
             </Btn>
             <button type="button" onClick={() => void editRunCommand()} aria-label="Run command settings" title="Change the Run command" className="hidden h-8 w-8 place-items-center rounded-full text-s-ink-3 hover:bg-s-hover sm:grid">
@@ -905,10 +957,12 @@ export function CodeWorkspace({ id }: { id: string }) {
         <Link href="/code" className="shrink-0 text-[14px] font-medium text-s-ink-3 hover:text-s-ink">
           Code
         </Link>
-        <span className="text-s-ink-3">/</span>
+        <span className="text-s-ink-3" aria-hidden>
+          /
+        </span>
         <button type="button" onClick={() => void renameProject()} className="group flex min-w-0 items-center gap-1 text-[14px] font-medium text-s-ink-2 hover:text-s-ink" title="Rename project">
           <span className="truncate">{project?.name ?? "…"}</span>
-          <Pencil className="h-3 w-3 shrink-0 opacity-0 group-hover:opacity-100" />
+          <Pencil className="h-3 w-3 shrink-0 opacity-0 group-hover:opacity-100" aria-hidden />
         </button>
       </StudioHeader>
 
@@ -930,7 +984,7 @@ export function CodeWorkspace({ id }: { id: string }) {
 
       {!wide ? (
         <>
-          {/* Phones: one pane at a time. */}
+          {/* Phones: one pane at a time; the agent stays mounted so a session keeps going. */}
           <div className="flex shrink-0 gap-1 overflow-x-auto px-3 pb-2" role="tablist" aria-label="Workspace panes">
             {PANES.map((p) => (
               <button
@@ -946,46 +1000,36 @@ export function CodeWorkspace({ id }: { id: string }) {
             ))}
           </div>
           <div className="min-h-0 flex-1 overflow-hidden border-t border-s-line">
-            {withAgent(
-              pane === "agent" ? "agent" : null,
-              pane === "files" ? treeView : pane === "editor" ? editorView : pane === "terminal" ? terminalView : pane === "agent" ? null : sideView(pane),
-            )}
+            <div className={cn("h-full min-h-0", pane !== "agent" && "hidden")}>{agentView}</div>
+            {pane === "sessions" && sessionsView}
+            {pane === "files" && treeView}
+            {pane !== "agent" && pane !== "sessions" && pane !== "files" && sideView(pane)}
           </div>
         </>
       ) : (
-        /* Larger screens: files | editor over terminal | agent, quick edit, changes or preview. Panels resize and collapse. */
+        /* Larger screens: files and sessions | the agent | an optional panel (editor, changes, preview, terminal, quick edit). */
         <div className="flex min-h-0 flex-1 border-t border-s-line">
           {filesOpen && (
             <>
-              <aside className="shrink-0 border-r border-s-line" style={{ width: leftW }}>
-                {treeView}
+              <aside className="flex shrink-0 flex-col border-r border-s-line" style={{ width: leftW }} aria-label="Project files and sessions">
+                {leftPanel}
               </aside>
               <Resizer axis="x" value={leftW} onChange={setLeftW} label="Resize files panel" />
             </>
           )}
-          <div className="flex min-w-0 flex-1 flex-col">
-            <div className="min-h-0 flex-1">{editorView}</div>
-            {terminalOpen && (
-              <>
-                <Resizer axis="y" value={termH} onChange={setTermH} label="Resize terminal" sign={-1} />
-                <div className="shrink-0 border-t border-s-line" style={{ height: termH }}>
-                  {terminalView}
-                </div>
-              </>
-            )}
+          <main className="flex min-w-0 flex-1 flex-col" aria-label="Coding agent">
+            <div className="min-h-0 flex-1">{agentView}</div>
             <div className="flex h-7 shrink-0 items-center gap-1 border-t border-s-line px-1.5">
-              <button type="button" onClick={() => setFilesOpen(!filesOpen)} aria-pressed={filesOpen} title={filesOpen ? "Hide files" : "Show files"} className="grid h-6 w-6 place-items-center rounded text-s-ink-3 hover:bg-s-hover hover:text-s-ink">
+              <button type="button" onClick={() => setFilesOpen(!filesOpen)} aria-pressed={filesOpen} title={filesOpen ? "Hide files and sessions" : "Show files and sessions"} className="grid h-6 w-6 place-items-center rounded text-s-ink-3 hover:bg-s-hover hover:text-s-ink">
                 {filesOpen ? <PanelLeftClose className="h-3.5 w-3.5" /> : <PanelLeftOpen className="h-3.5 w-3.5" />}
-              </button>
-              <button type="button" onClick={() => setTerminalOpen(!terminalOpen)} aria-pressed={terminalOpen} title={terminalOpen ? "Hide terminal" : "Show terminal"} className="grid h-6 w-6 place-items-center rounded text-s-ink-3 hover:bg-s-hover hover:text-s-ink">
-                {terminalOpen ? <PanelBottomClose className="h-3.5 w-3.5" /> : <PanelBottomOpen className="h-3.5 w-3.5" />}
               </button>
               {allowance && <span className="ml-1 truncate text-[11px] text-s-ink-3">{minutesLine(allowance)} · counted in {block}-minute blocks</span>}
             </div>
-          </div>
+          </main>
           {right && <Resizer axis="x" value={rightW} onChange={setRightW} label="Resize side panel" sign={-1} />}
-          <aside className={cn("flex shrink-0 flex-col border-l border-s-line", !right && "w-11")} style={right ? { width: rightW } : undefined}>
-            <div className={cn("flex shrink-0 gap-1 border-b border-s-line p-1.5", !right && "flex-col items-center border-b-0")} role="tablist" aria-label="Side panel">
+          <aside className={cn("flex shrink-0 flex-col border-l border-s-line", !right && "w-12")} style={right ? { width: rightW } : undefined} aria-label="Tools">
+            <div className={cn("flex shrink-0 items-center gap-1 border-b border-s-line p-1.5", !right && "flex-col border-b-0")} role="tablist" aria-label="Tools">
+              {!right && <PanelRightOpen className="mb-1 mt-1 h-4 w-4 text-s-ink-3" aria-hidden />}
               {SIDES.map((r) => (
                 <button
                   key={r.id}
@@ -993,15 +1037,21 @@ export function CodeWorkspace({ id }: { id: string }) {
                   role="tab"
                   onClick={() => setRight(right === r.id ? null : r.id)}
                   aria-selected={right === r.id}
-                  title={right === r.id ? `Hide ${r.label}` : r.label}
+                  aria-label={r.label}
+                  title={`${r.label} — ${r.hint}`}
                   className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[12.5px]", right === r.id ? "bg-s-hover text-s-ink" : "text-s-ink-3 hover:text-s-ink")}
                 >
                   {r.icon}
-                  {right && <span className={cn(right !== r.id && rightW < 380 && "sr-only")}>{r.label}</span>}
+                  {right && <span className={cn(right !== r.id && rightW < 560 && "sr-only")}>{r.label}</span>}
                 </button>
               ))}
+              {right && (
+                <button type="button" onClick={() => setRight(null)} aria-label="Close panel" title="Close panel" className="ml-auto grid h-8 w-8 place-items-center rounded-lg text-s-ink-3 hover:bg-s-hover hover:text-s-ink">
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
-            <div className={cn("min-h-0 flex-1", !right && "hidden")}>{withAgent(right, right && right !== "agent" ? sideView(right) : null)}</div>
+            {right && <div className="min-h-0 flex-1">{sideView(right)}</div>}
           </aside>
         </div>
       )}

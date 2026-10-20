@@ -377,3 +377,34 @@ describe("the final report", () => {
     expect(buildReport({ ...base, tests: failed, lastEditAt: "2026-10-20T12:00:00Z" }).verification).toBe("failed");
   });
 });
+
+describe("read-only runs", () => {
+  it("refuse every edit, restore, checkpoint, command and plan on the server, whatever the model asks", async () => {
+    const { env, files, ran } = fakeEnv([{ path: "a.js", content: "a" }]);
+    const out = await runActions(
+      act(
+        ["read_files", { paths: ["a.js"] }],
+        ["write_file", { path: "a.js", content: "changed" }],
+        ["delete_file", { path: "a.js" }],
+        ["run_command", { command: "ls" }],
+        ["run_tests"],
+        ["create_checkpoint", { label: "x" }],
+        ["restore_checkpoint", { checkpoint: "start" }],
+        ["propose_plan", { summary: "x", steps: ["y"] }],
+      ),
+      { ...working, readOnly: true },
+      env,
+    );
+    expect(out.results.map((r) => r.ok)).toEqual([true, false, false, false, false, false, false, false]);
+    expect(out.results.slice(1).every((r) => r.text.includes("read-only"))).toBe(true);
+    expect(files()).toEqual([{ path: "a.js", content: "a" }]);
+    expect(ran).toEqual([]);
+    expect(out.pause).toBeNull();
+  });
+
+  it("aren't offered tools that change anything", () => {
+    const names = toolsFor({ commands: "safe", docs: false, github: false, approvePlans: true, readOnly: true });
+    for (const t of ["write_file", "edit_file", "delete_file", "run_command", "run_tests", "restore_checkpoint", "propose_plan"]) expect(names).not.toContain(t);
+    expect(names).toEqual(expect.arrayContaining(["inspect_project", "read_files", "search_code", "git_status", "finish"]));
+  });
+});

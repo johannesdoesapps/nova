@@ -72,6 +72,8 @@ export interface StepState {
   approvedCommand?: string | null;
   /** The latest test result before this step. */
   lastTests?: TestResult | null;
+  /** A read-only run: every edit, restore, checkpoint, command and plan is refused. */
+  readOnly?: boolean;
 }
 
 export interface StepOutcome {
@@ -107,6 +109,8 @@ export function isSecretPath(path: string): boolean {
     name,
   );
 }
+
+const READ_ONLY_REFUSED = new Set(["write_file", "edit_file", "delete_file", "restore_checkpoint", "create_checkpoint", "run_command", "run_tests", "propose_plan"]);
 
 const WITHHELD = "(withheld: this looks like a file with secrets, so Orbis doesn't send its contents to the AI)";
 
@@ -322,6 +326,10 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
     }
     if (raw === null) {
       result(id, tool, false, "Invalid arguments: they must be a JSON object.");
+      continue;
+    }
+    if (state.readOnly && READ_ONLY_REFUSED.has(tool)) {
+      result(id, tool, false, "Not allowed: this run is read-only. Answer the user with finish instead.");
       continue;
     }
     const parsed = TOOL_DEFS[tool].schema.safeParse(raw);
