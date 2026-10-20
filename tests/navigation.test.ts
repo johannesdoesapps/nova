@@ -115,6 +115,10 @@ describe("the sidebar", () => {
     expect(code).not.toContain('aria-label="Search chats"');
   });
 
+  it("labels its loading placeholders as status regions (an aria-label needs a role)", () => {
+    expect(render({ conversations: null })).toMatch(/role="status" aria-label="Loading chats"/);
+  });
+
   it("shows the admin group only to administrators", () => {
     expect(render({ user: user(true) })).toContain('href="/admin"');
     expect(render({ user: user(false) })).not.toContain('href="/admin"');

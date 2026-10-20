@@ -216,7 +216,7 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
           ) : p.listError ? (
             <p className="px-3 py-2 text-[13px] text-s-ink-3">History couldn’t load: {p.listError}</p>
           ) : p.conversations === null ? (
-            <div className="space-y-2.5 px-3 pt-3" aria-label="Loading chats">
+            <div className="space-y-2.5 px-3 pt-3" role="status" aria-label="Loading chats">
               {[70, 88, 56, 80].map((w, i) => (
                 <div key={i} className="s-skeleton h-3.5" style={{ width: `${w}%` }} />
               ))}
@@ -282,7 +282,7 @@ function RecentProjects({ signedIn, onNavigate }: { signedIn: boolean; onNavigat
   if (failed) return <p className="px-3 py-3 text-[13px] text-s-ink-3">Projects couldn’t load.</p>;
   if (!projects)
     return (
-      <div className="space-y-2.5 px-3 pt-3" aria-label="Loading projects">
+      <div className="space-y-2.5 px-3 pt-3" role="status" aria-label="Loading projects">
         {[70, 56, 80].map((w, i) => (
           <div key={i} className="s-skeleton h-3.5" style={{ width: `${w}%` }} />
         ))}
