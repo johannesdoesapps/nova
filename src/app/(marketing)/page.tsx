@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { getImageProps } from "next/image";
 import Link from "next/link";
 import { ArrowRight, Check, Eye, GitCompareArrows, Lock, ServerCog, ShieldCheck, Undo2 } from "lucide-react";
 import { CtaBand, PrimaryCta, SecondaryCta, SectionHeading, StatusBadge } from "@/components/marketing/parts";
@@ -52,6 +52,8 @@ const TRUST = [
 
 export default function HomePage() {
   const url = siteUrl();
+  const { props: { srcSet: heroWide } } = getImageProps({ src: HERO_SHOT.wide.src, width: HERO_SHOT.wide.width, height: HERO_SHOT.wide.height, alt: "", sizes: "(min-width: 1100px) 1024px, 100vw" });
+  const { props: heroNarrow } = getImageProps({ src: HERO_SHOT.narrow.src, width: HERO_SHOT.narrow.width, height: HERO_SHOT.narrow.height, alt: "", sizes: "100vw", loading: "eager" });
   const structured = [
     { "@context": "https://schema.org", "@type": "WebSite", name: "Orbis", url },
     {
@@ -99,25 +101,11 @@ export default function HomePage() {
 
         <figure className="mx-auto mt-14 max-w-5xl">
           <div className="lux-card overflow-hidden rounded-[22px] p-1.5 sm:p-2">
-            {/* Phones get a crop of the agent panel, which stays readable at that size. */}
-            <Image
-              src={HERO_SHOT.wide.src}
-              alt={HERO_SHOT.wide.alt}
-              width={HERO_SHOT.wide.width}
-              height={HERO_SHOT.wide.height}
-              priority
-              sizes="(min-width: 1100px) 1024px, 100vw"
-              className="hidden h-auto w-full rounded-[16px] sm:block"
-            />
-            <Image
-              src={HERO_SHOT.narrow.src}
-              alt={HERO_SHOT.narrow.alt}
-              width={HERO_SHOT.narrow.width}
-              height={HERO_SHOT.narrow.height}
-              priority
-              sizes="100vw"
-              className="h-auto w-full rounded-[16px] sm:hidden"
-            />
+            {/* Phones get a crop of the agent panel, which stays readable at that size. One <picture>, so only the image that fits is downloaded. */}
+            <picture>
+              <source media="(min-width: 640px)" srcSet={heroWide} sizes="(min-width: 1100px) 1024px, 100vw" />
+              <img {...heroNarrow} alt={HERO_SHOT.wide.alt} fetchPriority="high" className="aspect-[780/1227] h-auto w-full rounded-[16px] sm:aspect-[2400/1457]" />
+            </picture>
           </div>
           <figcaption className="mt-3 text-center text-xs text-muted">{HERO_SHOT.caption}</figcaption>
         </figure>
