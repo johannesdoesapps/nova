@@ -7,9 +7,9 @@ All accounting happens on the server and in the database; nothing the browser se
 | Account | Allowance |
 | --- | --- |
 | Guest (not signed in) | Per-IP daily cap (`ORBIS_DAILY_REQUEST_LIMIT`) |
-| Free | 10 units per 5-hour window, 30 per week, 10 messages a day, 400k tokens and a $0.10 AI budget a month, 20 code runs, standard models (`src/lib/plans.ts`) |
-| Pro (active or trialing subscription) | 200 per 5 hours, 1,100 per week, 15M tokens and a $4.12 AI budget a month ($2.47 of it for advanced models), 300 code runs, standard and advanced models |
-| Max (active or trialing subscription) | 2,000 per 5 hours, 10,000 per week, 60M tokens and a $26.74 AI budget a month ($22.73 for advanced and premium models), 1,500 code runs, all models |
+| Free | 10 units per 5-hour window, 30 per week, 10 messages a day, 400k tokens and a $0.10 AI budget a month, 20 code runs, 20 Code workspace minutes and 3 projects, standard models (`src/lib/plans.ts`) |
+| Pro (active or trialing subscription) | 200 per 5 hours, 1,100 per week, 15M tokens and a $3.59 AI budget a month ($2.15 of it for advanced models), 300 code runs, 200 Code workspace minutes and 25 projects, standard and advanced models |
+| Max (active or trialing subscription) | 2,000 per 5 hours, 10,000 per week, 60M tokens and a $24.07 AI budget a month ($20.46 for advanced and premium models), 1,500 code runs, 1,000 Code workspace minutes and 100 projects, all models |
 | Administrator (row in `public.admins`) | No allowance while `ORBIS_ADMINS_UNLIMITED` isn't `false`. Runs are still recorded with `entitlement = admin_unlimited`, and duplicate submissions are still refused. |
 
 Admin rights come only from the `admins` table, which has no insert policy: rows are added with SQL by an operator. Sign-up (email or Google) never creates one. Test accounts follow the same rules; give one Pro with a `subscriptions` row or admin rights with an `admins` row if a test needs more.

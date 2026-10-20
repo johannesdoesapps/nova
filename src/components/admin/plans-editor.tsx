@@ -92,6 +92,8 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
                 <Num label="History characters" value={p.historyChars} step={1000} onChange={(v) => setPlan(id, { historyChars: v })} />
                 <Num label="Web searches / month" value={p.webSearchesPerPeriod} onChange={(v) => setPlan(id, { webSearchesPerPeriod: v })} />
                 <Num label="Code runs / month" value={p.codeRunsPerPeriod} onChange={(v) => setPlan(id, { codeRunsPerPeriod: v })} hint="Run button; 0 = off" />
+                <Num label="Workspace minutes / month" value={p.workspaceMinutesPerPeriod} step={10} onChange={(v) => setPlan(id, { workspaceMinutesPerPeriod: v })} hint="Code page computer time; 0 = off" />
+                <Num label="Code projects" value={p.codeProjects} onChange={(v) => setPlan(id, { codeProjects: v })} />
                 <Num label="Advanced-model share %" value={p.premiumBudgetPct} onChange={(v) => setPlan(id, { premiumBudgetPct: v })} hint="of the AI budget" />
                 <Num label="Messages / day (0 = no cap)" value={p.dailyMessages} onChange={(v) => setPlan(id, { dailyMessages: v })} />
                 <Num label="Tokens / month (0 = no cap)" value={p.monthlyTokens} step={100000} onChange={(v) => setPlan(id, { monthlyTokens: v })} />
@@ -168,12 +170,12 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
               </dl>
               {warn && (
                 <p className="mt-2 text-[12px] text-s-danger">
-                  This price leaves no AI budget at a {Math.round(b.targetMargin * 100)}% margin. Raise it to at least {usd(priceForBudget(b, 1, p.codeRunsPerPeriod) ?? 0)} for a $1 budget.
+                  This price leaves no AI budget at a {Math.round(b.targetMargin * 100)}% margin. Raise it to at least {usd(priceForBudget(b, 1, p) ?? 0)} for a $1 budget.
                 </p>
               )}
               {!warn && hi && id !== "free" && hiBudget / hi.c < 50 && (
                 <p className="mt-2 text-[12px] text-s-ink-3">
-                  Few messages on {hi.m.displayName}. Raise the advanced-model share or the price (about {usd(priceForBudget(b, (hi.c * 100) / Math.max(p.premiumBudgetPct / 100, 0.01), p.codeRunsPerPeriod) ?? 0)} for 100), or leave this tier to a higher plan.
+                  Few messages on {hi.m.displayName}. Raise the advanced-model share or the price (about {usd(priceForBudget(b, (hi.c * 100) / Math.max(p.premiumBudgetPct / 100, 0.01), p) ?? 0)} for 100), or leave this tier to a higher plan.
                 </p>
               )}
             </div>
@@ -201,6 +203,9 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
         <Num label="Site-wide monthly cap $" value={b.siteMonthlyCapUsd} step={10} onChange={(v) => set({ siteMonthlyCapUsd: v })} hint="0 = none; stops new requests" />
         <Num label="Code runs / month, whole site" value={b.codeRunsSiteMonthly} step={100} onChange={(v) => set({ codeRunsSiteMonthly: v })} hint="0 = none; Vercel Hobby allows 5,000 sandboxes" />
         <Num label="Code run time limit (s)" value={b.codeRunSeconds} onChange={(v) => set({ codeRunSeconds: v })} hint="5–120; sets each plan's worst-case run cost" />
+        <Num label="Workspace minutes / month, whole site" value={b.workspaceSiteMonthlyMinutes} step={100} onChange={(v) => set({ workspaceSiteMonthlyMinutes: v })} hint="0 = none" />
+        <Num label="Workspace block (minutes)" value={b.workspaceBlockMinutes} onChange={(v) => set({ workspaceBlockMinutes: v })} hint="5–40; time is started and counted in blocks" />
+        <Num label="Workspaces running at once, whole site" value={b.workspaceSiteConcurrent} onChange={(v) => set({ workspaceSiteConcurrent: v })} hint="0 = none; Vercel Hobby allows 10 sandboxes at a time" />
       </div>
       <label className="mt-3 flex items-start gap-2 text-[13px]">
         <input type="checkbox" checked={b.aiPaused} onChange={(e) => set({ aiPaused: e.target.checked })} className="mt-0.5" />

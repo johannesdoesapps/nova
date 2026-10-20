@@ -43,8 +43,8 @@ Each plan's runs are set aside at that worst case **before** its AI budget is wo
 
 | | Code runs, worst case / month | AI budget / month |
 | --- | --- | --- |
-| Pro ($20) | $0.47 | $4.12 |
-| Max ($100) | $2.34 | $26.74 |
+| Pro ($20) | $0.47 | $3.59 (after Code workspace minutes are also set aside) |
+| Max ($100) | $2.34 | $24.07 (likewise) |
 
 ## Known limits
 

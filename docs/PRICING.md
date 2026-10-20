@@ -102,13 +102,14 @@ Fixed overhead isn't a variable cost, so it isn't in this formula. It's shown se
 | Payment fees | $1.02 | $0.67 | $3.90 | $3.27 |
 | Hosting + Free users' share | $1.50 | $1.50 | $1.50 | $1.50 |
 | Code runs, worst case (300 / 1,500 a month) | $0.47 | $0.47 | $2.34 | $2.34 |
-| Safety buffer | $0.73 | $0.66 | $4.72 | $4.23 |
-| **AI budget / month** | **$4.12** | **$3.75** | **$26.74** | **$23.94** |
-| … of which advanced/premium models | $2.47 (60%) | $2.25 | $22.73 (85%) | $20.35 |
+| Code workspace computer, worst case (200 / 1,000 minutes a month) | $0.63 | $0.63 | $3.14 | $3.14 |
+| Safety buffer | $0.63 | $0.57 | $4.25 | $3.75 |
+| **AI budget / month** | **$3.59** | **$3.22** | **$24.07** | **$21.28** |
+| … of which advanced/premium models | $2.15 (60%) | $1.93 | $20.46 (85%) | $18.08 |
 | Required profit (60%) | $11.76 | $10.58 | $58.80 | $52.92 |
-| Contribution if the whole budget and every code run are used | $12.49 (63.7%) | $11.25 (63.8%) | $63.52 (64.8%) | $57.15 (64.8%) |
+| Contribution if the whole budget, every code run and every workspace minute are used | $12.39 (63.2%) | $11.15 (63.2%) | $63.05 (64.3%) | $56.67 (64.3%) |
 
-**Verdict: Pro $20 and Max $100 both sustain at least 60% contribution margin.** (On 2026-10-19 the owner changed Pro from $15 to $20 and Max from $110 to $100. Each plan's AI budget is derived from its price, so Pro's rose from $3.01 and Max's fell from $31.76. Since 2026-10-20 each plan's code runs are set aside at their worst-case cost before the AI budget: see docs/CODE_RUNS.md.)
+**Verdict: Pro $20 and Max $100 both sustain at least 60% contribution margin.** (On 2026-10-19 the owner changed Pro from $15 to $20 and Max from $110 to $100. Each plan's AI budget is derived from its price, so Pro's rose from $3.01 and Max's fell from $31.76. Since 2026-10-20 each plan's code runs and Code workspace minutes are set aside at their worst-case cost before the AI budget: see docs/CODE_RUNS.md and docs/CODE_WORKSPACE.md. The workspace minutes lowered Pro's AI budget from $4.12 to $3.59 and Max's from $26.74 to $24.07; this needs the owner's approval.)
 
 The margin holds because the server stops usage at the AI budget. Without that guard, no flat price would be safe: a Max user on Opus at 300 messages a day would cost $227 a month.
 
@@ -118,17 +119,17 @@ These run 10, 50, 100 and 300 messages a day on each model the plan includes, wi
 
 | Plan | Model | 10/day | 50/day | 100/day | 300/day |
 | --- | --- | --- | --- | --- | --- |
-| Pro | Claude Haiku | 83.8% | 79.9% | 75.1% | 69.6% (capped) |
-| Pro | GPT Luna | 82.4% | 73.0% | 63.7% (capped) | 63.7% (capped) |
-| Pro | Claude Sonnet | 72.2% (capped at the advanced part) | 72.2% | 72.2% | 72.2% |
-| Pro | GPT Terra | 72.2% (capped) | 72.2% | 72.2% | 72.2% |
-| Max | Claude Haiku | 91.9% | 91.1% | 90.2% | 86.3% |
-| Max | Claude Sonnet | 88.2% | 72.8% | 68.9% (capped) | 68.9% (capped) |
-| Max | Claude Opus (premium only) | 84.4% | 68.9% (capped) | 68.9% | 68.9% |
-| Max | GPT Sol (premium only) | 83.7% | 68.9% (capped) | 68.9% | 68.9% |
+| Pro | Claude Haiku | 80.6% | 76.7% | 71.9% | 66.4% (capped) |
+| Pro | GPT Luna | 79.2% | 69.8% | 63.2% (capped) | 63.2% (capped) |
+| Pro | Claude Sonnet | 70.6% (capped at the advanced part) | 70.6% | 70.6% | 70.6% |
+| Pro | GPT Terra | 70.6% (capped) | 70.6% | 70.6% | 70.6% |
+| Max | Claude Haiku | 88.7% | 87.9% | 87.0% | 83.1% |
+| Max | Claude Sonnet | 85.0% | 69.6% | 68.0% (capped) | 68.0% (capped) |
+| Max | Claude Opus (premium only) | 81.2% | 68.0% (capped) | 68.0% | 68.0% |
+| Max | GPT Sol (premium only) | 80.5% | 68.0% (capped) | 68.0% | 68.0% |
 
-- Yearly plans give at least 64% in every scenario.
-- The lowest result anywhere is **63.7%**: a Pro user sending 100 or more GPT Luna messages a day. Every scenario also counts all of the plan's code runs at their most expensive.
+- Yearly plans give at least 63.2% in every scenario.
+- The lowest result anywhere is **63.2%**: a Pro user sending 100 or more GPT Luna messages a day. Every scenario also counts all of the plan's code runs and workspace minutes at their most expensive.
 - All of these are checked in a test.
 
 **Average cost per subscriber** depends on the mix of light, normal and heavy users. As an illustration only (not data): with 50% light (15/day), 35% normal (45/day) and 15% heavy (200/day) users, all on Auto (Haiku), it's about **$0.89 a month on Pro** and **$1.01 on Max**.
@@ -140,13 +141,14 @@ Use the real "AI cost per paying subscriber" in Finance after launch.
 | | Free | Pro ($20) | Max ($100) |
 | --- | --- | --- | --- |
 | Models | Standard: Haiku, Luna | + Advanced: Sonnet, Terra | + Premium: Opus, Sol |
-| Monthly AI budget | $0.10 | $4.12 | $26.74 |
-| Advanced-model part | — | $2.47 | $22.73 |
+| Monthly AI budget | $0.10 | $3.59 | $24.07 |
+| Advanced-model part | — | $2.15 | $20.46 |
 | Messages / month, Auto (Haiku) | about 128 (weekly cap) | about 4,714 (157/day) | about 20,400 (680/day; token cap) |
-| Messages / month, GPT Luna | about 65 | about 2,689 | about 17,400 |
-| Messages / month, advanced models | — | about 161 (Terra) – 196 (Sonnet) | about 1,482 (Terra) – 1,803 (Sonnet) |
-| Messages / month, premium models | — | — | about 832 (Sol) – 901 (Opus) |
-| Mix: 80% Auto, 20% top model | — | about 806 | about 4,162 |
+| Messages / month, GPT Luna | about 65 | about 2,341 | about 15,700 |
+| Messages / month, advanced models | — | about 140 (Terra) – 170 (Sonnet) | about 1,334 (Terra) – 1,623 (Sonnet) |
+| Messages / month, premium models | — | — | about 749 (Sol) – 811 (Opus) |
+| Mix: 80% Auto, 20% top model | — | about 702 | about 3,746 |
+| Code workspace | 3 projects, 20 minutes | 25 projects, 200 minutes | 100 projects, 1,000 minutes |
 | Messages / day | 10 | no daily cap | no daily cap |
 | Tokens / month | 400,000 | 15,000,000 | 60,000,000 |
 | 5-hour / weekly units | 10 / 30 | 200 / 1,100 | 2,000 / 10,000 |

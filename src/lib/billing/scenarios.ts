@@ -142,7 +142,7 @@ export function planScenario(billing: BillingSettings, plan: PlanId, model: Pric
   const allowed = Math.floor(Math.min(wanted, caps.daily, caps.tokens, caps.units / Math.max(billing.tierUnits[tier], 1e-9), moneyCap));
   const ai = allowed * c;
   // Other variable costs: hosting and Free users' share, plus every code run the plan allows (worst case).
-  const other = (plan === "free" ? 0 : e.overheadUsd) + e.codeRunsUsd;
+  const other = (plan === "free" ? 0 : e.overheadUsd) + e.codeRunsUsd + e.workspaceUsd;
   const contribution = e.revenueUsd - e.feesUsd - other - ai;
   return {
     plan,
