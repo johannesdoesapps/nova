@@ -234,15 +234,27 @@ function AssistantMessage({
         <div role="alert" className="s-in mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-s-line bg-s-hover px-4 py-3 text-[14px]">
           <CircleAlert className="h-4 w-4 shrink-0 text-s-danger" />
           <span className="min-w-0 flex-1 text-s-ink-2">{m.error ?? "Something went wrong."}</span>
-          {isLast && (
-            <button
-              type="button"
-              onClick={() => onRetry(m.id)}
-              disabled={busy}
-              className="inline-flex items-center gap-1.5 rounded-full border border-s-line-strong px-3 py-1 text-[13px] transition hover:bg-s-hover disabled:opacity-40"
-            >
-              <RefreshCw className="h-3.5 w-3.5" /> Try again
-            </button>
+          {m.needsSignIn ? (
+            // Retrying can't help a visitor: offer the way in instead, coming back to this chat.
+            <span className="flex gap-2">
+              <a href="/login?mode=signup&next=%2Fchat" className="inline-flex items-center rounded-full bg-s-accent px-3 py-1 text-[13px] font-medium text-s-accent-ink transition hover:brightness-110">
+                Create a free account
+              </a>
+              <a href="/login?next=%2Fchat" className="inline-flex items-center rounded-full border border-s-line-strong px-3 py-1 text-[13px] transition hover:bg-s-hover">
+                Sign in
+              </a>
+            </span>
+          ) : (
+            isLast && (
+              <button
+                type="button"
+                onClick={() => onRetry(m.id)}
+                disabled={busy}
+                className="inline-flex items-center gap-1.5 rounded-full border border-s-line-strong px-3 py-1 text-[13px] transition hover:bg-s-hover disabled:opacity-40"
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> Try again
+              </button>
+            )
           )}
         </div>
       )}

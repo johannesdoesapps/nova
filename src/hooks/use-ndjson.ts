@@ -30,7 +30,7 @@ export async function* postNdjson<T = Record<string, unknown>>(
     body: JSON.stringify(body),
     signal,
   });
-  if (!res.ok || !res.body) throw new Error(await readApiError(res));
+  if (!res.ok || !res.body) throw Object.assign(new Error(await readApiError(res)), { status: res.status });
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";

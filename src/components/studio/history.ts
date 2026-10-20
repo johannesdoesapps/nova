@@ -26,6 +26,8 @@ export interface Msg {
   /** Why Auto chose the model, when Auto answered. */
   routing?: string;
   error?: string;
+  /** The reply failed because the visitor isn't signed in. */
+  needsSignIn?: boolean;
   simulated?: boolean;
   sources?: SearchSource[];
   tools?: ToolRecord[];

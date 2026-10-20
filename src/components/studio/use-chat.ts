@@ -210,7 +210,7 @@ export function useStudioChat({
             ? m
             : aborted
               ? { ...m, status: m.content ? "done" : "error", error: m.content ? undefined : "Stopped before a reply arrived." }
-              : { ...m, status: "error", error: (e as Error).message || "Something went wrong." },
+              : { ...m, status: "error", error: (e as Error).message || "Something went wrong.", needsSignIn: (e as { status?: number }).status === 401 },
         );
       } finally {
         // Signed in: the server may have created or touched the conversation even if the turn was stopped or failed.
