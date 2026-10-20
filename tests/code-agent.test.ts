@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { classifyCommand, splitCommands } from "@/lib/code/agent/policy";
 import { appendUser, capTranscript, initialMessage, parseAgentReply, resultsMessage, systemPrompt, trimTranscript, type AgentReply, type TranscriptMessage } from "@/lib/code/agent/protocol";
-import { applyProposed, mergeChanges, runActions, searchFiles, type AgentEnv, type CommandOutcome, type StepState } from "@/lib/code/agent/tools";
+import { applyProposed, mergeChanges, runActions, searchFiles, type AgentEnv, type Checkpoint, type CommandOutcome, type RunChange, type StepState } from "@/lib/code/agent/tools";
 import type { FileChange, ProjectFile } from "@/lib/code/projects";
 
 describe("command policy", () => {
@@ -51,7 +51,7 @@ describe("protocol", () => {
   });
 
   it("describes only the tools the run allows", () => {
-    const base = { planning: false, approvePlans: true, reviewEdits: false, commands: "safe" as const, docs: false, github: false };
+    const base = { planning: false, approvePlans: true, reviewEdits: false, commands: "safe" as const, docs: false, github: false, native: false };
     expect(systemPrompt(base)).toContain("run_command");
     expect(systemPrompt({ ...base, commands: "off" })).not.toContain("run_command {");
     expect(systemPrompt(base)).not.toContain("lookup_docs");
@@ -96,11 +96,27 @@ function fakeEnv(files: ProjectFile[], o: { computer?: boolean; exec?: (cmd: str
   let state = [...files];
   const saved: FileChange[][] = [];
   const ran: string[] = [];
+  // The run's change records: the first "before" is kept, the latest "after" replaces the last.
+  const changes = new Map<string, RunChange>();
+  const checkpoints: Checkpoint[] = [];
+  const record = (cs: FileChange[]) => {
+    for (const c of cs) changes.set(c.path, { path: c.path, before: changes.has(c.path) ? changes.get(c.path)!.before : c.before, after: c.after });
+  };
   const env: AgentEnv = {
     files: async () => state,
-    save: async (changes) => {
-      saved.push(changes);
-      state = applyProposed(state, changes);
+    save: async (cs) => {
+      saved.push(cs);
+      record(cs);
+      state = applyProposed(state, cs);
+    },
+    changes: async () => [...changes.values()],
+    checkpoints: {
+      list: async () => checkpoints,
+      create: async (label, f) => {
+        const cp = { id: `cp${checkpoints.length + 1}`, label, files: f, createdAt: "2026-10-20T12:00:00.000Z" };
+        checkpoints.push(cp);
+        return cp;
+      },
     },
     computer: async () => o.computer ?? true,
     exec: async (cmd) => {
@@ -109,7 +125,7 @@ function fakeEnv(files: ProjectFile[], o: { computer?: boolean; exec?: (cmd: str
     },
   };
   if (o.docs) env.lookupDocs = async () => [{ title: "Docs", url: "https://example.com/docs", snippet: "How to" }];
-  return { env, saved, ran, files: () => state };
+  return { env, saved, ran, files: () => state, changes, setFile: (path: string, content: string) => (state = applyProposed(state, [{ path, before: null, after: content }])) };
 }
 
 const act = (...actions: [string, Record<string, unknown>?][]): AgentReply => ({ thought: "", actions: actions.map(([tool, args]) => ({ tool, args: args ?? {} })) });
@@ -187,7 +203,7 @@ describe("agent tools", () => {
     expect(out.results[0]!.text).toContain("exit code 1");
     expect(out.results[0]!.text).toContain("Expected 2, got 1");
     expect(out.results[1]!.text).toMatch(/one command per step/);
-    expect(out.events.find((e) => e.kind === "command")!.title).toBe("Ran npm test — failed (exit 1)");
+    expect(out.events.find((e) => e.kind === "command")!.title).toBe("Tests failed: npm test");
   });
 
   it("asks before other commands, and runs one the user approved", async () => {

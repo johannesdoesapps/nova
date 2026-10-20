@@ -97,4 +97,53 @@ export interface AIProvider {
   missingConfig(): string | null;
   generate(params: GenerateParams): Promise<GenerateResult>;
   stream(params: GenerateParams): AsyncGenerator<StreamEvent, void, unknown>;
+  /** One model turn with native tool calling, where the provider's API has it. */
+  toolTurn?(params: ToolTurnParams): Promise<ToolTurnResult>;
+}
+
+// ---------------------------------------------------------------- native tool calling
+
+/** A tool the model may call: name, what it does, and a JSON Schema for its arguments. */
+export interface ToolSpec {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  /** Parsed arguments; null when the model sent arguments that aren't a JSON object. */
+  args: Record<string, unknown> | null;
+}
+
+export interface ToolResult {
+  id: string;
+  ok: boolean;
+  text: string;
+}
+
+/**
+ * A provider-neutral conversation with tool calls. A user turn carries the
+ * results of the previous assistant turn's calls (all of them, in order),
+ * then any text; an assistant turn carries its text and its calls.
+ */
+export type ToolMessage = { role: "user"; text: string; results?: ToolResult[] } | { role: "assistant"; text: string; calls?: ToolCall[] };
+
+export interface ToolTurnParams {
+  model: ModelInfo;
+  system: string;
+  messages: ToolMessage[];
+  tools: ToolSpec[];
+  maxOutputTokens: number;
+  signal?: AbortSignal;
+}
+
+export interface ToolTurnResult {
+  text: string;
+  calls: ToolCall[];
+  usage: Usage;
+  servedModel: string | null;
+  /** Why the model stopped: it called tools, ended its turn, hit the output limit, or declined. */
+  stop: "tool_use" | "end_turn" | "max_tokens" | "refusal" | "other";
 }

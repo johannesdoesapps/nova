@@ -3,7 +3,22 @@ import { ApiError, requireUuid } from "@/lib/http";
 import { redactSecrets } from "@/lib/usage";
 import { dbError, type Authed } from "../server";
 import type { TranscriptMessage } from "./protocol";
-import { DEFAULT_OPTIONS, type AgentChange, type AgentEvent, type AgentPlan, type EventKind, type Pending, type RunOptions, type RunStatus, type RunView } from "./types";
+import type { Checkpoint } from "./tools";
+import {
+  DEFAULT_OPTIONS,
+  EMPTY_USAGE,
+  type AgentChange,
+  type AgentEvent,
+  type AgentPlan,
+  type EventKind,
+  type Pending,
+  type RunOptions,
+  type RunReport,
+  type RunStatus,
+  type RunTests,
+  type RunUsage,
+  type RunView,
+} from "./types";
 
 /**
  * The coding agent's records, through the user's own Supabase session (so
@@ -25,15 +40,29 @@ export interface RunRow {
   steps: number;
   step_limit: number;
   locked_until: string | null;
+  token_budget: number;
+  usage: Partial<RunUsage> | null;
+  active_ms: number;
+  time_limit_ms: number;
+  tests: RunTests | null;
+  recent: string[] | null;
+  last_edit_at: string | null;
+  report: RunReport | null;
   created_at: string;
   updated_at: string;
 }
 
-const RUN_COLS = "id, project_id, request, status, options, plan, pending, transcript, summary, error, steps, step_limit, locked_until, created_at, updated_at";
-const LIST_COLS = "id, project_id, request, status, options, plan, pending, summary, error, steps, step_limit, locked_until, created_at, updated_at";
+const COMMON_COLS =
+  "id, project_id, request, status, options, plan, pending, summary, error, steps, step_limit, locked_until, token_budget, usage, active_ms, time_limit_ms, tests, recent, last_edit_at, report, created_at, updated_at";
+const RUN_COLS = `${COMMON_COLS}, transcript`;
+const LIST_COLS = COMMON_COLS;
 
 export function runOptions(r: Pick<RunRow, "options">): RunOptions {
   return { ...DEFAULT_OPTIONS, ...(r.options ?? {}) };
+}
+
+export function runUsage(r: Pick<RunRow, "usage">): RunUsage {
+  return { ...EMPTY_USAGE, ...(r.usage ?? {}) };
 }
 
 export function toRunView(r: Omit<RunRow, "transcript"> & { transcript?: unknown }, now = Date.now()): RunView {
@@ -50,6 +79,12 @@ export function toRunView(r: Omit<RunRow, "transcript"> & { transcript?: unknown
     steps: r.steps,
     stepLimit: r.step_limit,
     busy: !!r.locked_until && Date.parse(r.locked_until) > now,
+    usage: runUsage(r),
+    tokenBudget: r.token_budget,
+    activeMs: Number(r.active_ms),
+    timeLimitMs: Number(r.time_limit_ms),
+    tests: r.tests,
+    report: r.report,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -93,7 +128,28 @@ export async function openRun(auth: Authed, projectId: string): Promise<RunView 
   return data ? toRunView(data as RunRow) : null;
 }
 
-export type RunPatch = Partial<Pick<RunRow, "status" | "plan" | "pending" | "transcript" | "summary" | "error" | "steps" | "step_limit" | "locked_until">>;
+export type RunPatch = Partial<
+  Pick<
+    RunRow,
+    | "status"
+    | "plan"
+    | "pending"
+    | "transcript"
+    | "summary"
+    | "error"
+    | "steps"
+    | "step_limit"
+    | "locked_until"
+    | "token_budget"
+    | "usage"
+    | "active_ms"
+    | "time_limit_ms"
+    | "tests"
+    | "recent"
+    | "last_edit_at"
+    | "report"
+  >
+>;
 
 export async function updateRun(auth: Authed, runId: string, patch: RunPatch): Promise<RunRow> {
   const { data, error } = await auth.supabase
@@ -242,4 +298,25 @@ export async function markReverted(auth: Authed, changeIds: string[]): Promise<v
   if (!changeIds.length) return;
   const { error } = await auth.supabase.from("code_agent_changes").update({ reverted_at: new Date().toISOString(), updated_at: new Date().toISOString() }).in("id", changeIds);
   if (error) throw dbError(error, "code.agent.changes.revert");
+}
+
+// ---------------------------------------------------------------- checkpoints
+
+type CheckpointRow = { id: string; label: string; files: Record<string, string | null>; created_at: string };
+
+export async function listCheckpoints(auth: Authed, runId: string): Promise<Checkpoint[]> {
+  const { data, error } = await auth.supabase.from("code_agent_checkpoints").select("id, label, files, created_at").eq("run_id", runId).order("created_at").limit(100);
+  if (error) throw dbError(error, "code.agent.checkpoints");
+  return (data as CheckpointRow[]).map((c) => ({ id: c.id, label: c.label, files: c.files, createdAt: c.created_at }));
+}
+
+export async function createCheckpoint(auth: Authed, runId: string, label: string, files: Record<string, string | null>): Promise<Checkpoint> {
+  const { data, error } = await auth.supabase
+    .from("code_agent_checkpoints")
+    .insert({ run_id: runId, label: label.slice(0, 200), files })
+    .select("id, label, files, created_at")
+    .single();
+  if (error) throw dbError(error, "code.agent.checkpoints.create");
+  const c = data as CheckpointRow;
+  return { id: c.id, label: c.label, files: c.files, createdAt: c.created_at };
 }

@@ -88,3 +88,17 @@ export function diffStats(before: string, after: string): { added: number; remov
   }
   return { added, removed };
 }
+
+/** A unified diff ("--- a/path", "+++ b/path", "@@" hunks), as git prints it. null content: the file doesn't exist on that side. */
+export function unifiedDiff(path: string, before: string | null, after: string | null, context = 3): string {
+  const head = `--- ${before === null ? "/dev/null" : `a/${path}`}\n+++ ${after === null ? "/dev/null" : `b/${path}`}`;
+  const body = diffHunks(before ?? "", after ?? "", context).map((h) => {
+    const first = h.lines[0]!;
+    const oldStart = h.lines.find((l) => l.oldNo !== null)?.oldNo ?? Math.max(0, (first.newNo ?? 1) - 1);
+    const newStart = h.lines.find((l) => l.newNo !== null)?.newNo ?? Math.max(0, (first.oldNo ?? 1) - 1);
+    const oldLen = h.lines.filter((l) => l.kind !== "add").length;
+    const newLen = h.lines.filter((l) => l.kind !== "del").length;
+    return [`@@ -${oldStart},${oldLen} +${newStart},${newLen} @@`, ...h.lines.map((l) => `${l.kind === "add" ? "+" : l.kind === "del" ? "-" : " "}${l.text}`)].join("\n");
+  });
+  return [head, ...body].join("\n");
+}

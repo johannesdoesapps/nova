@@ -22,7 +22,8 @@ import {
 } from "lucide-react";
 import { useCatalog } from "@/components/common/model-picker";
 import { ModelSelector } from "@/components/studio/model-selector";
-import { ENDED_STATUSES, STATUS_LABEL, WORKING_STATUSES, type AgentEvent, type CommandMode, type Decision, type RunView } from "@/lib/code/agent/types";
+import { VERIFICATION_LABEL } from "@/lib/code/agent/report";
+import { ENDED_STATUSES, STATUS_LABEL, WORKING_STATUSES, type AgentEvent, type CommandMode, type Decision, type LimitReason, type RunReport, type RunView } from "@/lib/code/agent/types";
 import { cn } from "@/lib/utils";
 import { api, CodeApiError, post } from "./api";
 import { FileDiff } from "./diff-view";
@@ -30,8 +31,11 @@ import { FileDiff } from "./diff-view";
 /**
  * The coding agent in Code mode: ask for a change, watch what it does, and
  * answer when it needs you (its plan, a command, edits to review, a
- * question, starting the computer). The page drives the run one step at a
- * time, so the agent works while this page is open; Stop ends it at once.
+ * question, starting the computer). The page drives the run step by step
+ * (each request says which step it expects, so a retry never repeats one),
+ * so the agent works while this page is open; Stop ends it at once. When the
+ * run ends, its report shows what changed, what ran and whether the tests
+ * passed, from the run's records.
  */
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -106,17 +110,19 @@ export function AgentPanel({
       setDriving(true);
       setError(null);
       try {
+        let expectStep = (await refresh(runId)).steps;
         for (;;) {
           if (!alive.current || driveId.current !== me) return;
           const watch = setInterval(() => void refresh(runId).catch(() => {}), 2500);
-          let res: { run: RunView; skipped?: "busy" | "not_working" };
+          let res: { run: RunView; skipped?: "busy" | "not_working" | "stale" };
           try {
-            res = await post(`/api/code/agent/${runId}/step`, {});
+            res = await post(`/api/code/agent/${runId}/step`, { expectStep });
           } finally {
             clearInterval(watch);
           }
           if (driveId.current !== me) return;
           const latest = await refresh(runId);
+          expectStep = latest.steps;
           if (!WORKING_STATUSES.includes(latest.status)) return;
           if (res.skipped === "busy") await sleep(3000);
         }
@@ -221,20 +227,41 @@ export function AgentPanel({
         <Bot className="h-3.5 w-3.5 text-s-ink-3" />
         <span className="text-[11.5px] font-medium uppercase tracking-[0.08em] text-s-ink-3">Agent</span>
         {run && (
-          <span className={cn("ml-1 inline-flex items-center gap-1 rounded-full border px-2 py-px text-[11px]", working || busy ? "border-s-accent/50 text-s-ink" : run.status === "failed" ? "border-s-danger/50 text-s-danger" : "border-s-line text-s-ink-3")}>
+          <span
+            className={cn(
+              "ml-1 inline-flex items-center gap-1 rounded-full border px-2 py-px text-[11px]",
+              working || busy ? "border-s-accent/50 text-s-ink" : run.status === "failed" ? "border-s-danger/50 text-s-danger" : "border-s-line text-s-ink-3",
+            )}
+          >
             {(busy || working) && !ended && <Loader2 className="h-3 w-3 animate-spin" />}
             {STATUS_LABEL[run.status]}
             {run.steps > 0 && ` · step ${run.steps}`}
           </span>
         )}
+        {run && !ended && run.options.approvePlans && !run.plan?.approved && (
+          <span
+            className="inline-flex items-center gap-1 rounded-full border border-s-line px-2 py-px text-[11px] text-s-ink-3"
+            title="The agent can read your files but can't change them or run commands until you approve its plan."
+          >
+            <ShieldCheck className="h-3 w-3" /> Read-only
+          </span>
+        )}
         <div className="ml-auto flex items-center gap-1">
           {run && !ended && (
-            <button type="button" onClick={() => void stop()} className="inline-flex h-7 items-center gap-1 rounded-full border border-s-line px-2.5 text-[12px] text-s-ink-2 hover:border-s-danger hover:text-s-danger">
+            <button
+              type="button"
+              onClick={() => void stop()}
+              className="inline-flex h-7 items-center gap-1 rounded-full border border-s-line px-2.5 text-[12px] text-s-ink-2 hover:border-s-danger hover:text-s-danger"
+            >
               <Square className="h-3 w-3" /> Stop agent
             </button>
           )}
           {ended && (
-            <button type="button" onClick={() => setRun(null)} className="inline-flex h-7 items-center gap-1 rounded-full border border-s-line px-2.5 text-[12px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink">
+            <button
+              type="button"
+              onClick={() => setRun(null)}
+              className="inline-flex h-7 items-center gap-1 rounded-full border border-s-line px-2.5 text-[12px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink"
+            >
               New request
             </button>
           )}
@@ -280,7 +307,11 @@ export function AgentPanel({
               </label>
               <label className="flex flex-wrap items-center gap-2">
                 Commands
-                <select value={commands} onChange={(e) => setCommands(e.target.value as CommandMode)} className="h-7 rounded-lg border border-s-line bg-s-bg px-1.5 text-[12.5px] text-s-ink outline-none">
+                <select
+                  value={commands}
+                  onChange={(e) => setCommands(e.target.value as CommandMode)}
+                  className="h-7 rounded-lg border border-s-line bg-s-bg px-1.5 text-[12.5px] text-s-ink outline-none"
+                >
                   <option value="safe">Tests, builds and installs run; ask me for others</option>
                   <option value="ask">Ask me before every command</option>
                   <option value="off">Don&apos;t run commands</option>
@@ -298,7 +329,9 @@ export function AgentPanel({
               </button>
             </div>
             <p className="mt-3 text-[11.5px] leading-snug text-s-ink-3">
-              The agent reads your files, plans, edits, and runs tests on the project&apos;s computer. It works while this page is open and you can stop it any time. Each step it takes counts like one chat message on your plan; commands use workspace minutes. Every change it makes can be reviewed and reverted in Changes. It never deploys, publishes or pushes on its own.
+              The agent reads your files, plans, edits, and runs tests on the project&apos;s computer.
+              {approvePlans ? " It's read-only until you approve its plan." : ""} It works while this page is open and you can stop it any time. Each step it takes counts like one chat message on your
+              plan; commands use workspace minutes. Every change it makes can be reviewed and reverted in Changes. It never deploys, publishes or pushes on its own.
             </p>
           </form>
         )}
@@ -312,6 +345,7 @@ export function AgentPanel({
                 {run.options.approvePlans ? "Plan approval on" : "No plan approval"} · {run.options.reviewEdits ? "edits reviewed" : "edits saved directly"} ·{" "}
                 {run.options.commands === "safe" ? "safe commands run" : run.options.commands === "ask" ? "every command asks" : "no commands"}
               </p>
+              {run.usage.modelCalls > 0 && <UsageLine run={run} />}
             </div>
 
             <ol className="space-y-1.5">
@@ -326,32 +360,22 @@ export function AgentPanel({
               </p>
             )}
 
-            {run.pending && !busy && (
-              <PendingCard run={run} computerOn={computerOn} onRespond={respond} onStartComputer={startAndContinue} />
-            )}
+            {run.pending && !busy && <PendingCard run={run} computerOn={computerOn} onRespond={respond} onStartComputer={startAndContinue} />}
 
             {working && !busy && !error && (
               <div className="rounded-xl border border-s-line p-3 text-[13px]">
                 <p className="text-s-ink-2">The agent is paused (the page was reloaded or a step didn&apos;t finish).</p>
-                <button type="button" onClick={() => void drive(run.id)} className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-full bg-s-accent px-3.5 text-[12.5px] font-medium text-s-accent-ink">
+                <button
+                  type="button"
+                  onClick={() => void drive(run.id)}
+                  className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-full bg-s-accent px-3.5 text-[12.5px] font-medium text-s-accent-ink"
+                >
                   <RotateCcw className="h-3.5 w-3.5" /> Continue
                 </button>
               </div>
             )}
 
-            {ended && (
-              <div className={cn("rounded-xl border p-3 text-[13px] leading-relaxed", run.status === "failed" ? "border-s-danger/40" : "border-s-line")}>
-                <div className="flex items-center gap-1.5 font-medium text-s-ink">
-                  {run.status === "completed" ? <Check className="h-4 w-4 text-emerald-500" /> : run.status === "failed" ? <AlertTriangle className="h-4 w-4 text-s-danger" /> : <Square className="h-3.5 w-3.5" />}
-                  {run.status === "completed" ? "Done" : run.status === "failed" ? "Stopped with an error" : "Stopped"}
-                </div>
-                {run.error && <p className="mt-1 text-s-danger">{run.error}</p>}
-                {run.summary && <p className="mt-1 whitespace-pre-wrap text-s-ink-2">{run.summary}</p>}
-                <button type="button" onClick={() => onShowChanges(run.id)} className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-full border border-s-line px-3 text-[12.5px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink">
-                  <Undo2 className="h-3.5 w-3.5" /> Review or revert changes
-                </button>
-              </div>
-            )}
+            {ended && <ReportCard run={run} onShowChanges={() => onShowChanges(run.id)} />}
           </div>
         )}
 
@@ -380,6 +404,124 @@ export function AgentPanel({
     </div>
   );
 }
+
+const minutes = (ms: number) => (ms < 60_000 ? `${Math.max(1, Math.round(ms / 1000))} s` : `${Math.round(ms / 60_000)} min`);
+const usd = (n: number) => (n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`);
+
+/** Tokens used against the run's budget, estimated cost and working time. */
+function UsageLine({ run }: { run: RunView }) {
+  const used = run.usage.inputTokens + run.usage.outputTokens;
+  return (
+    <p className="mt-1 text-[11.5px] text-s-ink-3">
+      {used.toLocaleString()} of {run.tokenBudget.toLocaleString()} tokens
+      {run.usage.estimated ? " (some estimated)" : ""} · {run.usage.costUsd === null ? "cost not known for this model" : `about ${usd(run.usage.costUsd)}`} · worked {minutes(run.activeMs)}
+    </p>
+  );
+}
+
+const VERIFY_STYLE: Record<RunReport["verification"], string> = {
+  passed: "border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
+  failed: "border-s-danger/50 text-s-danger",
+  not_run: "border-s-line text-s-ink-2",
+  stale: "border-amber-500/50 text-amber-600 dark:text-amber-400",
+};
+
+/** The end of a run: built by the server from what actually ran and changed; the agent's own words are labelled as such. */
+function ReportCard({ run, onShowChanges }: { run: RunView; onShowChanges: () => void }) {
+  const r = run.report;
+  const title = run.status === "completed" ? "Done" : run.status === "failed" ? "Stopped with an error" : "Stopped";
+  return (
+    <section aria-label="Run report" className={cn("rounded-xl border p-3 text-[13px] leading-relaxed", run.status === "failed" ? "border-s-danger/40" : "border-s-line")}>
+      <div className="flex flex-wrap items-center gap-2 font-medium text-s-ink">
+        {run.status === "completed" ? (
+          <Check className="h-4 w-4 text-emerald-500" />
+        ) : run.status === "failed" ? (
+          <AlertTriangle className="h-4 w-4 text-s-danger" />
+        ) : (
+          <Square className="h-3.5 w-3.5" />
+        )}
+        {title}
+        {r && <span className={cn("rounded-full border px-2 py-px text-[11.5px] font-normal", VERIFY_STYLE[r.verification])}>{VERIFICATION_LABEL[r.verification]}</span>}
+      </div>
+      {run.error && <p className="mt-1 text-s-danger">{run.error}</p>}
+      {r?.tests && (
+        <p className="mt-1.5 text-[12.5px] text-s-ink-2">
+          Last test run: <code className="font-mono text-[12px]">{r.tests.command}</code> —{" "}
+          {r.tests.passed !== null || r.tests.failed !== null ? `${r.tests.passed ?? 0} passed, ${r.tests.failed ?? 0} failed` : `exit code ${r.tests.exitCode ?? "none"}`}
+          {r.tests.failures.length > 0 && <span className="block text-s-danger">Failing: {r.tests.failures.join("; ")}</span>}
+        </p>
+      )}
+      {r && r.files.length > 0 && (
+        <div className="mt-2">
+          <div className="text-[11px] uppercase tracking-[0.08em] text-s-ink-3">Files changed</div>
+          <ul className="mt-0.5 space-y-0.5 font-mono text-[12px] text-s-ink-2">
+            {r.files.map((f) => (
+              <li key={f.path} className="flex gap-2">
+                <span className="min-w-0 flex-1 truncate">{f.path}</span>
+                <span className="shrink-0 text-s-ink-3">{f.change === "created" ? "new" : f.change === "deleted" ? "deleted" : ""}</span>
+                <span className="shrink-0 text-emerald-600 dark:text-emerald-400">+{f.added}</span>
+                <span className="shrink-0 text-s-danger">−{f.removed}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {r && r.files.length === 0 && <p className="mt-1.5 text-[12.5px] text-s-ink-3">No files were changed.</p>}
+      {r && r.commands.length > 0 && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-[12px] text-s-ink-3">
+            {r.commands.length} command{r.commands.length === 1 ? "" : "s"} ran
+          </summary>
+          <ul className="mt-1 space-y-0.5 font-mono text-[11.5px] text-s-ink-2">
+            {r.commands.map((c, i) => (
+              <li key={i}>
+                $ {c.command} <span className={c.exitCode === 0 ? "text-emerald-600 dark:text-emerald-400" : "text-s-danger"}>— {c.result}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {r && r.unresolved.length > 0 && (
+        <div className="mt-2">
+          <div className="text-[11px] uppercase tracking-[0.08em] text-s-ink-3">Not resolved</div>
+          <ul className="mt-0.5 list-disc space-y-0.5 pl-5 text-s-ink-2">
+            {r.unresolved.map((u, i) => (
+              <li key={i}>{u}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {run.summary && (
+        <div className="mt-2">
+          <div className="text-[11px] uppercase tracking-[0.08em] text-s-ink-3">The agent&apos;s summary</div>
+          <p className="mt-0.5 whitespace-pre-wrap text-s-ink-2">{run.summary}</p>
+        </div>
+      )}
+      {r && (
+        <p className="mt-2 text-[11.5px] text-s-ink-3">
+          {r.usage.steps} step{r.usage.steps === 1 ? "" : "s"} · {(r.usage.inputTokens + r.usage.outputTokens).toLocaleString()} tokens ·{" "}
+          {r.usage.costUsd === null ? "cost not known" : `about ${usd(r.usage.costUsd)}`} · {r.usage.models.join(", ")}
+          {r.checkpoints > 0 && ` · ${r.checkpoints} checkpoint${r.checkpoints === 1 ? "" : "s"}`}
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={onShowChanges}
+        className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-full border border-s-line px-3 text-[12.5px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink"
+      >
+        <Undo2 className="h-3.5 w-3.5" /> Review diffs, restore or revert
+      </button>
+    </section>
+  );
+}
+
+const LIMIT_TEXT: Record<LimitReason, { title: (p: { steps: number }) => string; body: string; go: string }> = {
+  steps: { title: (p) => `The agent has taken ${p.steps} steps`, body: "Let it keep going? Each step counts like a chat message.", go: "Allow 10 more steps" },
+  tokens: { title: () => "The agent has used its token budget", body: "Let it use more? Tokens count toward your plan's usage.", go: "Allow 300,000 more tokens" },
+  time: { title: () => "The agent has been working a long time", body: "Let it keep going?", go: "Allow 15 more minutes" },
+  tests: { title: () => "The tests keep failing", body: "The agent has tried several times without making the tests pass. Let it try again, or stop and look yourself.", go: "Allow 2 more attempts" },
+  repeat: { title: () => "The agent is repeating itself", body: "It asked for the same actions three times in a row. Let it carry on with a different approach, or stop.", go: "Let it carry on" },
+};
 
 const ICONS: Record<string, ReactNode> = {
   status: <Bot className="h-3.5 w-3.5" />,
@@ -425,13 +567,27 @@ function EventRow({ event: e }: { event: AgentEvent }) {
           ))}
         </ol>
       )}
-      {open && output && <pre className="s-scroll mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-[var(--s-code,transparent)] p-2 font-mono text-[11.5px] text-s-ink-2">{output || "(no output)"}</pre>}
+      {open && output && (
+        <pre className="s-scroll mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-[var(--s-code,transparent)] p-2 font-mono text-[11.5px] text-s-ink-2">
+          {output || "(no output)"}
+        </pre>
+      )}
       {open && e.kind === "summary" && typeof d.summary === "string" && <p className="mt-1 whitespace-pre-wrap pl-5.5 text-s-ink-2">{d.summary}</p>}
     </li>
   );
 }
 
-function PendingCard({ run, computerOn, onRespond, onStartComputer }: { run: RunView; computerOn: boolean; onRespond: (d: Decision, text?: string) => Promise<void>; onStartComputer: () => Promise<void> }) {
+function PendingCard({
+  run,
+  computerOn,
+  onRespond,
+  onStartComputer,
+}: {
+  run: RunView;
+  computerOn: boolean;
+  onRespond: (d: Decision, text?: string) => Promise<void>;
+  onStartComputer: () => Promise<void>;
+}) {
   const [text, setText] = useState("");
   const [asking, setAsking] = useState(false);
   const p = run.pending!;
@@ -439,7 +595,15 @@ function PendingCard({ run, computerOn, onRespond, onStartComputer }: { run: Run
   const primary = "inline-flex h-8 items-center gap-1.5 rounded-full bg-s-accent px-3.5 text-[12.5px] font-medium text-s-accent-ink hover:brightness-110 disabled:opacity-40";
   const secondary = "inline-flex h-8 items-center gap-1.5 rounded-full border border-s-line px-3 text-[12.5px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink disabled:opacity-40";
   const feedback = (placeholder: string, label: string) => (
-    <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={4000} placeholder={placeholder} aria-label={label} className="mt-2 block w-full resize-y rounded-lg border border-s-line bg-transparent p-2 text-[13px] outline-none focus:border-s-line-strong" />
+    <textarea
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      rows={2}
+      maxLength={4000}
+      placeholder={placeholder}
+      aria-label={label}
+      className="mt-2 block w-full resize-y rounded-lg border border-s-line bg-transparent p-2 text-[13px] outline-none focus:border-s-line-strong"
+    />
   );
 
   if (p.kind === "plan" && run.plan) {
@@ -499,7 +663,8 @@ function PendingCard({ run, computerOn, onRespond, onStartComputer }: { run: Run
     return (
       <div className={card}>
         <div className="font-medium text-s-ink">
-          Review {p.changes.length} file change{p.changes.length === 1 ? "" : "s"}
+          Review {p.changes.length} file change
+          {p.changes.length === 1 ? "" : "s"}
         </div>
         <p className="text-[12px] text-s-ink-3">Nothing is saved until you approve.</p>
         <div className="mt-2 space-y-2">
@@ -567,13 +732,17 @@ function PendingCard({ run, computerOn, onRespond, onStartComputer }: { run: Run
     );
   }
   if (p.kind === "limit") {
+    const t = LIMIT_TEXT[p.reason ?? "steps"];
     return (
       <div className={card}>
-        <div className="font-medium text-s-ink">The agent has taken {p.steps} steps</div>
-        <p className="mt-1 text-s-ink-2">Let it keep going? Each step counts like a chat message.</p>
+        <div className="font-medium text-s-ink">{t.title(p)}</div>
+        <p className="mt-1 text-s-ink-2">
+          {p.detail ? `${p.detail} ` : ""}
+          {t.body}
+        </p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           <button type="button" className={primary} onClick={() => void onRespond("continue")}>
-            Allow 10 more steps
+            {t.go}
           </button>
           <button type="button" className={secondary} onClick={() => void onRespond("stop")}>
             Stop here

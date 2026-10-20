@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import { ArrowLeft, ExternalLink, GitBranch, History, Loader2, Undo2, X } from "lucide-react";
+import { ArrowLeft, Bookmark, ExternalLink, GitBranch, History, Loader2, Undo2, X } from "lucide-react";
+import { VERIFICATION_LABEL } from "@/lib/code/agent/report";
 import { STATUS_LABEL, type AgentChange, type RunView } from "@/lib/code/agent/types";
 import { cn } from "@/lib/utils";
 import { api, CodeApiError, post } from "./api";
@@ -8,12 +9,14 @@ import { FileDiff } from "./diff-view";
 
 /**
  * The project's history: every agent run, the files each one changed (as
- * diffs), and reverting a run or a single file. Also pushing the project to
- * a new GitHub branch, which the user confirms.
+ * diffs), its checkpoints, and reverting a run or a single file or restoring
+ * a checkpoint. Also pushing the project to a new GitHub branch, which the
+ * user confirms.
  */
 
 type RunWithCount = RunView & { changedFiles: number };
 type RevertResult = { ok: boolean; reverted: string[]; conflicts: string[] };
+type CheckpointInfo = { id: string; label: string; createdAt: string; paths: string[] };
 
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
@@ -26,6 +29,8 @@ export function ChangesPanel({ projectId, sourceRepo, focusRun, onFilesChanged }
   const [pushing, setPushing] = useState(false);
   const [version, setVersion] = useState(0);
   const changes = selected && loadedChanges?.runId === selected ? loadedChanges.list : null;
+  const [loadedCheckpoints, setLoadedCheckpoints] = useState<{ runId: string; list: CheckpointInfo[] } | null>(null);
+  const checkpoints = selected && loadedCheckpoints?.runId === selected ? loadedCheckpoints.list : [];
 
   useEffect(() => {
     let live = true;
@@ -43,6 +48,9 @@ export function ChangesPanel({ projectId, sourceRepo, focusRun, onFilesChanged }
     api<{ changes: AgentChange[] }>(`/api/code/agent/${selected}?after=999999`)
       .then((r) => live && setLoadedChanges({ runId: selected, list: r.changes }))
       .catch((e: CodeApiError) => live && setError(e));
+    api<{ checkpoints: CheckpointInfo[] }>(`/api/code/agent/${selected}/checkpoints`)
+      .then((r) => live && setLoadedCheckpoints({ runId: selected, list: r.checkpoints }))
+      .catch(() => {});
     return () => {
       live = false;
     };
@@ -57,6 +65,25 @@ export function ChangesPanel({ projectId, sourceRepo, focusRun, onFilesChanged }
         const sure = confirm(`These files changed after the agent's run:\n\n${r.conflicts.join("\n")}\n\nRevert anyway? Your later changes to them will be lost.`);
         if (!sure) return;
         r = await post<RevertResult>(`/api/code/agent/${runId}/revert`, { path, force: true });
+      }
+      if (r.reverted.length) onFilesChanged();
+      setVersion((v) => v + 1);
+    } catch (e) {
+      setError(e as CodeApiError);
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const restore = async (runId: string, cp: CheckpointInfo) => {
+    setWorking(`cp:${cp.id}`);
+    setError(null);
+    try {
+      let r = await post<RevertResult>(`/api/code/agent/${runId}/checkpoints`, { checkpointId: cp.id });
+      if (!r.ok && r.conflicts.length) {
+        const sure = confirm(`These files changed after the agent's run:\n\n${r.conflicts.join("\n")}\n\nRestore the checkpoint anyway? Your later changes to them will be lost.`);
+        if (!sure) return;
+        r = await post<RevertResult>(`/api/code/agent/${runId}/checkpoints`, { checkpointId: cp.id, force: true });
       }
       if (r.reverted.length) onFilesChanged();
       setVersion((v) => v + 1);
@@ -112,6 +139,7 @@ export function ChangesPanel({ projectId, sourceRepo, focusRun, onFilesChanged }
                     <p className="line-clamp-2 text-[13px] text-s-ink">{r.request}</p>
                     <p className="mt-0.5 text-[11.5px] text-s-ink-3">
                       {when(r.createdAt)} · {STATUS_LABEL[r.status]} · {r.changedFiles} file{r.changedFiles === 1 ? "" : "s"} changed
+                      {r.report && ` · ${VERIFICATION_LABEL[r.report.verification]}`}
                     </p>
                   </button>
                 </li>
@@ -132,6 +160,35 @@ export function ChangesPanel({ projectId, sourceRepo, focusRun, onFilesChanged }
                   {when(run.createdAt)} · {STATUS_LABEL[run.status]}
                 </p>
                 {run.summary && <p className="mt-1.5 whitespace-pre-wrap text-[12.5px] text-s-ink-2">{run.summary}</p>}
+              </div>
+            )}
+            {checkpoints.length > 0 && (
+              <div className="rounded-xl border border-s-line px-3 py-2">
+                <div className="text-[11px] uppercase tracking-[0.08em] text-s-ink-3">Checkpoints</div>
+                <ul className="mt-1 space-y-1">
+                  {checkpoints.map((cp) => (
+                    <li key={cp.id} className="flex items-center gap-2 text-[12.5px]">
+                      <Bookmark className="h-3.5 w-3.5 shrink-0 text-s-ink-3" />
+                      <span className="min-w-0 flex-1">
+                        <span className="text-s-ink">{cp.label}</span>
+                        <span className="text-s-ink-3">
+                          {" "}
+                          · {when(cp.createdAt)} · {cp.paths.length} file
+                          {cp.paths.length === 1 ? "" : "s"}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        disabled={!!working}
+                        onClick={() => void restore(selected, cp)}
+                        title="Put the files this run changed back as they were at this checkpoint"
+                        className="inline-flex shrink-0 items-center gap-1 rounded-full border border-s-line px-2 py-px text-[11px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink disabled:opacity-40"
+                      >
+                        {working === `cp:${cp.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Undo2 className="h-3 w-3" />} Restore
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
             {changes === null && <div className="s-skeleton h-20 w-full rounded-xl" />}

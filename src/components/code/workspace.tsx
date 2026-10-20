@@ -20,6 +20,7 @@ import {
   Plus,
   Power,
   RotateCw,
+  Search,
   Settings2,
   Sparkles,
   Square,
@@ -618,23 +619,31 @@ export function CodeWorkspace({ id }: { id: string }) {
           />
         </form>
       )}
-      <div className="s-scroll min-h-0 flex-1 overflow-y-auto px-1 pb-3">
-        {paths.length === 0 && project && <p className="px-3 py-2 text-[12.5px] text-s-ink-3">No files yet.</p>}
-        <TreeList
-          nodes={tree}
-          depth={0}
-          active={active}
-          dirty={drafts}
-          collapsed={collapsed}
-          onToggle={(p) => setCollapsed((c) => (c.has(p) ? new Set([...c].filter((x) => x !== p)) : new Set([...c, p])))}
-          onOpen={(p) => {
-            setActive(p);
-            setPane("editor");
-          }}
-          onRename={renameFile}
-          onDelete={deleteFile}
-        />
-      </div>
+      <FileSearch
+        files={{ ...saved, ...drafts }}
+        onOpen={(p) => {
+          setActive(p);
+          setPane("editor");
+        }}
+      >
+        <div className="s-scroll min-h-0 flex-1 overflow-y-auto px-1 pb-3">
+          {paths.length === 0 && project && <p className="px-3 py-2 text-[12.5px] text-s-ink-3">No files yet.</p>}
+          <TreeList
+            nodes={tree}
+            depth={0}
+            active={active}
+            dirty={drafts}
+            collapsed={collapsed}
+            onToggle={(p) => setCollapsed((c) => (c.has(p) ? new Set([...c].filter((x) => x !== p)) : new Set([...c, p])))}
+            onOpen={(p) => {
+              setActive(p);
+              setPane("editor");
+            }}
+            onRename={renameFile}
+            onDelete={deleteFile}
+          />
+        </div>
+      </FileSearch>
     </div>
   );
 
@@ -997,6 +1006,76 @@ export function CodeWorkspace({ id }: { id: string }) {
         </div>
       )}
       {allowance && !wide && <p className="shrink-0 border-t border-s-line px-4 py-1 text-[11px] text-s-ink-3">{minutesLine(allowance)} · counted in {block}-minute blocks.</p>}
+    </>
+  );
+}
+
+/** Search file names and contents; while there's a query, its matches replace the file tree. */
+function FileSearch({ files, onOpen, children }: { files: Record<string, string>; onOpen: (path: string) => void; children: ReactNode }) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const results = useMemo(() => {
+    if (!q) return null;
+    const names: string[] = [];
+    const lines: { path: string; line: number; text: string }[] = [];
+    for (const [path, content] of Object.entries(files).sort(([a], [b]) => a.localeCompare(b))) {
+      if (path.toLowerCase().includes(q)) names.push(path);
+      if (lines.length >= 100) continue;
+      content.split("\n").forEach((text, i) => {
+        if (lines.length < 100 && text.length < 2000 && text.toLowerCase().includes(q)) lines.push({ path, line: i + 1, text: text.trim().slice(0, 120) });
+      });
+    }
+    return { names, lines };
+  }, [files, q]);
+  return (
+    <>
+      <div className="px-2 pb-1.5">
+        <label className="relative block">
+          <span className="sr-only">Search files</span>
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-s-ink-3" aria-hidden />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Escape" && setQuery("")}
+            placeholder="Search files"
+            className="h-7 w-full rounded-lg border border-s-line bg-transparent pl-7 pr-2 text-[12.5px] outline-none placeholder:text-s-ink-3 focus:border-s-line-strong"
+          />
+        </label>
+      </div>
+      {results ? (
+        <div className="s-scroll min-h-0 flex-1 overflow-y-auto px-1 pb-3 text-[12.5px]" aria-live="polite">
+          {results.names.length === 0 && results.lines.length === 0 && <p className="px-3 py-2 text-s-ink-3">No matches.</p>}
+          {results.names.length > 0 && (
+            <ul className="mb-2">
+              {results.names.map((p) => (
+                <li key={p}>
+                  <button type="button" onClick={() => onOpen(p)} className="flex w-full items-center gap-1.5 truncate rounded-lg px-2 py-1 text-left text-s-ink-2 hover:bg-s-hover">
+                    <FileIcon className="h-3.5 w-3.5 shrink-0 text-s-ink-3" />
+                    <span className="truncate">{p}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {results.lines.length > 0 && (
+            <ul>
+              {results.lines.map((m) => (
+                <li key={`${m.path}:${m.line}`}>
+                  <button type="button" onClick={() => onOpen(m.path)} className="block w-full rounded-lg px-2 py-1 text-left hover:bg-s-hover">
+                    <span className="block truncate text-[11.5px] text-s-ink-3">
+                      {m.path}:{m.line}
+                    </span>
+                    <span className="block truncate font-mono text-[11.5px] text-s-ink-2">{m.text}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : (
+        children
+      )}
     </>
   );
 }

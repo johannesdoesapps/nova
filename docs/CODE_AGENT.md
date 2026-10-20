@@ -11,8 +11,10 @@ The agent works on one Code project at a time. The user describes a change. The 
 
 Every action runs for real on the server. The results the agent sees, and the page shows, are what actually happened. When something can't run, it says so: for example, when the computer is off, commands are turned off, or web search isn't set up.
 
-Code: `src/lib/code/agent/` (`types.ts`, `policy.ts`, `protocol.ts`, `tools.ts`, `runs.ts`, `engine.ts`).
-APIs: `src/app/api/code/projects/[id]/agent`, `src/app/api/code/agent/[runId]/…`.
+Code: `src/lib/code/agent/` (`types.ts`, `policy.ts`, `tool-specs.ts`, `protocol.ts`, `tools.ts`, `test-results.ts`, `report.ts`, `runs.ts`, `engine.ts`).
+APIs: `src/app/api/code/projects/[id]/agent`, `src/app/api/code/agent/[runId]/…` (read, step, respond, cancel, revert, checkpoints).
+
+Architecture, security, tests and the latest QA results: [ORBIS_CODE_ARCHITECTURE.md](ORBIS_CODE_ARCHITECTURE.md), [ORBIS_CODE_SECURITY.md](ORBIS_CODE_SECURITY.md), [ORBIS_CODE_TEST_PLAN.md](ORBIS_CODE_TEST_PLAN.md), [ORBIS_CODE_QA_REPORT.md](ORBIS_CODE_QA_REPORT.md).
 Screens: `src/components/code/agent-panel.tsx` and `changes-panel.tsx`.
 
 ## How a run works
@@ -23,19 +25,22 @@ Screens: `src/components/code/agent-panel.tsx` and `changes-panel.tsx`.
   - what the run is waiting for (`pending`);
   - the agent's working memory (`transcript`, trimmed);
   - a step count and a step limit.
-- **The page drives the run.** It calls `POST /api/code/agent/[runId]/step` repeatedly. So the agent works while the page is open; if the page is closed, the run pauses and shows **Continue**.
+- **The page drives the run.** It calls `POST /api/code/agent/[runId]/step` with the step number it expects (`expectStep`); a request keeps taking steps while it's under 45 seconds old. So the agent works while the page is open; if the page is closed, the run pauses after the current step and shows **Continue**.
   - Each step is **one model call**, followed by the actions the model asked for.
-  - Each step takes a lock (`locked_until`), so two tabs can't run the same step.
-- **The model's reply format.** Every step, the model answers with one JSON object: `{"thought", "actions": [{tool, args}]}`. There are at most 8 actions per step.
-- **Tools** (`tools.ts`):
-  - `list_files`, `read_files`, `search_code`;
+  - Each step takes a lock (`locked_until`), so two tabs can't run the same step, and a retried request (`expectStep` already passed) never repeats one.
+- **Tool calling.** Claude and GPT models get the tools natively (Messages API tools, Chat Completions functions). Other models answer with one JSON object, `{"thought", "actions": [{tool, args}]}`. Either way there are at most 8 actions per step, and every call is validated by the server before it runs.
+- **Tools** (`tool-specs.ts`, `tools.ts`):
+  - `inspect_project`, `list_files`, `read_files`, `search_code` (contents or file names);
   - `write_file`, `edit_file` (exact search/replace) and `delete_file`;
-  - `run_command`;
+  - `inspect_diff`, `git_status`, `create_checkpoint`, `restore_checkpoint`;
+  - `run_command`, `run_tests` (parsed results) and `inspect_test_results`;
   - `lookup_docs`, only when web search is configured and the plan has searches left;
   - `github` (read files, search issues, list repos), only when the user's GitHub connection is usable;
   - `propose_plan`, `ask_user` and `finish`.
-- **Pauses.** A run stops and waits for the user to approve a plan, approve a command, review edits (when that option is on), answer a question, start the computer, or allow more steps once the step limit is reached (20 by default).
-  - The user answers with `POST …/respond`, using `approve`, `reject`, `answer`, `continue` or `stop`. Approving a command runs it right away.
+- **Pauses.** A run stops and waits for the user to approve a plan, approve a command, review edits (when that option is on), answer a question, start the computer, or decide whether to go on after a limit: 20 steps, 600,000 tokens, 30 minutes of work, 3 failed test runs in a row, or the same actions three steps running.
+  - The user answers with `POST …/respond`, using `approve`, `reject`, `answer`, `continue` or `stop`. Approving a command runs it right away; `continue` after a limit raises that limit.
+- **Recovery.** The model's request for actions is stored before they run. If a step is cut off, the next one tells the model which actions may or may not have run, so it checks before repeating them.
+- **Report.** When a run ends, the server builds a report from its records: files changed, commands and exit codes, the latest test run, and whether the work is verified (tests passed after the last change).
 - **Stop.** `POST …/cancel` stops the run. If a command is running, it is killed. A step that's in progress notices within seconds and ends.
 
 ## Safety
@@ -54,7 +59,7 @@ Screens: `src/components/code/agent-panel.tsx` and `changes-panel.tsx`.
 - **Plans first.** Until the plan is approved, edits and commands are refused.
 - **Edit review (optional).** Proposed edits are shown as diffs and saved only when approved. If a file changed in the meantime, nothing is saved and the agent is told.
 - **Untrusted content.** File contents, command output, web pages and repository text are given to the model as data. The system prompt tells it to ignore instructions inside them.
-- **Secrets.** Before the activity log is stored, likely credentials are removed from it (API keys, bearer tokens, GitHub/Slack/AWS tokens and JWTs). The computer never holds Orbis's own secrets.
+- **Secrets.** Before the activity log is stored, likely credentials are removed from it (API keys, bearer tokens, GitHub/Slack/AWS tokens and JWTs). Files that usually hold credentials (`.env`, keys, `credentials.json`, …) are listed but their contents are never sent to the model. The computer never holds Orbis's own secrets.
 - **Audit trail.** `code_agent_events` records each run's activity:
   - what was read, searched, edited, run (with exit code and output), approved, declined and reverted.
   - It is append-only for users: they can add rows but never change or delete them.
@@ -69,6 +74,7 @@ Screens: `src/components/code/agent-panel.tsx` and `changes-panel.tsx`.
 ## Metering
 
 - **Steps.** Each step is reserved, charged and recorded like a chat message, with purpose `code_agent`, the plan's model tiers and the plan's output limit. A model failure isn't charged.
+- **Per run.** Tokens, estimated cost (from verified prices; unknown when a model has none), model calls and working time are added up on the run and shown while it works and in its report.
 - **Commands** use the project computer's workspace minutes.
 - **Web lookups** count toward the plan's web searches.
 - **Reply size.** The plan's output limit is respected. The agent is told to write big files in parts.
@@ -88,6 +94,6 @@ Screens: `src/components/code/agent-panel.tsx` and `changes-panel.tsx`.
 
 ## Not yet
 
-- Runs continue only while the page is open; there is no background worker.
+- Runs continue only while the page is open; there is no background worker (it needs a server-side database credential and a design that keeps per-user authorization; see ORBIS_CODE_ARCHITECTURE.md §8).
 - The agent doesn't deploy. Orbis has no deploy integration for user projects.
 - Interactive commands (that wait for keyboard input) don't work.

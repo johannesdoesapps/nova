@@ -34,6 +34,7 @@ const SAFE: [RegExp, CommandPurpose][] = [
   [/^(python3?\s+-m\s+)?pytest(\s|$)/, "test"],
   [/^python3?\s+-m\s+unittest(\s|$)/, "test"],
   [/^go\s+test(\s|$)/, "test"],
+  [/^node\s+--test(\s|$)/, "test"],
   [/^(npm|pnpm|yarn)\s+run\s+(build|lint|typecheck|check|format:check)(\s|$)/, "build"],
   [/^(npx\s+)?(tsc|eslint|prettier\s+--check|next\s+lint|biome\s+check)(\s|$)/, "build"],
   [/^python3?\s+-m\s+(py_compile|compileall|mypy|ruff|flake8)(\s|$)/, "build"],

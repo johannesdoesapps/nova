@@ -1,7 +1,7 @@
 import { ApiError } from "../../http";
 import { reportError } from "../../observability";
 import { providerErrorMessage } from "./errors";
-import type { AIProvider, GenerateParams, GenerateResult, ProviderId, StreamEvent, Usage } from "../types";
+import type { AIProvider, GenerateParams, GenerateResult, ProviderId, StreamEvent, ToolMessage, ToolTurnParams, ToolTurnResult, Usage } from "../types";
 
 /**
  * A provider for any OpenAI-compatible Chat Completions endpoint. Used for
@@ -23,11 +23,7 @@ export class OpenAICompatibleProvider implements AIProvider {
   }
 
   private body(params: GenerateParams, stream: boolean) {
-    const body: Record<string, unknown> = {
-      model: params.model.providerModelId,
-      messages: params.messages,
-      stream,
-    };
+    const body: Record<string, unknown> = { model: params.model.providerModelId, messages: params.messages, stream };
     if (params.maxOutputTokens) {
       // OpenAI's newer models use max_completion_tokens; HF router accepts max_tokens.
       body[this.id === "openai" ? "max_completion_tokens" : "max_tokens"] = params.maxOutputTokens;
@@ -39,18 +35,18 @@ export class OpenAICompatibleProvider implements AIProvider {
   }
 
   /** One retry for transient failures (429, 5xx, network) before any output has been received. */
-  private async request(params: GenerateParams, stream: boolean): Promise<Response> {
+  private async request(params: Pick<GenerateParams, "model" | "signal">, body: Record<string, unknown>): Promise<Response> {
     try {
-      return await this.requestOnce(params, stream);
+      return await this.requestOnce(params, body);
     } catch (err) {
       const transient = err instanceof ApiError && (err.code === "rate_limited" || err.code === "upstream_error") && !params.signal?.aborted;
       if (!transient) throw err;
       await new Promise((r) => setTimeout(r, 700));
-      return this.requestOnce(params, stream);
+      return this.requestOnce(params, body);
     }
   }
 
-  private async requestOnce(params: GenerateParams, stream: boolean): Promise<Response> {
+  private async requestOnce(params: Pick<GenerateParams, "model" | "signal">, payload: Record<string, unknown>): Promise<Response> {
     const key = this.opts.apiKey();
     if (!key) throw new ApiError("not_configured", this.missingConfig()!);
     // A key pasted with spaces, quotes or typographic characters can't go in a header and makes fetch throw.
@@ -62,7 +58,7 @@ export class OpenAICompatibleProvider implements AIProvider {
       res = await fetch(`${this.opts.baseUrl.replace(/\/$/, "")}/chat/completions`, {
         method: "POST",
         headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify(this.body(params, stream)),
+        body: JSON.stringify(payload),
         signal: params.signal,
       });
     } catch (err) {
@@ -81,14 +77,7 @@ export class OpenAICompatibleProvider implements AIProvider {
       } catch {
         /* ignore */
       }
-      const code =
-        res.status === 429
-          ? "rate_limited"
-          : res.status === 401 || res.status === 403
-            ? "not_configured"
-            : res.status >= 500
-              ? "upstream_error"
-              : "bad_request";
+      const code = res.status === 429 ? "rate_limited" : res.status === 401 || res.status === 403 ? "not_configured" : res.status >= 500 ? "upstream_error" : "bad_request";
       // Provider details (which can echo parts of keys or internal settings) are logged, never shown to users.
       reportError(new Error(`${params.model.id} returned ${res.status}: ${detail.slice(0, 500)}`), { where: "provider.openai-compatible" });
       throw new ApiError(code, providerErrorMessage(params.model.displayName, res.status, detail));
@@ -97,31 +86,18 @@ export class OpenAICompatibleProvider implements AIProvider {
   }
 
   async generate(params: GenerateParams): Promise<GenerateResult> {
-    const res = await this.request(params, false);
-    const j = (await res.json()) as {
-      model?: string;
-      choices?: { message?: { content?: string | null } }[];
-      usage?: OpenAIUsage;
-    };
-    return {
-      text: j.choices?.[0]?.message?.content ?? "",
-      usage: toUsage(j.usage),
-      simulated: false,
-      servedModel: typeof j.model === "string" ? j.model : null,
-    };
+    const res = await this.request(params, this.body(params, false));
+    const j = (await res.json()) as { model?: string; choices?: { message?: { content?: string | null } }[]; usage?: OpenAIUsage };
+    return { text: j.choices?.[0]?.message?.content ?? "", usage: toUsage(j.usage), simulated: false, servedModel: typeof j.model === "string" ? j.model : null };
   }
 
   async *stream(params: GenerateParams): AsyncGenerator<StreamEvent> {
-    const res = await this.request(params, true);
+    const res = await this.request(params, this.body(params, true));
     if (!res.body) throw new ApiError("upstream_error", "Empty stream from provider.");
     let served = false;
     for await (const data of sseData(res.body)) {
       if (data === "[DONE]") break;
-      let j: {
-        model?: string;
-        choices?: { delta?: { content?: string | null } }[];
-        usage?: OpenAIUsage | null;
-      };
+      let j: { model?: string; choices?: { delta?: { content?: string | null } }[]; usage?: OpenAIUsage | null };
       try {
         j = JSON.parse(data);
       } catch {
@@ -136,6 +112,72 @@ export class OpenAICompatibleProvider implements AIProvider {
       if (j.usage) yield { type: "usage", usage: toUsage(j.usage) };
     }
   }
+
+  /** One turn with Chat Completions function calling (offered for OpenAI's own API). */
+  async toolTurn(params: ToolTurnParams): Promise<ToolTurnResult> {
+    const body: Record<string, unknown> = {
+      model: params.model.providerModelId,
+      messages: [{ role: "system", content: params.system }, ...toOpenAIToolMessages(params.messages)],
+      tools: params.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } })),
+      tool_choice: "auto",
+      [this.id === "openai" ? "max_completion_tokens" : "max_tokens"]: params.maxOutputTokens,
+    };
+    const res = await this.request(params, body);
+    const j = (await res.json()) as {
+      model?: string;
+      choices?: {
+        finish_reason?: string;
+        message?: { content?: string | null; refusal?: string | null; tool_calls?: { id: string; type?: string; function?: { name?: string; arguments?: string } }[] };
+      }[];
+      usage?: OpenAIUsage;
+    };
+    const choice = j.choices?.[0];
+    const calls = (choice?.message?.tool_calls ?? []).filter((c) => c.function?.name).map((c) => ({ id: c.id, name: c.function!.name!, args: parseArgs(c.function!.arguments) }));
+    const finish = choice?.finish_reason;
+    const stop: ToolTurnResult["stop"] = choice?.message?.refusal
+      ? "refusal"
+      : finish === "tool_calls" || calls.length
+        ? "tool_use"
+        : finish === "stop"
+          ? "end_turn"
+          : finish === "length"
+            ? "max_tokens"
+            : finish === "content_filter"
+              ? "refusal"
+              : "other";
+    return { text: (choice?.message?.content ?? choice?.message?.refusal ?? "").trim(), calls, usage: toUsage(j.usage), servedModel: typeof j.model === "string" ? j.model : null, stop };
+  }
+}
+
+function parseArgs(raw: string | undefined): Record<string, unknown> | null {
+  try {
+    const v = JSON.parse(raw || "{}") as unknown;
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The neutral tool conversation as Chat Completions messages: an assistant
+ * message with tool_calls, then one "tool" message per call, then any user text.
+ */
+export function toOpenAIToolMessages(input: ToolMessage[]): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  for (const m of input) {
+    if (m.role === "assistant") {
+      const calls = m.calls ?? [];
+      out.push({
+        role: "assistant",
+        content: m.text || (calls.length ? null : "(no reply)"),
+        ...(calls.length ? { tool_calls: calls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: JSON.stringify(c.args ?? {}) } })) } : {}),
+      });
+    } else {
+      for (const r of m.results ?? []) out.push({ role: "tool", tool_call_id: r.id, content: `${r.ok ? "" : "[failed] "}${r.text || "(empty)"}` });
+      if (m.text.trim() || !m.results?.length) out.push({ role: "user", content: m.text || "(continue)" });
+    }
+  }
+  return out;
 }
 
 /** OpenAI-style usage; DeepSeek reports cache hits as prompt_cache_hit_tokens. */

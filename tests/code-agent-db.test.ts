@@ -107,3 +107,49 @@ describe("agent changes", () => {
     expect(await as(BOB, () => q("select * from public.code_agent_changes"))).toEqual([]);
   });
 });
+
+describe("agent checkpoints and run budgets", () => {
+  it("can be added and read by the run's owner only, and never changed or deleted", async () => {
+    const p = await newProject(ALICE);
+    const r = await newRun(ALICE, p);
+    const cp = await as(
+      ALICE,
+      async () =>
+        (await q<{ id: string }>('insert into public.code_agent_checkpoints (run_id, label, files) values ($1, \'before refactor\', \'{"a.js": "v2", "gone.js": null}\') returning id', [r]))[0]!.id,
+    );
+    expect(await as(ALICE, () => q("select label, files from public.code_agent_checkpoints"))).toEqual([{ label: "before refactor", files: { "a.js": "v2", "gone.js": null } }]);
+    await expect(as(ALICE, () => q("update public.code_agent_checkpoints set files = '{}' where id = $1", [cp]))).rejects.toThrow(/permission denied/);
+    await expect(as(ALICE, () => q("delete from public.code_agent_checkpoints where id = $1", [cp]))).rejects.toThrow(/permission denied/);
+    // Another user can neither see it nor add one to Alice's run.
+    expect(await as(BOB, () => q("select * from public.code_agent_checkpoints"))).toEqual([]);
+    await expect(as(BOB, () => q("insert into public.code_agent_checkpoints (run_id, label) values ($1, 'x')", [r]))).rejects.toThrow(/row-level security/);
+    await expect(as(ALICE, () => q("insert into public.code_agent_checkpoints (run_id, label) values ($1, '')", [r]))).rejects.toThrow(/check constraint/);
+  });
+
+  it("start runs with a token budget and time limit, kept within bounds, and keep usage and the report", async () => {
+    const p = await newProject(ALICE);
+    const r = await newRun(ALICE, p);
+    expect(await as(ALICE, () => q("select token_budget, time_limit_ms::int as limit, active_ms::int as active, usage from public.code_agent_runs where id = $1", [r]))).toEqual([
+      { token_budget: 600000, limit: 1800000, active: 0, usage: {} },
+    ]);
+    await as(ALICE, () =>
+      q(
+        `update public.code_agent_runs set usage = '{"inputTokens": 10}', tests = '{"runs": 1}', report = '{"verification": "passed"}', recent = '["x"]', active_ms = 5000, last_edit_at = now() where id = $1`,
+        [r],
+      ),
+    );
+    await expect(as(ALICE, () => q("update public.code_agent_runs set token_budget = 5 where id = $1", [r]))).rejects.toThrow(/check constraint/);
+    await expect(as(ALICE, () => q("update public.code_agent_runs set time_limit_ms = 999999999999 where id = $1", [r]))).rejects.toThrow(/check constraint/);
+    // Bob can't touch Alice's run or its usage.
+    await as(BOB, () => q("update public.code_agent_runs set usage = '{}', report = null"));
+    expect(await as(ALICE, () => q("select usage, report from public.code_agent_runs where id = $1", [r]))).toEqual([{ usage: { inputTokens: 10 }, report: { verification: "passed" } }]);
+  });
+
+  it("are deleted with their run's project", async () => {
+    const p = await newProject(ALICE);
+    const r = await newRun(ALICE, p);
+    await as(ALICE, () => q("insert into public.code_agent_checkpoints (run_id, label) values ($1, 'x')", [r]));
+    await as(ALICE, () => q("delete from public.code_projects where id = $1", [p]));
+    expect(await q("select * from public.code_agent_checkpoints")).toEqual([]);
+  });
+});
