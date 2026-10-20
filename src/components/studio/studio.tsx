@@ -45,6 +45,8 @@ export function Studio() {
     modelId,
     allowFallback: !!studio.settings.allowFallback,
     onHistoryChanged: refresh,
+    replyLength: studio.settings.replyLength,
+    replyStyle: studio.settings.replyStyle,
   });
 
   const [input, setInput] = useState(() => studio.takePendingPrompt() ?? "");
@@ -151,6 +153,7 @@ export function Studio() {
           thinkingLabel={chat.mode === "research" && chat.useWeb && integrations.search ? "Searching the web" : "Thinking"}
           feedback={studio.feedback}
           onRetry={chat.retry}
+          onEdit={chat.edit}
           onFeedback={studio.giveFeedback}
           onSavePrompt={studio.addPrompt}
           onSaveToProject={user ? setToSave : undefined}

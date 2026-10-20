@@ -1,9 +1,11 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Bookmark, Check, FolderKanban, Monitor, Moon, Plus, Sun, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, Bookmark, Check, FolderKanban, Monitor, Moon, Plus, Sun, Trash2 } from "lucide-react";
 import { saveNote } from "@/components/projects/save-to-project";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import { CHAT_MODES, MODE_LABELS, type ChatMode } from "@/lib/ai/modes";
+import { REPLY_LENGTH_LABEL, REPLY_LENGTHS, REPLY_STYLE_LABEL, REPLY_STYLES, type ReplyLength, type ReplyStyle } from "@/lib/ai/reply-settings";
 import { cn } from "@/lib/utils";
 import type { ConvSummary, Msg } from "./history";
 import type { SavedPrompt, StudioSettings, ThemePref } from "./prefs";
@@ -26,6 +28,7 @@ export function SettingsDialog({
   theme,
   historyKind,
   onClearLocal,
+  onOpenArchived,
 }: {
   open: boolean;
   onClose: () => void;
@@ -34,10 +37,11 @@ export function SettingsDialog({
   theme: { pref: ThemePref; setTheme: (p: ThemePref) => void };
   historyKind: "server" | "local";
   onClearLocal: () => void;
+  onOpenArchived?: () => void;
 }) {
   return (
     <Dialog open={open} onClose={onClose} title="Settings" width={520}>
-      <SettingsBody settings={settings} onSettings={onSettings} theme={theme} historyKind={historyKind} onClearLocal={onClearLocal} />
+      <SettingsBody settings={settings} onSettings={onSettings} theme={theme} historyKind={historyKind} onClearLocal={onClearLocal} onOpenArchived={onOpenArchived} />
     </Dialog>
   );
 }
@@ -48,12 +52,14 @@ function SettingsBody({
   theme,
   historyKind,
   onClearLocal,
+  onOpenArchived,
 }: {
   settings: StudioSettings;
   onSettings: (s: Partial<StudioSettings>) => void;
   theme: { pref: ThemePref; setTheme: (p: ThemePref) => void };
   historyKind: "server" | "local";
   onClearLocal: () => void;
+  onOpenArchived?: () => void;
 }) {
   const [confirmClear, setConfirmClear] = useState(false);
   const usage = useUsage();
@@ -92,6 +98,22 @@ function SettingsBody({
             ))}
           </select>
         </Row>
+        <Row title="Reply length" hint="Applies to new replies in chat.">
+          <Segmented
+            label="Reply length"
+            value={settings.replyLength ?? "normal"}
+            onChange={(v: ReplyLength) => onSettings({ replyLength: v })}
+            options={REPLY_LENGTHS.map((v) => ({ value: v, label: REPLY_LENGTH_LABEL[v] }))}
+          />
+        </Row>
+        <Row title="Reply style" hint="Precise sticks to established facts; Creative offers more ideas and alternatives.">
+          <Segmented
+            label="Reply style"
+            value={settings.replyStyle ?? "balanced"}
+            onChange={(v: ReplyStyle) => onSettings({ replyStyle: v })}
+            options={REPLY_STYLES.map((v) => ({ value: v, label: REPLY_STYLE_LABEL[v] }))}
+          />
+        </Row>
         <Row title="Send with Enter" hint={settings.enterToSend ? "Shift + Enter adds a new line." : "Ctrl/⌘ + Enter sends; Enter adds a new line."}>
           <Switch label="Send with Enter" checked={settings.enterToSend} onChange={(v) => onSettings({ enterToSend: v })} />
         </Row>
@@ -125,7 +147,13 @@ function SettingsBody({
               </button>
             )
           ) : (
-            <span className="text-[13px] text-s-ink-3">Delete chats from the sidebar</span>
+            onOpenArchived ? (
+              <button type="button" className={btnQuiet} onClick={onOpenArchived}>
+                <Archive /> Archived chats
+              </button>
+            ) : (
+              <span className="text-[13px] text-s-ink-3">Delete chats from the sidebar</span>
+            )
           )}
         </Row>
         <div className="py-4">
@@ -279,6 +307,73 @@ function DeleteBody({ conv, onClose, onConfirm }: { conv: ConvSummary; onClose: 
         </button>
       </div>
     </>
+  );
+}
+
+/* Archived chats ---------------------------------------------------------- */
+
+export function ArchivedDialog({
+  open,
+  onClose,
+  load,
+  onRestore,
+  onDelete,
+}: {
+  open: boolean;
+  onClose: () => void;
+  load: () => Promise<ConvSummary[]>;
+  onRestore: (c: ConvSummary) => Promise<void>;
+  onDelete: (c: ConvSummary) => void;
+}) {
+  return (
+    <Dialog open={open} onClose={onClose} title="Archived chats" description="Archived chats are hidden from the sidebar. Restore one to see it there again." width={520}>
+      {open && <ArchivedBody load={load} onRestore={onRestore} onDelete={onDelete} onClose={onClose} />}
+    </Dialog>
+  );
+}
+
+function ArchivedBody({ load, onRestore, onDelete, onClose }: { load: () => Promise<ConvSummary[]>; onRestore: (c: ConvSummary) => Promise<void>; onDelete: (c: ConvSummary) => void; onClose: () => void }) {
+  const [list, setList] = useState<ConvSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    load()
+      .then((l) => live && setList(l))
+      .catch((e: Error) => live && setError(e.message));
+    return () => {
+      live = false;
+    };
+  }, [load]);
+  if (error) return <p role="alert" className="text-[13px] text-s-danger">{error}</p>;
+  if (!list) return <div className="s-skeleton h-16 w-full rounded-xl" />;
+  if (!list.length) return <p className="text-[13.5px] text-s-ink-3">No archived chats.</p>;
+  return (
+    <ul className="s-scroll max-h-[50vh] divide-y divide-s-line overflow-y-auto">
+      {list.map((c) => (
+        <li key={c.id} className="flex items-center gap-2 py-2">
+          <Link href={`/chat?c=${c.id}`} onClick={onClose} className="min-w-0 flex-1 truncate text-[13.5px] text-s-ink hover:underline" title={c.title}>
+            {c.title}
+          </Link>
+          <button
+            type="button"
+            className={btnQuiet}
+            onClick={async () => {
+              try {
+                await onRestore(c);
+                setList((l) => l?.filter((x) => x.id !== c.id) ?? null);
+              } catch (e) {
+                setError((e as Error).message);
+              }
+            }}
+          >
+            <ArchiveRestore /> Restore
+          </button>
+          <IconButton label={`Delete ${c.title}`} size="sm" onClick={() => onDelete(c)}>
+            <Trash2 />
+          </IconButton>
+        </li>
+      ))}
+    </ul>
   );
 }
 

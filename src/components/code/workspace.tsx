@@ -3,12 +3,18 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
+  Bot,
   ChevronDown,
   ChevronRight,
   Eye,
   File as FileIcon,
   FilePlus2,
   Folder,
+  History,
+  PanelBottomClose,
+  PanelBottomOpen,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Play,
   Plus,
@@ -27,7 +33,9 @@ import { StudioHeader, useStudio } from "@/components/studio/frame";
 import { ModelSelector } from "@/components/studio/model-selector";
 import { validProjectPath, type FileChange, type ProjectSummary } from "@/lib/code/projects";
 import { cn } from "@/lib/utils";
+import { AgentPanel } from "./agent-panel";
 import { api, CodeApiError, plainText, post, type AiResult, type Allowance, type JobRead, type ProjectData, type Session } from "./api";
+import { ChangesPanel } from "./changes-panel";
 import { FileDiff } from "./diff-view";
 import { minutesLine } from "./projects-view";
 
@@ -47,7 +55,83 @@ interface Entry {
   note?: string;
 }
 
-type Pane = "files" | "editor" | "terminal" | "ai" | "preview";
+type Pane = "files" | "editor" | "terminal" | "agent" | "ai" | "changes" | "preview";
+type Side = "agent" | "ai" | "changes" | "preview";
+
+/** Sizes the user dragged, remembered in this browser (and in memory when storage is unavailable). */
+const sizeMemory = new Map<string, number>();
+const sizeListeners = new Set<() => void>();
+function useStoredSize(key: string, initial: number, min: number, max: number): [number, (n: number) => void] {
+  const read = () => {
+    if (sizeMemory.has(key)) return sizeMemory.get(key)!;
+    try {
+      const v = Number(localStorage.getItem(key));
+      if (v >= min && v <= max) return v;
+    } catch {}
+    return initial;
+  };
+  const value = useSyncExternalStore(
+    (cb) => {
+      sizeListeners.add(cb);
+      return () => sizeListeners.delete(cb);
+    },
+    read,
+    () => initial,
+  );
+  const set = useCallback(
+    (n: number) => {
+      const v = Math.round(Math.min(max, Math.max(min, n)));
+      sizeMemory.set(key, v);
+      try {
+        localStorage.setItem(key, String(v));
+      } catch {}
+      sizeListeners.forEach((l) => l());
+    },
+    [key, min, max],
+  );
+  return [value, set];
+}
+
+/** A drag handle between panels (arrow keys work too). `sign` is -1 when dragging toward the start shrinks the next panel. */
+function Resizer({ axis, value, onChange, label, sign = 1 }: { axis: "x" | "y"; value: number; onChange: (n: number) => void; label: string; sign?: 1 | -1 }) {
+  const start = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const from = axis === "x" ? e.clientX : e.clientY;
+    const base = value;
+    const move = (ev: PointerEvent) => onChange(base + sign * ((axis === "x" ? ev.clientX : ev.clientY) - from));
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.style.userSelect = "";
+    };
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  return (
+    <div
+      role="separator"
+      aria-orientation={axis === "x" ? "vertical" : "horizontal"}
+      aria-label={label}
+      aria-valuenow={value}
+      tabIndex={0}
+      onPointerDown={start}
+      onKeyDown={(e) => {
+        const step = e.shiftKey ? 48 : 16;
+        const less = axis === "x" ? "ArrowLeft" : "ArrowUp";
+        const more = axis === "x" ? "ArrowRight" : "ArrowDown";
+        if (e.key === less) onChange(value - sign * step);
+        if (e.key === more) onChange(value + sign * step);
+      }}
+      className={cn(
+        "group relative z-10 shrink-0 outline-none",
+        axis === "x" ? "-mx-[3px] w-[7px] cursor-col-resize" : "-my-[3px] h-[7px] cursor-row-resize",
+      )}
+    >
+      <span className={cn("absolute bg-transparent transition group-hover:bg-s-accent/60 group-focus-visible:bg-s-accent", axis === "x" ? "inset-y-0 left-[3px] w-px" : "inset-x-0 top-[3px] h-px")} />
+    </div>
+  );
+}
 
 /** Phones get one pane at a time, larger screens all of them; only one layout is rendered. */
 const WIDE = "(min-width: 768px)";
@@ -120,7 +204,13 @@ export function CodeWorkspace({ id }: { id: string }) {
   const [command, setCommand] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const [histAt, setHistAt] = useState<number | null>(null);
-  const [right, setRight] = useState<"ai" | "preview" | null>("ai");
+  const [right, setRight] = useState<Side | null>("agent");
+  const [focusRun, setFocusRun] = useState<string | null>(null);
+  const [filesOpen, setFilesOpen] = useState(true);
+  const [terminalOpen, setTerminalOpen] = useState(true);
+  const [leftW, setLeftW] = useStoredSize("orbis.code.left", 232, 160, 420);
+  const [rightW, setRightW] = useStoredSize("orbis.code.right", 400, 300, 760);
+  const [termH, setTermH] = useStoredSize("orbis.code.terminal", 240, 96, 640);
   const [pane, setPane] = useState<Pane>("editor");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [newFile, setNewFile] = useState<string | null>(null);
@@ -459,6 +549,14 @@ export function CodeWorkspace({ id }: { id: string }) {
     }
   };
 
+  const startComputer = async () => !!(running || (await sessionAction("start")));
+  const showChanges = (runId: string) => {
+    setFocusRun(runId);
+    setRight("changes");
+    setPane("changes");
+  };
+  const reloadFiles = useCallback(() => void reload().catch(() => {}), [reload]);
+
   // ------------------------------------------------------------ render
 
   if (loadError) {
@@ -670,7 +768,7 @@ export function CodeWorkspace({ id }: { id: string }) {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-s-line px-3">
         <Sparkles className="h-3.5 w-3.5 text-s-ink-3" />
-        <span className="text-[11.5px] font-medium uppercase tracking-[0.08em] text-s-ink-3">AI editor</span>
+        <span className="text-[11.5px] font-medium uppercase tracking-[0.08em] text-s-ink-3">Quick edit</span>
       </div>
       <div className="s-scroll min-h-0 flex-1 overflow-y-auto p-3">
         <form
@@ -704,7 +802,7 @@ export function CodeWorkspace({ id }: { id: string }) {
             </Btn>
           </div>
         </form>
-        <p className="mt-2 text-[11.5px] leading-snug text-s-ink-3">The AI sees your files and proposes changes. Nothing changes until you accept. Each request counts like a chat message.</p>
+        <p className="mt-2 text-[11.5px] leading-snug text-s-ink-3">One request, one set of proposed changes: the AI sees your files and nothing changes until you accept. For work that needs planning, running tests and fixing failures, use the Agent. Each request counts like a chat message.</p>
 
         {ai && (
           <div className="mt-4 space-y-3">
@@ -739,12 +837,24 @@ export function CodeWorkspace({ id }: { id: string }) {
     </div>
   );
 
+  const agentView = <AgentPanel projectId={id} computerOn={running} startComputer={startComputer} onFilesChanged={reloadFiles} onShowChanges={showChanges} />;
+  const changesView = <ChangesPanel key={focusRun ?? "all"} projectId={id} sourceRepo={project?.sourceRepo ?? null} focusRun={focusRun} onFilesChanged={reloadFiles} />;
+  const sideView = (s: Side) => (s === "agent" ? agentView : s === "ai" ? aiView : s === "changes" ? changesView : previewView);
+
   const PANES: { id: Pane; label: string }[] = [
+    { id: "agent", label: "Agent" },
     { id: "files", label: "Files" },
     { id: "editor", label: "Editor" },
     { id: "terminal", label: "Terminal" },
-    { id: "ai", label: "AI" },
+    { id: "changes", label: "Changes" },
     { id: "preview", label: "Preview" },
+    { id: "ai", label: "Quick edit" },
+  ];
+  const SIDES: { id: Side; label: string; icon: ReactNode }[] = [
+    { id: "agent", label: "Agent", icon: <Bot className="h-4 w-4" /> },
+    { id: "ai", label: "Quick edit", icon: <Sparkles className="h-4 w-4" /> },
+    { id: "changes", label: "Changes", icon: <History className="h-4 w-4" /> },
+    { id: "preview", label: "Preview", icon: <Eye className="h-4 w-4" /> },
   ];
 
   return (
@@ -820,38 +930,63 @@ export function CodeWorkspace({ id }: { id: string }) {
             ))}
           </div>
           <div className="min-h-0 flex-1 overflow-hidden border-t border-s-line">
-            {pane === "files" ? treeView : pane === "editor" ? editorView : pane === "terminal" ? terminalView : pane === "ai" ? aiView : previewView}
+            {pane === "files" ? treeView : pane === "editor" ? editorView : pane === "terminal" ? terminalView : sideView(pane)}
           </div>
         </>
       ) : (
-        /* Larger screens: files | editor over terminal | AI or preview. */
+        /* Larger screens: files | editor over terminal | agent, quick edit, changes or preview. Panels resize and collapse. */
         <div className="flex min-h-0 flex-1 border-t border-s-line">
-          <aside className="w-56 shrink-0 border-r border-s-line lg:w-60">{treeView}</aside>
+          {filesOpen && (
+            <>
+              <aside className="shrink-0 border-r border-s-line" style={{ width: leftW }}>
+                {treeView}
+              </aside>
+              <Resizer axis="x" value={leftW} onChange={setLeftW} label="Resize files panel" />
+            </>
+          )}
           <div className="flex min-w-0 flex-1 flex-col">
-            <div className="min-h-0 flex-[3]">{editorView}</div>
-            <div className="min-h-0 flex-[2] border-t border-s-line">{terminalView}</div>
+            <div className="min-h-0 flex-1">{editorView}</div>
+            {terminalOpen && (
+              <>
+                <Resizer axis="y" value={termH} onChange={setTermH} label="Resize terminal" sign={-1} />
+                <div className="shrink-0 border-t border-s-line" style={{ height: termH }}>
+                  {terminalView}
+                </div>
+              </>
+            )}
+            <div className="flex h-7 shrink-0 items-center gap-1 border-t border-s-line px-1.5">
+              <button type="button" onClick={() => setFilesOpen(!filesOpen)} aria-pressed={filesOpen} title={filesOpen ? "Hide files" : "Show files"} className="grid h-6 w-6 place-items-center rounded text-s-ink-3 hover:bg-s-hover hover:text-s-ink">
+                {filesOpen ? <PanelLeftClose className="h-3.5 w-3.5" /> : <PanelLeftOpen className="h-3.5 w-3.5" />}
+              </button>
+              <button type="button" onClick={() => setTerminalOpen(!terminalOpen)} aria-pressed={terminalOpen} title={terminalOpen ? "Hide terminal" : "Show terminal"} className="grid h-6 w-6 place-items-center rounded text-s-ink-3 hover:bg-s-hover hover:text-s-ink">
+                {terminalOpen ? <PanelBottomClose className="h-3.5 w-3.5" /> : <PanelBottomOpen className="h-3.5 w-3.5" />}
+              </button>
+              {allowance && <span className="ml-1 truncate text-[11px] text-s-ink-3">{minutesLine(allowance)} · counted in {block}-minute blocks</span>}
+            </div>
           </div>
-          <aside className={cn("flex shrink-0 flex-col border-l border-s-line", right ? "w-[360px] xl:w-[420px]" : "w-11")}>
-            <div className={cn("flex shrink-0 gap-1 border-b border-s-line p-1.5", !right && "flex-col items-center border-b-0")}>
-              {(["ai", "preview"] as const).map((r) => (
+          {right && <Resizer axis="x" value={rightW} onChange={setRightW} label="Resize side panel" sign={-1} />}
+          <aside className={cn("flex shrink-0 flex-col border-l border-s-line", !right && "w-11")} style={right ? { width: rightW } : undefined}>
+            <div className={cn("flex shrink-0 gap-1 border-b border-s-line p-1.5", !right && "flex-col items-center border-b-0")} role="tablist" aria-label="Side panel">
+              {SIDES.map((r) => (
                 <button
-                  key={r}
+                  key={r.id}
                   type="button"
-                  onClick={() => setRight(right === r ? null : r)}
-                  aria-pressed={right === r}
-                  title={r === "ai" ? "AI editor" : "Preview"}
-                  className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[12.5px]", right === r ? "bg-s-hover text-s-ink" : "text-s-ink-3 hover:text-s-ink")}
+                  role="tab"
+                  onClick={() => setRight(right === r.id ? null : r.id)}
+                  aria-selected={right === r.id}
+                  title={right === r.id ? `Hide ${r.label}` : r.label}
+                  className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[12.5px]", right === r.id ? "bg-s-hover text-s-ink" : "text-s-ink-3 hover:text-s-ink")}
                 >
-                  {r === "ai" ? <Sparkles className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  {right && (r === "ai" ? "AI" : "Preview")}
+                  {r.icon}
+                  {right && <span className={cn(right !== r.id && rightW < 380 && "sr-only")}>{r.label}</span>}
                 </button>
               ))}
             </div>
-            {right && <div className="min-h-0 flex-1">{right === "ai" ? aiView : previewView}</div>}
+            {right && <div className="min-h-0 flex-1">{sideView(right)}</div>}
           </aside>
         </div>
       )}
-      {allowance && <p className="hidden shrink-0 border-t border-s-line px-4 py-1 text-[11px] text-s-ink-3 md:block">{minutesLine(allowance)} · time is counted in {block}-minute blocks from when you start or extend the computer.</p>}
+      {allowance && !wide && <p className="shrink-0 border-t border-s-line px-4 py-1 text-[11px] text-s-ink-3">{minutesLine(allowance)} · counted in {block}-minute blocks.</p>}
     </>
   );
 }

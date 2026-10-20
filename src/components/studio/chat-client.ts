@@ -12,6 +12,7 @@
  * and register it in src/lib/ai/index.ts; this file and the UI stay unchanged.
  */
 import { postNdjson } from "@/hooks/use-ndjson";
+import type { ReplyLength, ReplyStyle } from "@/lib/ai/reply-settings";
 import type { ChatMode } from "@/lib/ai/modes";
 import type { ProposedAction } from "@/lib/connectors/catalog";
 import type { SearchSource } from "@/lib/search/types";
@@ -46,6 +47,10 @@ export interface ChatRequest {
   attachments?: ChatAttachment[];
   /** Signed in: this replaces the conversation's last reply (same question, new answer). */
   regenerate?: boolean;
+  /** Signed in: this rewrites a saved question; it and everything after it are replaced. */
+  editOf?: string;
+  replyLength?: ReplyLength;
+  replyStyle?: ReplyStyle;
 }
 
 type ModelRef = { id: string; displayName: string; provider: string };
@@ -58,7 +63,7 @@ export type ChatEvent =
   | { type: "notice"; level?: string; message: string }
   | { type: "tool"; tool: ToolRecord }
   | { type: "delta"; text: string }
-  | { type: "done"; text: string; simulated: boolean; assistantMessageId: string | null; estimatedCost: number | null }
+  | { type: "done"; text: string; simulated: boolean; assistantMessageId: string | null; userMessageId?: string | null; estimatedCost: number | null }
   | { type: "error"; message: string };
 
 /** A tool the server ran for this turn (e.g. web search, data analysis). */
@@ -81,6 +86,10 @@ export interface TurnRequest {
   attachments: ChatAttachment[];
   /** The turn regenerates the last reply rather than asking something new. */
   regenerate?: boolean;
+  /** The turn rewrites an earlier question (the general chat only). */
+  editOf?: string;
+  replyLength?: ReplyLength;
+  replyStyle?: ReplyStyle;
 }
 export type ChatTransport = (req: TurnRequest, signal: AbortSignal) => AsyncGenerator<ChatEvent>;
 

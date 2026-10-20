@@ -6,7 +6,8 @@ import { trimHistory } from "@/lib/ai/trim";
 import { isAutoId } from "@/lib/ai/platform";
 import type { ChatMessage, Usage } from "@/lib/ai/types";
 import { requireUserIfConfigured, type AuthContext } from "@/lib/auth";
-import { addMessages, createConversation, deleteMessage, getConversation, regeneratedReply, updateConversation } from "@/lib/db";
+import { addMessages, createConversation, deleteMessage, deleteMessages, editedTurns, getConversation, regeneratedReply, updateConversation } from "@/lib/db";
+import { replyInstruction, replyTokens } from "@/lib/ai/reply-settings";
 import { serverEnv } from "@/lib/env";
 import { ApiError, errorResponse, ndjsonStream, parseJsonBody } from "@/lib/http";
 import { reportError } from "@/lib/observability";
@@ -49,11 +50,12 @@ export async function POST(req: Request) {
     });
     let model = choice.model;
     const promptChars = body.message.length + (body.attachments ?? []).reduce((n, a) => n + a.content.length, 0);
+    const maxOutputTokens = replyTokens(limits.maxOutputTokens, body.replyLength);
     await enforceLimits(req, auth, 1, [model], {
       requestId: body.requestId,
       purpose: "chat",
       inputTokens: Math.ceil((promptChars + limits.historyChars) / 4) + 1500,
-      maxOutputTokens: limits.maxOutputTokens,
+      maxOutputTokens,
     });
     const requestedModel = body.modelId ?? "default";
     const routingReason = choice.routing?.reason ?? (body.modelId ? "Chosen by the user." : "Site default model.");
@@ -65,6 +67,8 @@ export async function POST(req: Request) {
     let history: ChatMessage[] = [];
     // Regenerate: the saved reply this turn replaces (its question is reused, not saved again).
     let replacing: string | null = null;
+    // Edit: the saved question being rewritten and every message after it, removed once the new turn is saved.
+    let superseded: string[] = [];
     if (auth.mode === "authenticated") {
       if (body.conversationId) {
         const { conversation, messages } = await getConversation(auth.supabase, auth.user.id, body.conversationId);
@@ -73,11 +77,16 @@ export async function POST(req: Request) {
         }
         conversationId = conversation.id;
         const turns = messages.filter((m) => m.role !== "system");
-        replacing = body.regenerate ? regeneratedReply(turns, body.message) : null;
+        replacing = body.regenerate && !body.editOf ? regeneratedReply(turns, body.message) : null;
+        let earlier = replacing ? turns.slice(0, -2) : turns;
+        if (body.editOf) {
+          const edit = editedTurns(turns, body.editOf);
+          if (!edit) throw new ApiError("bad_request", "That message can't be edited any more. Send it as a new message instead.");
+          earlier = edit.before;
+          superseded = edit.superseded;
+        }
         // The model sees neither the old answer nor the question twice.
-        history = (replacing ? turns.slice(0, -2) : turns)
-          .slice(-30)
-          .map((m) => ({ role: m.role, content: m.content }));
+        history = earlier.slice(-30).map((m) => ({ role: m.role, content: m.content }));
         if (conversation.mode !== body.mode) {
           await updateConversation(auth.supabase, auth.user.id, conversation.id, { mode: body.mode });
         }
@@ -103,6 +112,8 @@ export async function POST(req: Request) {
       });
 
       let system = systemPromptFor(body.mode);
+      const preferences = replyInstruction(body.replyLength, body.replyStyle);
+      if (preferences) system += `\n\nThe user's reply preferences:\n${preferences}`;
       const turnTools: string[] = [];
 
       // Optional web grounding in Research mode, or always when the Smart Router's Research mode is on.
@@ -175,7 +186,7 @@ export async function POST(req: Request) {
       let status: "success" | "error" = "success";
       let failure: string | null = null;
       try {
-        for await (const ev of streamWithFallback(model, fallbacks, { messages, maxOutputTokens: limits.maxOutputTokens }, () => withTimeout(50_000, signal))) {
+        for await (const ev of streamWithFallback(model, fallbacks, { messages, maxOutputTokens }, () => withTimeout(50_000, signal))) {
           if (ev.type === "delta") {
             text += ev.text;
             send({ type: "delta", text: ev.text });
@@ -226,6 +237,7 @@ export async function POST(req: Request) {
       }
 
       let assistantMessageId: string | null = null;
+      let userMessageId: string | null = null;
       if (auth.mode === "authenticated" && conversationId) {
         try {
           const usageMeta = {
@@ -240,6 +252,9 @@ export async function POST(req: Request) {
             { role: "assistant", content: text, model_id: model.id, usage_metadata: usageMeta },
           ]);
           assistantMessageId = rows.find((r) => r.role === "assistant")?.id ?? null;
+          userMessageId = rows.find((r) => r.role === "user")?.id ?? null;
+          // Edit: the old question and what followed it go only once the new turn is saved.
+          if (superseded.length) await deleteMessages(auth.supabase, conversationId, superseded).catch((err) => reportError(err, { where: "chat.edit" }));
           // Regenerate: the old reply goes only once the new one is saved after it.
           if (replacing) await deleteMessage(auth.supabase, conversationId, replacing).catch((err) => reportError(err, { where: "chat.regenerate" }));
         } catch (err) {
@@ -253,6 +268,7 @@ export async function POST(req: Request) {
         text,
         model: { id: model.id, displayName: model.displayName, provider: model.provider },
         assistantMessageId,
+        userMessageId,
         simulated: model.provider === "demo",
         usage,
         estimatedCost: estimateCost(model, usage),

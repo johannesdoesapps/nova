@@ -136,12 +136,30 @@ if (beforeFile) { try { before = JSON.parse(readFileSync(beforeFile, "utf8")).pa
 process.stdout.write(JSON.stringify({ paths, changed, skipped, overflow, before }));
 `;
 
-/** Copy the project into a new computer, with the helper script. */
+/**
+ * A local Git history for the session: the project as it was copied in is
+ * the first commit, so `git status` and `git diff` show what changed since.
+ * It stays in the computer (never pushed from here). Best effort.
+ */
+export const GIT_SEED = [
+  "git init -q -b main 2>/dev/null || git init -q",
+  "git config user.name Orbis && git config user.email workspace@tryorbis.app",
+  `printf '%s\\n' ${IGNORED_DIRS.map((d) => `'${d}/'`).join(" ")} > .git/info/exclude`,
+  "git add -A && git commit -qm 'Project as copied in' --allow-empty",
+  "true",
+].join(" ; ");
+
+/** Copy the project into a new computer, with the helper script, and start its Git history. */
 export async function seedWorkspace(box: WorkspaceBox, files: ProjectFile[], d: WsDirs = WS_DIRS): Promise<void> {
   await box.writeFiles([
     { path: `${d.jobs}/collect.mjs`, content: collectScript(d.root) },
     ...files.map((f) => ({ path: `${d.root}/${f.path}`, content: f.content })),
   ]);
+  try {
+    await box.runCommand({ cmd: "bash", args: ["-c", GIT_SEED], cwd: d.root });
+  } catch {
+    // No Git in the computer: everything else still works.
+  }
 }
 
 const JOB_ID = /^[a-z0-9]{6,32}$/;

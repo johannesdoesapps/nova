@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import {
+  Archive,
   Bookmark,
   Bot,
   Code2,
@@ -49,6 +50,8 @@ export interface SidebarProps {
   /** Searches all of the user's chats on the server (signed in); otherwise only the loaded list is filtered. */
   onSearch?: (q: string) => Promise<ConvSummary[]>;
   onRequestDelete: (c: ConvSummary) => void;
+  /** Signed-in history only. */
+  onArchive?: (c: ConvSummary) => void;
   onOpenPrompts: () => void;
   onOpenSettings: () => void;
   user: AppUser | null;
@@ -146,6 +149,29 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
           </IconButton>
         </div>
 
+        {/* Mode: Chat or Code */}
+        <div className={cn("shrink-0 px-3 pb-2", rail && "md:hidden")}>
+          <div role="group" aria-label="Mode" className="grid grid-cols-2 gap-0.5 rounded-xl bg-s-hover p-0.5">
+            {(
+              [
+                { id: "chat", label: "Chat", href: "/chat", icon: <MessagesSquare className="h-3.5 w-3.5" />, on: p.section === "chats" },
+                { id: "code", label: "Code", href: "/code", icon: <Code2 className="h-3.5 w-3.5" />, on: p.section === "code" },
+              ] as const
+            ).map((m) => (
+              <Link
+                key={m.id}
+                href={m.href}
+                onClick={p.onCloseMobile}
+                aria-current={m.on ? "page" : undefined}
+                className={cn("flex h-8 items-center justify-center gap-1.5 rounded-[10px] text-[13px] font-medium transition", m.on ? "bg-s-bg text-s-ink shadow-sm" : "text-s-ink-3 hover:text-s-ink")}
+              >
+                {m.icon}
+                {m.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+
         {/* Primary actions */}
         <div className={cn("flex shrink-0 flex-col gap-1 px-3 pb-2", rail && "md:items-center md:px-0")}>
           {rail ? (
@@ -238,6 +264,7 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
                       onNavigate={p.onCloseMobile}
                       onRename={p.onRename}
                       onRequestDelete={p.onRequestDelete}
+                      onArchive={p.onArchive}
                     />
                   ))}
                 </ul>
@@ -285,12 +312,14 @@ function HistoryItem({
   onNavigate,
   onRename,
   onRequestDelete,
+  onArchive,
 }: {
   conv: ConvSummary;
   active: boolean;
   onNavigate: () => void;
   onRename: (id: string, title: string) => Promise<void>;
   onRequestDelete: (c: ConvSummary) => void;
+  onArchive?: (c: ConvSummary) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(conv.title);
@@ -372,6 +401,11 @@ function HistoryItem({
           <MenuItem icon={<Pencil />} onClick={() => setEditing(true)}>
             Rename
           </MenuItem>
+          {onArchive && (
+            <MenuItem icon={<Archive />} onClick={() => onArchive(conv)}>
+              Archive
+            </MenuItem>
+          )}
           <MenuItem icon={<Trash2 />} danger onClick={() => onRequestDelete(conv)}>
             Delete
           </MenuItem>

@@ -21,6 +21,7 @@ export function ConversationPane({
   thinkingLabel,
   feedback,
   onRetry,
+  onEdit,
   onFeedback,
   onSavePrompt,
   onSaveToProject,
@@ -38,6 +39,8 @@ export function ConversationPane({
   thinkingLabel: string;
   feedback: Record<string, Feedback>;
   onRetry: (id: string) => void;
+  /** Edit a question you sent (the general chat). */
+  onEdit?: (id: string, text: string) => void;
   onFeedback: (id: string, f: Feedback) => void;
   onSavePrompt: (text: string) => boolean;
   onSaveToProject?: (m: Msg) => void;
@@ -117,6 +120,7 @@ export function ConversationPane({
                   feedback={feedback[m.id]}
                   thinkingLabel={thinkingLabel}
                   onRetry={onRetry}
+                  onEdit={onEdit}
                   onFeedback={onFeedback}
                   onSavePrompt={onSavePrompt}
                   onSaveToProject={onSaveToProject}

@@ -26,7 +26,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/conversations/[
   }
 }
 
-/** PATCH — rename, change mode, or move to a project. */
+/** PATCH — rename, change mode, move to a project, or archive / unarchive. */
 export async function PATCH(req: Request, ctx: RouteContext<"/api/conversations/[id]">) {
   try {
     const id = await idFrom(ctx);
@@ -36,6 +36,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/conversations/
       ...(body.title !== undefined && { title: body.title }),
       ...(body.mode !== undefined && { mode: body.mode }),
       ...(body.projectId !== undefined && { project_id: body.projectId }),
+      ...(body.archived !== undefined && { archived_at: body.archived ? new Date().toISOString() : null }),
     });
     return NextResponse.json({ conversation });
   } catch (err) {

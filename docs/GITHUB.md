@@ -62,6 +62,7 @@ The sign-in button appears within about a minute; no redeploy is needed.
    - **Setup URL:** `https://tryorbis.app/chat`. Tick **Redirect on update**.
    - **Webhook:** untick **Active**.
    - **Repository permissions → Contents:** Read-only. Metadata stays Read-only automatically. Leave everything else at No access.
+     - To use **Code → Changes → Push to GitHub**, choose **Read and write** instead. Pushes only ever create new branches; see CODE_AGENT.md.
    - **Where can this GitHub App be installed?** Any account.
 2. Click **Create GitHub App**. On the app's page:
    - copy the **App ID**;

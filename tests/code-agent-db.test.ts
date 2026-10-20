@@ -1,0 +1,109 @@
+/**
+ * The coding agent's records in the database (the real migrations on
+ * PGlite): runs only on your own projects, an activity log you can add to
+ * but never edit or delete, and change records whose "before" can't be
+ * rewritten.
+ */
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { PGlite } from "@electric-sql/pglite";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+
+const ALICE = "11111111-1111-4111-8111-111111111111";
+const BOB = "22222222-2222-4222-8222-222222222222";
+let db: PGlite;
+
+async function as<T>(user: string, fn: () => Promise<T>): Promise<T> {
+  await db.exec(`reset role; select set_config('request.jwt.claim.sub', '${user}', false); set role authenticated;`);
+  try {
+    return await fn();
+  } finally {
+    await db.exec("reset role");
+  }
+}
+const q = <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => db.query<T>(sql, params).then((r) => r.rows);
+const newProject = (user: string, name = "P") => as(user, async () => (await q<{ id: string }>("insert into public.code_projects (name, template) values ($1, 'website') returning id", [name]))[0]!.id);
+beforeAll(async () => {
+  db = new PGlite();
+  await db.exec(`
+    create role anon nologin;
+    create role authenticated nologin;
+    create schema auth;
+    create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}'::jsonb);
+    create function auth.uid() returns uuid language sql stable as $$
+      select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+    $$;
+    grant usage on schema auth to anon, authenticated;
+    grant execute on function auth.uid() to anon, authenticated;
+    grant usage on schema public to anon, authenticated;
+    -- Like Supabase: new tables are granted to the API roles unless a migration says otherwise.
+    alter default privileges in schema public grant all on tables to anon, authenticated;
+  `);
+  const migrations = join(__dirname, "..", "supabase", "migrations");
+  for (const f of readdirSync(migrations).filter((f) => f.endsWith(".sql")).sort()) await db.exec(readFileSync(join(migrations, f), "utf8"));
+  await db.exec(`insert into auth.users (id, email) values ('${ALICE}', 'alice@example.com'), ('${BOB}', 'bob@example.com');`);
+}, 60_000);
+afterAll(() => db.close());
+
+beforeEach(async () => {
+  await db.exec("reset role; delete from public.code_projects;");
+});
+
+const newRun = (user: string, project: string) =>
+  as(user, async () => (await q<{ id: string }>("insert into public.code_agent_runs (project_id, request, status, options) values ($1, 'Add tests', 'planning', '{}') returning id", [project]))[0]!.id);
+
+describe("agent runs", () => {
+  it("can be started only on your own projects, and are visible to their owner only", async () => {
+    const p = await newProject(ALICE);
+    await expect(newRun(BOB, p)).rejects.toThrow(/row-level security/);
+    const r = await newRun(ALICE, p);
+    expect(await as(BOB, () => q("select * from public.code_agent_runs"))).toEqual([]);
+    await as(BOB, () => q("update public.code_agent_runs set status = 'cancelled'"));
+    expect(await as(ALICE, () => q("select status from public.code_agent_runs where id = $1", [r]))).toEqual([{ status: "planning" }]);
+  });
+
+  it("never lets a user move a run to another project or owner, or set an unknown status", async () => {
+    const p = await newProject(ALICE);
+    const p2 = await newProject(ALICE, "Other");
+    const r = await newRun(ALICE, p);
+    await expect(as(ALICE, () => q("update public.code_agent_runs set project_id = $1 where id = $2", [p2, r]))).rejects.toThrow(/permission denied/);
+    await expect(as(ALICE, () => q(`update public.code_agent_runs set user_id = '${BOB}' where id = $1`, [r]))).rejects.toThrow(/permission denied/);
+    await expect(as(ALICE, () => q("update public.code_agent_runs set status = 'hacked' where id = $1", [r]))).rejects.toThrow(/check constraint/);
+    await as(ALICE, () => q("update public.code_agent_runs set status = 'running', steps = 1, locked_until = now() where id = $1", [r]));
+  });
+
+  it("are deleted with their project", async () => {
+    const p = await newProject(ALICE);
+    const r = await newRun(ALICE, p);
+    await as(ALICE, () => q("insert into public.code_agent_events (run_id, seq, kind, title) values ($1, 1, 'status', 'Started')", [r]));
+    await as(ALICE, () => q("delete from public.code_projects where id = $1", [p]));
+    expect(await q("select * from public.code_agent_events")).toEqual([]);
+  });
+});
+
+describe("agent activity log", () => {
+  it("is append-only and kept to the run's owner", async () => {
+    const p = await newProject(ALICE);
+    const r = await newRun(ALICE, p);
+    await as(ALICE, () => q("insert into public.code_agent_events (run_id, seq, kind, title, detail) values ($1, 1, 'command', 'Ran npm test', '{\"exitCode\": 0}')", [r]));
+    await expect(as(ALICE, () => q("update public.code_agent_events set title = 'edited'"))).rejects.toThrow(/permission denied/);
+    await expect(as(ALICE, () => q("delete from public.code_agent_events"))).rejects.toThrow(/permission denied/);
+    await expect(as(ALICE, () => q("insert into public.code_agent_events (run_id, seq, kind, title) values ($1, 1, 'note', 'dup')", [r]))).rejects.toThrow(/duplicate key/);
+    await expect(as(BOB, () => q("insert into public.code_agent_events (run_id, seq, kind, title) values ($1, 2, 'note', 'x')", [r]))).rejects.toThrow(/row-level security/);
+    expect(await as(BOB, () => q("select * from public.code_agent_events"))).toEqual([]);
+    expect(await as(ALICE, () => q("select title from public.code_agent_events"))).toEqual([{ title: "Ran npm test" }]);
+  });
+});
+
+describe("agent changes", () => {
+  it("keep the original content and only let the latest content and revert time change", async () => {
+    const p = await newProject(ALICE);
+    const r = await newRun(ALICE, p);
+    await as(ALICE, () => q("insert into public.code_agent_changes (run_id, path, before, after) values ($1, 'a.js', 'v1', 'v2')", [r]));
+    await expect(as(ALICE, () => q("update public.code_agent_changes set before = 'forged'"))).rejects.toThrow(/permission denied/);
+    await as(ALICE, () => q("update public.code_agent_changes set after = 'v3', reverted_at = now()"));
+    expect(await as(ALICE, () => q("select before, after from public.code_agent_changes"))).toEqual([{ before: "v1", after: "v3" }]);
+    await expect(as(BOB, () => q("insert into public.code_agent_changes (run_id, path, before, after) values ($1, 'b.js', null, 'x')", [r]))).rejects.toThrow(/row-level security/);
+    expect(await as(BOB, () => q("select * from public.code_agent_changes"))).toEqual([]);
+  });
+});

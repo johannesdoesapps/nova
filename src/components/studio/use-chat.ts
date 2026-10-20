@@ -2,6 +2,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatMode } from "@/lib/ai/modes";
+import type { ReplyLength, ReplyStyle } from "@/lib/ai/reply-settings";
 import { CHAT_MODES } from "@/lib/ai/modes";
 import { streamChat, type ChatAttachment, type ChatTransport } from "./chat-client";
 import { titleFrom, type HistoryStore, type Msg } from "./history";
@@ -24,6 +25,8 @@ export function useStudioChat({
   onHistoryChanged,
   basePath = "/chat",
   transport = chatTransport,
+  replyLength,
+  replyStyle,
 }: {
   store: HistoryStore;
   defaultMode: ChatMode;
@@ -33,6 +36,8 @@ export function useStudioChat({
   onHistoryChanged: () => void;
   basePath?: string;
   transport?: ChatTransport;
+  replyLength?: ReplyLength;
+  replyStyle?: ReplyStyle;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -111,9 +116,12 @@ export function useStudioChat({
   }, [busy, messages, conversationId, store, title, mode, onHistoryChanged]);
 
   const send = useCallback(
-    async (text: string, opts: { attachments?: ChatAttachment[]; retryOf?: string; mode?: ChatMode } = {}) => {
+    async (text: string, opts: { attachments?: ChatAttachment[]; retryOf?: string; editOf?: string; mode?: ChatMode } = {}) => {
       const content = text.trim();
       if (!content || busy) return false;
+      // An edit rewrites an earlier question: it and everything after it are replaced.
+      const editIdx = opts.editOf ? messages.findIndex((m) => m.id === opts.editOf && m.role === "user") : -1;
+      if (opts.editOf && editIdx < 0) return false;
       const turnMode = opts.mode ?? mode;
       if (opts.mode) setMode(opts.mode);
       // A regenerate replaces the last reply: everything before it stays, in place.
@@ -122,7 +130,7 @@ export function useStudioChat({
       const ac = new AbortController();
       abortRef.current = ac;
       const files = opts.attachments ?? [];
-      const prior = opts.retryOf ? messages.slice(0, retryIdx) : messages;
+      const prior = opts.retryOf ? messages.slice(0, retryIdx) : opts.editOf ? messages.slice(0, editIdx) : messages;
       const userMsg: Msg = { id: crypto.randomUUID(), role: "user", content, status: "done", attachments: files.map((f) => f.name), files };
       const asst: Msg = { id: crypto.randomUUID(), role: "assistant", content: "", status: "streaming", notices: [] };
       setMessages(opts.retryOf ? [...prior, asst] : [...prior, userMsg, asst]);
@@ -165,6 +173,9 @@ export function useStudioChat({
             history,
             attachments: files,
             regenerate: opts.retryOf ? true : undefined,
+            editOf: opts.editOf && !local ? opts.editOf : undefined,
+            replyLength,
+            replyStyle,
           },
           ac.signal,
         )) {
@@ -182,8 +193,12 @@ export function useStudioChat({
           else if (ev.type === "actions") patch((m) => ({ ...m, actions: ev.actions }));
           else if (ev.type === "notice") patch((m) => ({ ...m, notices: [...(m.notices ?? []), ev.message] }));
           else if (ev.type === "delta") patch((m) => ({ ...m, content: m.content + ev.text }));
-          else if (ev.type === "done")
+          else if (ev.type === "done") {
             patch((m) => ({ ...m, content: ev.text, status: "done", simulated: ev.simulated, cost: ev.estimatedCost, id: ev.assistantMessageId ?? m.id }));
+            // The saved question's id, so it can be edited later.
+            const savedId = ev.userMessageId;
+            if (savedId) setMessages((ms) => ms.map((m) => (m.id === userMsg.id ? { ...m, id: savedId } : m)));
+          }
           else if (ev.type === "error") patch((m) => ({ ...m, status: "error", error: ev.message }));
         }
         // A stream that ends without "done" (dropped connection) is an error, not a silent stop.
@@ -203,7 +218,7 @@ export function useStudioChat({
       }
       return true;
     },
-    [busy, mode, messages, store, conversationId, title, router, modelId, allowFallback, useWeb, onHistoryChanged, setId, basePath, transport],
+    [busy, mode, messages, store, conversationId, title, router, modelId, allowFallback, useWeb, onHistoryChanged, setId, basePath, transport, replyLength, replyStyle],
   );
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
@@ -219,10 +234,19 @@ export function useStudioChat({
     [messages, send],
   );
 
+  /** Rewrite an earlier question and get a new answer; the turns after it are replaced. */
+  const edit = useCallback(
+    (userId: string, text: string) => {
+      const m = messages.find((x) => x.id === userId && x.role === "user");
+      if (m) void send(text, { editOf: userId, attachments: m.files });
+    },
+    [messages, send],
+  );
+
   const newChat = useCallback(() => {
     reset();
     router.replace(basePath, { scroll: false });
   }, [reset, router, basePath]);
 
-  return { messages, conversationId, title, setTitle, mode, setMode, useWeb, setUseWeb, load, busy, send, stop, retry, newChat };
+  return { messages, conversationId, title, setTitle, mode, setMode, useWeb, setUseWeb, load, busy, send, stop, retry, edit, newChat };
 }

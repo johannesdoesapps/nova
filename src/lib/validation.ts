@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { REPLY_LENGTHS, REPLY_STYLES } from "./ai/reply-settings";
 import { CHAT_MODES } from "./ai/modes";
 
 export const uuid = z.uuid();
@@ -36,6 +37,11 @@ export const chatRequest = z.object({
   requestId: z.uuid().optional(),
   /** Regenerate: the new reply replaces the conversation's last one instead of adding a turn. */
   regenerate: z.boolean().optional(),
+  /** Edit: this saved question and everything after it are replaced by the new message and its reply. */
+  editOf: uuid.optional(),
+  /** Reply settings from the user's preferences. */
+  replyLength: z.enum(REPLY_LENGTHS).optional(),
+  replyStyle: z.enum(REPLY_STYLES).optional(),
   attachments: z
     .array(
       z.object({
@@ -52,7 +58,7 @@ export const chatRequest = z.object({
 });
 
 /** GET /api/conversations?q= — an optional title search. */
-export const conversationSearch = z.object({ q: z.string().trim().max(200).optional() });
+export const conversationSearch = z.object({ q: z.string().trim().max(200).optional(), archived: z.enum(["1"]).optional() });
 
 export const compareRequest = z.object({
   prompt: z.string().trim().min(1).max(8_000),
@@ -102,6 +108,8 @@ export const conversationPatch = z
     title: z.string().trim().min(1).max(200).optional(),
     mode: z.enum(CHAT_MODES).optional(),
     projectId: uuid.nullable().optional(),
+    /** Archive (hide from the list without deleting) or bring back. */
+    archived: z.boolean().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, "Nothing to update.");
 

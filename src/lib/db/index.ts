@@ -24,6 +24,8 @@ export interface ConversationRow {
   /** Set for agent conversations: a custom agent's id, or a built-in agent's key. */
   agent_id?: string | null;
   builtin_agent?: string | null;
+  /** Set when the user archived the chat (hidden from the main list). */
+  archived_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -160,13 +162,15 @@ export function escapeLike(s: string): string {
 }
 
 /** The user's recent chats; with `query`, every chat whose title contains it (case-insensitive). */
-export async function listConversations(db: ServerSupabase, userId: string, limit = 50, query?: string): Promise<ConversationRow[]> {
+/** The user's chats, newest first: active ones, or with `archived` the archived ones. */
+export async function listConversations(db: ServerSupabase, userId: string, limit = 50, query?: string, archived = false): Promise<ConversationRow[]> {
   let q = db
     .from("conversations")
-    .select("id,project_id,title,mode,created_at,updated_at")
+    .select("id,project_id,title,mode,archived_at,created_at,updated_at")
     .eq("user_id", userId)
     .is("agent_id", null)
     .is("builtin_agent", null);
+  q = archived ? q.not("archived_at", "is", null) : q.is("archived_at", null);
   if (query?.trim()) q = q.ilike("title", `%${escapeLike(query.trim())}%`);
   const { data, error } = await q.order("updated_at", { ascending: false }).limit(limit);
   if (error) fail(error, "Conversations");
@@ -221,7 +225,7 @@ export async function updateConversation(
   db: ServerSupabase,
   userId: string,
   id: string,
-  patch: { title?: string; mode?: string; project_id?: string | null },
+  patch: { title?: string; mode?: string; project_id?: string | null; archived_at?: string | null },
 ) {
   if (patch.project_id) await assertProject(db, userId, patch.project_id);
   const { data, error } = await db
@@ -229,7 +233,7 @@ export async function updateConversation(
     .update(patch)
     .eq("id", id)
     .eq("user_id", userId)
-    .select("id,project_id,title,mode,created_at,updated_at")
+    .select("id,project_id,title,mode,archived_at,created_at,updated_at")
     .maybeSingle();
   if (error) fail(error, "Conversation");
   if (!data) throw new ApiError("not_found", "Conversation not found.");
@@ -250,6 +254,24 @@ export async function deleteConversation(db: ServerSupabase, userId: string, id:
 export function regeneratedReply(turns: { id: string; role: string; content: string }[], question: string): string | null {
   const [user, reply] = turns.slice(-2);
   return user?.role === "user" && reply?.role === "assistant" && user.content.trim() === question.trim() ? reply.id : null;
+}
+
+/**
+ * Editing a saved question: the turns before it (what the model sees) and the
+ * ids of it and every later message (removed once the new turn is saved).
+ * Null when the id isn't one of the conversation's questions.
+ */
+export function editedTurns<T extends { id: string; role: string }>(turns: T[], editOf: string): { before: T[]; superseded: string[] } | null {
+  const i = turns.findIndex((m) => m.id === editOf);
+  if (i < 0 || turns[i]!.role !== "user") return null;
+  return { before: turns.slice(0, i), superseded: turns.slice(i).map((m) => m.id) };
+}
+
+/** Removes messages of a conversation (RLS limits this to the user's own conversations). */
+export async function deleteMessages(db: ServerSupabase, conversationId: string, ids: string[]) {
+  if (!ids.length) return;
+  const { error } = await db.from("messages").delete().eq("conversation_id", conversationId).in("id", ids);
+  if (error) fail(error, "Messages");
 }
 
 /** Removes one message of a conversation (RLS limits this to the user's own conversations). */

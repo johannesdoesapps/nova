@@ -1,6 +1,6 @@
 "use client";
 import { memo, useState, type ReactNode } from "react";
-import { BookmarkPlus, ChartColumn, Check, ChevronRight, CircleAlert, Copy, Ellipsis, FileText, FolderPlus, Globe, RefreshCw, Sparkles, ThumbsDown, ThumbsUp, Wrench } from "lucide-react";
+import { BookmarkPlus, ChartColumn, Check, ChevronRight, CircleAlert, Copy, Ellipsis, FileText, FolderPlus, Globe, Pencil, RefreshCw, Sparkles, ThumbsDown, ThumbsUp, Wrench } from "lucide-react";
 import { Markdown } from "@/components/common/markdown";
 import { ActionCard } from "@/components/connectors/action-card";
 import { BrandIcon } from "@/components/connectors/brand-icon";
@@ -17,6 +17,7 @@ export const MessageView = memo(function MessageView({
   feedback,
   thinkingLabel,
   onRetry,
+  onEdit,
   onFeedback,
   onSavePrompt,
   onSaveToProject,
@@ -30,6 +31,7 @@ export const MessageView = memo(function MessageView({
   feedback?: Feedback;
   thinkingLabel: string;
   onRetry: (id: string) => void;
+  onEdit?: (id: string, text: string) => void;
   onFeedback: (id: string, f: Feedback) => void;
   onSavePrompt: (text: string) => boolean;
   onSaveToProject?: (m: Msg) => void;
@@ -41,7 +43,55 @@ export const MessageView = memo(function MessageView({
 }) {
   const verify = useVerify(question, m.content);
   if (m.role === "user") {
+    return <UserMessage m={m} busy={busy} onEdit={onEdit} onSavePrompt={onSavePrompt} />;
+  }
+  return <AssistantMessage {...{ m, isLast, busy, feedback, thinkingLabel, onRetry, onFeedback, onSaveToProject, assistantName, assistantAvatar, verify }} />;
+});
+
+/** A question you sent, with copy, save and (in the general chat) edit. */
+function UserMessage({ m, busy, onEdit, onSavePrompt }: { m: Msg; busy: boolean; onEdit?: (id: string, text: string) => void; onSavePrompt: (text: string) => boolean }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(m.content);
+  if (editing) {
+    const submit = () => {
+      const t = draft.trim();
+      if (!t || busy) return;
+      setEditing(false);
+      onEdit?.(m.id, t);
+    };
     return (
+      <div className="s-in flex flex-col items-end">
+        <div className="w-full max-w-[88%] rounded-[22px] border border-s-line-strong bg-s-user p-2 sm:max-w-[78%]">
+          <textarea
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setEditing(false);
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+            rows={Math.min(10, Math.max(2, draft.split("\n").length))}
+            maxLength={12000}
+            aria-label="Edit your message"
+            className="block w-full resize-y bg-transparent px-2 py-1 text-[15.5px] leading-relaxed outline-none"
+          />
+          <div className="flex items-center justify-end gap-1.5 px-1 pt-1">
+            <span className="mr-auto pl-1 text-[12px] text-s-ink-3">Replaces this message and everything after it.</span>
+            <button type="button" onClick={() => setEditing(false)} className="h-8 rounded-full px-3 text-[13px] text-s-ink-2 hover:bg-s-hover">
+              Cancel
+            </button>
+            <button type="button" onClick={submit} disabled={!draft.trim() || busy} className="h-8 rounded-full bg-s-accent px-3.5 text-[13px] font-medium text-s-accent-ink disabled:opacity-40">
+              Send
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
       <div className="group/msg s-in flex flex-col items-end">
         {m.attachments && m.attachments.length > 0 && (
           <div className="mb-1.5 flex max-w-[85%] flex-wrap justify-end gap-1.5">
@@ -57,12 +107,50 @@ export const MessageView = memo(function MessageView({
         </div>
         <div className="s-actions mt-1 flex items-center gap-0.5">
           <CopyAction text={m.content} />
+          {onEdit && (
+            <IconButton
+              size="sm"
+              label="Edit"
+              disabled={busy}
+              onClick={() => {
+                setDraft(m.content);
+                setEditing(true);
+              }}
+            >
+              <Pencil />
+            </IconButton>
+          )}
           <SavePromptAction onSave={() => onSavePrompt(m.content)} />
         </div>
       </div>
     );
-  }
+}
 
+function AssistantMessage({
+  m,
+  isLast,
+  busy,
+  feedback,
+  thinkingLabel,
+  onRetry,
+  onFeedback,
+  onSaveToProject,
+  assistantName,
+  assistantAvatar,
+  verify,
+}: {
+  m: Msg;
+  isLast: boolean;
+  busy: boolean;
+  feedback?: Feedback;
+  thinkingLabel: string;
+  onRetry: (id: string) => void;
+  onFeedback: (id: string, f: Feedback) => void;
+  onSaveToProject?: (m: Msg) => void;
+  assistantName?: string;
+  assistantAvatar?: ReactNode;
+  verify: ReturnType<typeof useVerify>;
+}) {
   const streaming = m.status === "streaming";
   const valid = new Set((m.sources ?? []).map((s) => s.index));
   // A proposed connector action arrives as a block at the end of the reply; it becomes a review card, not text.
@@ -200,7 +288,7 @@ export const MessageView = memo(function MessageView({
       {m.status === "done" && <VerifyPanel state={verify.state} onClose={verify.close} onRetry={verify.run} />}
     </div>
   );
-});
+}
 
 const TOOL_ICONS: Record<string, ReactNode> = { web_search: <Globe />, data_analysis: <ChartColumn /> };
 

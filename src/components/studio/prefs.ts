@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { CHAT_MODES, type ChatMode } from "@/lib/ai/modes";
+import type { ReplyLength, ReplyStyle } from "@/lib/ai/reply-settings";
 
 function useStoredJson<T>(key: string, fallback: T, valid: (v: unknown) => v is T): [T, (v: T) => void] {
   const [raw, setRaw] = useLocalStorage(key);
@@ -71,6 +72,9 @@ export interface StudioSettings {
   defaultMode: ChatMode;
   /** Let another compatible model answer if the chosen one fails (only when the site allows fallback). */
   allowFallback?: boolean;
+  /** How long and in what style replies should be. */
+  replyLength?: ReplyLength;
+  replyStyle?: ReplyStyle;
 }
 
 const DEFAULT_SETTINGS: StudioSettings = { enterToSend: true, defaultMode: "research", allowFallback: false };

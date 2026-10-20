@@ -46,6 +46,16 @@ Without a key, the labelled demo provider streams a template reply. It is marked
 | Conversations | Supabase (`/api/conversations`) | This browser (`localStorage`, newest 40) |
 | Saved prompts, feedback, settings, last model, sidebar state | This browser | This browser |
 
+## Conversation tools
+
+- **Edit a question:** use the pencil under any message you sent. The new text replaces that message and everything after it. The model sees only the turns before it. Signed in, the old messages are deleted only after the new reply is saved.
+- **Regenerate:** only the latest reply can be regenerated.
+- **Archive:** archive a chat from its menu in the sidebar. Archived chats are hidden from the list but kept. Find them under **Settings → Chat history → Archived chats**, where they can be restored or deleted. This needs an account.
+- **Reply settings** (Settings):
+  - **Length** (Short, Normal, Detailed) and **style** (Precise, Balanced, Creative) are added to the model's instructions.
+  - Short also lowers the reply's output limit, within the plan's limit.
+  - Temperature isn't offered because current reasoning models don't accept it.
+
 ## Honest limits
 
 - **Images:** the "Add images" control is disabled and explains why. The connected models accept text only.

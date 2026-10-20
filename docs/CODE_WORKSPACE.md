@@ -94,7 +94,17 @@ Each plan's minutes are set aside at that worst case before its AI budget is wor
 
 In practice a workspace's CPU is idle most of the time, so the real cost is far below the worst case.
 
-### AI editor
+### Coding agent
+
+The **Agent** panel plans, edits, runs tests and fixes failures, with approvals along the way. See docs/CODE_AGENT.md.
+
+The **Changes** panel lists every agent run with per-file diffs. A whole run or a single file can be reverted from there, and the project can be pushed to a new GitHub branch.
+
+### Layout
+
+On larger screens, the files panel, the terminal and the side panel (Agent, Quick edit, Changes, Preview) can be resized by dragging, or with the arrow keys on the handles. The files panel and terminal can also be hidden. Sizes are remembered in the browser. Phones show one pane at a time.
+
+### Quick edit (AI editor)
 
 `POST /api/code/projects/[id]/ai` sends the request and as many of the project's files as fit to the model. The files sent are chosen in this order:
 
@@ -118,7 +128,7 @@ Each request is reserved, charged and recorded like a chat message (purpose `cod
 
 ## Not yet
 
-- **Save back to GitHub:** this needs the GitHub App to have *Contents: write* permission.
+- **Save back to GitHub:** *Push to GitHub* (a new branch per push) exists, but it needs the GitHub App configured with *Contents: Read and write* permission.
 - **Interactive programs:** commands get no keyboard input, so programs that ask questions won't work.
 - **Persistent computers that keep installed packages:** this needs snapshot storage, at $0.08 per GB-month.
 - **Several people editing one project at once.**

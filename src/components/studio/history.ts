@@ -51,6 +51,10 @@ export interface HistoryStore {
   remove(id: string): Promise<void>;
   /** Server store only: every chat whose title contains `q`, beyond the recent ones `list` returns. */
   search?(q: string): Promise<ConvSummary[]>;
+  /** Server store only: hide a chat from the list without deleting it, or bring it back. */
+  archive?(id: string, archived: boolean): Promise<void>;
+  /** Server store only: the archived chats. */
+  listArchived?(): Promise<ConvSummary[]>;
   /** Local store only: persist a guest conversation after each turn. */
   save?(conv: ConvSummary, messages: Msg[]): void;
   clear?(): void;
@@ -68,7 +72,7 @@ type ServerMessage = {
 
 /** Signed-in history. `listUrl` selects ordinary chats or one agent's conversations. */
 export function makeServerHistory(listUrl: string): HistoryStore {
-  return { ...serverHistory, search: undefined, list: async () => (await jsonFetch<{ conversations: ConvSummary[] }>(listUrl)).conversations };
+  return { ...serverHistory, search: undefined, archive: undefined, listArchived: undefined, list: async () => (await jsonFetch<{ conversations: ConvSummary[] }>(listUrl)).conversations };
 }
 
 export const serverHistory: HistoryStore = {
@@ -104,6 +108,12 @@ export const serverHistory: HistoryStore = {
   },
   async remove(id) {
     await jsonFetch(`/api/conversations/${id}`, { method: "DELETE" });
+  },
+  async archive(id, archived) {
+    await jsonFetch(`/api/conversations/${id}`, { method: "PATCH", body: JSON.stringify({ archived }) });
+  },
+  async listArchived() {
+    return (await jsonFetch<{ conversations: ConvSummary[] }>("/api/conversations?archived=1")).conversations;
   },
 };
 

@@ -5,7 +5,10 @@ import { ApiError } from "@/lib/http";
 /**
  * Orbis's GitHub App: users install it on the repositories they choose, and
  * Orbis reads files from those repositories with short-lived installation
- * tokens. Read-only ("Contents: read"); Orbis never writes to GitHub.
+ * tokens ("Contents: read"). The one exception is Code's "Push to GitHub",
+ * which the user starts and confirms: it creates a new branch with one
+ * commit (see push.ts) and only works if the app is also given
+ * "Contents: Read and write". Existing branches are never written to.
  *
  * Configuration (Vercel, Sensitive): GITHUB_APP_ID, GITHUB_APP_SLUG and
  * GITHUB_APP_PRIVATE_KEY (the .pem, with real or "\n" line breaks).
