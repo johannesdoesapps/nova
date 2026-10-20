@@ -7,8 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { displayNameFrom, exchangeFailureCode, LOGIN_MESSAGES, loginMessage, oauthErrorCode, oauthRedirectTo, safeNext } from "@/lib/auth-flow";
 
 const exchange = vi.fn();
+const inserted: unknown[] = [];
 let configured = true;
-vi.mock("@/lib/supabase/server", () => ({ createServerSupabase: async () => ({ auth: { exchangeCodeForSession: exchange } }) }));
+// Just enough of the query builder for the legal-acceptance check after OAuth sign-up.
+const legalTable = {
+  select: () => ({ eq: () => ({ limit: async () => ({ data: [], error: null }) }) }),
+  insert: async (rows: unknown) => (inserted.push(rows), { error: null }),
+};
+vi.mock("@/lib/supabase/server", () => ({ createServerSupabase: async () => ({ auth: { exchangeCodeForSession: exchange }, from: () => legalTable }) }));
 vi.mock("@/lib/env", async (orig) => ({
   ...(await orig<typeof import("@/lib/env")>()),
   isSupabaseConfigured: () => configured,
@@ -18,10 +24,10 @@ vi.mock("@/lib/env", async (orig) => ({
 const { GET } = await import("@/app/auth/callback/route");
 const { authProviders } = await import("@/lib/auth-providers");
 
-async function callback(query: string) {
-  const res = await GET(new Request(`https://orbis.example/auth/callback?${query}`));
+async function callback(query: string, cookie?: string) {
+  const res = await GET(new Request(`https://orbis.example/auth/callback?${query}`, cookie ? { headers: { cookie } } : undefined));
   const loc = new URL(res.headers.get("location")!);
-  return { status: res.status, path: loc.pathname, origin: loc.origin, params: Object.fromEntries(loc.searchParams) };
+  return { status: res.status, path: loc.pathname, origin: loc.origin, params: Object.fromEntries(loc.searchParams), setCookie: res.headers.get("set-cookie") ?? "" };
 }
 
 describe("redirect safety", () => {
@@ -100,6 +106,20 @@ describe("OAuth callback", () => {
     expect((await callback("code=abc&next=%2Freset-password")).path).toBe("/reset-password");
     exchange.mockResolvedValue({ error: { message: "code verifier missing" } });
     expect((await callback("code=abc&next=%2Freset-password")).params).toEqual({ msg: "reset_expired", next: "/reset-password" });
+  });
+
+  it("records the Terms and Privacy acceptance ticked before Continue with Google, once", async () => {
+    const { LEGAL } = await import("@/content/legal-meta");
+    exchange.mockResolvedValue({ error: null });
+    inserted.length = 0;
+    const r = await callback("code=abc&via=google", `other=1; orbis_terms_pending=${LEGAL.version}`);
+    expect(inserted).toEqual([[expect.objectContaining({ document: "terms", version: LEGAL.version, method: "signup" }), expect.objectContaining({ document: "privacy", method: "signup" })]]);
+    expect(r.setCookie).toMatch(/orbis_terms_pending=;/);
+    // Plain sign-in, or a stale version from an older form: nothing recorded.
+    inserted.length = 0;
+    await callback("code=abc&via=google");
+    await callback("code=abc&via=google", "orbis_terms_pending=1999-01-01");
+    expect(inserted).toEqual([]);
   });
 
   it("keeps the email-confirmation behaviour for email links", async () => {

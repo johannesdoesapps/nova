@@ -2,6 +2,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { LEGAL } from "@/content/legal-meta";
+import { PENDING_COOKIE } from "@/lib/legal";
 import { browserSupabase } from "@/lib/supabase/client";
 import { friendlyAuthError, LOGIN_MESSAGES, oauthErrorCode, oauthRedirectTo, RESET_PASSWORD_PATH } from "@/lib/auth-flow";
 import { Button, Input, Notice } from "@/components/ui/primitives";
@@ -44,6 +46,17 @@ export function LoginForm({
   // Blocks a second click before React re-renders the button as busy.
   const googleStarted = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  // Sign-up: both documents must be accepted before an account is created (by email, Google or GitHub).
+  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [agreePrivacy, setAgreePrivacy] = useState(false);
+  const consentRef = useRef<HTMLFieldSetElement>(null);
+  const consented = agreeTerms && agreePrivacy;
+  const needConsent = () => {
+    if (mode !== "signup" || consented) return false;
+    setError("To create an account, tick both boxes to agree to the Terms of Service and the Privacy Policy.");
+    consentRef.current?.querySelector<HTMLInputElement>("input:not(:checked)")?.focus();
+    return true;
+  };
   const [info, setInfo] = useState<string | null>(null);
   const copy = COPY[mode];
   // Redirects go to the main site address, which is the one on Supabase's
@@ -53,6 +66,7 @@ export function LoginForm({
   const continueWithGoogle = () => continueWith("google");
   const continueWith = async (provider: "google" | "github") => {
     if (googleStarted.current || busy) return;
+    if (needConsent()) return;
     const setProviderBusy = provider === "google" ? setGoogleBusy : setGithubBusy;
     setError(null);
     setInfo(null);
@@ -62,6 +76,8 @@ export function LoginForm({
     }
     googleStarted.current = true;
     setProviderBusy(true);
+    // Carried through the provider's sign-in, so the acceptance is recorded when the new account comes back.
+    if (mode === "signup") document.cookie = `${PENDING_COOKIE}=${LEGAL.version}; Max-Age=1800; Path=/; SameSite=Lax; Secure`;
     try {
       // Supabase runs the OAuth flow with PKCE and checks state (and, for
       // Google, the OpenID nonce); Orbis never sees Google or GitHub credentials.
@@ -90,6 +106,7 @@ export function LoginForm({
   };
 
   const submit = async () => {
+    if (needConsent()) return;
     setBusy(true);
     setError(null);
     setInfo(null);
@@ -105,7 +122,8 @@ export function LoginForm({
           email,
           password,
           options: {
-            data: { display_name: name.trim() || undefined },
+            // Recorded with the new account as its acceptance of these documents' current version.
+            data: { display_name: name.trim() || undefined, terms_version: LEGAL.version },
             emailRedirectTo: `${origin()}/auth/callback?next=${encodeURIComponent(next)}`,
           },
         });
@@ -154,6 +172,33 @@ export function LoginForm({
     <div>
       <h1 className="font-serif text-[34px] leading-[1.05] tracking-[-0.01em]">{copy.title}</h1>
       <p className="mt-1 text-sm text-muted">{copy.subtitle}</p>
+
+      {mode === "signup" && (
+        <fieldset ref={consentRef} className="mt-5 space-y-2.5 rounded-xl border border-border bg-panel-2 p-3.5 text-[13px] leading-snug">
+          <legend className="sr-only">Agreements</legend>
+          <label className="flex items-start gap-2.5">
+            <input type="checkbox" required checked={agreeTerms} onChange={(e) => setAgreeTerms(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]" />
+            <span>
+              I agree to the{" "}
+              <Link href="/terms" target="_blank" className="text-fg underline underline-offset-2 hover:text-accent">
+                Terms of Service
+              </Link>
+              .
+            </span>
+          </label>
+          <label className="flex items-start gap-2.5">
+            <input type="checkbox" required checked={agreePrivacy} onChange={(e) => setAgreePrivacy(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]" />
+            <span>
+              I have read and agree to the{" "}
+              <Link href="/privacy" target="_blank" className="text-fg underline underline-offset-2 hover:text-accent">
+                Privacy Policy
+              </Link>
+              .
+            </span>
+          </label>
+          <p className="text-xs text-muted">You must be 13 or older. If you&apos;re under 18, you need a parent&apos;s or guardian&apos;s permission.</p>
+        </fieldset>
+      )}
 
       <div className="mt-5">
         <GoogleButton onClick={() => void continueWithGoogle()} loading={googleBusy} disabled={google === false || busy} />
@@ -218,13 +263,6 @@ export function LoginForm({
         {error && <Notice tone="danger">{error}</Notice>}
         {info && <Notice tone="success">{info}</Notice>}
         <Button type="submit" className="w-full" loading={busy} disabled={googleBusy}>{mode === "signin" ? "Sign in" : "Create account"}</Button>
-        {mode === "signup" && (
-          <p className="text-center text-xs leading-relaxed text-muted">
-            By creating an account you agree to the{" "}
-            <Link href="/terms" className="underline underline-offset-2 hover:text-fg">Terms of Service</Link> and confirm you&apos;ve read the{" "}
-            <Link href="/privacy" className="underline underline-offset-2 hover:text-fg">Privacy Policy</Link>. You must be 13 or older; under 18s need a parent&apos;s or guardian&apos;s permission.
-          </p>
-        )}
         <p className="text-center text-xs text-muted">
           {mode === "signin" ? "Don’t have an account?" : "Already have an account?"}{" "}
           <button

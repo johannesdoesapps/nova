@@ -1,5 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { LEGAL } from "@/content/legal-meta";
+import { ACCEPTED_COOKIE, acceptedCookieOptions, hasAccepted, needsAcceptance } from "@/lib/legal";
 
 /**
  * Pages that require a signed-in user (only enforced when Supabase is configured).
@@ -46,6 +48,21 @@ export async function proxy(request: NextRequest) {
     login.pathname = "/login";
     login.search = `?next=${encodeURIComponent(path)}`;
     return NextResponse.redirect(login);
+  }
+
+  // Signed-in users accept the current Terms of Service and Privacy Policy before using the app.
+  if (signedIn && request.method === "GET" && needsAcceptance(path) && request.cookies.get(ACCEPTED_COOKIE)?.value !== LEGAL.version) {
+    const accepted = await hasAccepted(supabase);
+    if (accepted === false) {
+      const consent = request.nextUrl.clone();
+      consent.pathname = "/consent";
+      consent.search = `?next=${encodeURIComponent(path + request.nextUrl.search)}`;
+      const redirect = NextResponse.redirect(consent);
+      response.cookies.getAll().forEach((c) => redirect.cookies.set(c));
+      return redirect;
+    }
+    // Checked (or the check is unavailable: never lock people out because of it).
+    if (accepted) response.cookies.set(ACCEPTED_COOKIE, LEGAL.version, acceptedCookieOptions);
   }
   return response;
 }

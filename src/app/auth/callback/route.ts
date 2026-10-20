@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { LEGAL } from "@/content/legal-meta";
+import { hasAccepted, PENDING_COOKIE, recordAcceptance } from "@/lib/legal";
 import { afterSignIn, exchangeFailureCode, oauthErrorCode, safeNext, type LoginMessageCode } from "@/lib/auth-flow";
 import { isSupabaseConfigured } from "@/lib/env";
 import { createServerSupabase } from "@/lib/supabase/server";
@@ -41,10 +43,26 @@ export async function GET(req: Request) {
     // have one pending); passing it also lets Supabase delete that verifier.
     const flowId = url.searchParams.get("sb_flow_id");
     const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code, flowId ? { flowId } : undefined);
-    if (!exchangeError) return NextResponse.redirect(new URL(afterSignIn(next), url.origin));
+    if (!exchangeError) {
+      const res = NextResponse.redirect(new URL(afterSignIn(next), url.origin));
+      // Signed up with Google or GitHub after ticking both boxes: record the acceptance now.
+      const pending = readCookie(req, PENDING_COOKIE);
+      if (pending) {
+        if (pending === LEGAL.version && (await hasAccepted(supabase)) === false) await recordAcceptance(supabase, "signup");
+        res.cookies.set(PENDING_COOKIE, "", { path: "/", maxAge: 0 });
+      }
+      return res;
+    }
   }
   // The exchange fails when the code was used already, expired, or the flow
   // was started in another browser (no PKCE verifier here).
   if (via === "github-link") return toPage(exchangeFailureCode(via, Boolean(code), next));
   return toLogin(exchangeFailureCode(via, Boolean(code), next));
+}
+
+function readCookie(req: Request, name: string): string | undefined {
+  for (const part of (req.headers.get("cookie") ?? "").split(";")) {
+    const [k, ...v] = part.trim().split("=");
+    if (k === name) return v.join("=");
+  }
 }

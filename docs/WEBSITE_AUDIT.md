@@ -73,7 +73,7 @@ How the site was checked:
 ## 7. What can't be verified or done without the site owner
 
 - **Analytics and funnel data.** No analytics provider is configured, so conversion, sign-up and retention can't be measured, and no A/B test can be run honestly. See WEBSITE.md → Analytics for the privacy-friendly setup.
-- **A privacy policy and terms of service.** Added later on 20 October 2026, at `/privacy` and `/terms`. They're drafted from how the product works, with the owner's choices: UK law, contact support@tryorbis.app, minimum age 13 (under 18s need a parent's permission). They still need the registered business name and a postal address, and a lawyer's review.
+- **A privacy policy and terms of service.** Added later on 20 October 2026, at `/privacy` and `/terms`. They're drafted from how the product works, with the owner's choices: UK law, contact support@tryorbis.app, minimum age 13 (under 18s need a parent's permission). Their structure mirrors ChatGPT's and Claude's consumer terms and privacy policy. Since 20 October 2026, sign-up requires ticking both, and existing users accept them before continuing (see WEBSITE.md → Consent). They still need the registered business name and a postal address, and a lawyer's review.
 - **Customer testimonials, logos, usage statistics and certifications.** None exist, so none are shown.
 - **Search Console** verification and sitemap submission need the owner's Google account.
 - **Payments.** Stripe isn't configured, so Pro and Max show "Payments are being set up".

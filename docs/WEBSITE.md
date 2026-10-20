@@ -80,15 +80,32 @@ No analytics provider is configured, so no tracking code is included. To add one
 ## Still needed from the site owner
 
 - **Privacy Policy and Terms of Service** are published at `/privacy` and `/terms`
-  (content in `src/content/legal.ts`). They're linked in the footer, on the sign-up form and from
-  Security & data. They are drafts based on how Orbis actually works and should be reviewed by a
-  lawyer. Two facts are still missing and should be filled in `LEGAL` once known:
+  (content in `src/content/legal.ts`, settings in `src/content/legal-meta.ts`). They follow the
+  structure and topics of OpenAI's and Anthropic's consumer documents, written for how Orbis
+  actually works, and should be reviewed by a lawyer. Two facts are still missing and should be
+  filled in `LEGAL` once known:
   - `operatorName`, the registered business name;
   - `address`, a postal address. UK e-commerce rules require a name and a geographic address for an online service.
 
-  Make sure support@tryorbis.app receives mail, and change `updated` whenever the meaning changes.
-- **Contact details** (an email address or form) for support and data requests —
-  account deletion currently needs the operator.
+  Make sure support@tryorbis.app receives mail — it's the contact for support, data requests and account deletion.
+
+## Consent to the Terms and Privacy Policy
+
+Nobody can use the app without accepting the current version of both documents.
+
+- **Sign-up form** (`/login`, Create account): two required tick boxes, one per document. Neither
+  "Create account" nor "Continue with Google/GitHub" works until both are ticked.
+  - Email sign-up sends `terms_version` with the sign-up; the `handle_new_user` trigger records it.
+  - Google/GitHub sets a short-lived `orbis_terms_pending` cookie; `/auth/callback` records it after sign-in.
+- **Everyone else** (existing accounts, or Google/GitHub sign-ins from the "Sign in" tab): the proxy
+  sends a signed-in user without an acceptance to `/consent`, which asks for both boxes (or offers
+  to sign out). The public site, legal pages and sign-in stay open.
+- **Records** are in `legal_acceptances` (user, document, version, method `signup`/`prompt`, time).
+  Users can add and read their own rows but never change or delete them.
+- **Changing the documents:** update `updated` in `LEGAL`. For a material change, also change
+  `version` (e.g. `2027-03-01`): everyone is then asked to accept again on their next visit, with
+  the heading "We've updated our terms". The Terms promise 30 days' notice before a material change
+  takes effect, so email users first.
 - **Pro plan price**, when it goes on sale (shown on `/pricing` and the homepage).
 - **Web search key** (`SEARCH_PROVIDER` + `SEARCH_API_KEY`) if you want live sources and
   Truth Layer checks — the feature pages say clearly that they're not enabled yet.
