@@ -51,7 +51,7 @@ First attempt: **failed** — every model call returned HTTP 400 ("Function tool
 | Revert of a path outside the project — 400 | PASS |
 | A step request for a step that already ran (`expectStep` stale) runs nothing | PASS |
 | Stop ends the run, nothing changes after Stop, the stopped run has a report | **FAIL** on first run → race fixed (§1) → see §5 for the re-run |
-| Another user's session: read, step, cancel, revert, list checkpoints | see §5 |
+| Another user's session: read, step, cancel, revert, list checkpoints | PASS, see §5 |
 
 Timeouts, budgets and the repeated-action and failed-test limits were tested in the engine suite (§1), not live: running them live would mean deliberately burning model budget or waiting 30 minutes.
 
@@ -90,7 +90,7 @@ Run after deploying the Stop fix (commit c1bade0):
 | Stop ends the run, nothing changed after Stop, the stopped run has a report | PASS (3/3). Confirmed in the database afterwards: status cancelled, 1 step, 0 changes, no lock, report outcome "cancelled". This Stop landed during the model call; a Stop landing mid-action or while a step saves is covered by the two regression tests in §1, not live (the timing can't be forced from outside). |
 | Keyboard: pressing Tab from the top of the page reaches the main navigation, and the focused link shows a visible outline (solid 2px) | PASS |
 | Code start screen: no serious or critical accessibility issues (axe, WCAG 2.0/2.1/2.2 A and AA) | PASS |
-| Another user's session (signed in as a second test account): read, step, cancel and revert all return 404; checkpoints list returned 200 with an empty list | PASS — nothing is exposed. To match the other routes, the checkpoints list now also returns 404 for someone else's run (deployed after this run). |
+| Another user's session (signed in as a second test account): read, step, cancel and revert all return 404; checkpoints list returned 200 with an empty list | PASS — nothing is exposed. To match the other routes, the checkpoints list was changed to return 404 for someone else's run (commit c2363b8); re-run after deploying: **404 on all five**. |
 
 ## 6. Known limitations
 
@@ -101,3 +101,7 @@ Run after deploying the Stop fix (commit c1bade0):
 - **The agent may skip reproducing the failure first** (seen with Claude Haiku); the report still only says "verified" when tests passed after the last change.
 - **Old `(app)` route shell** is unused and redirected; it can be deleted in a cleanup.
 - The editor is still CodeMirror; no change was needed for this work.
+
+## 7. Clean-up
+
+After testing, both test accounts were locked again (banned, password replaced with a random one, sessions revoked); they have no runs left open. The test password files were deleted.
