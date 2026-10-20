@@ -1,7 +1,7 @@
 "use client";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -49,6 +49,20 @@ interface Entry {
 
 type Pane = "files" | "editor" | "terminal" | "ai" | "preview";
 
+/** Phones get one pane at a time, larger screens all of them; only one layout is rendered. */
+const WIDE = "(min-width: 768px)";
+function useWide(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      const m = window.matchMedia(WIDE);
+      m.addEventListener("change", cb);
+      return () => m.removeEventListener("change", cb);
+    },
+    () => window.matchMedia(WIDE).matches,
+    () => true,
+  );
+}
+
 function Btn({ children, onClick, disabled, title, primary, className }: { children: ReactNode; onClick?: () => void; disabled?: boolean; title?: string; primary?: boolean; className?: string }) {
   return (
     <button
@@ -91,6 +105,7 @@ function buildTree(paths: string[]): Node[] {
 export function CodeWorkspace({ id }: { id: string }) {
   const { theme } = useStudio();
   const catalog = useCatalog();
+  const wide = useWide();
   const [project, setProject] = useState<ProjectSummary | null>(null);
   const [saved, setSaved] = useState<Record<string, string>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -787,51 +802,55 @@ export function CodeWorkspace({ id }: { id: string }) {
         </div>
       )}
 
-      {/* Phones: one pane at a time. */}
-      <div className="flex shrink-0 gap-1 overflow-x-auto px-3 pb-2 md:hidden" role="tablist" aria-label="Workspace panes">
-        {PANES.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            role="tab"
-            aria-selected={pane === p.id}
-            onClick={() => setPane(p.id)}
-            className={cn("shrink-0 rounded-full px-3 py-1 text-[12.5px]", pane === p.id ? "bg-s-hover text-s-ink" : "text-s-ink-3")}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
-      <div className="min-h-0 flex-1 overflow-hidden border-t border-s-line md:hidden">
-        {pane === "files" ? treeView : pane === "editor" ? editorView : pane === "terminal" ? terminalView : pane === "ai" ? aiView : previewView}
-      </div>
-
-      {/* Larger screens: files | editor over terminal | AI or preview. */}
-      <div className="hidden min-h-0 flex-1 border-t border-s-line md:flex">
-        <aside className="w-56 shrink-0 border-r border-s-line lg:w-60">{treeView}</aside>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="min-h-0 flex-[3]">{editorView}</div>
-          <div className="min-h-0 flex-[2] border-t border-s-line">{terminalView}</div>
-        </div>
-        <aside className={cn("flex shrink-0 flex-col border-l border-s-line", right ? "w-[360px] xl:w-[420px]" : "w-11")}>
-          <div className={cn("flex shrink-0 gap-1 border-b border-s-line p-1.5", !right && "flex-col items-center border-b-0")}>
-            {(["ai", "preview"] as const).map((r) => (
+      {!wide ? (
+        <>
+          {/* Phones: one pane at a time. */}
+          <div className="flex shrink-0 gap-1 overflow-x-auto px-3 pb-2" role="tablist" aria-label="Workspace panes">
+            {PANES.map((p) => (
               <button
-                key={r}
+                key={p.id}
                 type="button"
-                onClick={() => setRight(right === r ? null : r)}
-                aria-pressed={right === r}
-                title={r === "ai" ? "AI editor" : "Preview"}
-                className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[12.5px]", right === r ? "bg-s-hover text-s-ink" : "text-s-ink-3 hover:text-s-ink")}
+                role="tab"
+                aria-selected={pane === p.id}
+                onClick={() => setPane(p.id)}
+                className={cn("shrink-0 rounded-full px-3 py-1 text-[12.5px]", pane === p.id ? "bg-s-hover text-s-ink" : "text-s-ink-3")}
               >
-                {r === "ai" ? <Sparkles className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                {right && (r === "ai" ? "AI" : "Preview")}
+                {p.label}
               </button>
             ))}
           </div>
-          {right && <div className="min-h-0 flex-1">{right === "ai" ? aiView : previewView}</div>}
-        </aside>
-      </div>
+          <div className="min-h-0 flex-1 overflow-hidden border-t border-s-line">
+            {pane === "files" ? treeView : pane === "editor" ? editorView : pane === "terminal" ? terminalView : pane === "ai" ? aiView : previewView}
+          </div>
+        </>
+      ) : (
+        /* Larger screens: files | editor over terminal | AI or preview. */
+        <div className="flex min-h-0 flex-1 border-t border-s-line">
+          <aside className="w-56 shrink-0 border-r border-s-line lg:w-60">{treeView}</aside>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="min-h-0 flex-[3]">{editorView}</div>
+            <div className="min-h-0 flex-[2] border-t border-s-line">{terminalView}</div>
+          </div>
+          <aside className={cn("flex shrink-0 flex-col border-l border-s-line", right ? "w-[360px] xl:w-[420px]" : "w-11")}>
+            <div className={cn("flex shrink-0 gap-1 border-b border-s-line p-1.5", !right && "flex-col items-center border-b-0")}>
+              {(["ai", "preview"] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setRight(right === r ? null : r)}
+                  aria-pressed={right === r}
+                  title={r === "ai" ? "AI editor" : "Preview"}
+                  className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[12.5px]", right === r ? "bg-s-hover text-s-ink" : "text-s-ink-3 hover:text-s-ink")}
+                >
+                  {r === "ai" ? <Sparkles className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {right && (r === "ai" ? "AI" : "Preview")}
+                </button>
+              ))}
+            </div>
+            {right && <div className="min-h-0 flex-1">{right === "ai" ? aiView : previewView}</div>}
+          </aside>
+        </div>
+      )}
       {allowance && <p className="hidden shrink-0 border-t border-s-line px-4 py-1 text-[11px] text-s-ink-3 md:block">{minutesLine(allowance)} · time is counted in {block}-minute blocks from when you start or extend the computer.</p>}
     </>
   );
