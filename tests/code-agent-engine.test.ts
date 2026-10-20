@@ -411,6 +411,45 @@ describe("recovery", () => {
     expect((await stepRun(req(), auth, id)).run.status).toBe("completed");
   });
 
+  it("stops the run at once when the provider rejects the request, with its reason", async () => {
+    const { ApiError } = await import("@/lib/http");
+    const id = working();
+    script.turns.push(() => {
+      throw new ApiError("bad_request", "GPT-5.6 Luna couldn't process this request (error 400).");
+    });
+    const r = await stepRun(req(), auth, id);
+    expect(r.run.status).toBe("failed");
+    expect(r.run.error).toContain("couldn't process this request (error 400)");
+    expect(r.run.report).toMatchObject({ outcome: "failed" });
+    expect(releaseUsage).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops after three failed model calls in a row, and logs the start only once", async () => {
+    const id = newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true } });
+    const busy = () => {
+      throw new Error("529 overloaded");
+    };
+    script.turns.push(busy, busy, busy);
+    await expect(stepRun(req(), auth, id)).rejects.toMatchObject({ code: "upstream_error" });
+    await expect(stepRun(req(), auth, id)).rejects.toMatchObject({ code: "upstream_error" });
+    const third = await stepRun(req(), auth, id);
+    expect(third.run.status).toBe("failed");
+    expect(third.run.error).toContain("failed 3 times in a row");
+    expect(events(id).filter((e) => e.title.startsWith("Started with"))).toHaveLength(1);
+  });
+
+  it("resets the failure count after a model call succeeds", async () => {
+    const id = working();
+    script.turns.push(() => {
+      throw new Error("timeout");
+    });
+    await expect(stepRun(req(), auth, id)).rejects.toMatchObject({ code: "upstream_error" });
+    expect(run(id).usage).toMatchObject({ modelFailuresInRow: 1 });
+    script.turns.push(turn("Done.", call("finish", { summary: "ok" })));
+    await stepRun(req(), auth, id);
+    expect(run(id).usage).toMatchObject({ modelFailuresInRow: 0 });
+  });
+
   it("recovers an interrupted step by telling the model which actions may or may not have run", async () => {
     const id = working();
     db.runs.get(id)!.transcript = [

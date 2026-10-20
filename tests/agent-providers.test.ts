@@ -208,7 +208,8 @@ describe("GPT tool turns", () => {
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("https://api.openai.test/v1/chat/completions");
     const body = JSON.parse(init.body);
-    expect(body).toMatchObject({ model: "gpt-5.6-luna", tool_choice: "auto", max_completion_tokens: 1200 });
+    // Function tools on Chat Completions need reasoning off for OpenAI's reasoning models.
+    expect(body).toMatchObject({ model: "gpt-5.6-luna", tool_choice: "auto", max_completion_tokens: 1200, reasoning_effort: "none" });
     expect(body.messages[0]).toEqual({ role: "system", content: "You are the agent." });
     expect(body.tools[0]).toEqual({ type: "function", function: { name: "read_files", description: "Read files", parameters: tools[0]!.parameters } });
     expect(init.headers.Authorization).toBe("Bearer sk-test");

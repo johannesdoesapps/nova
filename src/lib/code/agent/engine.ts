@@ -91,6 +91,8 @@ const MAX_OUTPUT_KEPT = 200_000;
 const TOKEN_BUDGET_INCREMENT = 300_000;
 const TIME_LIMIT_INCREMENT = 15 * 60_000;
 const TEST_ATTEMPT_INCREMENT = 2;
+/** Model calls that fail in a row (busy, timed out, unreachable) before the run stops. */
+const MAX_MODEL_FAILURES = 3;
 /** Identical steps in a row before the run stops to ask. */
 const REPEAT_LIMIT = 3;
 
@@ -413,6 +415,8 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
     const computer = Boolean(await optionalBox(auth, project.id));
     transcript = [{ role: "user", content: initialMessage(row.request, files, { projectName: project.name, runCommand: project.runCommand, computer }) }];
     await addEvents(auth, row.id, [{ kind: "status", title: `Started with ${model.displayName}`, detail: { model: model.displayName, routing: choice.routing?.reason ?? null } }]);
+    // Kept now, so a retry after a failed first model call doesn't start (and log) the run again.
+    await updateRun(auth, row.id, { transcript });
   }
 
   // A step that was cut off after the model asked for actions (a crash or timeout) left its calls without
@@ -471,18 +475,29 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
       const parsed = parseAgentReply(r.text);
       reply = parsed.ok ? { ...parsed.data, actions: parsed.data.actions.map((a, i) => ({ ...a, id: `s${row.steps}a${i}` })) } : { thought: "", actions: [] };
       if (!parsed.ok) {
-        usage = addUsage(usage, model, callUsage, promptChars, raw.length);
+        usage = { ...addUsage(usage, model, callUsage, promptChars, raw.length), modelFailuresInRow: 0 };
         return formatProblem(auth, row, transcript, raw, parsed.error, usage, stepStarted);
       }
     }
   } catch (err) {
     await releaseUsage(auth);
     reportError(err, { where: "code.agent.model" });
-    await addEvents(auth, row.id, [{ kind: "error", title: `${model.displayName} didn't answer. This step wasn't counted; it can be retried.` }]);
-    throw new ApiError("upstream_error", `${model.displayName} didn't answer. This step wasn't counted. Press Continue to try again.`);
+    // Provider messages from ApiError are already safe to show; anything else gets a generic one.
+    const reason = err instanceof ApiError ? err.message : `${model.displayName} didn't answer.`;
+    const failures = (usage.modelFailuresInRow ?? 0) + 1;
+    // A rejected request (or a missing key) fails the same way every time; a busy or unreachable provider may recover.
+    const permanent = err instanceof ApiError && (err.code === "bad_request" || err.code === "not_configured");
+    if (permanent || failures >= MAX_MODEL_FAILURES) {
+      const message = permanent ? `${reason} The run stopped; try another model.` : `${model.displayName} failed ${failures} times in a row (${reason}), so the run stopped. Try again later or with another model.`;
+      await addEvents(auth, row.id, [{ kind: "error", title: message.slice(0, 380) }]);
+      return finishStep(auth, row.id, { status: "failed", error: message.slice(0, 2000), pending: null, usage: { ...usage, modelFailuresInRow: failures } });
+    }
+    await updateRun(auth, row.id, { usage: { ...usage, modelFailuresInRow: failures } });
+    await addEvents(auth, row.id, [{ kind: "error", title: `${reason} This step wasn't counted; it can be retried.`.slice(0, 380) }]);
+    throw new ApiError("upstream_error", `${reason} This step wasn't counted. Press Continue to try again.`);
   }
   const latencyMs = performance.now() - started;
-  usage = addUsage(usage, model, callUsage, promptChars, raw.length);
+  usage = { ...addUsage(usage, model, callUsage, promptChars, raw.length), modelFailuresInRow: 0 };
   const webSearches = { count: 0 };
   const record = (tools: string[]) =>
     recordRunLater(auth, {

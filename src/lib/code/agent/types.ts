@@ -68,6 +68,8 @@ export interface RunUsage {
   models: string[];
   /** Some token counts were estimated (the provider didn't report them). */
   estimated?: boolean;
+  /** Model calls that failed in a row (reset by a successful one). */
+  modelFailuresInRow?: number;
 }
 
 export const EMPTY_USAGE: RunUsage = { inputTokens: 0, outputTokens: 0, costUsd: 0, modelCalls: 0, models: [] };

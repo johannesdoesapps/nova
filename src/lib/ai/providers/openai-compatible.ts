@@ -120,6 +120,8 @@ export class OpenAICompatibleProvider implements AIProvider {
       messages: [{ role: "system", content: params.system }, ...toOpenAIToolMessages(params.messages)],
       tools: params.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } })),
       tool_choice: "auto",
+      // OpenAI's reasoning models accept function tools on Chat Completions only with reasoning off.
+      ...(this.id === "openai" ? { reasoning_effort: "none" } : {}),
       [this.id === "openai" ? "max_completion_tokens" : "max_tokens"]: params.maxOutputTokens,
     };
     const res = await this.request(params, body);
