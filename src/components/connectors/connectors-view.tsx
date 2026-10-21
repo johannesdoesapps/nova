@@ -48,6 +48,7 @@ function ConnectorCard({ c, onOpen }: { c: CatalogEntry; onOpen: () => void }) {
         <button
           type="button"
           onClick={onOpen}
+          aria-label={`${action}: ${c.name}`}
           className={cn(
             "h-8 rounded-full px-3.5 text-[12.5px] font-medium transition",
             status === "connected" ? "border border-s-line text-s-ink-2 hover:border-s-line-strong hover:text-s-ink" : !c.available ? "border border-dashed border-s-line text-s-ink-3 hover:text-s-ink-2" : "bg-s-accent text-s-accent-ink hover:brightness-110",
