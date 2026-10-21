@@ -216,6 +216,16 @@ vi.mock("@/lib/code/agent/runs", async (orig) => {
   };
 });
 
+// Project memory: an in-memory stand-in for the table.
+const memory = { notes: [] as import("@/lib/code/memory").MemoryEntry[], added: [] as Record<string, unknown>[] };
+vi.mock("@/lib/code/memory-store", () => ({
+  listMemory: async () => structuredClone(memory.notes),
+  addMemory: async (_a: unknown, _p: string, e: Record<string, unknown>) => {
+    memory.added.push(e);
+    return { id: `mem${memory.added.length}`, always: false, status: "active", source: "user", runId: null, createdAt: "", updatedAt: "", ...e };
+  },
+}));
+
 const { stepRun, respondToRun, cancelRun, addUsage } = await import("@/lib/code/agent/engine");
 const { scrub } = await import("@/lib/code/agent/runs");
 
@@ -261,6 +271,8 @@ const FAILING = " ❯ sum.test.js (2 tests | 1 failed)\n   × sum > adds negativ
 const PASSING = "      Tests  2 passed (2)\n";
 
 beforeEach(() => {
+  memory.notes = [];
+  memory.added = [];
   script.turns = [];
   script.seen = [];
   script.json = [];
@@ -657,5 +669,42 @@ describe("accounting and secrets", () => {
   it("removes credentials from what the activity log keeps", () => {
     const text = scrub("token ghp_abcdefghijklmnopqrstuvwxyz0123456789 and AKIAABCDEFGHIJKLMNOP and sk-ant-api03-abcdefghijklmnopqrstuvwxyz and Bearer abcdefghijklmnopqrstuvwxyz123456");
     expect(text).not.toMatch(/ghp_abc|AKIAABCD|sk-ant-api03-abc|abcdefghijklmnopqrstuvwxyz123456/);
+  });
+});
+
+describe("project memory", () => {
+  const note = (over: Partial<import("@/lib/code/memory").MemoryEntry>) => ({ id: "n", kind: "decision" as const, title: "T", content: "C", always: false, status: "active" as const, source: "user" as const, runId: null, createdAt: "", updatedAt: "2026-10-20T00:00:00Z", ...over });
+
+  it("gives the run the user's approved notes that fit, never unapproved suggestions, and saves the agent's suggestions for approval", async () => {
+    memory.notes = [
+      note({ id: "a", kind: "instruction", title: "Tests", content: "Always run npm test before finishing." }),
+      note({ id: "b", kind: "architecture", title: "Sum module", content: "sum.js holds the arithmetic helpers." }),
+      note({ id: "c", kind: "decision", title: "Database", content: "Postgres, never MySQL." }),
+      note({ id: "d", kind: "preference", title: "Sum style", content: "Use arrow functions in sum.js.", status: "proposed", source: "agent" }),
+    ];
+    const id = newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true }, request: "Fix the sum helper in sum.js" });
+    script.turns.push(
+      turn("Noting the convention.", call("propose_memory", { kind: "preference", title: "Exports", content: "sum.js uses named exports.", reason: "Seen in the code." })),
+      turn("Done.", call("finish", { summary: "ok" })),
+    );
+    await stepRun(req(), auth, id);
+    const first = script.seen[0]!.messages[0]!;
+    const text = first.text;
+    expect(text).toContain("Always run npm test before finishing.");
+    expect(text).toContain("sum.js holds the arithmetic helpers.");
+    expect(text).not.toContain("Postgres");
+    expect(text).not.toContain("arrow functions");
+    expect(script.seen[0]!.tools.map((t) => t.name)).toEqual(expect.arrayContaining(["search_memory", "propose_memory"]));
+    expect(events(id).find((e) => e.title.startsWith("Using 2 notes from project memory"))).toBeTruthy();
+    expect(memory.added).toEqual([{ kind: "preference", title: "Exports", content: "sum.js uses named exports.", status: "proposed", source: "agent", runId: id }]);
+  });
+
+  it("works with no memory at all", async () => {
+    const id = newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true } });
+    script.turns.push(turn("Done.", call("finish", { summary: "ok" })));
+    await stepRun(req(), auth, id);
+    const first = script.seen[0]!.messages[0]!;
+    expect(first.text).not.toContain("Project memory");
+    expect(events(id).some((e) => e.title.includes("project memory"))).toBe(false);
   });
 });

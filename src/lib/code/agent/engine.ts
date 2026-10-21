@@ -59,6 +59,8 @@ import {
 } from "./runs";
 import { isTestCommand, testResult, type TestResult } from "./test-results";
 import { toolSchemas, type ToolContext } from "./tool-specs";
+import { memoryBlock, searchMemory, selectMemory, type MemoryEntry } from "../memory";
+import { addMemory, listMemory } from "../memory-store";
 import { commandEvent, commandResultText, describeChange, planRestore, runActions, type AgentEnv, type CommandOutcome } from "./tools";
 import {
   DEFAULT_TEST_ATTEMPTS,
@@ -302,6 +304,10 @@ function realEnv(c: EnvContext): AgentEnv {
       setRunCommand: (command) => setRunCommand(auth, project.id, command),
     },
   };
+  env.memory = {
+    search: async (query) => searchMemory(await listMemory(auth, project.id), query),
+    propose: (note) => addMemory(auth, project.id, { ...note, status: "proposed", source: "agent", runId: run.id }),
+  };
   if (c.docs) {
     env.lookupDocs = async (query) => {
       const e = serverEnv();
@@ -462,8 +468,17 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
       .filter((r) => r.id !== row.id && ENDED_STATUSES.includes(r.status))
       .slice(0, 3)
       .map((r) => ({ request: r.request, status: r.status, summary: r.report?.summary ?? r.summary, files: (r.report?.files ?? []).map((f) => f.path) }));
-    transcript = [{ role: "user", content: initialMessage(row.request, files, { projectName: project.name, runCommand: project.runCommand, computer, earlier }) }];
-    await addEvents(auth, row.id, [{ kind: "status", title: `Started with ${model.displayName}`, detail: { model: model.displayName, routing: choice.routing?.reason ?? null } }]);
+    // Project memory: approved notes that fit this request (instructions and "always" notes every time).
+    const notes = await listMemory(auth, project.id).catch(() => [] as MemoryEntry[]);
+    const active = notes.filter((n) => n.status === "active");
+    const used = selectMemory(active, row.request);
+    transcript = [{ role: "user", content: initialMessage(row.request, files, { projectName: project.name, runCommand: project.runCommand, computer, earlier, memory: memoryBlock(used, active.length) }) }];
+    await addEvents(auth, row.id, [
+      { kind: "status", title: `Started with ${model.displayName}`, detail: { model: model.displayName, routing: choice.routing?.reason ?? null } },
+      ...(used.length
+        ? [{ kind: "inspect" as const, title: `Using ${used.length} note${used.length === 1 ? "" : "s"} from project memory: ${used.map((n) => n.title).join(", ").slice(0, 300)}`, detail: { memory: used.map((n) => ({ id: n.id, kind: n.kind, title: n.title })) } }]
+        : []),
+    ]);
     // Kept now, so a retry after a failed first model call doesn't start (and log) the run again.
     await updateRun(auth, row.id, { transcript });
   }
@@ -487,7 +502,7 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
 
   const readOnly = !!opts.readOnly;
   const planApproved = !readOnly && (!opts.approvePlans || !!row.plan?.approved);
-  const ctx: ToolContext = { commands: readOnly ? "off" : opts.commands, docs, github, approvePlans: opts.approvePlans, readOnly };
+  const ctx: ToolContext = { commands: readOnly ? "off" : opts.commands, docs, github, approvePlans: opts.approvePlans, readOnly, memory: true };
   const native = usesNativeTools(model);
   const maxOutputTokens = Math.max(limits.maxOutputTokens, AGENT_OUTPUT_TOKENS);
   const replyChars = maxOutputTokens * 3;

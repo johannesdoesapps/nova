@@ -23,6 +23,7 @@ import {
   Search,
   Settings2,
   Sparkles,
+  BookMarked,
   Square,
   SquareArrowOutUpRight,
   Terminal as TerminalIcon,
@@ -40,6 +41,7 @@ import { cn } from "@/lib/utils";
 import { AgentPanel, SessionsList } from "./agent-panel";
 import { api, CodeApiError, plainText, post, takeBuildRequest, type AiResult, type Allowance, type JobRead, type ProjectData, type Session } from "./api";
 import { ChangesPanel } from "./changes-panel";
+import { MemoryPanel } from "./memory-panel";
 import { FileDiff } from "./diff-view";
 import { minutesLine } from "./projects-view";
 
@@ -60,9 +62,9 @@ interface Entry {
 }
 
 /** Phones show one pane at a time. */
-type Pane = "agent" | "sessions" | "files" | "editor" | "changes" | "preview" | "terminal" | "ai";
+type Pane = "agent" | "sessions" | "files" | "editor" | "changes" | "memory" | "preview" | "terminal" | "ai";
 /** Larger screens: the optional panel beside the agent. */
-type Side = "editor" | "changes" | "preview" | "terminal" | "ai";
+type Side = "editor" | "changes" | "memory" | "preview" | "terminal" | "ai";
 
 /** Sizes the user dragged, remembered in this browser (and in memory when storage is unavailable). */
 const sizeMemory = new Map<string, number>();
@@ -223,7 +225,9 @@ export function CodeWorkspace({ id }: { id: string }) {
   const [activeRun, setActiveRun] = useState<RunView | null>(null);
   const [sessionsVersion, setSessionsVersion] = useState(0);
   const params = useSearchParams();
-  const initialRequest = params.get("task") === "example" ? EXAMPLE_PROJECT.task : undefined;
+  // A workflow from project memory fills the next session's request.
+  const [draftRequest, setDraftRequest] = useState<string | null>(null);
+  const initialRequest = draftRequest ?? (params.get("task") === "example" ? EXAMPLE_PROJECT.task : undefined);
   // "Build website": the request comes from the start screen (kept for this page, so later URL changes don't matter).
   const [buildRequest] = useState<string | undefined>(() => (params.get("build") === "1" ? takeBuildRequest(id) : undefined));
   // The live site: whether it answers on the preview port (asked from the computer, not assumed).
@@ -640,7 +644,8 @@ export function CodeWorkspace({ id }: { id: string }) {
       return r;
     });
   }, []);
-  const openSession = (runId: string | null) => {
+  const openSession = (runId: string | null, draft: string | null = null) => {
+    setDraftRequest(draft);
     setSelect((s) => ({ runId, n: (s?.n ?? 0) + 1 }));
     setPane("agent");
   };
@@ -989,11 +994,19 @@ export function CodeWorkspace({ id }: { id: string }) {
   );
   const sessionsView = <SessionsList projectId={id} activeId={activeRun?.id ?? null} version={sessionsVersion} onOpen={(runId) => openSession(runId)} onNew={() => openSession(null)} />;
   const changesView = <ChangesPanel key={focusRun ?? "all"} projectId={id} sourceRepo={project?.sourceRepo ?? null} focusRun={focusRun} onFilesChanged={reloadFiles} />;
-  const sideView = (s: Side) => (s === "editor" ? editorView : s === "changes" ? changesView : s === "preview" ? previewView : s === "terminal" ? terminalView : aiView);
+  const memoryView = (
+    <MemoryPanel
+      projectId={id}
+      version={sessionsVersion}
+      onRunWorkflow={(request) => openSession(null, request)}
+    />
+  );
+  const sideView = (s: Side) => (s === "editor" ? editorView : s === "changes" ? changesView : s === "memory" ? memoryView : s === "preview" ? previewView : s === "terminal" ? terminalView : aiView);
 
   const SIDES: { id: Side; label: string; icon: ReactNode; hint: string }[] = [
     { id: "editor", label: "Editor", icon: <FileIcon className="h-4 w-4" />, hint: "Read and edit the project's files" },
     { id: "changes", label: "Changes", icon: <History className="h-4 w-4" />, hint: "What each session changed: diffs, checkpoints, undo, push to GitHub" },
+    { id: "memory", label: "Memory", icon: <BookMarked className="h-4 w-4" />, hint: "Notes and workflows the agent uses in this project" },
     { id: "preview", label: "Preview", icon: <Eye className="h-4 w-4" />, hint: "See your running app" },
     { id: "terminal", label: "Terminal", icon: <TerminalIcon className="h-4 w-4" />, hint: "Run commands on the project's computer" },
     { id: "ai", label: "Quick edit", icon: <Sparkles className="h-4 w-4" />, hint: "One-shot AI edit you accept or reject (advanced)" },

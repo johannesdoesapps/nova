@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MEMORY_KINDS } from "../memory";
 import { fileContent, projectPath } from "../projects";
 import type { CommandMode } from "./types";
 
@@ -16,6 +17,8 @@ export interface ToolContext {
   docs: boolean;
   github: boolean;
   approvePlans: boolean;
+  /** The project's memory can be searched and added to. */
+  memory?: boolean;
 }
 
 export const MAX_READ_FILES = 8;
@@ -107,6 +110,22 @@ export const TOOL_DEFS = {
       query: z.string().max(200).optional(),
     }),
     when: (c) => c.github,
+  },
+  search_memory: {
+    description: "Search the project's memory: notes the user wrote or approved (instructions, architecture, decisions, preferences, workflows). The relevant ones are already in the first message; search when you need one that isn't.",
+    schema: z.object({ query: z.string().trim().min(2).max(200) }),
+    when: (c) => !!c.memory,
+  },
+  propose_memory: {
+    description:
+      "Suggest a note for the project's memory, for future tasks: a lasting instruction, how the project is built, a decision and its reason, or the user's preference. The user approves it before it's used. Only things that will still matter later — not this task's progress. At most 2 per task.",
+    schema: z.object({
+      kind: z.enum(MEMORY_KINDS),
+      title: z.string().trim().min(1).max(120),
+      content: z.string().trim().min(1).max(2_000),
+      reason: z.string().trim().min(1).max(500).describe("Why this is worth remembering."),
+    }),
+    when: (c) => !!c.memory,
   },
   propose_plan: {
     description: "Your plan: one sentence and short steps. When plan approval is on, the user approves it before you change anything.",

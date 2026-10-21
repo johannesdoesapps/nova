@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import { applyAiEdits, type AiEdits } from "../ai-edits";
 import { diffStats, unifiedDiff } from "../diff";
+import { MEMORY_KIND_LABELS, type MemoryEntry, type MemoryKind } from "../memory";
 import type { FileChange, ProjectFile } from "../projects";
 import type { PreviewCheck } from "../preview-check";
 import { classifyCommand, classifyServerCommand, isServerCommand } from "./policy";
@@ -71,6 +72,11 @@ export interface AgentEnv {
     setRunCommand(command: string): Promise<void>;
   };
   lookupDocs?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]>;
+  /** The project's memory: approved notes to search, and suggestions that wait for the user's approval. */
+  memory?: {
+    search(query: string): Promise<MemoryEntry[]>;
+    propose(note: { kind: MemoryKind; title: string; content: string }): Promise<MemoryEntry>;
+  };
   github?: (tool: string, args: Record<string, unknown>) => Promise<{ ok: boolean; text: string; summary: string }>;
 }
 
@@ -105,6 +111,8 @@ export interface StepOutcome {
 }
 
 const MAX_READ_CHARS = 30_000;
+/** Memory suggestions per step. */
+const MAX_PROPOSALS = 2;
 const MAX_MATCHES = 80;
 const OUTPUT_FOR_MODEL = 6_000;
 const OUTPUT_FOR_LOG = 20_000;
@@ -257,6 +265,7 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
   const events: NewEvent[] = [];
   const tests: TestResult[] = [];
   let plan: AgentPlan | null = null;
+  let proposedNotes = 0;
   let edited = false;
   let files: ProjectFile[] | null = null;
   const current = async () => (files ??= await env.files());
@@ -666,6 +675,35 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
         const r = await env.github(`github_${a.action as string}`, Object.fromEntries(Object.entries(a).filter(([k]) => k !== "action")));
         result(id, tool, r.ok, r.text);
         await log({ kind: "inspect", title: r.ok ? `GitHub: ${r.summary}` : `GitHub: ${r.text.slice(0, 200)}` });
+        break;
+      }
+      case "search_memory": {
+        if (!env.memory) {
+          result(id, tool, false, "Project memory isn't available here.");
+          break;
+        }
+        const found = await env.memory.search(a.query as string);
+        result(id, tool, true, found.length ? found.map((e) => `- [${MEMORY_KIND_LABELS[e.kind].label}] ${e.title}: ${e.content}`).join("\n") : "No saved notes match.");
+        await log({ kind: "inspect", title: `Searched project memory for “${(a.query as string).slice(0, 80)}” (${found.length} note${found.length === 1 ? "" : "s"})` });
+        break;
+      }
+      case "propose_memory": {
+        if (!env.memory) {
+          result(id, tool, false, "Project memory isn't available here.");
+          break;
+        }
+        if (proposedNotes >= MAX_PROPOSALS) {
+          result(id, tool, false, `Not saved: at most ${MAX_PROPOSALS} suggestions per step.`);
+          break;
+        }
+        try {
+          const note = await env.memory.propose({ kind: a.kind as MemoryKind, title: a.title as string, content: a.content as string });
+          proposedNotes++;
+          result(id, tool, true, "Suggested. The user approves it before it's used in future tasks; it doesn't change this task.");
+          await log({ kind: "note", title: `Suggested a note for project memory: ${note.title}`, detail: { memoryId: note.id, kind: note.kind, content: note.content, reason: a.reason } });
+        } catch (err) {
+          result(id, tool, false, `Not saved: ${(err as Error).message.slice(0, 200)}`);
+        }
         break;
       }
       case "propose_plan": {

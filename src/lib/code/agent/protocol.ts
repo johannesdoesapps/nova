@@ -128,7 +128,7 @@ How to work:
 ${o.readOnly ? `- This run is read-only: inspect the project and answer the user's question with finish. You can't change files or run commands, so don't offer to.\n` : ""}${o.planning ? `- You are in the planning phase and have read-only access. Inspect the project (inspect_project, list_files, read_files, search_code), then call propose_plan. You can't edit files or run commands until the plan is approved. If the request is only a question, answer it with finish instead.\n` : ""}- Inspect before you edit: read every file you change first. Make the smallest change that does the job and keep the project's style.
 - After changing code, run the tests (run_tests) or the build when the project has them${o.commands === "off" ? " (here: tell the user what to run)" : ""}. When something fails, read the actual error, fix the cause and run it again. After three failed attempts at the same problem, stop and explain it.
 ${commandRule[o.commands]}
-- Before a risky change, create_checkpoint; restore_checkpoint undoes this run's changes back to it.
+${o.memory ? "- Project memory in the first message is the user's own guidance for this project: follow it unless this request says otherwise, and mention it when it shaped what you did. When the user states a lasting preference, or you learn something future tasks will need (how to run or test the project, a decision and its reason), suggest it with propose_memory; the user approves it before it's used.\n" : ""}- Before a risky change, create_checkpoint; restore_checkpoint undoes this run's changes back to it.
 - Apps that serve web pages must listen on port 3000 and host 0.0.0.0 so the preview works. ${o.commands === "off" ? "Don't start servers; tell the user to press Run." : "Start servers with start_preview, never with run_command (run_command waits for a command to finish, so a server would just be stopped)."}
 - Up to ${MAX_ACTIONS_PER_STEP} actions per step; they run in order and you get every result back.${o.reviewEdits ? "\n- The user reviews each set of edits before they're saved; a rejected edit comes back with their feedback." : ""}
 - Paths are relative to the project root ("src/app.js"). Never use "..", a leading "/", or package folders like node_modules.
@@ -165,7 +165,12 @@ export interface EarlierRun {
   files: string[];
 }
 
-export function initialMessage(request: string, files: ProjectFile[], meta: { projectName: string; runCommand: string; computer: boolean; earlier?: EarlierRun[] }, budgetChars = 12_000): string {
+export function initialMessage(
+  request: string,
+  files: ProjectFile[],
+  meta: { projectName: string; runCommand: string; computer: boolean; earlier?: EarlierRun[]; memory?: string },
+  budgetChars = 12_000,
+): string {
   const key = files.filter((f) => KEY_FILES.test(f.path.split("/").pop()!) && f.path.split("/").length <= 2).sort((a, b) => a.content.length - b.content.length);
   const shown: string[] = [];
   let used = 0;
@@ -178,6 +183,7 @@ export function initialMessage(request: string, files: ProjectFile[], meta: { pr
     `Request:\n${request}`,
     `Project: ${meta.projectName}. Its Run command (used by the Run button and the preview): ${meta.runCommand || "(none)"}.`,
     `The project's computer is ${meta.computer ? "running" : "not running yet (it starts when a command needs it, with the user's go-ahead)"}.`,
+    meta.memory ?? "",
     meta.earlier?.length
       ? `Earlier work in this project (newest first; the files now reflect it):\n${meta.earlier
           .map(
