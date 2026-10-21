@@ -12,7 +12,7 @@ import type { ChatMode } from "@/lib/ai/modes";
 
 /** What pressing something on the home does: start or fill a chat, or open a page. */
 export type HomeAction =
-  | { kind: "send"; prompt: string; mode: ChatMode; web?: boolean }
+  | { kind: "send"; prompt: string; mode: ChatMode; web?: boolean; modelId?: string }
   | { kind: "draft"; prompt: string; mode: ChatMode; web?: boolean; attach?: boolean }
   | { kind: "link"; href: string };
 

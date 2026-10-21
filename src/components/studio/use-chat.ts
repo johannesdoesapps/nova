@@ -116,7 +116,7 @@ export function useStudioChat({
   }, [busy, messages, conversationId, store, title, mode, onHistoryChanged]);
 
   const send = useCallback(
-    async (text: string, opts: { attachments?: ChatAttachment[]; retryOf?: string; editOf?: string; mode?: ChatMode } = {}) => {
+    async (text: string, opts: { attachments?: ChatAttachment[]; retryOf?: string; editOf?: string; mode?: ChatMode; modelId?: string; useWeb?: boolean } = {}) => {
       const content = text.trim();
       if (!content || busy) return false;
       // An edit rewrites an earlier question: it and everything after it are replaced.
@@ -167,8 +167,8 @@ export function useStudioChat({
             conversationId: local ? null : convId,
             message: content,
             mode: turnMode,
-            modelId,
-            useWeb,
+            modelId: opts.modelId ?? modelId,
+            useWeb: opts.useWeb ?? useWeb,
             allowFallback,
             history,
             attachments: files,

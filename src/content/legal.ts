@@ -204,7 +204,7 @@ export const PRIVACY: LegalSection[] = [
         ],
       },
       "Your browser's local storage holds your preferences and, without an account, your conversations. There are no analytics or advertising cookies.",
-      "To see how Orbis is used, we count page visits with **Vercel Web Analytics**. For each visit it records the page (with any ids and everything after a “?” removed), the site you came from, and your country, browser, operating system and type of device. It doesn't use cookies or store anything on your device. Visitors are told apart by a code worked out from the request, which Vercel discards after 24 hours, so visits aren't linked to you, your account or your IP address, or followed across days or other websites.",
+      "To see how Orbis is used, we count page visits with **Vercel Web Analytics**. For each visit it records the page (with any ids and everything after a “?” removed), the site you came from, and your country, browser, operating system and type of device. It doesn't use cookies or store anything on your device. Visitors are told apart by a code worked out from the request, which Vercel discards after 24 hours, so visits aren't linked to you, your account or your IP address, or followed across days or other websites. When you pick one of the starting options on the first screen (such as “Coding”) or one of its examples, which option it was is counted too — never what you type.",
     ],
   },
   {

@@ -48,7 +48,6 @@ import {
   planDayPrompt,
   QUICK_TOOLS,
   readPrefs,
-  SUGGESTIONS,
   type DayEvent,
   type DiscoverItem,
   type HomeAction,
@@ -59,8 +58,10 @@ import {
   type HomeSectionId,
   type IconName,
 } from "@/lib/home";
+import type { StarterTask, StarterTaskId } from "@/lib/starter";
 import { cn } from "@/lib/utils";
 import { useStudio } from "./frame";
+import { TaskStarter, type StarterEnv } from "./task-starter";
 import { Dialog, iconButtonClass, Menu, MenuItem, Switch } from "./ui";
 
 export const HOME_ICONS: Record<IconName, ReactNode> = {
@@ -83,8 +84,6 @@ export const HOME_ICONS: Record<IconName, ReactNode> = {
   code: <Code2 />,
   sparkles: <Sparkles />,
 };
-
-const SUGGESTION_ICONS: Record<string, ReactNode> = { research: <Telescope />, brainstorm: <Lightbulb />, write: <PenLine />, "plan-day": <CalendarDays />, build: <Code2 /> };
 
 const noSubscribe = () => () => {};
 type Loaded = HomeData & { errors: string[] };
@@ -144,10 +143,11 @@ export interface HomeProps {
   composer: ReactNode;
   onAction: (a: HomeAction) => void;
   notice?: ReactNode;
+  starter: { active: StarterTaskId | null; onChoose: (task: StarterTask | null) => void; env: StarterEnv };
 }
 
-/** The signed-in start page: greeting, the prompt box, suggestions and the user's own work. */
-export function Home({ name, composer, onAction, notice }: HomeProps) {
+/** The start page: one question, the prompt box, the task starter, and the user's own work. */
+export function Home({ name, composer, onAction, notice, starter }: HomeProps) {
   const { user, integrations } = useApp();
   const studio = useStudio();
   const router = useRouter();
@@ -222,25 +222,12 @@ export function Home({ name, composer, onAction, notice }: HomeProps) {
   return (
     <div className="mx-auto w-full max-w-[1080px] px-4 pb-24 pt-6 sm:px-6 sm:pt-10 lg:pt-14">
       <div className="mx-auto flex max-w-[760px] flex-col items-center text-center">
-        <p className="s-in h-5 text-[13px] text-s-ink-3" suppressHydrationWarning>
-          {date?.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}
+        <p className="s-in h-5 text-[13.5px] text-s-ink-3" suppressHydrationWarning>
+          {greeting && date ? `${greeting} · ${date.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}` : " "}
         </p>
-        <h1 className="s-in mt-1.5 min-h-[1.1em] text-balance font-serif text-[clamp(32px,5.6vw,48px)] leading-[1.08] tracking-[-0.01em] [animation-delay:40ms]">{greeting ?? " "}</h1>
+        <h1 className="s-in mt-1.5 text-balance font-serif text-[clamp(32px,5.6vw,48px)] leading-[1.08] tracking-[-0.01em] [animation-delay:40ms]">What do you want to accomplish?</h1>
         <div className="s-in mt-7 w-full text-left [animation-delay:120ms]">{composer}</div>
-        <ul className="s-in mt-4 flex w-full flex-wrap justify-center gap-1.5 [animation-delay:160ms]" aria-label="Suggestions">
-          {SUGGESTIONS.map((s) => (
-            <li key={s.id}>
-              <ActionButton
-                action={s.action}
-                onAction={runAction}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-s-line px-3.5 text-[13px] text-s-ink-2 transition hover:border-s-line-strong hover:bg-s-hover hover:text-s-ink active:scale-[0.98] [&_svg]:h-3.5 [&_svg]:w-3.5"
-              >
-                {SUGGESTION_ICONS[s.id]}
-                {s.label}
-              </ActionButton>
-            </li>
-          ))}
-        </ul>
+        <TaskStarter active={starter.active} onChoose={starter.onChoose} onAction={runAction} env={starter.env} home />
         {notice && <div className="mt-5 text-center text-[12.5px] text-s-ink-3">{notice}</div>}
       </div>
 

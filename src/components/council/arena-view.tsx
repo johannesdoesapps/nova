@@ -1,5 +1,6 @@
 "use client";
 import { useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ArrowUp, Eye, EyeOff, Scale, Sparkles, Square, Star, ThumbsUp } from "lucide-react";
 import { useCatalog } from "@/components/common/model-picker";
 import { Markdown } from "@/components/common/markdown";
@@ -32,7 +33,9 @@ export function ArenaView() {
   const [picked, setPicked] = useState<string[] | null>(null);
   const selected = picked ?? defaultParticipants(pool, 2);
   const [blind, setBlind] = useState(true);
-  const [prompt, setPrompt] = useState("");
+  // "/arena?q=…" (from the starter's examples) fills in the question; nothing is sent until the user presses send.
+  const params = useSearchParams();
+  const [prompt, setPrompt] = useState(() => params.get("q")?.slice(0, 4000) ?? "");
 
   const [asked, setAsked] = useState("");
   const [order, setOrder] = useState<string[]>([]);
