@@ -173,11 +173,13 @@ export async function resolveModelChoice(
   return { model: route.model, routing: { auto: true, mode: routerMode, reason: route.reason }, settings };
 }
 
+const TIER_RANK = { standard: 0, advanced: 1, premium: 2 } as const;
+
 /**
  * Models that may answer if the chosen one fails: only when the administrator
  * allows fallback and the user opted in, and only models with the same key
- * capabilities. Same-provider models are tried first; for a model the user
- * picked, only same-provider models are used.
+ * capabilities, in the same or a cheaper tier. Same-provider models are tried
+ * first; for a model the user picked, only same-provider models are used.
  */
 export async function fallbackChain(
   primary: ModelWithStatus,
@@ -191,7 +193,9 @@ export async function fallbackChain(
     .filter((m) => m.available && m.provider !== "demo" && m.id !== primary.id && key.every((c) => m.capabilities.includes(c)))
     // A model the user picked is never replaced by another provider's, and backups stay within the plan.
     .filter((m) => (!opts.sameProvider || m.provider === primary.provider) && (!opts.tiers || opts.tiers.includes(modelTier(m))))
-    .sort((a, b) => Number(b.provider === primary.provider) - Number(a.provider === primary.provider))
+    // Never a more expensive tier than the one asked for: a backup can't silently use more of the allowance.
+    .filter((m) => TIER_RANK[modelTier(m)] <= TIER_RANK[modelTier(primary)])
+    .sort((a, b) => Number(b.provider === primary.provider) - Number(a.provider === primary.provider) || TIER_RANK[modelTier(b)] - TIER_RANK[modelTier(a)])
     .slice(0, 2);
 }
 

@@ -173,6 +173,12 @@ describe("fallback", () => {
       // A model the user picked is never replaced by another provider's, and backups stay within the plan.
       const same = await fallbackChain(sonnet, { ...DEFAULT_PLATFORM_SETTINGS, fallbackEnabled: true }, true, { sameProvider: true, tiers: ["standard", "advanced"] });
       expect(same.every((m) => m.provider === "anthropic" && m.id !== "anthropic:claude-opus-5-5")).toBe(true);
+      // Never a more expensive tier: Sonnet (advanced) may fall back to advanced or standard models, never Opus (premium).
+      expect(chain.some((m) => m.id === "anthropic:claude-opus-5-5")).toBe(false);
+      const haiku = models.find((m) => m.id === "anthropic:claude-haiku-5-5")!;
+      const cheap = await fallbackChain(haiku, { ...DEFAULT_PLATFORM_SETTINGS, fallbackEnabled: true }, true);
+      const { modelTier } = await import("@/lib/plans");
+      expect(cheap.every((m) => modelTier(m) === "standard")).toBe(true);
     } finally {
       delete process.env.ANTHROPIC_API_KEY;
       delete process.env.OPENAI_API_KEY;

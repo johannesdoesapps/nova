@@ -243,7 +243,7 @@ export function Home({ name, composer, onAction, notice, starter }: HomeProps) {
         {signedIn && usage && (
           <p className="hidden min-w-0 truncate text-[12.5px] text-s-ink-3 sm:block">
             <span aria-hidden>· </span>
-            <UsageSummary usage={usage} onDetails={studio.openSettings} />
+            <UsageSummary usage={usage} detailsHref="/usage" />
           </p>
         )}
         <button

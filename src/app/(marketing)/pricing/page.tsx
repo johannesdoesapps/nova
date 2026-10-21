@@ -8,6 +8,7 @@ import { entitlementFor } from "@/lib/entitlements";
 import { planCapacity } from "@/lib/billing/scenarios";
 import { DEFAULT_BILLING, PLAN_IDS, chargeUsd, modelTier, planOf, resolveBilling, type ModelTier } from "@/lib/plans";
 import { pageMetadata } from "@/lib/seo";
+import { DEFAULT_STEP_LIMIT } from "@/lib/code/agent/types";
 
 export const dynamic = "force-dynamic";
 
@@ -73,6 +74,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
 
   const current = entitlement ? { plan: entitlement.plan, interval: entitlement.interval } : null;
   const tu = billing.tierUnits;
+  const fastNames = namesFor(["standard"]).slice(0, 2);
   const P = Object.fromEntries(PLAN_IDS.map((id) => [id, planOf(billing, id)])) as Record<(typeof PLAN_IDS)[number], ReturnType<typeof planOf>>;
   const fmt = (n: number) => n.toLocaleString("en-US");
   const words = (tokens: number) => `about ${fmt(Math.round((tokens * 0.75) / 50) * 50)} words`;
@@ -151,14 +153,18 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
         <h2 id="units" className="text-2xl font-medium text-fg">How usage units work</h2>
         <div className="mt-5 space-y-4 text-[15px] leading-relaxed text-muted">
           <p>
-            A message to a fast, low-cost model (such as Claude Haiku 5.5 or GPT-5.6 Luna) uses {tu.standard} unit. Larger models cost more to run: a message to an advanced model uses{" "}
-            {tu.advanced} units and to a premium model {tu.premium}.
+            A message to a fast, low-cost model{fastNames.length ? ` (such as ${fastNames.join(" or ")})` : ""} uses {tu.standard} unit. Larger models cost more to run: a message to an
+            advanced model uses {tu.advanced} units and to a premium model {tu.premium}. The model menu shows each model&rsquo;s units per message.
           </p>
           <p>
-            Your 5-hour window starts with your first message and resets five hours later. The weekly limit counts the last seven days. Auto always uses the lowest-cost model your
-            plan includes; a model you pick yourself is kept until you change it.
+            Your 5-hour window starts with your first message and resets five hours later. The weekly limit counts the last seven days, so units come back as older use passes seven days.
+            Auto uses the lowest-cost model for everyday requests and a stronger one only for hard coding or reasoning tasks, always within your plan. A model you pick yourself is kept
+            until you change it, and a backup model (if you allow one) is never a more expensive kind than the one you chose.
           </p>
-          <p>Orbis Council and Orbis Arena ask several models at once, so each model&rsquo;s reply counts. Your current usage and reset times are always shown in the app.</p>
+          <p>
+            Orbis Council and Orbis Arena ask several models at once, so each model&rsquo;s reply counts; both show an estimate before you start. Your remaining units, reset times and
+            every request with the units it used are on the Usage page in the app. Failed requests with no reply aren&rsquo;t charged.
+          </p>
         </div>
 
         <h3 className="mt-10 text-lg font-medium text-fg">What different tasks use</h3>
@@ -168,8 +174,9 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
             ["A quick question to a fast model", `${tu.standard} unit.`],
             ["The same question to an advanced or premium model", `${tu.advanced} or ${tu.premium} units.`],
             ["A long conversation, or one with big attachments", "The same units per message, but more of your monthly AI allowance, because more text is sent with each message."],
-            ["A Council with three models", "One message per model's answer, plus the chair model's summary (and the models' reviews of each other in Deep mode)."],
-            ["A coding agent run", "One message per step the agent takes (a small bug fix is typically a handful of steps), plus workspace computer time, counted in 10-minute blocks."],
+            ["A Council with three models", `One message per model's answer, plus the chair model's summary (and the models' reviews of each other in Deep mode). With three fast models in Quick mode: ${4 * tu.standard} units.`],
+            ["An Arena comparison of two fast models", `${2 * tu.standard} units. An agreement analysis, final answer or evaluation afterwards is one more message each, to the model that writes it.`],
+            ["A coding agent run", `One message per step the agent takes (a small bug fix is typically a handful of steps). It stops to ask before going past ${DEFAULT_STEP_LIMIT} steps. Running code on the project's computer uses workspace time, counted in 10-minute blocks.`],
             ["Running code from a chat reply", "One code run from your monthly runs. It uses no usage units."],
           ].map(([k, v]) => (
             <div key={k} className="grid gap-1 px-5 py-4 sm:grid-cols-[1fr_1.4fr] sm:gap-6">

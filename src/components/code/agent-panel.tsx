@@ -34,7 +34,8 @@ import { useCatalog } from "@/components/common/model-picker";
 import { ModelSelector } from "@/components/studio/model-selector";
 import { Menu, MenuItem } from "@/components/studio/ui";
 import { VERIFICATION_LABEL } from "@/lib/code/agent/report";
-import { ENDED_STATUSES, STATUS_LABEL, WORKING_STATUSES, type AgentEvent, type Decision, type LimitReason, type RunOptions, type RunReport, type RunView } from "@/lib/code/agent/types";
+import type { ModelWithStatus } from "@/lib/ai/types";
+import { DEFAULT_STEP_LIMIT, ENDED_STATUSES, STATUS_LABEL, STEP_LIMIT_INCREMENT, WORKING_STATUSES, type AgentEvent, type Decision, type LimitReason, type RunOptions, type RunReport, type RunView } from "@/lib/code/agent/types";
 import { formatBytes, type AttachmentMeta } from "@/lib/code/attachments";
 import { cn } from "@/lib/utils";
 import { useAttachments } from "./attachments";
@@ -765,6 +766,7 @@ export function AgentPanel({
             }
             footerRight={<ModelSelector models={catalog?.models ?? null} value={modelId} onChange={setModelId} auto={catalog?.auto ?? null} className="h-8 px-2 text-[12.5px]" />}
           />
+          {!inProgress && <StepEstimate models={catalog?.models ?? null} modelId={modelId} readOnly={mode === "read"} />}
         </div>
       </div>
     </div>
@@ -1505,5 +1507,29 @@ export function SessionsList({ projectId, activeId, version, onOpen, onNew }: { 
         </ul>
       </div>
     </div>
+  );
+}
+
+/**
+ * Before a task: what it can use. Each step is one model call, charged like a
+ * message to that model; the agent stops to ask after DEFAULT_STEP_LIMIT
+ * steps. An upper bound, not a prediction: most tasks take fewer steps.
+ */
+function StepEstimate({ models, modelId, readOnly }: { models: ModelWithStatus[] | null; modelId: string; readOnly: boolean }) {
+  if (!models) return null;
+  const usable = models.filter((m) => m.available && !m.locked && m.units !== undefined);
+  if (!usable.length) return null;
+  const auto = modelId.startsWith("auto");
+  const chosen = usable.find((m) => m.id === modelId);
+  const lo = Math.min(...usable.map((m) => m.units!));
+  const hi = Math.max(...usable.map((m) => m.units!));
+  const per = auto ? (lo === hi ? `${lo}` : `${lo}–${hi}`) : chosen ? `${chosen.units}` : null;
+  if (per === null) return null;
+  const max = auto ? hi * DEFAULT_STEP_LIMIT : chosen!.units! * DEFAULT_STEP_LIMIT;
+  return (
+    <p className="mt-1 px-2 text-[11.5px] leading-snug text-s-ink-3">
+      Each step uses {per} unit{per === "1" ? "" : "s"} ({auto ? "Auto picks the model per step" : chosen!.displayName}). It stops to ask after {DEFAULT_STEP_LIMIT} steps, so a task uses at most{" "}
+      {max} units before you decide to give it {STEP_LIMIT_INCREMENT} more{readOnly ? "" : "; computer time for running code is counted separately"}. Most tasks use fewer.
+    </p>
   );
 }

@@ -10,7 +10,8 @@ import { GitHubLogo } from "@/components/common/login-form";
 import { GitHubPicker } from "./github-picker";
 import { IconButton, iconButtonClass, Menu, MenuItem, MenuLabel, MenuSeparator, Switch } from "./ui";
 import { ModelSelector } from "./model-selector";
-import { UsageNotice, useUsage } from "./usage";
+import { UsageNotice, useUsage, type UsageState } from "./usage";
+import { isAutoId } from "@/lib/ai/platform";
 
 export const MODE_ICONS: Record<ChatMode, ReactNode> = {
   research: <Telescope />,
@@ -340,6 +341,7 @@ export function Composer(p: ComposerProps) {
         </p>
       )}
       <UsageNotice usage={usage} />
+      <ModelCostNotice models={p.models} modelId={p.modelId} usage={usage} autoOn={!!p.auto?.enabled} onModel={p.onModel} />
       {githubOpen && (
         <GitHubPicker open={githubOpen} onClose={() => setGithubOpen(false)} attachments={p.attachments} onAttachments={p.onAttachments} maxFiles={MAX_FILES} />
       )}
@@ -409,4 +411,55 @@ export function useSpeech(onText: (t: string) => void) {
 
   const stop = useCallback(() => rec.current?.stop(), []);
   return { supported, listening, error, start, stop };
+}
+
+/**
+ * Before sending to a model that uses several units a message: how many, and
+ * — when the allowance can't cover it — cheaper choices to switch to (the
+ * user switches; nothing changes on its own).
+ */
+function ModelCostNotice({
+  models,
+  modelId,
+  usage,
+  autoOn,
+  onModel,
+}: {
+  models: ModelWithStatus[] | null;
+  modelId: string | undefined;
+  usage: UsageState | null;
+  autoOn: boolean;
+  onModel: (id: string) => void;
+}) {
+  if (!models || !modelId || isAutoId(modelId)) return null;
+  const m = models.find((x) => x.id === modelId);
+  if (!m || m.units === undefined || m.units <= 1) return null;
+  const left = usage && !usage.info?.unlimited ? Math.max(0, Math.min(usage.window.limit - usage.window.used, usage.week.limit - usage.week.used)) : null;
+  const advancedSpent = !!usage?.budget && usage.budget.state === "economy" && m.units > 1;
+  const short = (left !== null && left < m.units) || advancedSpent;
+  const cheapest = models.filter((x) => x.available && !x.locked && x.units !== undefined && x.units < m.units!).sort((a, b) => a.units! - b.units!)[0];
+  return (
+    <p role="status" className={cn("s-in mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-3 text-[12.5px]", short ? "text-s-ink-2" : "text-s-ink-3")}>
+      <span>
+        {m.displayName} uses {m.units} units a message
+        {short
+          ? advancedSpent
+            ? " — this month's allowance for larger models is used up."
+            : ` — you have ${left} left until your limit resets.`
+          : left !== null
+            ? ` · ${left} left now.`
+            : "."}
+      </span>
+      {short && autoOn && (
+        <button type="button" onClick={() => onModel("auto")} className="rounded-full border border-s-line px-2 py-0.5 text-s-ink hover:bg-s-hover">
+          Use Auto
+        </button>
+      )}
+      {short && cheapest && (
+        <button type="button" onClick={() => onModel(cheapest.id)} className="rounded-full border border-s-line px-2 py-0.5 text-s-ink hover:bg-s-hover">
+          Use {cheapest.displayName} ({cheapest.units} unit{cheapest.units === 1 ? "" : "s"})
+        </button>
+      )}
+    </p>
+  );
 }

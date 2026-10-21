@@ -1,4 +1,4 @@
-import { Bot, Code2, Compass, Flag, FolderKanban, House, MessagesSquare, Plug, SlidersHorizontal, Swords, Users, Workflow, type LucideIcon } from "lucide-react";
+import { Bot, Code2, Compass, Flag, Gauge, FolderKanban, House, MessagesSquare, Plug, SlidersHorizontal, Swords, Users, Workflow, type LucideIcon } from "lucide-react";
 
 /**
  * The app's one navigation list: the sidebar (desktop, collapsed and the
@@ -6,7 +6,7 @@ import { Bot, Code2, Compass, Flag, FolderKanban, House, MessagesSquare, Plug, S
  * destination appears once, with one label and one icon everywhere.
  */
 
-export type Section = "home" | "chat" | "code" | "projects" | "agents" | "discover" | "missions" | "council" | "arena" | "connectors" | "workforce" | "admin";
+export type Section = "home" | "chat" | "code" | "projects" | "agents" | "discover" | "missions" | "council" | "arena" | "connectors" | "usage" | "workforce" | "admin";
 
 export interface NavEntry {
   id: Section;
@@ -32,6 +32,7 @@ export const NAV_ENTRIES: NavEntry[] = [
   { id: "council", label: "Council", href: "/council", icon: Users, group: "tools", hint: "Several models answer; one combined reply" },
   { id: "arena", label: "Arena", href: "/arena", icon: Swords, group: "tools", hint: "Compare models side by side, blind if you like" },
   { id: "connectors", label: "Connectors", href: "/connectors", icon: Plug, group: "tools", hint: "Connect Gmail, GitHub, Drive and more" },
+  { id: "usage", label: "Usage", href: "/usage", icon: Gauge, group: "main", hint: "Your allowance, resets and usage history", parent: "home" },
   { id: "workforce", label: "Workforce", href: "/workforce", icon: Workflow, group: "admin", hint: "Internal AI engineers" },
   { id: "admin", label: "Admin", href: "/admin", icon: SlidersHorizontal, group: "admin", hint: "Models, plans and finance" },
 ];

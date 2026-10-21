@@ -316,8 +316,13 @@ export function ModelSelector({
                       )}
                     </div>
                     <p className="mt-0.5 line-clamp-2 text-[12.5px] leading-snug text-s-ink-3">{m.description}</p>
-                    {(tags.length > 0 || price) && (
+                    {(tags.length > 0 || price || m.units !== undefined) && (
                       <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-s-ink-3">
+                        {m.units !== undefined && (
+                          <span className="rounded-md border border-s-line px-1.5 py-px" title="Allowance units one message to this model uses">
+                            {m.units} unit{m.units === 1 ? "" : "s"} / message
+                          </span>
+                        )}
                         {tags.map((t) => (
                           <span key={t} className="rounded-md border border-s-line px-1.5 py-px">
                             {t}

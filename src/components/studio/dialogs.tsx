@@ -1,6 +1,5 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Archive, ArchiveRestore, Bookmark, Check, FolderKanban, Monitor, Moon, Plus, Sun, Trash2 } from "lucide-react";
 import { saveNote } from "@/components/projects/save-to-project";
@@ -71,6 +70,9 @@ function SettingsBody({
         {usage && (
           <div className="pb-2">
             <UsageMeters usage={usage} billing={integrations.billing} />
+            <Link href="/usage" className="mt-2 inline-block text-[12.5px] text-s-ink-2 underline-offset-2 hover:text-s-ink hover:underline">
+              Usage history and resets →
+            </Link>
           </div>
         )}
         <Row title="Appearance" hint="Auto follows your system setting.">
@@ -157,7 +159,6 @@ function SettingsBody({
             )
           )}
         </Row>
-        {historyKind === "server" && <DeleteAccount />}
         <div className="py-4">
           <div className="mb-2.5 text-[13.5px] font-medium">Keyboard shortcuts</div>
           <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 text-[13px] text-s-ink-2">
@@ -175,77 +176,6 @@ function SettingsBody({
         </div>
       </div>
     </>
-  );
-}
-
-/** Delete the account for good: a warning, then the user types their email address to confirm. */
-function DeleteAccount() {
-  const { user } = useApp();
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [email, setEmail] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const matches = !!user?.email && email.trim().toLowerCase() === user.email.toLowerCase();
-  const remove = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await jsonFetch("/api/account/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.trim() }) });
-      router.replace("/");
-      router.refresh();
-    } catch (e) {
-      setError((e as Error).message);
-      setBusy(false);
-    }
-  };
-  if (!open)
-    return (
-      <Row title="Delete account" hint="Removes your account and everything in it, for good.">
-        <button type="button" className={cn(btnQuiet, "text-s-danger")} onClick={() => setOpen(true)}>
-          <Trash2 /> Delete…
-        </button>
-      </Row>
-    );
-  return (
-    <div className="py-4">
-      <div className="text-[13.5px] font-medium text-s-danger">Delete your account?</div>
-      <p className="mt-1 text-[12.5px] leading-relaxed text-s-ink-2">
-        This permanently deletes your chats, agents, code projects and their files, missions, connected accounts and settings. It can&apos;t be undone. Download anything you want to keep first.
-      </p>
-      <label htmlFor="delete-email" className="mt-3 block text-[12.5px] text-s-ink-3">
-        Type <span className="font-medium text-s-ink">{user?.email}</span> to confirm
-      </label>
-      <input
-        id="delete-email"
-        type="email"
-        autoComplete="off"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        className="mt-1.5 h-9 w-full rounded-xl border border-s-line-strong bg-transparent px-3 text-[13.5px] text-s-ink outline-none focus:border-s-danger"
-      />
-      {error && (
-        <p role="alert" className="mt-2 text-[12.5px] text-s-danger">
-          {error}
-        </p>
-      )}
-      <div className="mt-3 flex gap-1.5">
-        <button type="button" disabled={!matches || busy} className={cn(btn, "bg-s-danger text-white hover:brightness-110")} onClick={() => void remove()}>
-          {busy ? "Deleting…" : "Delete my account"}
-        </button>
-        <button
-          type="button"
-          className={btnQuiet}
-          onClick={() => {
-            setOpen(false);
-            setEmail("");
-            setError(null);
-          }}
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
   );
 }
 

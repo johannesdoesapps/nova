@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
-import { Archive, Bookmark, ChevronDown, Code2, CreditCard, Ellipsis, LayoutGrid, FolderPlus, LogIn, LogOut, Monitor, Moon, Pencil, Search, Settings2, SquarePen, Sun, Trash2, X } from "lucide-react";
+import { Archive, Bookmark, ChevronDown, Code2, CreditCard, Ellipsis, Gauge, LayoutGrid, FolderPlus, LogIn, LogOut, Monitor, Moon, Pencil, Search, Settings2, SquarePen, Sun, Trash2, X } from "lucide-react";
 import type { AppUser } from "@/components/layout/app-context";
 import { cn } from "@/lib/utils";
 import { groupByDate, type ConvSummary } from "./history";
@@ -551,6 +551,11 @@ function ProfileMenu(p: Omit<SidebarProps, "searchRef"> & { rail: boolean }) {
             >
               Settings
             </MenuItem>
+            {p.user && (
+              <MenuItem icon={<Gauge />} hint="What's left, resets and history" onClick={() => router.push("/usage")}>
+                Usage
+              </MenuItem>
+            )}
             <MenuItem icon={<CreditCard />} hint="Compare plans or upgrade" onClick={() => router.push("/pricing")}>
               Plans and pricing
             </MenuItem>

@@ -99,7 +99,7 @@ export function UsageNotice({ usage }: { usage: UsageState | null }) {
 }
 
 /** One quiet line for the home: the plan and how much of the tighter limit is used (details are in Settings). */
-export function UsageSummary({ usage, onDetails }: { usage: UsageState; onDetails?: () => void }) {
+export function UsageSummary({ usage, detailsHref }: { usage: UsageState; detailsHref?: string }) {
   const label = usage.info?.label ?? PLAN_LABEL[usage.plan];
   if (usage.info?.unlimited) return <span>{label} · no usage limits on your account</span>;
   const weekShare = usage.week.limit ? usage.week.used / usage.week.limit : 0;
@@ -109,12 +109,12 @@ export function UsageSummary({ usage, onDetails }: { usage: UsageState; onDetail
   return (
     <span className={cn(pct >= 80 && "text-s-ink-2")}>
       {label} plan · {pct}% of {weekly ? "this week's" : "this 5-hour"} allowance used
-      {onDetails && (
+      {detailsHref && (
         <>
           {" · "}
-          <button type="button" onClick={onDetails} className="underline-offset-2 hover:text-s-ink hover:underline">
+          <a href={detailsHref} className="underline-offset-2 hover:text-s-ink hover:underline">
             Details
-          </button>
+          </a>
         </>
       )}
       <UpgradeLink usage={usage} />
