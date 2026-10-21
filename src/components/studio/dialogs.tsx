@@ -12,6 +12,7 @@ import type { SavedPrompt, StudioSettings, ThemePref } from "./prefs";
 import { Dialog, IconButton, Kbd, Segmented, Switch } from "./ui";
 import { UsageMeters, useUsage } from "./usage";
 import { useApp } from "@/components/layout/app-context";
+import { LEGAL } from "@/content/legal-meta";
 
 const btn =
   "inline-flex h-9 items-center justify-center gap-1.5 rounded-xl px-3.5 text-[13.5px] font-medium transition active:scale-[0.98] disabled:opacity-40 [&_svg]:h-4 [&_svg]:w-4";
@@ -159,6 +160,7 @@ function SettingsBody({
             )
           )}
         </Row>
+        <PrivacyAndData signedIn={historyKind === "server"} onOpenArchived={onOpenArchived} />
         <div className="py-4">
           <div className="mb-2.5 text-[13.5px] font-medium">Keyboard shortcuts</div>
           <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 text-[13px] text-s-ink-2">
@@ -176,6 +178,91 @@ function SettingsBody({
         </div>
       </div>
     </>
+  );
+}
+
+/** Every place your data lives in Orbis, what deleting or disconnecting does, and where to do it. */
+function PrivacyAndData({ signedIn, onOpenArchived }: { signedIn: boolean; onOpenArchived?: () => void }) {
+  const link = "text-s-ink underline-offset-2 hover:underline";
+  const items: { title: string; text: React.ReactNode }[] = [
+    {
+      title: "Chats",
+      text: signedIn ? (
+        <>
+          Delete a chat from its ⋯ menu in the sidebar: it’s removed from your account for good. Archiving hides it instead
+          {onOpenArchived ? (
+            <>
+              {" "}
+              (
+              <button type="button" onClick={onOpenArchived} className={link}>
+                archived chats
+              </button>
+              )
+            </>
+          ) : null}
+          . Attached files aren’t kept, only their names.
+        </>
+      ) : (
+        "As a guest, chats are kept in this browser only; Clear above removes them. Attached files aren’t kept, only their names."
+      ),
+    },
+    {
+      title: "Agents and memory",
+      text: (
+        <>
+          Your <Link href="/agents" className={link}>agents</Link> keep the instructions you give them. Each code project’s Memory panel lists the notes its agent reads; edit or delete
+          them there.
+        </>
+      ),
+    },
+    {
+      title: "Connected apps",
+      text: (
+        <>
+          <Link href="/connectors" className={link}>Connectors</Link> shows what each app can access. Make one read-only or disconnect it: Orbis deletes its copy of the sign-in and
+          revokes access where the app allows.
+        </>
+      ),
+    },
+    {
+      title: "Files and projects",
+      text: (
+        <>
+          <Link href="/code" className={link}>Code projects</Link> keep their files, task history and attachments; deleting a project removes all of them. Download a copy first from the
+          project’s menu.
+        </>
+      ),
+    },
+    { title: "On this device", text: "Saved prompts and display settings are kept in this browser only." },
+    {
+      title: "Your account",
+      text: (
+        <>
+          For a copy of your data, or to delete your account and everything in it, email{" "}
+          <a href={`mailto:${LEGAL.email}`} className={link}>
+            {LEGAL.email}
+          </a>
+          . Visit counts use no cookies and never include what you type. Details are in the{" "}
+          <a href="/privacy" className={link}>
+            Privacy Policy
+          </a>
+          .
+        </>
+      ),
+    },
+  ];
+  return (
+    <div className="py-4">
+      <div className="mb-2 text-[13.5px] font-medium">Privacy and data</div>
+      <dl className="space-y-2.5 text-[12.5px] leading-relaxed">
+        {items.map((i) => (
+          <div key={i.title}>
+            <dt className="font-medium text-s-ink-2">{i.title}</dt>
+            <dd className="text-s-ink-3">{i.text}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
 }
 

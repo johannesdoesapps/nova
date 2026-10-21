@@ -57,7 +57,7 @@ export function ActionCard({ action, messageId }: { action: ProposedAction; mess
         <BrandIcon id={action.connectorId} size={28} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 text-[12px] text-s-ink-3">
-            <PenLine className="h-3 w-3" /> {state === "done" ? "Done" : "Needs your confirmation"} · {action.connectorName}
+            <PenLine className="h-3 w-3" /> {state === "done" ? "Done" : "Prepared — needs your confirmation"} · {action.connectorName}
           </div>
           <p className="text-s-ink">{action.description}</p>
         </div>
@@ -94,7 +94,12 @@ export function ActionCard({ action, messageId }: { action: ProposedAction; mess
         </p>
       )}
       {editable && (
-        <div className="mt-3 flex gap-2">
+        <p className="mt-3 text-[12px] text-s-ink-3">
+          Nothing has been sent or changed in {action.connectorName} yet. Check and edit it above; Orbis does it only when you press Confirm.
+        </p>
+      )}
+      {editable && (
+        <div className="mt-2 flex gap-2">
           <button type="button" onClick={() => void confirm()} disabled={busy} className="h-9 rounded-full bg-s-accent px-4 text-[13px] font-medium text-s-accent-ink disabled:opacity-50">
             {busy ? "Working…" : state === "failed" ? "Try again" : "Confirm"}
           </button>

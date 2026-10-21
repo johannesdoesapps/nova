@@ -880,7 +880,8 @@ function ModeMenu({ mode, onChange, disabled }: { mode: ModeId; onChange: (m: Mo
       ))}
       <p className="mx-2.5 mb-1 mt-2 border-t border-s-line pt-2 text-[11.5px] leading-snug text-s-ink-3">
         In every mode the agent works only on this project&apos;s files and its private computer. Files like <code className="font-mono">.env</code> are never shown to the AI; it never deploys,
-        publishes or pushes on its own; every change can be undone. Each step counts like one chat message on your plan.
+        publishes or pushes on its own; every change can be undone. The computer is isolated, but no setup is perfectly secure: keep real passwords and keys out of your files. Each step
+        counts like one chat message on your plan.
       </p>
     </Menu>
   );

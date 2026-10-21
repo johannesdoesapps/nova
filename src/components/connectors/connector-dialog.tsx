@@ -233,7 +233,10 @@ export function ConnectorDialog({
                   Disconnect
                 </button>
               ) : (
-                <span className="ml-auto flex items-center gap-2 text-[12.5px]">
+                <span className="ml-auto flex flex-wrap items-center justify-end gap-2 text-[12.5px]">
+                  <span className="w-full text-right text-[12px] text-s-ink-3">
+                    Orbis deletes its copy of the sign-in and revokes access where {c.name} allows it. Chats that used it stay.
+                  </span>
                   Disconnect {c.name}?
                   <button type="button" onClick={() => void disconnect()} disabled={!!busy} className="h-8 rounded-full bg-red-600 px-3 text-white disabled:opacity-50">
                     Yes, disconnect

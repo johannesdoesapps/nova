@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { ArrowUp, Check, CodeXml, FileText, Globe, ImagePlus, Mic, Paperclip, Plus, Scale, ShieldQuestionMark, Square, Telescope, X } from "lucide-react";
+import { ArrowUp, Check, CodeXml, FileText, Globe, ImagePlus, Mic, Paperclip, Plus, Scale, ShieldCheck, ShieldQuestionMark, Square, Telescope, X } from "lucide-react";
 import type { ModelWithStatus } from "@/lib/ai/types";
 import { CHAT_MODES, MODE_LABELS, type ChatMode } from "@/lib/ai/modes";
 import { ALLOWED_ATTACHMENT_EXT, MAX_ATTACHMENT_CHARS } from "@/lib/limits";
@@ -12,6 +12,9 @@ import { IconButton, iconButtonClass, Menu, MenuItem, MenuLabel, MenuSeparator, 
 import { ModelSelector } from "./model-selector";
 import { UsageNotice, useUsage, type UsageState } from "./usage";
 import { isAutoId } from "@/lib/ai/platform";
+import { recipientsFor } from "@/lib/ai/disclosure";
+import { useApp } from "@/components/layout/app-context";
+import { useStudio } from "./frame";
 
 export const MODE_ICONS: Record<ChatMode, ReactNode> = {
   research: <Telescope />,
@@ -206,7 +209,7 @@ export function Composer(p: ComposerProps) {
           >
             <MenuItem
               icon={<Paperclip />}
-              hint={filesAllowed ? "Text, Markdown, CSV or JSON · up to 3 files" : "Not enabled for this agent"}
+              hint={filesAllowed ? "Text, Markdown, CSV or JSON · up to 3 · sent with your message to the model" : "Not enabled for this agent"}
               disabled={!filesAllowed}
               onClick={() => fileRef.current?.click()}
             >
@@ -232,8 +235,8 @@ export function Composer(p: ComposerProps) {
                   {!webAllowed
                     ? (p.webBlockedHint ?? "Available in Research mode")
                     : !p.webAvailable
-                      ? "Needs SEARCH_API_KEY on the server"
-                      : "Cite live sources in replies"}
+                      ? "Not set up on this site"
+                      : "Cite live sources · your search terms go to the search provider"}
                 </div>
               </div>
               <Switch label="Search the web" checked={p.useWeb && webAllowed} onChange={p.onUseWeb} disabled={!p.webAvailable || !webAllowed} />
@@ -284,6 +287,7 @@ export function Composer(p: ComposerProps) {
           )}
 
           <div className="ml-auto flex items-center gap-1">
+            <WhereItGoes models={p.models} modelId={p.modelId} web={p.useWeb && webAllowed && p.webAvailable} files={p.attachments.length} />
             <ModelSelector models={p.models} value={p.modelId} onChange={p.onModel} auto={p.auto ?? null} />
 
             {speech.supported && (
@@ -461,5 +465,57 @@ function ModelCostNotice({
         </button>
       )}
     </p>
+  );
+}
+
+
+/**
+ * Before sending: which provider gets the message (all Auto might use, when
+ * Auto chooses), what goes with it, and what Orbis keeps. Statements match
+ * the Privacy Policy; nothing here promises more than it says.
+ */
+function WhereItGoes({ models, modelId, web, files }: { models: ModelWithStatus[] | null; modelId: string | undefined; web: boolean; files: number }) {
+  const { user } = useApp();
+  const studio = useStudio();
+  if (!models || !modelId) return null;
+  const { names, simulated, auto } = recipientsFor(models, modelId);
+  const to = names.length ? names.join(auto ? " or " : ", ") : "the model's provider";
+  return (
+    <Menu
+      label="Where your message goes"
+      side="auto"
+      align="end"
+      width={330}
+      buttonLabel={`Where your message goes: ${simulated ? "nowhere (simulated replies)" : to}`}
+      buttonTitle="Where your message goes"
+      buttonClassName={cn(iconButtonClass(), "h-8 w-8 text-s-ink-3")}
+      button={<ShieldCheck />}
+    >
+      <div className="space-y-2 px-2.5 py-2 text-[12.5px] leading-relaxed text-s-ink-2">
+        {simulated ? (
+          <p>Replies are simulated on this site: your message isn’t sent to an AI provider.</p>
+        ) : (
+          <>
+            <p>
+              <span className="font-medium text-s-ink">Sent to {to}.</span> Your message, the earlier messages in this chat{files ? ` and the ${files} attached file${files === 1 ? "" : "s"}` : ""} go to
+              them to write the reply.{auto ? " Auto picks the model for each message; the reply shows which one answered." : ""}
+            </p>
+            <p className="text-s-ink-3">Under their API terms, data sent through their APIs isn’t used to train their models by default; they may keep it for a limited time to check for abuse.</p>
+          </>
+        )}
+        {web && <p className="text-s-ink-3">Web search is on, so your search terms also go to the search provider.</p>}
+        <p className="text-s-ink-3">
+          {user ? "Orbis saves this chat to your account" : "This chat is saved in this browser"}; attached files’ contents aren’t kept, only their names.
+        </p>
+        <p className="flex flex-wrap gap-x-3">
+          <a href="/privacy" className="text-s-ink underline-offset-2 hover:underline">
+            Privacy Policy
+          </a>
+          <button type="button" onClick={studio.openSettings} className="text-s-ink underline-offset-2 hover:underline">
+            Privacy and data settings
+          </button>
+        </p>
+      </div>
+    </Menu>
   );
 }
