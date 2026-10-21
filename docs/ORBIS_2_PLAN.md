@@ -59,6 +59,13 @@ Brief: make Orbis a dependable AI coding agent with a personalised workspace. Th
 
 **Files**: `supabase/migrations/20261023000000_code_project_memory.sql`, `src/lib/code/memory.ts`, `src/lib/code/memory-store.ts`, `src/app/api/code/projects/[id]/memory/**`, `src/lib/code/agent/{engine,protocol,tool-specs,tools}.ts`, `src/components/code/{memory-panel,workspace}.tsx`, `tests/code-memory.test.ts`, `tests/code-agent-engine.test.ts`, `tests/code-agent-tools.test.ts`.
 
-**Tests**: see the stage report in the changelog for the exact runs and the live check.
+**Tests run (23 October 2026)**
+
+- Automated: 736 tests, all passing (49 files). New: `tests/code-memory.test.ts` (16: selection, budget, approval rule, workflows left out, validation, both tools, and the table's rules on the real migrations — owner only, columns that can't change, the 100/20 limits, deleted with the project) and 2 engine tests (a run's first message holds approved, relevant notes and never suggestions; the agent's suggestion is stored as proposed with the run's id).
+- Live on tryorbis.app, 17/17 (second run): notes added in the Memory tab; a real agent run (Claude Haiku 5.5 via Auto, 13 s, 4 steps, about $0.002) used the one instruction note and not the unrelated decision or the workflow, and wrote `multiply` with the required `ORBISDOC` JSDoc line; it suggested remembering the user's arrow-function preference, which waited as "proposed" until approved in the UI; a workflow filled the agent's request; another account got 404 for read, change, delete and add; deleting from the UI worked; the test project was deleted.
+- Found and fixed live: workflows were added to a task's context when they shared words with the request (first live run, 14/17). Now they're only searchable; regression test added.
+- Production database: the migration's table, owner-only policy, limits trigger, indexes and column grants are in place (verified by query). The migration tool timed out on multi-statement scripts, so the statements were applied one at a time; the repository file is the source of truth and is safe to re-run.
 
 **Not done in this stage**: memory is per project (not across a user's projects); relevance is word overlap, not embeddings; suggestions aren't shown inline in the agent's activity with approve buttons (they're in the Memory tab).
+
+**Recommended next step**: the evaluation suite (gap 2), so every later stage — the review agent first — is measured against the same tasks.
