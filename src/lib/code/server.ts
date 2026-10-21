@@ -43,6 +43,12 @@ export function dbError(error: { message?: string; code?: string }, where: strin
   return new ApiError("upstream_error", "Your project couldn't be saved right now. Please try again.");
 }
 
+/** Set the project's Run command (what the Run button and the preview start). */
+export async function setRunCommand(auth: Authed, projectId: string, runCommand: string): Promise<void> {
+  const { error } = await auth.supabase.from("code_projects").update({ run_command: runCommand.slice(0, 500) }).eq("id", projectId);
+  if (error) throw dbError(error, "code.projects.run_command");
+}
+
 export async function listProjects(auth: Authed): Promise<ProjectSummary[]> {
   const { data, error } = await auth.supabase.from("code_projects").select(PROJECT_COLS).order("updated_at", { ascending: false }).limit(500);
   if (error) throw dbError(error, "code.projects.list");

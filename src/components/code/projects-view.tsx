@@ -2,12 +2,12 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, ChevronDown, Code2, FlaskConical, FolderGit2, Globe, Plus, Server, ShieldCheck, Terminal, Trash2 } from "lucide-react";
+import { ArrowRight, ChevronDown, Code2, FlaskConical, FolderGit2, Globe, Loader2, Plus, Server, ShieldCheck, Sparkles, Terminal, Trash2 } from "lucide-react";
 import { useApp } from "@/components/layout/app-context";
 import { StudioHeader } from "@/components/studio/frame";
 import { EXAMPLE_PROJECT, TEMPLATES, TEMPLATE_IDS, type ProjectSummary, type TemplateId } from "@/lib/code/projects";
 import { cn } from "@/lib/utils";
-import { api, CodeApiError, post, type Allowance } from "./api";
+import { api, CodeApiError, post, putBuildRequest, type Allowance } from "./api";
 
 /**
  * Code's start screen: what Code does in one sentence, the three steps, the
@@ -35,6 +35,49 @@ export function minutesLine(a: Allowance): string {
   return `${a.left?.toLocaleString("en-US")} of ${a.limit.toLocaleString("en-US")} workspace minutes left this month`;
 }
 
+/** Example website prompts: each fills the box with a real request to edit or send. */
+export const SITE_EXAMPLES: { label: string; prompt: string }[] = [
+  {
+    label: "Premium SaaS landing page",
+    prompt:
+      "Build a premium SaaS landing page for an AI note-taking app called Lumen: a sticky navigation bar, a bold hero with a call to action, feature cards, three pricing plans, testimonials (clearly labelled sample content), an FAQ and a footer. Dark theme, responsive on mobile and desktop.",
+  },
+  {
+    label: "Designer portfolio",
+    prompt:
+      "Create an online portfolio for a product designer: an intro, a grid of six case studies with short descriptions, an about section, and a contact form that validates email addresses. Minimal, light, elegant typography.",
+  },
+  {
+    label: "E-commerce storefront",
+    prompt:
+      "Build an e-commerce storefront for a small coffee roaster: a product grid with filters, product cards with prices (sample data), a cart drawer that adds and removes items, and a checkout button that explains payments aren't connected yet.",
+  },
+  {
+    label: "Restaurant with reservations",
+    prompt:
+      "Create a restaurant website for a modern Italian trattoria: hero, menu with sections and prices (sample data), opening hours, location, and a reservation inquiry form with date, time, party size and validation.",
+  },
+  {
+    label: "Dashboard with charts",
+    prompt:
+      "Build a dashboard for a small online shop with a responsive sidebar that collapses on phones, summary cards, a sales line chart and a category bar chart (sample data, drawn with SVG or canvas), and a recent orders table.",
+  },
+];
+
+/** A short project name from a website request. */
+export function siteName(prompt: string): string {
+  const called = prompt.match(/\bcalled\s+["“]?([A-Z][\w&' -]{1,30}?)["”]?(?=[.,;:!?]|\s+(?:with|that|for|and|in)\b|$)/);
+  if (called) return `Website: ${called[1]!.trim()}`;
+  const words = prompt
+    .replace(/^\s*(please\s+)?(build|create|make|design|write)\s+(me\s+)?(an?|the)?\s*/i, "")
+    .split(/\s+/)
+    .slice(0, 6)
+    .join(" ")
+    .replace(/[.,;:!?]+$/, "");
+  const name = words ? words[0]!.toUpperCase() + words.slice(1) : "New website";
+  return name.length > 60 ? `${name.slice(0, 57)}…` : name;
+}
+
 const edited = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 
 const STEPS = [
@@ -57,6 +100,9 @@ export function CodeProjectsView() {
   const [repoNote, setRepoNote] = useState<string | null>(null);
   const [repo, setRepo] = useState("");
   const newRef = useRef<HTMLElement>(null);
+  const [site, setSite] = useState("");
+  const [siteTarget, setSiteTarget] = useState<string>("new");
+  const siteBox = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -84,6 +130,27 @@ export function CodeProjectsView() {
     try {
       const r = await post<{ project: ProjectSummary }>("/api/code/projects", { name: name.trim() || TEMPLATES[template].label, template });
       router.push(`/code/${r.project.id}`);
+    } catch (e) {
+      setError(e as CodeApiError);
+      setBusy(null);
+    }
+  };
+
+  /**
+   * "Build website": a new project from the website template (or the chosen
+   * existing one), then its page, where the agent starts on the request at
+   * once, working on its own; it changes only that project.
+   */
+  const buildSite = async () => {
+    const text = site.trim();
+    if (!text) return siteBox.current?.focus();
+    setBusy("build");
+    setError(null);
+    try {
+      let pid = siteTarget;
+      if (pid === "new") pid = (await post<{ project: ProjectSummary }>("/api/code/projects", { name: siteName(text), template: "website" })).project.id;
+      putBuildRequest(pid, text);
+      router.push(`/code/${pid}?build=1`);
     } catch (e) {
       setError(e as CodeApiError);
       setBusy(null);
@@ -212,6 +279,85 @@ export function CodeProjectsView() {
               )}
             </p>
           )}
+
+          <section className="mt-8" aria-labelledby="build-h">
+            <form
+              className="glass-strong glass-edge rounded-[24px] p-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void buildSite();
+              }}
+            >
+              <h2 id="build-h" className="flex items-center gap-2 text-[15px] font-medium text-s-ink">
+                <Globe className="h-4 w-4 text-s-ink-2" aria-hidden /> Build a website
+              </h2>
+              <label htmlFor="build-site" className="sr-only">
+                Describe the website you want to build
+              </label>
+              <textarea
+                id="build-site"
+                ref={siteBox}
+                value={site}
+                onChange={(e) => setSite(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    void buildSite();
+                  }
+                }}
+                rows={3}
+                maxLength={8000}
+                placeholder="Describe the website you want to build…"
+                className="mt-2 block w-full resize-none bg-transparent px-1 py-1 text-[15px] leading-relaxed outline-none placeholder:text-s-ink-3"
+              />
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <label htmlFor="build-target" className="sr-only">
+                  Project
+                </label>
+                <select
+                  id="build-target"
+                  value={siteTarget}
+                  onChange={(e) => setSiteTarget(e.target.value)}
+                  className="h-9 max-w-[260px] rounded-full border border-s-line bg-transparent px-3 text-[13px] text-s-ink-2"
+                >
+                  <option value="new">New website project</option>
+                  {(data?.projects ?? []).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      Change “{p.name}”
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  disabled={!!busy || (siteTarget === "new" && full)}
+                  className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-full bg-s-accent px-4 text-[13.5px] font-medium text-s-accent-ink transition hover:brightness-110 disabled:opacity-40"
+                >
+                  {busy === "build" ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Sparkles className="h-3.5 w-3.5" aria-hidden />}
+                  {busy === "build" ? "Setting up…" : "Build website"}
+                </button>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {SITE_EXAMPLES.map((x) => (
+                  <button
+                    key={x.label}
+                    type="button"
+                    onClick={() => {
+                      setSite(x.prompt);
+                      siteBox.current?.focus();
+                    }}
+                    title="Fills in the box: edit it, then press Build website"
+                    className="rounded-full border border-s-line px-2.5 py-1 text-[12.5px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink"
+                  >
+                    {x.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-3 text-[12px] leading-relaxed text-s-ink-3">
+                The agent writes the site&apos;s files, starts it on the project&apos;s private computer (this uses workspace minutes), checks it in a real browser at desktop and phone sizes, and
+                fixes what it finds. You see the live preview and can ask for changes; every change can be undone.
+              </p>
+            </form>
+          </section>
 
           {recent.length > 0 && (
             <section className="mt-9" aria-labelledby="continue-h">

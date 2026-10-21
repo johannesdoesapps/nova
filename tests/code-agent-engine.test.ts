@@ -68,6 +68,7 @@ vi.mock("@/lib/usage", async (orig) => ({
 let files = new Map<string, string>();
 let computerOn = true;
 const commands: string[] = [];
+const runCommands: string[] = [];
 let commandOutput: (cmd: string) => { output: string; exitCode: number } = () => ({ output: "", exitCode: 0 });
 vi.mock("@/lib/code/server", async (orig) => ({
   ...(await orig<typeof import("@/lib/code/server")>()),
@@ -81,6 +82,7 @@ vi.mock("@/lib/code/server", async (orig) => ({
   },
   optionalBox: async () => (computerOn ? { sandboxId: "box" } : null),
   syncBack: vi.fn(),
+  setRunCommand: async (_a: unknown, _p: string, cmd: string) => void runCommands.push(cmd),
 }));
 const jobs = new Map<string, { output: string; exitCode: number; read: boolean }>();
 vi.mock("@/lib/code/workspace", () => ({
@@ -98,6 +100,43 @@ vi.mock("@/lib/code/workspace", () => ({
   claimSync: async () => false,
   removeFromWorkspace: async () => {},
   writeToWorkspace: async () => {},
+}));
+
+// The live preview: the server and the browser check, scripted.
+const preview = { starts: [] as string[], checks: [] as string[], problems: [["Phone: the page scrolls sideways by 120px."]] as string[][] };
+vi.mock("@/lib/code/preview", () => ({
+  startPreview: async (_b: unknown, cmd: string) => {
+    preview.starts.push(cmd);
+    return { state: "running", http: 200, exitCode: null, log: "Serving HTTP on 0.0.0.0 port 3000", waitedMs: 1500, otherPorts: [] };
+  },
+  describeStart: (s: { http: number }, cmd: string) => `The preview server is running: \`${cmd}\` answered with HTTP ${s.http}.`,
+  runPreviewCheck: async (_b: unknown, path: string) => {
+    preview.checks.push(path);
+    const problems = preview.problems.shift() ?? [];
+    return {
+      url: path,
+      viewports: [
+        {
+          name: "desktop",
+          width: 1280,
+          height: 800,
+          status: 200,
+          title: "Nova",
+          consoleErrors: [],
+          pageErrors: [],
+          failedRequests: [],
+          external: [],
+          overflowX: 0,
+          wide: [],
+          page: { headings: ["h1: Nova"], nav: [], buttons: [], images: 0, imagesWithoutAlt: 0, brokenImages: [], brokenAnchors: [], placeholders: [], forms: [], height: 900, textLength: 900, viewportMeta: true, lang: "en" },
+        },
+        { name: "phone", width: 390, height: 844, status: 200, title: "Nova", consoleErrors: [], pageErrors: [], failedRequests: [], external: [], overflowX: problems.length ? 120 : 0, wide: problems.length ? ["div.hero"] : [], page: null },
+      ],
+      links: [],
+      shots: [{ name: "phone", data: "SU1H", caption: "phone, first screen" }],
+      error: null,
+    };
+  },
 }));
 
 // The database, in memory.
@@ -142,6 +181,7 @@ vi.mock("@/lib/code/agent/runs", async (orig) => {
       return structuredClone(r);
     },
     addEvents: async (_a: unknown, runId: string, evs: { kind: AgentEvent["kind"]; title: string; detail?: Record<string, unknown> | null }[]) => {
+      const seqs: number[] = [];
       for (const e of evs) {
         const seq = db.events.filter((x) => x.runId === runId).length + 1;
         db.events.push({
@@ -153,7 +193,9 @@ vi.mock("@/lib/code/agent/runs", async (orig) => {
           detail: e.detail ? JSON.parse(real.scrub(JSON.stringify(e.detail))) : null,
           createdAt: new Date().toISOString(),
         });
+        seqs.push(seq);
       }
+      return seqs;
     },
     listEvents: async (_a: unknown, runId: string, after = 0) => db.events.filter((e) => e.runId === runId && e.seq > after),
     listChanges: async (_a: unknown, runId: string) => db.changes.filter((c) => c.runId === runId),
@@ -202,6 +244,7 @@ function newRun(o: Partial<RunRow> = {}): string {
     active_ms: 0,
     time_limit_ms: 1_800_000,
     tests: null,
+    checks: null,
     recent: [],
     last_edit_at: null,
     report: null,
@@ -316,6 +359,46 @@ describe("a coding task from request to verified report", () => {
 });
 
 // ---------------------------------------------------------------- bounds
+
+describe("building a website", () => {
+  it("writes the site, starts the preview, checks it in a browser, fixes what the check found, and reports the checks that really ran", async () => {
+    files = new Map([["index.html", "<h1>Hello from Orbis</h1>\n"]]);
+    preview.problems = [["overflow"], []];
+    const id = newRun({ status: "running", request: "Build a landing page for Nova", options: { approvePlans: false, reviewEdits: false, commands: "safe", modelId: null, web: true } });
+    const page = "<!doctype html>\n<html lang=\"en\"><main><h1>Nova</h1><div class=\"hero\">…</div></main></html>\n".repeat(40);
+    script.turns.push(
+      turn("Writing the page.", call("write_file", { path: "index.html", content: page }), call("start_preview", { command: "python3 -m http.server 3000" })),
+      turn("Checking it.", call("check_preview", {})),
+      (p) => {
+        // The check's screenshot reaches the model with its results.
+        const last = p.messages[p.messages.length - 1]!;
+        expect(last.role === "user" && last.results?.[0]?.images).toEqual([{ mediaType: "image/jpeg", data: "SU1H" }]);
+        return turn("The hero is too wide on phones; fixing.", call("edit_file", { path: "index.html", search: '<div class="hero">', replace: '<div class="hero" style="max-width:100%">' }));
+      },
+      turn("Checking again.", call("check_preview", {})),
+      turn("Done.", call("finish", { summary: "Built the Nova landing page; the browser check passes at desktop and phone sizes." })),
+    );
+    const r = await stepRun(req(), auth, id);
+    expect(r.run.status).toBe("completed");
+    expect(preview.starts).toEqual(["python3 -m http.server 3000"]);
+    expect(runCommands).toEqual(["python3 -m http.server 3000"]);
+    expect(preview.checks).toEqual(["/", "/"]);
+    // A whole page fits in one step: the agent gets far more output room than a chat reply.
+    expect(script.seen.every((p) => p.maxOutputTokens >= 12_000)).toBe(true);
+    expect(script.seen[0]!.system).toContain("Building or changing a website");
+    expect(script.seen[0]!.tools.map((t) => t.name)).toEqual(expect.arrayContaining(["start_preview", "check_preview"]));
+    // Earlier writes are kept out of later turns (the file is saved; the agent can read it).
+    expect(JSON.stringify(script.seen[3]!.messages)).not.toContain(page);
+    expect(run(id).report?.checks).toMatchObject({
+      server: { command: "python3 -m http.server 3000", state: "running", http: 200 },
+      preview: { verdict: "passed", problems: [], freshness: "current" },
+      build: null,
+    });
+    expect(events(id).filter((e) => e.title.startsWith("Screenshot:"))).toHaveLength(2);
+    // The stored list of recent steps stays small however big the files are.
+    expect(JSON.stringify(run(id).recent).length).toBeLessThan(400);
+  });
+});
 
 describe("bounds", () => {
   const working = () => newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true } });

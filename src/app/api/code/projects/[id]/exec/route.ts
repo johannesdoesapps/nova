@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { codeContext, getProjectRow, requireBox, syncBack } from "@/lib/code/server";
+import { PREVIEW_JOB, stopPreview } from "@/lib/code/preview";
 import { claimSync, killJob, readJob, startJob } from "@/lib/code/workspace";
 import { ApiError, errorResponse, parseJsonBody, requireUuid } from "@/lib/http";
 import { reportError } from "@/lib/observability";
@@ -10,16 +11,24 @@ export const maxDuration = 60;
 type Ctx = RouteContext<"/api/code/projects/[id]/exec">;
 const JOB = /^[a-z0-9]{6,32}$/;
 
-const body = z.object({ command: z.string().trim().min(1).max(2_000) });
+const body = z.object({ command: z.string().trim().min(1).max(2_000), preview: z.boolean().optional() });
 
-/** POST /api/code/projects/[id]/exec — run a terminal command in the project's computer, in the background. */
+/**
+ * POST /api/code/projects/[id]/exec — run a terminal command in the project's computer, in the background.
+ * With `preview`, it's the project's server: it replaces the running preview (the one the agent uses too).
+ */
 export async function POST(req: Request, ctx: Ctx) {
   try {
     const id = requireUuid((await ctx.params).id);
-    const { command } = await parseJsonBody(req, body, 4_000);
+    const { command, preview } = await parseJsonBody(req, body, 4_000);
     const auth = await codeContext("code-exec", 30);
     await getProjectRow(auth, id);
     const { box } = await requireBox(auth, id);
+    if (preview) {
+      await stopPreview(box);
+      await startJob(box, PREVIEW_JOB, command);
+      return NextResponse.json({ jobId: PREVIEW_JOB });
+    }
     const jobId = `j${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
     await startJob(box, jobId, command);
     return NextResponse.json({ jobId });

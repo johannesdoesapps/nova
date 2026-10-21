@@ -11,9 +11,11 @@ import {
   Eye,
   FileCode2,
   FlaskConical,
+  Globe,
   ListChecks,
   Loader2,
   MessageSquare,
+  MonitorSmartphone,
   Plus,
   Power,
   RotateCcw,
@@ -96,6 +98,16 @@ export const EXAMPLES: { label: string; task: string; mode?: ModeId; start: bool
   { label: "Build a new feature", task: "Build a new feature: ", start: false },
 ];
 
+/** Follow-ups for a website project: each starts a real change to the existing site. */
+export const WEB_EXAMPLES: { label: string; task: string; start: boolean }[] = [
+  { label: "Make the design more premium", task: "Make the design more premium: refine typography, spacing, colour and details. Keep the content and features.", start: true },
+  { label: "Add a pricing section", task: "Add a pricing section with three plans (clearly marked as sample prices), linked from the navigation.", start: true },
+  { label: "Make the navigation sticky", task: "Make the navigation bar stick to the top while scrolling, on desktop and phones.", start: true },
+  { label: "Fix the mobile layout", task: "Check the site at phone sizes and fix anything that's cramped, overflowing or hard to tap.", start: true },
+  { label: "Add dark mode", task: "Add a dark mode that follows the visitor's system setting, with a toggle to switch.", start: true },
+  { label: "Change the colours…", task: "Change the colours to ", start: false },
+];
+
 const MODE_KEY = "orbis.code.mode";
 const readMode = (): ModeId => {
   try {
@@ -108,7 +120,7 @@ const readMode = (): ModeId => {
 
 // ---------------------------------------------------------------- stages
 
-export type StageId = "understand" | "explore" | "plan" | "edit" | "check" | "review";
+export type StageId = "understand" | "explore" | "plan" | "edit" | "check" | "preview" | "review";
 
 export const STAGE_LABEL: Record<StageId, string> = {
   understand: "Understanding your request",
@@ -116,6 +128,7 @@ export const STAGE_LABEL: Record<StageId, string> = {
   plan: "Planning the changes",
   edit: "Editing files",
   check: "Running checks",
+  preview: "Checking the site in a browser",
   review: "Reviewing the results",
 };
 
@@ -125,6 +138,7 @@ const STAGE_ICON: Record<StageId, ReactNode> = {
   plan: <ListChecks className="h-4 w-4" />,
   edit: <FileCode2 className="h-4 w-4" />,
   check: <TerminalIcon className="h-4 w-4" />,
+  preview: <MonitorSmartphone className="h-4 w-4" />,
   review: <Check className="h-4 w-4" />,
 };
 
@@ -138,6 +152,8 @@ export interface StageBlock {
 /** Which stage an event belongs to; null for events that join the current stage (notes, answers, errors). */
 function stageOfEvent(e: AgentEvent): StageId | null {
   if (e.kind === "status" && e.title.startsWith("Started with")) return "understand";
+  // Starting and checking the live preview (and its screenshots).
+  if (e.detail?.preview || typeof e.detail?.screenshot === "string" || (e.kind === "status" && /preview|Run command/.test(e.title))) return "preview";
   // Looking at its own diff or status is the agent reviewing its work, not exploring the project.
   if (e.kind === "inspect") return /^(Checked the run's changes|Looked at the diff)/.test(e.title) ? "review" : "explore";
   if (e.kind === "plan") return "plan";
@@ -208,6 +224,12 @@ export function stageSummary(b: StageBlock): string {
       const blocked = ran.filter((e) => e.detail?.blocked).length;
       return [ran.length - blocked && `ran ${plural(ran.length - blocked, "command")}`, blocked && `${blocked} blocked`].filter(Boolean).join(", ");
     }
+    case "preview": {
+      const checks = b.events.filter((e) => e.detail?.preview && e.kind === "inspect");
+      if (checks.length) return checks[checks.length - 1]!.title;
+      const started = b.events.filter((e) => e.detail?.preview && e.kind === "command");
+      return started.length ? started[started.length - 1]!.title : (b.events[0]?.title ?? "");
+    }
     case "review":
       return n("summary") ? "Finished" : "Checked its changes";
   }
@@ -233,9 +255,35 @@ export interface AgentPanelProps {
   /** The project's test command, when it has one. */
   testCommand: string | null;
   onRunTests: () => void;
+  /** A website project: website examples and wording. */
+  web?: boolean;
+  /** The agent started the preview, checked it, or changed files the preview shows. */
+  onPreview?: (what: "started" | "checked" | "changed") => void;
+  onOpenPreview?: () => void;
+  /** Start this request straight away ("Build website"), working on its own. */
+  autoStart?: string;
+  /** Start the project's computer without asking when the run needs it (the user asked for a build). */
+  autoComputer?: boolean;
 }
 
-export function AgentPanel({ projectId, computerOn, startComputer, onFilesChanged, onShowChanges, initialRunId, onRunChange, initialRequest, onOpenFile, testCommand, onRunTests }: AgentPanelProps) {
+export function AgentPanel({
+  projectId,
+  computerOn,
+  startComputer,
+  onFilesChanged,
+  onShowChanges,
+  initialRunId,
+  onRunChange,
+  initialRequest,
+  onOpenFile,
+  testCommand,
+  onRunTests,
+  web,
+  onPreview,
+  onOpenPreview,
+  autoStart,
+  autoComputer,
+}: AgentPanelProps) {
   const [run, setRun] = useState<RunView | null>(null);
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -250,10 +298,12 @@ export function AgentPanel({ projectId, computerOn, startComputer, onFilesChange
   const feedEnd = useRef<HTMLDivElement>(null);
   const filesChanged = useRef(onFilesChanged);
   const runChanged = useRef(onRunChange);
+  const previewChanged = useRef(onPreview);
   useEffect(() => {
     filesChanged.current = onFilesChanged;
     runChanged.current = onRunChange;
-  }, [onFilesChanged, onRunChange]);
+    previewChanged.current = onPreview;
+  }, [onFilesChanged, onRunChange, onPreview]);
 
   /** Fetch the run and its new activity; reload files when the agent touched them. */
   const refresh = useCallback(async (runId: string): Promise<RunView> => {
@@ -265,7 +315,11 @@ export function AgentPanel({ projectId, computerOn, startComputer, onFilesChange
     if (fresh.length) {
       lastSeq.current = Math.max(...fresh.map((e) => e.seq));
       setEvents((es) => [...es.filter((e) => !fresh.some((f) => f.seq === e.seq)), ...fresh].sort((a, b) => a.seq - b.seq));
-      if (fresh.some((e) => e.kind === "edit" || e.kind === "revert" || (e.kind === "command" && Array.isArray(e.detail?.changed) && (e.detail.changed as unknown[]).length))) filesChanged.current();
+      const touched = fresh.some((e) => e.kind === "edit" || e.kind === "revert" || (e.kind === "command" && Array.isArray(e.detail?.changed) && (e.detail.changed as unknown[]).length));
+      if (touched) filesChanged.current();
+      if (fresh.some((e) => e.kind === "command" && e.detail?.preview && e.detail.state === "running")) previewChanged.current?.("started");
+      else if (fresh.some((e) => e.kind === "inspect" && e.detail?.preview)) previewChanged.current?.("checked");
+      else if (touched) previewChanged.current?.("changed");
     }
     return r.run;
   }, []);
@@ -398,6 +452,25 @@ export function AgentPanel({ projectId, computerOn, startComputer, onFilesChange
     if (ok) await respond("continue");
   };
 
+  // "Build website": the request starts as soon as the panel is ready, once.
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!loaded || run || !autoStart || autoStarted.current) return;
+    autoStarted.current = true;
+    void start(autoStart, "auto", "auto:coding");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once when the panel is ready
+  }, [loaded, run, autoStart]);
+
+  // The user asked for a build, which needs the computer: start it rather than ask (once per run).
+  const autoComputerFor = useRef<string | null>(null);
+  const busyNow = driving || answering || !!run?.busy;
+  useEffect(() => {
+    if (!autoComputer || !run || run.pending?.kind !== "computer" || busyNow || autoComputerFor.current === run.id) return;
+    autoComputerFor.current = run.id;
+    void startAndContinue();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reacts to the run waiting for the computer
+  }, [autoComputer, run?.id, run?.pending?.kind, busyNow]);
+
   const undoAll = async () => {
     if (!run) return;
     setError(null);
@@ -427,7 +500,12 @@ export function AgentPanel({ projectId, computerOn, startComputer, onFilesChange
         <div className="mx-auto w-full max-w-[780px] px-4 pb-6 pt-4 sm:px-6">
           {!loaded && <div className="s-skeleton h-24 w-full rounded-2xl" />}
 
-          {loaded && !run && <Composer initialRequest={initialRequest} starting={starting} onStart={start} />}
+          {loaded && !run && !(autoStart && !error) && <Composer initialRequest={initialRequest} starting={starting} onStart={start} web={web} />}
+          {loaded && !run && autoStart && !error && (
+            <p className="flex items-center gap-2 px-1 pt-10 text-[14px] text-s-ink-2">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Starting the build…
+            </p>
+          )}
 
           {run && (
             <div className="space-y-3">
@@ -494,7 +572,18 @@ export function AgentPanel({ projectId, computerOn, startComputer, onFilesChange
                 </div>
               )}
 
-              {ended && <ReportCard run={run} onShowChanges={() => onShowChanges(run.id)} onOpenFile={onOpenFile} testCommand={testCommand} onRunTests={onRunTests} onUndo={undoAll} />}
+              {ended && (
+                <ReportCard
+                  run={run}
+                  onShowChanges={() => onShowChanges(run.id)}
+                  onOpenFile={onOpenFile}
+                  testCommand={testCommand}
+                  onRunTests={onRunTests}
+                  onUndo={undoAll}
+                  onOpenPreview={onOpenPreview}
+                />
+              )}
+              {ended && <FollowUp run={run} web={web} starting={starting} onStart={start} />}
               {ended && (
                 <button
                   type="button"
@@ -541,7 +630,17 @@ export function AgentPanel({ projectId, computerOn, startComputer, onFilesChange
 
 // ---------------------------------------------------------------- the task box
 
-function Composer({ initialRequest, starting, onStart }: { initialRequest?: string; starting: boolean; onStart: (request: string, mode: ModeId, modelId: string) => Promise<void> }) {
+function Composer({
+  initialRequest,
+  starting,
+  onStart,
+  web,
+}: {
+  initialRequest?: string;
+  starting: boolean;
+  onStart: (request: string, mode: ModeId, modelId: string) => Promise<void>;
+  web?: boolean;
+}) {
   const catalog = useCatalog();
   const [request, setRequest] = useState(initialRequest ?? "");
   const [mode, setModeState] = useState<ModeId>(readMode);
@@ -559,7 +658,8 @@ function Composer({ initialRequest, starting, onStart }: { initialRequest?: stri
   };
   const current = MODES.find((m) => m.id === mode)!;
 
-  const example = (e: (typeof EXAMPLES)[number]) => {
+  const examples: { label: string; task: string; mode?: ModeId; start: boolean }[] = web ? WEB_EXAMPLES : EXAMPLES;
+  const example = (e: (typeof examples)[number]) => {
     if (e.start) return void onStart(e.task, e.mode ?? mode, modelId);
     setRequest(e.task);
     requestAnimationFrame(() => {
@@ -570,9 +670,11 @@ function Composer({ initialRequest, starting, onStart }: { initialRequest?: stri
 
   return (
     <div className="s-in pt-[min(8vh,64px)]">
-      <h2 className="text-center font-serif text-[clamp(28px,4vw,38px)] leading-[1.1]">What would you like to build or fix?</h2>
+      <h2 className="text-center font-serif text-[clamp(28px,4vw,38px)] leading-[1.1]">{web ? "What should change on your site?" : "What would you like to build or fix?"}</h2>
       <p className="mx-auto mt-2 max-w-[560px] text-center text-[14px] leading-relaxed text-s-ink-3">
-        Describe it in plain English. The agent explores the project, makes the changes, runs the checks and shows you what changed.
+        {web
+          ? "Describe it in plain English. The agent edits the site, starts the preview, checks it in a real browser at desktop and phone sizes, and shows you what changed."
+          : "Describe it in plain English. The agent explores the project, makes the changes, runs the checks and shows you what changed."}
       </p>
       <form
         className="glass-strong glass-edge mt-6 rounded-[24px] p-3"
@@ -597,7 +699,7 @@ function Composer({ initialRequest, starting, onStart }: { initialRequest?: stri
           }}
           rows={3}
           maxLength={8000}
-          placeholder="What would you like to build or fix?"
+          placeholder={web ? "Describe the website you want, or the change to make…" : "What would you like to build or fix?"}
           className="block w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-relaxed outline-none placeholder:text-s-ink-3"
         />
         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -639,7 +741,7 @@ function Composer({ initialRequest, starting, onStart }: { initialRequest?: stri
       <div className="mt-4">
         <p className="text-[12px] font-medium uppercase tracking-[0.08em] text-s-ink-3">Try</p>
         <div className="mt-2 flex flex-wrap gap-2">
-          {EXAMPLES.map((e) => (
+          {examples.map((e) => (
             <button
               key={e.label}
               type="button"
@@ -745,11 +847,12 @@ const ICONS: Record<string, ReactNode> = {
 function EventRow({ event: e }: { event: AgentEvent }) {
   const [open, setOpen] = useState(false);
   const d = e.detail ?? {};
-  const output = typeof d.output === "string" ? d.output : null;
+  const output = typeof d.output === "string" ? d.output : typeof d.report === "string" ? d.report : null;
+  const shot = typeof d.screenshot === "string" ? d.screenshot : null;
   const steps = Array.isArray(d.steps) ? (d.steps as string[]) : null;
   const failed = e.kind === "error" || (e.kind === "command" && (d.exitCode !== 0 || d.timedOut === true) && !d.blocked) || (e.kind === "command" && !!d.blocked);
   const passed = e.kind === "command" && d.exitCode === 0 && !d.timedOut;
-  const expandable = !!output || (e.kind === "summary" && typeof d.summary === "string");
+  const expandable = !!output || !!shot || (e.kind === "summary" && typeof d.summary === "string");
   return (
     <li className={cn("rounded-lg px-2 py-1 text-[12.5px] leading-snug", e.kind === "note" ? "text-s-ink-3" : "text-s-ink-2")}>
       <div className="flex items-start gap-2">
@@ -778,6 +881,10 @@ function EventRow({ event: e }: { event: AgentEvent }) {
         </pre>
       )}
       {open && e.kind === "summary" && typeof d.summary === "string" && <p className="mt-1 whitespace-pre-wrap pl-5.5 text-s-ink-2">{d.summary}</p>}
+      {open && shot && (
+        // eslint-disable-next-line @next/next/no-img-element -- a screenshot from the activity log (data URL), not an optimisable asset
+        <img src={`data:image/jpeg;base64,${shot}`} alt={e.title} className="mt-1.5 max-h-[420px] w-auto max-w-full rounded-md border border-s-line" />
+      )}
     </li>
   );
 }
@@ -805,6 +912,64 @@ const VERIFY_STYLE: Record<RunReport["verification"], string> = {
   stale: "border-amber-500/50 text-amber-600 dark:text-amber-400",
 };
 
+type Checks = NonNullable<RunReport["checks"]>;
+type Tone = "good" | "bad" | "warn" | "plain";
+const TONE: Record<Tone, string> = { good: "text-emerald-600 dark:text-emerald-400", bad: "text-s-danger", warn: "text-amber-600 dark:text-amber-400", plain: "text-s-ink-3" };
+
+/** Each website check on its own line, as it actually ended: server running, preview checked in a browser, production build. */
+export function checkLines(c: Checks | undefined): { label: string; value: string; tone: Tone; detail?: string[] }[] {
+  if (!c) return [];
+  const out: ReturnType<typeof checkLines> = [];
+  if (c.server) {
+    out.push({
+      label: "Development server",
+      value: c.server.state === "running" ? `Running (answered HTTP ${c.server.http})` : c.server.state === "exited" ? "Didn't start (it exited)" : "Didn't answer in time",
+      tone: c.server.state === "running" ? "good" : "bad",
+    });
+  }
+  if (c.preview) {
+    const p = c.preview;
+    out.push({
+      label: "Checked in a browser",
+      value:
+        p.freshness === "stale"
+          ? "Not re-checked after the last change"
+          : p.verdict === "passed"
+            ? "No problems at desktop and phone sizes"
+            : p.verdict === "failed"
+              ? "The check couldn't run"
+              : `${p.problems.length} problem${p.problems.length === 1 ? "" : "s"} found`,
+      tone: p.freshness === "stale" ? "warn" : p.verdict === "passed" ? "good" : p.verdict === "failed" ? "plain" : "bad",
+      detail: p.verdict === "problems" ? p.problems.slice(0, 6) : undefined,
+    });
+  } else if (c.server) out.push({ label: "Checked in a browser", value: "Not checked", tone: "plain" });
+  out.push(
+    c.build
+      ? {
+          label: "Production build",
+          value:
+            c.build.freshness === "stale"
+              ? `Not re-run after the last change (${c.build.command})`
+              : c.build.passed
+                ? `Passed (${c.build.command})`
+                : `Failed (${c.build.command}, exit ${c.build.exitCode ?? "none"})`,
+          tone: c.build.freshness === "stale" ? "warn" : c.build.passed ? "good" : "bad",
+        }
+      : { label: "Production build", value: "Not run", tone: "plain" },
+  );
+  return out;
+}
+
+/** The headline badge: tests when they ran, else the browser check, else not verified. */
+export function reportBadge(r: RunReport): { label: string; style: string } {
+  const p = r.checks?.preview;
+  if (r.tests || !p) return { label: VERIFICATION_LABEL[r.verification], style: VERIFY_STYLE[r.verification] };
+  if (p.freshness === "stale") return { label: "Not re-checked after the last change", style: VERIFY_STYLE.stale };
+  if (p.verdict === "passed") return { label: "Checked in a browser: no problems", style: VERIFY_STYLE.passed };
+  if (p.verdict === "problems") return { label: "Browser check found problems", style: VERIFY_STYLE.failed };
+  return { label: "Browser check couldn't run", style: VERIFY_STYLE.not_run };
+}
+
 /** The end of a session: built by the server from what actually ran and changed; the agent's own words are labelled as such. */
 function ReportCard({
   run,
@@ -813,6 +978,7 @@ function ReportCard({
   testCommand,
   onRunTests,
   onUndo,
+  onOpenPreview,
 }: {
   run: RunView;
   onShowChanges: () => void;
@@ -820,8 +986,11 @@ function ReportCard({
   testCommand: string | null;
   onRunTests: () => void;
   onUndo: () => Promise<void>;
+  onOpenPreview?: () => void;
 }) {
   const r = run.report;
+  const lines = checkLines(r?.checks);
+  const badge = r ? reportBadge(r) : null;
   const title = run.status === "completed" ? "Done" : run.status === "failed" ? "Stopped with an error" : "Stopped";
   const changed = r ? r.files.filter((f) => f.change !== "deleted") : [];
   const secondary = "inline-flex h-8 items-center gap-1.5 rounded-full border border-s-line px-3 text-[12.5px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink";
@@ -836,7 +1005,7 @@ function ReportCard({
           <Square className="h-3.5 w-3.5" aria-hidden />
         )}
         {title}
-        {r && <span className={cn("rounded-full border px-2 py-px text-[12px] font-normal", VERIFY_STYLE[r.verification])}>{VERIFICATION_LABEL[r.verification]}</span>}
+        {badge && <span className={cn("rounded-full border px-2 py-px text-[12px] font-normal", badge.style)}>{badge.label}</span>}
       </div>
       {run.error && <p className="mt-1 text-s-danger">{run.error}</p>}
 
@@ -858,7 +1027,31 @@ function ReportCard({
           {r.tests.failures.length > 0 && <p className="text-s-danger">Failing: {r.tests.failures.join("; ")}</p>}
         </div>
       )}
-      {r && !r.tests && r.files.length > 0 && <p className="mt-3 text-[13px] text-s-ink-3">No tests ran in this session, so the changes aren&apos;t verified.</p>}
+      {lines.length > 0 && (
+        <div className="mt-3">
+          <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-s-ink-3">Website checks</h3>
+          <dl className="mt-1 space-y-1">
+            {lines.map((l) => (
+              <div key={l.label}>
+                <div className="flex flex-wrap gap-x-2">
+                  <dt className="text-s-ink-2">{l.label}:</dt>
+                  <dd className={TONE[l.tone]}>{l.value}</dd>
+                </div>
+                {l.detail && (
+                  <ul className="mt-0.5 list-disc space-y-0.5 pl-5 text-[12.5px] text-s-ink-2">
+                    {l.detail.map((d, i) => (
+                      <li key={i}>{d}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+      {r && !r.tests && !r.checks?.preview && r.files.length > 0 && (
+        <p className="mt-3 text-[13px] text-s-ink-3">No tests or browser checks ran in this session, so the changes aren&apos;t verified.</p>
+      )}
 
       {r && (
         <div className="mt-3">
@@ -925,6 +1118,11 @@ function ReportCard({
         >
           <FileCode2 className="h-3.5 w-3.5" aria-hidden /> Review changes
         </button>
+        {onOpenPreview && r?.checks?.server && (
+          <button type="button" onClick={onOpenPreview} className={secondary}>
+            <Globe className="h-3.5 w-3.5" aria-hidden /> Open preview
+          </button>
+        )}
         {changed.length > 0 && (
           <button type="button" onClick={() => onOpenFile(changed[0]!.path)} className={secondary}>
             Open {changed.length === 1 ? changed[0]!.path.split("/").pop() : "changed files"}
@@ -951,6 +1149,68 @@ function ReportCard({
         </p>
       )}
     </section>
+  );
+}
+
+/** Ask for a change to what was just built: a new session on the same project, in the same mode and model, with the earlier work as context. */
+function FollowUp({ run, web, starting, onStart }: { run: RunView; web?: boolean; starting: boolean; onStart: (request: string, mode: ModeId, modelId: string) => Promise<void> }) {
+  const [text, setText] = useState("");
+  const mode = modeOf(run.options)?.id ?? "plan";
+  const model = run.options.modelId ?? "auto:coding";
+  const send = (t: string) => void onStart(t, mode === "read" ? "plan" : mode, model);
+  const chips = web ? WEB_EXAMPLES : [];
+  return (
+    <form
+      className="rounded-2xl border border-s-line p-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (text.trim()) send(text.trim());
+      }}
+    >
+      <label htmlFor="agent-followup" className="text-[13px] font-medium text-s-ink">
+        {web ? "Ask for changes to the site" : "Ask for a follow-up change"}
+      </label>
+      <p className="text-[12px] text-s-ink-3">The agent already knows this project and what was just done.</p>
+      <div className="mt-2 flex items-end gap-2">
+        <textarea
+          id="agent-followup"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && text.trim()) {
+              e.preventDefault();
+              send(text.trim());
+            }
+          }}
+          rows={2}
+          maxLength={8000}
+          placeholder={web ? "For example: change the colours to blue and white" : "For example: also add tests for the edge cases"}
+          className="min-h-[44px] flex-1 resize-none rounded-xl border border-s-line bg-transparent px-3 py-2 text-[14px] outline-none placeholder:text-s-ink-3 focus:border-s-line-strong"
+        />
+        <button
+          type="submit"
+          disabled={starting || !text.trim()}
+          className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-s-accent px-4 text-[13px] font-medium text-s-accent-ink disabled:opacity-40"
+        >
+          {starting ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <ArrowUp className="h-3.5 w-3.5" aria-hidden />} Send
+        </button>
+      </div>
+      {chips.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {chips.map((c) => (
+            <button
+              key={c.label}
+              type="button"
+              disabled={starting}
+              onClick={() => (c.start ? send(c.task) : setText(c.task))}
+              className="rounded-full border border-s-line px-2.5 py-1 text-[12px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink disabled:opacity-40"
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </form>
   );
 }
 
@@ -1032,7 +1292,7 @@ function PendingCard({
   if (p.kind === "command") {
     return (
       <div className={card}>
-        <div className="font-medium text-s-ink">Allow this command?</div>
+        <div className="font-medium text-s-ink">{p.preview ? "Start the preview with this command?" : "Allow this command?"}</div>
         <pre className="mt-1.5 whitespace-pre-wrap break-all rounded-md bg-[var(--s-code,transparent)] p-2 font-mono text-[12px] text-s-ink">{p.command}</pre>
         <p className="mt-1.5 text-[12px] text-s-ink-3">{p.reason} It runs on the project&apos;s private computer, which can only reach npm and PyPI.</p>
         {feedback("Optional: why not, or what to do instead", "Feedback")}
@@ -1099,7 +1359,8 @@ function PendingCard({
       <div className={card}>
         <div className="font-medium text-s-ink">The agent needs the project&apos;s computer</div>
         <p className="mt-1 text-s-ink-2">
-          To run <code className="font-mono text-[12px]">{p.command}</code>, the project&apos;s private computer has to be on. Starting it uses workspace minutes from your plan.
+          {p.preview ? "To start the live preview with" : "To run"} <code className="font-mono text-[12px]">{p.command}</code>, the project&apos;s private computer has to be on. Starting it uses
+          workspace minutes from your plan.
         </p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {computerOn ? (

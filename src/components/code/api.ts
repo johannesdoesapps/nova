@@ -88,3 +88,25 @@ export function languageOf(path: string): "javascript" | "typescript" | "jsx" | 
   if (["md", "mdx", "markdown"].includes(ext)) return "markdown";
   return null;
 }
+
+const BUILD_KEY = (projectId: string) => `orbis.code.build.${projectId}`;
+
+/** Hand a "Build website" request from the start screen to the project's page (kept out of the URL: it can be long). */
+export function putBuildRequest(projectId: string, request: string): void {
+  try {
+    sessionStorage.setItem(BUILD_KEY(projectId), request);
+  } catch {
+    /* the page then shows the box with nothing filled in */
+  }
+}
+
+/** The request handed over for this project, once (it's removed when read). */
+export function takeBuildRequest(projectId: string): string | undefined {
+  try {
+    const v = sessionStorage.getItem(BUILD_KEY(projectId));
+    sessionStorage.removeItem(BUILD_KEY(projectId));
+    return v?.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}

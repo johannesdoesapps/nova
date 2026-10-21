@@ -4,9 +4,12 @@
  * permission modes map to the run's real options (enforced by the server);
  * and every first-use example is a real task.
  */
-import { describe, expect, it } from "vitest";
-import { EXAMPLES, groupStages, MODES, modeOf, stageSummary } from "@/components/code/agent-panel";
-import type { AgentEvent } from "@/lib/code/agent/types";
+import { describe, expect, it, vi } from "vitest";
+import { checkLines, EXAMPLES, groupStages, MODES, modeOf, reportBadge, stageSummary, WEB_EXAMPLES } from "@/components/code/agent-panel";
+import { siteName, SITE_EXAMPLES } from "@/components/code/projects-view";
+import type { AgentEvent, RunReport } from "@/lib/code/agent/types";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {} }), useSearchParams: () => new URLSearchParams(), usePathname: () => "/code" }));
 
 let seq = 0;
 const ev = (kind: AgentEvent["kind"], title: string, detail: Record<string, unknown> | null = null): AgentEvent => ({ id: `e${++seq}`, seq, kind, title, detail, createdAt: "" });
@@ -86,5 +89,75 @@ describe("first-use examples", () => {
     expect(EXAMPLES.find((e) => e.label.startsWith("Explain"))).toMatchObject({ mode: "read", start: true });
     expect(EXAMPLES.find((e) => e.label === "Build a new feature")).toMatchObject({ start: false });
     for (const e of EXAMPLES.filter((x) => x.start)) expect(e.task.length).toBeGreaterThan(30);
+  });
+});
+
+describe("website building", () => {
+  it("shows starting and checking the live preview as its own stage, with the latest check as its summary", () => {
+    const blocks = groupStages([
+      ev("edit", "Created index.html (220 lines)", { path: "index.html" }),
+      ev("status", "Set the project's Run command to python3 -m http.server 3000", { runCommand: "python3 -m http.server 3000" }),
+      ev("command", "Started the preview: python3 -m http.server 3000", { command: "python3 -m http.server 3000", preview: true, state: "running", exitCode: null }),
+      ev("inspect", "Screenshot: phone, first screen", { screenshot: "QQ", view: "phone" }),
+      ev("inspect", "Checked / in a browser: 1 problem found", { preview: true, verdict: "problems", problems: ["Phone: scrolls sideways"] }),
+      ev("edit", "Edited styles.css (+3 −1)", { path: "styles.css" }),
+      ev("inspect", "Checked / in a browser (desktop and phone): no problems found", { preview: true, verdict: "passed", problems: [] }),
+    ]);
+    expect(blocks.map((b) => b.stage)).toEqual(["edit", "preview", "edit", "preview"]);
+    expect(stageSummary(blocks[1]!)).toBe("Checked / in a browser: 1 problem found");
+    expect(stageSummary(blocks[3]!)).toBe("Checked / in a browser (desktop and phone): no problems found");
+  });
+
+  it("reports each website check as it really ended, separately from tests", () => {
+    const report = (checks: RunReport["checks"], tests: RunReport["tests"] = null): RunReport =>
+      ({
+        outcome: "completed",
+        summary: null,
+        unresolved: [],
+        files: [],
+        commands: [],
+        tests,
+        verification: tests ? "passed" : "not_run",
+        checks,
+        usage: {} as never,
+        checkpoints: 0,
+        createdAt: "",
+      }) as RunReport;
+    const passed = {
+      server: { command: "python3 -m http.server 3000", state: "running" as const, http: 200, at: "", freshness: "current" as const },
+      preview: { path: "/", verdict: "passed" as const, problems: [], warnings: [], checkedAt: "", freshness: "current" as const },
+      build: null,
+    };
+    expect(checkLines(passed)).toEqual([
+      { label: "Development server", value: "Running (answered HTTP 200)", tone: "good" },
+      { label: "Checked in a browser", value: "No problems at desktop and phone sizes", tone: "good", detail: undefined },
+      { label: "Production build", value: "Not run", tone: "plain" },
+    ]);
+    expect(reportBadge(report(passed)).label).toBe("Checked in a browser: no problems");
+    const stale = { ...passed, preview: { ...passed.preview, freshness: "stale" as const } };
+    expect(reportBadge(report(stale)).label).toBe("Not re-checked after the last change");
+    const broken = {
+      ...passed,
+      preview: { ...passed.preview, verdict: "problems" as const, problems: ["JavaScript error: x is not defined"] },
+      build: { command: "npm run build", exitCode: 1, passed: false, ranAt: "", freshness: "current" as const },
+    };
+    expect(checkLines(broken)[1]).toMatchObject({ value: "1 problem found", tone: "bad", detail: ["JavaScript error: x is not defined"] });
+    expect(checkLines(broken)[2]).toMatchObject({ value: "Failed (npm run build, exit 1)", tone: "bad" });
+    expect(reportBadge(report(broken)).label).toBe("Browser check found problems");
+    // Tests that ran lead the badge; no checks at all means not verified.
+    expect(reportBadge(report(passed, { command: "npm test", verdict: "passed" } as never)).label).toBe("Tests passed after the last change");
+    expect(reportBadge(report(undefined)).label).toBe("Not verified: no tests ran");
+  });
+
+  it("names a new website project from its request", () => {
+    expect(siteName("Build a modern SaaS landing page for an AI productivity platform called Nova. Include a navigation bar")).toBe("Website: Nova");
+    expect(siteName("Create an online portfolio for a designer")).toBe("Online portfolio for a designer");
+    expect(siteName("")).toBe("New website");
+  });
+
+  it("offers website examples that are full, real requests", () => {
+    expect(SITE_EXAMPLES.map((x) => x.label)).toEqual(["Premium SaaS landing page", "Designer portfolio", "E-commerce storefront", "Restaurant with reservations", "Dashboard with charts"]);
+    for (const x of SITE_EXAMPLES) expect(x.prompt.length).toBeGreaterThan(80);
+    expect(WEB_EXAMPLES.filter((x) => x.start).every((x) => x.task.length > 30)).toBe(true);
   });
 });

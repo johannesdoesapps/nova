@@ -106,3 +106,37 @@ export function classifyCommand(command: string): CommandDecision {
   if (/(^|\s)rm\s/.test(c)) return { kind: "ask", purpose: purpose ?? "other", reason: "It deletes files." };
   return { kind: "allow", purpose: purpose ?? "other" };
 }
+
+/** Commands that start a server and keep running: they belong in start_preview, not run_command (which waits for them to end). */
+const SERVER_START: RegExp[] = [
+  /^python3?\s+-m\s+http\.server(\s+\d+)?(\s+(--bind|-b)\s+\S+)?(\s+(--directory|-d)\s+[\w./-]+)?$/,
+  /^(npm|pnpm|yarn)\s+(run\s+)?(dev|start|serve|preview)(\s+--(\s+[\w.=:/-]+)*)?$/,
+  /^npx\s+(-y\s+)?(vite|serve|http-server|next|astro|live-server)(@[\w.-]+)?(\s+[\w.=:/-]+)*$/,
+  /^(node|bun|tsx)\s+[\w./-]+\.(m?js|cjs|ts)(\s+[\w.=:/-]+)*$/,
+  /^python3?\s+[\w./-]+\.py(\s+[\w.=:/-]+)*$/,
+  /^(python3?\s+-m\s+)?(flask\s+run|uvicorn|gunicorn)(\s+[\w.=:/-]+)*$/,
+  /^php\s+-S\s+[\w.:]+(\s+-t\s+[\w./-]+)?$/,
+];
+
+export function isServerCommand(command: string): boolean {
+  const parts = splitCommands(command.trim());
+  return !!parts && parts.some((p) => SERVER_START.slice(0, 3).some((re) => re.test(p)) || /^(npx\s+)?(vite|next\s+(dev|start)|astro\s+dev)(\s|$)/.test(p));
+}
+
+/**
+ * A preview server command (start_preview): package installs and builds
+ * followed by one recognised server start run without asking; anything else
+ * waits for the user; the never-run list still applies.
+ */
+export function classifyServerCommand(command: string): CommandDecision {
+  const c = command.trim();
+  const base = classifyCommand(c);
+  if (base.kind === "block") return base;
+  const parts = splitCommands(c);
+  if (!parts) return { kind: "ask", purpose: "run", reason: "It uses shell features (command substitution or background jobs) that need a look." };
+  const last = parts[parts.length - 1]!;
+  const setup = parts.slice(0, -1);
+  const okSetup = setup.every((p) => SAFE.some(([re, purpose]) => re.test(p) && (purpose === "install" || purpose === "build" || purpose === "inspect")) || /^cd\s+[\w./-]+$/.test(p));
+  if (okSetup && SERVER_START.some((re) => re.test(last))) return { kind: "allow", purpose: "run" };
+  return { kind: "ask", purpose: "run", reason: `“${c.slice(0, 120)}” isn't a server command Orbis recognises, so it needs your go-ahead.` };
+}

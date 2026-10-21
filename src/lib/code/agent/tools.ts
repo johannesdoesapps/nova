@@ -2,12 +2,13 @@ import type { z } from "zod";
 import { applyAiEdits, type AiEdits } from "../ai-edits";
 import { diffStats, unifiedDiff } from "../diff";
 import type { FileChange, ProjectFile } from "../projects";
-import { classifyCommand } from "./policy";
+import type { PreviewCheck } from "../preview-check";
+import { classifyCommand, classifyServerCommand, isServerCommand } from "./policy";
 import { clipText, tailText, type ActionResult, type AgentReply } from "./protocol";
 import type { NewEvent } from "./runs";
 import { describeTestResult, detectTestCommand, isTestCommand, testResult, type TestResult } from "./test-results";
 import { EDIT_TOOLS, isToolName, MAX_READ_FILES, TOOL_DEFS } from "./tool-specs";
-import type { AgentPlan, CommandMode, Pending, RunStatus } from "./types";
+import type { AgentPlan, BuildCheck, CommandMode, Pending, PreviewCheckRecord, RunStatus, ServerCheck } from "./types";
 
 /**
  * The agent's tools. Every call is validated against its schema, checked
@@ -59,7 +60,16 @@ export interface AgentEnv {
   /** Whether the user has stopped the run (checked right before anything that changes the project). */
   cancelled?: () => Promise<boolean>;
   /** Write activity to the log as it happens (so the page shows it live). */
-  emit?: (events: NewEvent[]) => Promise<void>;
+  emit?: (events: NewEvent[]) => Promise<unknown>;
+  /** The live preview in the project's computer. */
+  preview?: {
+    /** (Re)start the preview server and wait until it answers, exits or times out. */
+    start(command: string): Promise<{ state: "running" | "exited" | "timeout"; http: number; exitCode: number | null; text: string }>;
+    /** Load the running site in a browser; screenshots go to the activity log (their event numbers come back). */
+    check(path: string): Promise<{ check: PreviewCheck; shots: number[] }>;
+    /** Make a server command the project's Run command (the Run button and the preview use it). */
+    setRunCommand(command: string): Promise<void>;
+  };
   lookupDocs?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]>;
   github?: (tool: string, args: Record<string, unknown>) => Promise<{ ok: boolean; text: string; summary: string }>;
 }
@@ -90,6 +100,8 @@ export interface StepOutcome {
   tests: TestResult[];
   /** Files were saved this step. */
   edited: boolean;
+  /** Website checks that ran this step (the latest of each). */
+  checks: { server?: ServerCheck; preview?: PreviewCheckRecord; build?: BuildCheck };
 }
 
 const MAX_READ_CHARS = 30_000;
@@ -113,9 +125,9 @@ export function isSecretPath(path: string): boolean {
 }
 
 /** Actions that change the project or run something: re-checked against Stop right before they run. */
-const CHANGES_PROJECT = new Set(["write_file", "edit_file", "delete_file", "restore_checkpoint", "run_command", "run_tests"]);
+const CHANGES_PROJECT = new Set(["write_file", "edit_file", "delete_file", "restore_checkpoint", "run_command", "run_tests", "start_preview"]);
 
-const READ_ONLY_REFUSED = new Set(["write_file", "edit_file", "delete_file", "restore_checkpoint", "create_checkpoint", "run_command", "run_tests", "propose_plan"]);
+const READ_ONLY_REFUSED = new Set(["write_file", "edit_file", "delete_file", "restore_checkpoint", "create_checkpoint", "run_command", "run_tests", "start_preview", "check_preview", "propose_plan"]);
 
 const WITHHELD = "(withheld: this looks like a file with secrets, so Orbis doesn't send its contents to the AI)";
 
@@ -251,12 +263,14 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
   let commandRan = false;
   // With review on, edits are collected here and shown together at the end of the step.
   let proposed: FileChange[] = [];
-  const done = (pause: StepOutcome["pause"], summary: string | null = null, unresolved: string[] = []): StepOutcome => ({ results, events, pause, plan, summary, unresolved, tests, edited });
+  const checks: StepOutcome["checks"] = {};
+  let checked = false;
+  const done = (pause: StepOutcome["pause"], summary: string | null = null, unresolved: string[] = []): StepOutcome => ({ results, events, pause, plan, summary, unresolved, tests, edited, checks });
   const log = async (...e: NewEvent[]) => {
     events.push(...e);
     if (env.emit) await env.emit(e);
   };
-  const result = (id: string | undefined, tool: string, ok: boolean, text: string) => results.push({ ...(id ? { id } : {}), tool, ok, text });
+  const result = (id: string | undefined, tool: string, ok: boolean, text: string, shots?: number[]) => results.push({ ...(id ? { id } : {}), tool, ok, text, ...(shots?.length ? { shots } : {}) });
   const skipRest = (from: number, why: string) => {
     for (const a of reply.actions.slice(from)) result(a.id, a.tool, false, `Not run: ${why}`);
   };
@@ -280,6 +294,10 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
     }
     if (commandRan) {
       result(id, tool, false, "Not run: one command per step. Run it in the next step.");
+      return null;
+    }
+    if (tool === "run_command" && isServerCommand(cmd)) {
+      result(id, tool, false, `Not run: \`${cmd}\` starts a server that keeps running, and run_command waits for commands to finish. Use start_preview for servers.`);
       return null;
     }
     const decision = classifyCommand(cmd);
@@ -310,6 +328,9 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
     }
     const t = isTestCommand(cmd) || tool === "run_tests" ? testResult({ command: cmd, ...out }) : null;
     if (t) tests.push(t);
+    else if (decision.purpose === "build" && !out.cancelled) {
+      checks.build = { command: cmd.slice(0, 300), exitCode: out.exitCode, passed: out.exitCode === 0 && !out.timedOut, ranAt: new Date().toISOString() };
+    }
     await log(commandEvent(cmd, out, t));
     result(id, tool, out.exitCode === 0 && !out.timedOut && !out.cancelled && (!t || t.verdict === "passed"), commandResultText(cmd, out, t));
     if (out.cancelled) {
@@ -529,6 +550,89 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
         }
         const pause = await command(i, id, tool, cmd);
         if (pause) return pause;
+        break;
+      }
+      case "start_preview": {
+        if (!state.planApproved) {
+          result(id, tool, false, "Not allowed yet: propose your plan and wait for the user's approval before running anything.");
+          break;
+        }
+        if (state.commands === "off") {
+          result(id, tool, false, "Commands are turned off for this run, so the preview can't be started. Tell the user to press Run.");
+          break;
+        }
+        if (commandRan) {
+          result(id, tool, false, "Not run: one command per step. Start the preview in the next step.");
+          break;
+        }
+        const cmd = ((a.command as string | undefined) ?? env.project?.runCommand ?? "").trim();
+        if (!cmd) {
+          result(id, tool, false, 'The project has no Run command. Give the server command, e.g. start_preview {"command": "python3 -m http.server 3000"}.');
+          break;
+        }
+        const decision = classifyServerCommand(cmd);
+        if (decision.kind === "block") {
+          result(id, tool, false, `Not run: ${decision.reason}`);
+          await log({ kind: "command", title: `Blocked: ${cmd.slice(0, 200)}`, detail: { command: cmd, blocked: decision.reason } });
+          break;
+        }
+        if (state.approvedCommand !== cmd && (state.commands === "ask" || decision.kind === "ask")) {
+          const reason = decision.kind === "ask" ? decision.reason : "Every command needs your approval in this run.";
+          result(id, tool, true, "Waiting for the user to approve the server command.");
+          skipRest(i + 1, "waiting for the user's approval of the server command.");
+          await log({ kind: "approval", title: `Asked to start the preview with: ${cmd.slice(0, 200)}`, detail: { command: cmd, reason, preview: true } });
+          return done({ status: "awaiting_approval", pending: { kind: "command", command: cmd, reason, preview: true } });
+        }
+        if (!(await env.computer())) {
+          result(id, tool, true, "Waiting for the user to start the project's computer.");
+          skipRest(i + 1, "waiting for the project's computer to start.");
+          await log({ kind: "status", title: "Needs the project's computer to start the preview", detail: { command: cmd, preview: true } });
+          return done({ status: "needs_input", pending: { kind: "computer", command: cmd, preview: true } });
+        }
+        if (!env.preview) {
+          result(id, tool, false, "The preview isn't available here.");
+          break;
+        }
+        commandRan = true;
+        if (a.command && cmd !== env.project?.runCommand) {
+          await env.preview.setRunCommand(cmd);
+          if (env.project) env.project.runCommand = cmd;
+          await log({ kind: "status", title: `Set the project's Run command to ${cmd.slice(0, 200)}`, detail: { runCommand: cmd } });
+        }
+        const s = await env.preview.start(cmd);
+        checks.server = { command: cmd.slice(0, 300), state: s.state, http: s.http, at: new Date().toISOString() };
+        await log({
+          kind: "command",
+          title: s.state === "running" ? `Started the preview: ${cmd.slice(0, 200)}` : `The preview didn't start: ${cmd.slice(0, 200)}`,
+          detail: { command: cmd, preview: true, state: s.state, http: s.http, exitCode: s.exitCode, output: tailText(s.text, OUTPUT_FOR_LOG) },
+        });
+        result(id, tool, s.state === "running", s.text);
+        break;
+      }
+      case "check_preview": {
+        if (checked) {
+          result(id, tool, false, "Not run: one browser check per step. Check again in the next step.");
+          break;
+        }
+        if (!env.preview || !(await env.computer())) {
+          result(id, tool, false, "The project's computer isn't running, so there's no preview to check. Call start_preview first.");
+          break;
+        }
+        checked = true;
+        const path = (a.path as string | undefined) ?? "/";
+        const { check: c, shots } = await env.preview.check(path);
+        checks.preview = { path, verdict: c.verdict, problems: c.problems.slice(0, 30), warnings: c.warnings.slice(0, 15), checkedAt: c.checkedAt };
+        await log({
+          kind: "inspect",
+          title:
+            c.verdict === "passed"
+              ? `Checked ${path} in a browser (desktop and phone): no problems found`
+              : c.verdict === "failed"
+                ? `Couldn't check ${path} in a browser`
+                : `Checked ${path} in a browser: ${c.problems.length} problem${c.problems.length === 1 ? "" : "s"} found`,
+          detail: { preview: true, path, verdict: c.verdict, problems: c.problems, warnings: c.warnings, shots, report: c.text.slice(0, 12_000) },
+        });
+        result(id, tool, c.verdict === "passed", c.text, shots);
         break;
       }
       case "inspect_test_results": {

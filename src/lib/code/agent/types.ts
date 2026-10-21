@@ -38,6 +38,8 @@ export interface RunOptions {
   commands: CommandMode;
   /** Look and explain only: the server refuses every edit and command. */
   readOnly?: boolean;
+  /** A website task: the agent gets the website guidance (set when the run starts). */
+  web?: boolean;
 }
 
 export const DEFAULT_OPTIONS: RunOptions = { modelId: null, approvePlans: true, reviewEdits: false, commands: "safe", readOnly: false };
@@ -50,10 +52,10 @@ export interface AgentPlan {
 
 export type Pending =
   | { kind: "plan" }
-  | { kind: "command"; command: string; reason: string }
+  | { kind: "command"; command: string; reason: string; preview?: boolean }
   | { kind: "edits"; changes: FileChange[] }
   | { kind: "question"; question: string; options: string[] }
-  | { kind: "computer"; command: string }
+  | { kind: "computer"; command: string; preview?: boolean }
   /** A limit was reached (steps, tokens, working time, failed test runs, or repeated actions); the user decides whether to go on. */
   | { kind: "limit"; steps: number; reason?: LimitReason; detail?: string }
   /** A command is running right now (so Stop can end it). */
@@ -87,6 +89,43 @@ export interface RunTests {
 
 export const DEFAULT_TEST_ATTEMPTS = 3;
 
+/** The preview server the agent last started, as it was found. */
+export interface ServerCheck {
+  command: string;
+  state: "running" | "exited" | "timeout";
+  http: number;
+  at: string;
+}
+
+/** The latest browser check of the running site. */
+export interface PreviewCheckRecord {
+  path: string;
+  verdict: "passed" | "problems" | "failed";
+  problems: string[];
+  warnings: string[];
+  checkedAt: string;
+}
+
+/** The latest production build (a build script, type check or linter run as a command). */
+export interface BuildCheck {
+  command: string;
+  exitCode: number | null;
+  passed: boolean;
+  ranAt: string;
+}
+
+/** Website checks, each recorded from what actually ran. */
+export interface RunChecks {
+  server: ServerCheck | null;
+  preview: PreviewCheckRecord | null;
+  build: BuildCheck | null;
+}
+
+export const EMPTY_CHECKS: RunChecks = { server: null, preview: null, build: null };
+
+/** Whether a check ran after the run's last change to the files. */
+export type Freshness = "current" | "stale";
+
 /** How the work was verified, from the test runs that actually happened. */
 export type Verification = "passed" | "failed" | "not_run" | "stale";
 
@@ -101,6 +140,8 @@ export interface RunReport {
   commands: { command: string; exitCode: number | null; result: string }[];
   tests: (Omit<TestResult, "outputTail"> & { afterLastEdit: boolean }) | null;
   verification: Verification;
+  /** Website checks: the server, the browser check and the build, each marked current or stale. */
+  checks?: { server: (ServerCheck & { freshness: Freshness }) | null; preview: (PreviewCheckRecord & { freshness: Freshness }) | null; build: (BuildCheck & { freshness: Freshness }) | null };
   usage: RunUsage & { steps: number; activeMs: number };
   checkpoints: number;
   createdAt: string;
@@ -125,6 +166,7 @@ export interface RunView {
   activeMs: number;
   timeLimitMs: number;
   tests: RunTests | null;
+  checks: RunChecks;
   report: RunReport | null;
   createdAt: string;
   updatedAt: string;

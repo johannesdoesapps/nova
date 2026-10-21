@@ -76,6 +76,26 @@ export const TOOL_DEFS = {
     schema: z.object({ command: z.string().trim().min(1).max(500).optional() }),
     when: commandsOn,
   },
+  start_preview: {
+    description:
+      "Start the website's server in the background on port 3000 (the live preview), and wait until it answers or fails; a running one is replaced. Uses the project's Run command, or the server command you give (it then becomes the project's Run command), e.g. \"python3 -m http.server 3000\" or \"npm install && npm run dev -- --port 3000 --host 0.0.0.0\". Returns whether it answered and the end of its output. Counts as the step's one command.",
+    schema: z.object({ command: z.string().trim().min(1).max(500).optional() }),
+    when: commandsOn,
+  },
+  check_preview: {
+    description:
+      "Open the running preview in a real browser (headless Chromium in the project's computer) at a desktop (1280px) and a phone (390px) size, and report what a visitor would hit: HTTP status, JavaScript and console errors, files that fail to load, sideways scrolling, links to missing sections or pages, placeholder links, images without alt text, forms, whether the phone menu opens; with screenshots. Start the preview first.",
+    schema: z.object({
+      path: z
+        .string()
+        .trim()
+        .max(300)
+        .regex(/^\/[^\s]*$/, "a path on the site, starting with /")
+        .optional()
+        .describe('Page to check, e.g. "/" or "/about.html". Default "/".'),
+    }),
+    when: commandsOn,
+  },
   inspect_test_results: { description: "The latest test run in this run: the verdict, counts, failing tests and the end of its output.", schema: z.object({}) },
   lookup_docs: { description: "Search the web for documentation (titles, links and snippets).", schema: z.object({ query: z.string().trim().min(2).max(300) }), when: (c) => c.docs },
   github: {
@@ -113,7 +133,18 @@ export function isToolName(name: string): name is ToolName {
   return Object.hasOwn(TOOL_DEFS, name);
 }
 
-const READ_ONLY_HIDDEN = new Set<string>(["write_file", "edit_file", "delete_file", "restore_checkpoint", "create_checkpoint", "run_command", "run_tests", "propose_plan"]);
+const READ_ONLY_HIDDEN = new Set<string>([
+  "write_file",
+  "edit_file",
+  "delete_file",
+  "restore_checkpoint",
+  "create_checkpoint",
+  "run_command",
+  "run_tests",
+  "start_preview",
+  "check_preview",
+  "propose_plan",
+]);
 
 export function toolsFor(c: ToolContext): ToolName[] {
   return TOOL_NAMES.filter((n) => {

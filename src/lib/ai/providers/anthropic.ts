@@ -168,7 +168,9 @@ export function toAnthropicToolMessages(input: ToolMessage[]): Anthropic.Beta.Me
       const blocks: Anthropic.Beta.Messages.BetaContentBlockParam[] = (m.results ?? []).map((r) => ({
         type: "tool_result" as const,
         tool_use_id: r.id,
-        content: r.text || "(empty)",
+        content: r.images?.length
+          ? [{ type: "text" as const, text: r.text || "(empty)" }, ...r.images.map((i) => ({ type: "image" as const, source: { type: "base64" as const, media_type: i.mediaType, data: i.data } }))]
+          : r.text || "(empty)",
         ...(r.ok ? {} : { is_error: true }),
       }));
       if (m.text.trim()) blocks.push({ type: "text", text: m.text });

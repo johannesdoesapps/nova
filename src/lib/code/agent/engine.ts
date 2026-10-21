@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { getProvider, resolveModelChoice, withTimeout } from "@/lib/ai";
 import { estimateCost } from "@/lib/ai/cost";
 import { autoIdFor } from "@/lib/ai/platform";
@@ -11,7 +12,9 @@ import { reportError } from "@/lib/observability";
 import { webSearch } from "@/lib/search/web";
 import { enforceLimits, planLimits, recordRunLater, releaseUsage } from "@/lib/usage";
 import type { FileChange, ProjectFile, ProjectSummary } from "../projects";
-import { applyFileChanges, getFiles, getProjectRow, optionalBox, syncBack, type Authed } from "../server";
+import { summarizeCheck } from "../preview-check";
+import { describeStart, runPreviewCheck, startPreview } from "../preview";
+import { applyFileChanges, getFiles, getProjectRow, optionalBox, setRunCommand, syncBack, type Authed } from "../server";
 import { claimSync, killJob, readJob, removeFromWorkspace, startJob, writeToWorkspace, type WorkspaceBox } from "../workspace";
 import {
   appendStep,
@@ -19,6 +22,8 @@ import {
   capTranscript,
   clipText,
   initialMessage,
+  isWebTask,
+  latestShots,
   messageSize,
   parseAgentReply,
   systemPrompt,
@@ -36,9 +41,11 @@ import {
   listChanges,
   listCheckpoints,
   listEvents,
+  listRuns,
   lockRun,
   markReverted,
   recordChanges,
+  runChecks,
   runOptions,
   runStatus,
   runUsage,
@@ -62,6 +69,7 @@ import {
   WORKING_STATUSES,
   type Decision,
   type LimitReason,
+  type RunChecks,
   type RunStatus,
   type RunTests,
   type RunUsage,
@@ -84,7 +92,14 @@ import {
 
 /** How long a command may run before it's stopped. */
 export const COMMAND_LIMIT_MS = 120_000;
-const MODEL_TIMEOUT_MS = 110_000;
+const MODEL_TIMEOUT_MS = 150_000;
+/**
+ * Output tokens the agent may use per step (or the plan's reply limit when
+ * that's higher). A step's reply carries whole files, so it needs far more
+ * room than a chat answer; spending still counts against the plan's
+ * allowance like any other model call.
+ */
+export const AGENT_OUTPUT_TOKENS = 12_000;
 /** One request keeps taking steps while it has been working for less than this. */
 const MULTI_STEP_MS = 45_000;
 const POLL_MS = 1_500;
@@ -136,9 +151,17 @@ export function addTests(prev: RunTests | null, results: TestResult[]): RunTests
   return { ...t, last, failuresInRow, runs };
 }
 
-/** A step's actions as one comparable string (ids left out). */
+/** A step's actions as one short comparable string (ids left out): a hash, so big file contents never end up in the stored list. */
 export function actionSignature(reply: Pick<AgentReply, "actions">): string {
-  return JSON.stringify(reply.actions.map((a) => [a.tool, a.args]));
+  return createHash("sha256")
+    .update(JSON.stringify(reply.actions.map((a) => [a.tool, a.args])))
+    .digest("base64url")
+    .slice(0, 22);
+}
+
+/** Add a step's website checks to the run's. */
+export function addChecks(prev: RunChecks, step: Partial<RunChecks>): RunChecks {
+  return { server: step.server ?? prev.server, preview: step.preview ?? prev.preview, build: step.build ?? prev.build };
 }
 
 // ---------------------------------------------------------------- the real environment
@@ -257,6 +280,26 @@ function realEnv(c: EnvContext): AgentEnv {
     project: { runCommand: project.runCommand },
     emit: (events) => addEvents(auth, run.id, events),
     cancelled: async () => (await runStatus(auth, run.id)) === "cancelled",
+    preview: {
+      start: async (command) => {
+        const box = await optionalBox(auth, project.id);
+        if (!box) throw new ApiError("conflict", "The project's computer isn't running.", { scope: "workspace_stopped" });
+        const s = await startPreview(box, command, { signal: async () => (await runStatus(auth, run.id)) === "cancelled" });
+        return { state: s.state, http: s.http, exitCode: s.exitCode, text: describeStart(s, command) };
+      },
+      check: async (path) => {
+        const box = await optionalBox(auth, project.id);
+        if (!box) throw new ApiError("conflict", "The project's computer isn't running.", { scope: "workspace_stopped" });
+        const check = summarizeCheck(await runPreviewCheck(box, path));
+        const shots = await addEvents(
+          auth,
+          run.id,
+          check.shots.map((x) => ({ kind: "inspect" as const, title: `Screenshot: ${x.caption}`, detail: { screenshot: x.data, view: x.name, path } })),
+        );
+        return { check, shots };
+      },
+      setRunCommand: (command) => setRunCommand(auth, project.id, command),
+    },
   };
   if (c.docs) {
     env.lookupDocs = async (query) => {
@@ -302,6 +345,7 @@ async function finalize(auth: Authed, runId: string, unresolved: string[] = []):
       current: new Map(files.map((f) => [f.path, f.content])),
       events,
       tests: row.tests,
+      checks: runChecks(row),
       lastEditAt: row.last_edit_at,
       usage: runUsage(row),
       steps: row.steps,
@@ -412,7 +456,12 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
   if (!transcript.length) {
     const files = await getFiles(auth, project.id);
     const computer = Boolean(await optionalBox(auth, project.id));
-    transcript = [{ role: "user", content: initialMessage(row.request, files, { projectName: project.name, runCommand: project.runCommand, computer }) }];
+    // Earlier finished runs in this project, so a follow-up ("make it blue") needn't explain the whole site again.
+    const earlier = (await listRuns(auth, project.id, 8).catch(() => []))
+      .filter((r) => r.id !== row.id && ENDED_STATUSES.includes(r.status))
+      .slice(0, 3)
+      .map((r) => ({ request: r.request, status: r.status, summary: r.report?.summary ?? r.summary, files: (r.report?.files ?? []).map((f) => f.path) }));
+    transcript = [{ role: "user", content: initialMessage(row.request, files, { projectName: project.name, runCommand: project.runCommand, computer, earlier }) }];
     await addEvents(auth, row.id, [{ kind: "status", title: `Started with ${model.displayName}`, detail: { model: model.displayName, routing: choice.routing?.reason ?? null } }]);
     // Kept now, so a retry after a failed first model call doesn't start (and log) the run again.
     await updateRun(auth, row.id, { transcript });
@@ -439,9 +488,11 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
   const planApproved = !readOnly && (!opts.approvePlans || !!row.plan?.approved);
   const ctx: ToolContext = { commands: readOnly ? "off" : opts.commands, docs, github, approvePlans: opts.approvePlans, readOnly };
   const native = usesNativeTools(model);
-  const maxOutputTokens = limits.maxOutputTokens;
-  const system = `${systemPrompt({ ...ctx, planning: !readOnly && !planApproved, reviewEdits: opts.reviewEdits, native })}
-- Keep each reply under about ${(maxOutputTokens * 3).toLocaleString("en-US")} characters. Write big files in parts over several steps (write_file the first part, then edit_file to add the rest).`;
+  const maxOutputTokens = Math.max(limits.maxOutputTokens, AGENT_OUTPUT_TOKENS);
+  const replyChars = maxOutputTokens * 3;
+  const web = opts.web ?? isWebTask(row.request, [], project.template);
+  const system = `${systemPrompt({ ...ctx, planning: !readOnly && !planApproved, reviewEdits: opts.reviewEdits, native, web, replyChars })}
+- Keep each reply under about ${replyChars.toLocaleString("en-US")} characters. A file that wouldn't fit: split it into several files, or write the first part and add the rest with edit_file in the next step.`;
   const history = trimTranscript(transcript, Math.max(24_000, limits.historyChars));
   const promptChars = system.length + history.reduce((n, m) => n + messageSize(m), 0);
   await enforceLimits(req, auth, 1, [model], { purpose: "code_agent", inputTokens: Math.ceil(promptChars / 3.5) + 200, maxOutputTokens });
@@ -455,7 +506,7 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
   let stop: "tool_use" | "end_turn" | "max_tokens" | "refusal" | "other" | "json" = "json";
   try {
     if (native) {
-      const r = await getProvider(model.provider).toolTurn!({ model, system, messages: toToolMessages(history), tools: toolSchemas(ctx), maxOutputTokens, signal: withTimeout(MODEL_TIMEOUT_MS) });
+      const r = await getProvider(model.provider).toolTurn!({ model, system, messages: toToolMessages(history, await screenshots(auth, row.id, history)), tools: toolSchemas(ctx), maxOutputTokens, signal: withTimeout(MODEL_TIMEOUT_MS) });
       reply = { thought: clipText(r.text, 6_000), actions: r.calls.slice(0, 8).map((c) => ({ id: c.id, tool: c.name, args: c.args })) };
       raw = `${r.text}\n${JSON.stringify(r.calls)}`;
       callUsage = r.usage;
@@ -573,12 +624,14 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
   record(webSearches.count ? ["web_search"] : []);
 
   const tests = outcome.tests.length ? addTests(row.tests, outcome.tests) : row.tests;
+  const checks = Object.keys(outcome.checks).length ? addChecks(runChecks(row), outcome.checks) : null;
   const plan = outcome.plan ? outcome.plan : row.plan;
   const patch: RunPatch = {
     ...base,
     active_ms: Number(row.active_ms) + (Date.now() - stepStarted),
     recent,
     tests,
+    ...(checks ? { checks } : {}),
     transcript: capTranscript(reply.actions.length ? appendStep(withAssistant, assistant, outcome.results) : withAssistant),
     plan,
     pending: null,
@@ -605,6 +658,21 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
   }
   if (outcome.summary) patch.summary = outcome.summary;
   return finishStep(auth, row.id, patch, outcome.unresolved);
+}
+
+/** The screenshots the model is shown with its latest results (loaded from the activity log). */
+async function screenshots(auth: Authed, runId: string, history: TranscriptMessage[]): Promise<Map<number, string>> {
+  const want = latestShots(history);
+  const out = new Map<number, string>();
+  if (!want.length) return out;
+  try {
+    for (const e of await listEvents(auth, runId, Math.min(...want) - 1)) {
+      if (want.includes(e.seq) && typeof e.detail?.screenshot === "string") out.set(e.seq, e.detail.screenshot);
+    }
+  } catch (err) {
+    reportError(err, { where: "code.agent.screenshots" });
+  }
+  return out;
 }
 
 /** A JSON-format reply that couldn't be read: ask again once, then stop. */
@@ -671,6 +739,13 @@ async function respond(auth: Authed, row: RunRow, input: RespondInput): Promise<
       break;
     }
     case "command": {
+      if (input.decision === "approve" && pending.preview) {
+        const lead: NewEvent = { kind: "approval", title: `You approved the server command: ${pending.command.slice(0, 200)}` };
+        if (!(await optionalBox(auth, row.project_id))) {
+          return done({ status: "needs_input", pending: { kind: "computer", command: pending.command, preview: true } }, [lead, { kind: "status", title: "Needs the project's computer to start the preview" }]);
+        }
+        return startApprovedPreview(auth, row, pending.command, [lead]);
+      }
       if (input.decision === "approve") {
         if (!(await optionalBox(auth, row.project_id))) {
           return done({ status: "needs_input", pending: { kind: "computer", command: pending.command } }, [
@@ -729,6 +804,7 @@ async function respond(auth: Authed, row: RunRow, input: RespondInput): Promise<
     case "computer": {
       if (input.decision === "continue" || input.decision === "approve") {
         if (!(await optionalBox(auth, row.project_id))) throw new ApiError("conflict", "The project's computer isn't running yet. Press Start first.", { scope: "workspace_stopped" });
+        if (pending.preview) return startApprovedPreview(auth, row, pending.command, []);
         return runApproved(auth, row, pending.command, []);
       }
       if (input.decision === "reject") {
@@ -794,6 +870,30 @@ async function runApproved(auth: Authed, row: RunRow, command: string, lead: New
   };
   if (out.cancelled) return updateRun(auth, row.id, { ...patch, locked_until: null });
   return finishStep(auth, row.id, { ...patch, status: workingStatus(row) });
+}
+
+/** Start the preview server the user approved (or the computer for it), and put the result in the conversation. */
+async function startApprovedPreview(auth: Authed, row: RunRow, command: string, lead: NewEvent[]): Promise<RunRow> {
+  if (lead.length) await addEvents(auth, row.id, lead);
+  const box = await optionalBox(auth, row.project_id);
+  if (!box) throw new ApiError("conflict", "The project's computer isn't running yet. Press Start first.", { scope: "workspace_stopped" });
+  const project = await getProjectRow(auth, row.project_id);
+  if (command !== project.runCommand) {
+    await setRunCommand(auth, row.project_id, command);
+    await addEvents(auth, row.id, [{ kind: "status", title: `Set the project's Run command to ${command.slice(0, 200)}`, detail: { runCommand: command } }]);
+  }
+  const s = await startPreview(box, command, { signal: async () => (await runStatus(auth, row.id)) === "cancelled" });
+  const text = describeStart(s, command);
+  await addEvents(auth, row.id, [
+    {
+      kind: "command",
+      title: s.state === "running" ? `Started the preview: ${command.slice(0, 200)}` : `The preview didn't start: ${command.slice(0, 200)}`,
+      detail: { command, preview: true, state: s.state, http: s.http, exitCode: s.exitCode, output: clipText(text, 20_000) },
+    },
+  ]);
+  const transcript = appendUser(row.transcript ?? [], `start_preview with \`${command}\` ran after the user's go-ahead. Result:\n${text}`);
+  const checks = addChecks(runChecks(row), { server: { command: command.slice(0, 300), state: s.state, http: s.http, at: new Date().toISOString() } });
+  return finishStep(auth, row.id, { transcript: capTranscript(transcript), pending: null, checks, status: workingStatus(row) });
 }
 
 // ---------------------------------------------------------------- stop, revert and checkpoints

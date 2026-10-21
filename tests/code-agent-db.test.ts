@@ -7,7 +7,10 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/ai", () => ({}));
 
 const ALICE = "11111111-1111-4111-8111-111111111111";
 const BOB = "22222222-2222-4222-8222-222222222222";
@@ -143,6 +146,30 @@ describe("agent checkpoints and run budgets", () => {
     // Bob can't touch Alice's run or its usage.
     await as(BOB, () => q("update public.code_agent_runs set usage = '{}', report = null"));
     expect(await as(ALICE, () => q("select usage, report from public.code_agent_runs where id = $1", [r]))).toEqual([{ usage: { inputTokens: 10 }, report: { verification: "passed" } }]);
+  });
+
+  it("keep the repeat detector's list small enough to save after big file writes (it once stopped every such run)", async () => {
+    const { actionSignature } = await import("@/lib/code/agent/engine");
+    const p = await newProject(ALICE);
+    const r = await newRun(ALICE, p);
+    const bigWrite = { actions: [{ tool: "write_file", args: { path: "index.html", content: "<section>".repeat(2_000) } }] };
+    const old = JSON.stringify(bigWrite.actions.map((a) => [a.tool, a.args]));
+    // The old signature (the actions themselves) breaks the column's size check, so the step couldn't be saved.
+    await expect(as(ALICE, () => q("update public.code_agent_runs set recent = $1 where id = $2", [JSON.stringify([old]), r]))).rejects.toThrow(/check constraint/);
+    const sigs = Array.from({ length: 6 }, (_, i) => actionSignature({ actions: [{ tool: "write_file", args: { path: `p${i}.html`, content: "x".repeat(150_000) } }] }));
+    expect(sigs.every((x) => x.length === 22)).toBe(true);
+    await as(ALICE, () => q("update public.code_agent_runs set recent = $1 where id = $2", [JSON.stringify(sigs), r]));
+    expect(actionSignature(bigWrite)).toBe(actionSignature(structuredClone(bigWrite)));
+  });
+
+  it("keep website checks (server, browser check, build), owner only and size-limited", async () => {
+    const p = await newProject(ALICE);
+    const r = await newRun(ALICE, p);
+    const checks = { server: { command: "python3 -m http.server 3000", state: "running", http: 200, at: "2026-10-21T00:00:00Z" }, preview: { verdict: "passed" }, build: null };
+    await as(ALICE, () => q("update public.code_agent_runs set checks = $1 where id = $2", [JSON.stringify(checks), r]));
+    await as(BOB, () => q("update public.code_agent_runs set checks = null"));
+    expect((await as(ALICE, () => q<{ checks: unknown }>("select checks from public.code_agent_runs where id = $1", [r])))[0]!.checks).toEqual(checks);
+    await expect(as(ALICE, () => q("update public.code_agent_runs set checks = $1 where id = $2", [JSON.stringify({ preview: { problems: ["x".repeat(30_000)] } }), r]))).rejects.toThrow(/check constraint/);
   });
 
   it("are deleted with their run's project", async () => {

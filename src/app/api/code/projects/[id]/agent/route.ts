@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { isWebTask } from "@/lib/code/agent/protocol";
 import { changeCounts, createRun, listRuns, openRun, toRunView } from "@/lib/code/agent/runs";
 import { DEFAULT_STEP_LIMIT, MAX_STEP_LIMIT } from "@/lib/code/agent/types";
-import { codeContext, getProjectRow } from "@/lib/code/server";
+import { codeContext, getFiles, getProjectRow } from "@/lib/code/server";
 import { ApiError, errorResponse, parseJsonBody, requireUuid } from "@/lib/http";
 
 type Ctx = RouteContext<"/api/code/projects/[id]/agent">;
@@ -44,17 +45,19 @@ export async function POST(req: Request, ctx: Ctx) {
     const id = requireUuid((await ctx.params).id);
     const input = await parseJsonBody(req, body, 20_000);
     const auth = await codeContext("code-agent", 20);
-    await getProjectRow(auth, id);
+    const project = await getProjectRow(auth, id);
     const open = await openRun(auth, id);
     if (open) throw new ApiError("conflict", "The agent is already working on this project. Stop that run or let it finish first.", { runId: open.id });
     const o = input.options ?? {};
+    // A website task gets the website guidance and the preview tools' instructions for the whole run.
+    const web = isWebTask(input.request, await getFiles(auth, id), project.template);
     const row = await createRun(auth, {
       projectId: id,
       request: input.request,
       // A read-only run never plans, edits or runs anything, so its other switches are fixed.
       options: o.readOnly
-        ? { modelId: o.modelId ?? null, approvePlans: false, reviewEdits: false, commands: "off", readOnly: true }
-        : { modelId: o.modelId ?? null, approvePlans: o.approvePlans ?? true, reviewEdits: o.reviewEdits ?? false, commands: o.commands ?? "safe", readOnly: false },
+        ? { modelId: o.modelId ?? null, approvePlans: false, reviewEdits: false, commands: "off", readOnly: true, web }
+        : { modelId: o.modelId ?? null, approvePlans: o.approvePlans ?? true, reviewEdits: o.reviewEdits ?? false, commands: o.commands ?? "safe", readOnly: false, web },
       stepLimit: input.stepLimit ?? DEFAULT_STEP_LIMIT,
     });
     return NextResponse.json({ run: toRunView(row) }, { status: 201 });

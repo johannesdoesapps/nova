@@ -121,6 +121,8 @@ export interface ToolResult {
   id: string;
   ok: boolean;
   text: string;
+  /** Pictures that go with the result (e.g. screenshots), for models that take images. */
+  images?: { mediaType: "image/jpeg" | "image/png"; data: string }[];
 }
 
 /**

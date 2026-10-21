@@ -1,6 +1,6 @@
 import { diffStats } from "../diff";
 import type { RunChange } from "./tools";
-import type { AgentEvent, RunReport, RunStatus, RunTests, RunUsage, Verification } from "./types";
+import type { AgentEvent, Freshness, RunChecks, RunReport, RunStatus, RunTests, RunUsage, Verification } from "./types";
 
 /**
  * The final report of a run, built from its records: the files it changed
@@ -17,6 +17,7 @@ export function buildReport(input: {
   current: Map<string, string>;
   events: Pick<AgentEvent, "kind" | "detail">[];
   tests: RunTests | null;
+  checks?: RunChecks | null;
   lastEditAt: string | null;
   usage: RunUsage;
   steps: number;
@@ -57,6 +58,17 @@ export function buildReport(input: {
     tests = { ...(copy as Omit<typeof last, "outputTail">), afterLastEdit };
   }
 
+  const fresh = (at: string | undefined): Freshness => (!input.lastEditAt || (at && Date.parse(at) >= Date.parse(input.lastEditAt)) ? "current" : "stale");
+  const c = input.checks;
+  const checks: RunReport["checks"] =
+    c && (c.server || c.preview || c.build)
+      ? {
+          server: c.server ? { ...c.server, freshness: fresh(c.server.at) } : null,
+          preview: c.preview ? { ...c.preview, freshness: fresh(c.preview.checkedAt) } : null,
+          build: c.build ? { ...c.build, freshness: fresh(c.build.ranAt) } : null,
+        }
+      : undefined;
+
   return {
     outcome: input.status,
     summary: input.summary,
@@ -65,6 +77,7 @@ export function buildReport(input: {
     commands: commands.slice(-40),
     tests,
     verification,
+    ...(checks ? { checks } : {}),
     usage: { ...input.usage, steps: input.steps, activeMs: input.activeMs },
     checkpoints: input.checkpoints,
     createdAt: (input.now ?? new Date()).toISOString(),

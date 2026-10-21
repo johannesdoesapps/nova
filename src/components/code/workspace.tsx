@@ -32,12 +32,13 @@ import {
 import { useCatalog } from "@/components/common/model-picker";
 import { StudioHeader, useStudio } from "@/components/studio/frame";
 import { ModelSelector } from "@/components/studio/model-selector";
+import { isWebTask } from "@/lib/code/agent/protocol";
 import { detectTestCommand } from "@/lib/code/agent/test-results";
 import type { RunView } from "@/lib/code/agent/types";
 import { EXAMPLE_PROJECT, validProjectPath, type FileChange, type ProjectSummary } from "@/lib/code/projects";
 import { cn } from "@/lib/utils";
 import { AgentPanel, SessionsList } from "./agent-panel";
-import { api, CodeApiError, plainText, post, type AiResult, type Allowance, type JobRead, type ProjectData, type Session } from "./api";
+import { api, CodeApiError, plainText, post, takeBuildRequest, type AiResult, type Allowance, type JobRead, type ProjectData, type Session } from "./api";
 import { ChangesPanel } from "./changes-panel";
 import { FileDiff } from "./diff-view";
 import { minutesLine } from "./projects-view";
@@ -221,7 +222,13 @@ export function CodeWorkspace({ id }: { id: string }) {
   const [select, setSelect] = useState<{ runId: string | null; n: number } | null>(null);
   const [activeRun, setActiveRun] = useState<RunView | null>(null);
   const [sessionsVersion, setSessionsVersion] = useState(0);
-  const initialRequest = useSearchParams().get("task") === "example" ? EXAMPLE_PROJECT.task : undefined;
+  const params = useSearchParams();
+  const initialRequest = params.get("task") === "example" ? EXAMPLE_PROJECT.task : undefined;
+  // "Build website": the request comes from the start screen (kept for this page, so later URL changes don't matter).
+  const [buildRequest] = useState<string | undefined>(() => (params.get("build") === "1" ? takeBuildRequest(id) : undefined));
+  // The live site: whether it answers on the preview port (asked from the computer, not assumed).
+  const [site, setSite] = useState<{ http: number; running: boolean; exitCode: number | null } | null>(null);
+  const [siteWaiting, setSiteWaiting] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [newFile, setNewFile] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -298,6 +305,8 @@ export function CodeWorkspace({ id }: { id: string }) {
   const running = !!session && secondsLeft > 0;
   const content = (p: string) => drafts[p] ?? saved[p] ?? "";
   const paths = useMemo(() => [...new Set([...Object.keys(saved), ...Object.keys(drafts)])].sort(), [saved, drafts]);
+  // A website project: the agent shows website examples and the preview opens on its own.
+  const web = useMemo(() => isWebTask(buildRequest ?? "", Object.entries(saved).map(([path, content]) => ({ path, content })), project?.template ?? ""), [buildRequest, saved, project?.template]);
   const tree = useMemo(() => buildTree(paths), [paths]);
 
   // ------------------------------------------------------------ saving
@@ -455,7 +464,7 @@ export function CodeWorkspace({ id }: { id: string }) {
     }
   };
 
-  const run = async (cmd: string) => {
+  const run = async (cmd: string, preview = false) => {
     const c = cmd.trim();
     if (!c) return;
     setError(null);
@@ -476,7 +485,7 @@ export function CodeWorkspace({ id }: { id: string }) {
       }
     }
     try {
-      const { jobId } = await post<{ jobId: string }>(`/api/code/projects/${id}/exec`, { command: c });
+      const { jobId } = await post<{ jobId: string }>(`/api/code/projects/${id}/exec`, { command: c, ...(preview ? { preview: true } : {}) });
       setEntries((es) => es.map((x) => (x.key === key ? { ...x, jobId, note: undefined } : x)));
       void poll(key, jobId);
     } catch (e) {
@@ -493,11 +502,64 @@ export function CodeWorkspace({ id }: { id: string }) {
     }
   };
 
+  /** Ask the computer whether the site answers; with `wait`, keep asking until it does, its server stops, or 90 s pass. */
+  const checkSite = useCallback(
+    async (wait = false) => {
+      const until = Date.now() + 90_000;
+      if (wait) setSiteWaiting(true);
+      try {
+        for (;;) {
+          const r = await api<{ preview: { http: number; running: boolean; exitCode: number | null; url: string | null } | null }>(`/api/code/projects/${id}/preview`).catch(() => null);
+          if (!alive.current) return;
+          const p = r?.preview ?? null;
+          setSite(p);
+          if (!wait || !p || p.http > 0 || (!p.running && p.exitCode !== null) || Date.now() > until) return p;
+          await sleep(1500);
+        }
+      } finally {
+        if (wait) setSiteWaiting(false);
+      }
+    },
+    [id],
+  );
+
+  const showPreview = useCallback(() => {
+    if (wide) setRight("preview");
+    else setPane("preview");
+    setPreviewKey((k) => k + 1);
+  }, [wide]);
+
+  /** Run the project: its Run command becomes the live preview's server (replacing a running one, the agent's included). */
   const runProject = async () => {
     if (!project) return;
     if (!project.runCommand.trim()) return editRunCommand();
-    await run(project.runCommand);
+    await run(project.runCommand, true);
+    const p = await checkSite(true);
+    if (p && p.http > 0) showPreview();
   };
+
+  // When the computer is on, find out whether the site is up (so the preview shows the real state).
+  useEffect(() => {
+    if (running) void checkSite();
+  }, [running, checkSite]);
+
+  // The agent started the preview, checked it, or changed the site: show it fresh (reloads are spaced out while it edits).
+  const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onPreview = useCallback(
+    (what: "started" | "checked" | "changed") => {
+      if (what === "started") {
+        void api<{ session: Session | null }>(`/api/code/projects/${id}/session`)
+          .then((s) => alive.current && setSession(s.session))
+          .catch(() => {});
+        void checkSite();
+        showPreview();
+        return;
+      }
+      if (reloadTimer.current) clearTimeout(reloadTimer.current);
+      reloadTimer.current = setTimeout(() => setPreviewKey((k) => k + 1), 1200);
+    },
+    [id, checkSite, showPreview],
+  );
 
   const editRunCommand = async () => {
     if (!project) return;
@@ -770,9 +832,25 @@ export function CodeWorkspace({ id }: { id: string }) {
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-s-line px-3">
         <Eye className="h-3.5 w-3.5 text-s-ink-3" />
         <span className="min-w-0 flex-1 truncate text-[12px] text-s-ink-3">{running && session?.previewUrl ? session.previewUrl.replace(/^https?:\/\//, "") : "Preview"}</span>
+        {running && (
+          <span
+            className={cn("shrink-0 text-[11.5px]", site?.http ? "text-emerald-600 dark:text-emerald-400" : "text-s-ink-3")}
+            title="Asked from the project's computer: does anything answer on port 3000?"
+          >
+            {siteWaiting ? "Starting…" : site?.http ? "Running" : site ? (site.running ? "Not answering yet" : "Not running") : ""}
+          </span>
+        )}
         {running && session?.previewUrl && (
           <>
-            <button type="button" onClick={() => setPreviewKey((k) => k + 1)} aria-label="Reload preview" className="grid h-7 w-7 place-items-center rounded-lg text-s-ink-2 hover:bg-s-hover">
+            <button
+              type="button"
+              onClick={() => {
+                setPreviewKey((k) => k + 1);
+                void checkSite();
+              }}
+              aria-label="Reload preview"
+              className="grid h-7 w-7 place-items-center rounded-lg text-s-ink-2 hover:bg-s-hover"
+            >
               <RotateCw className="h-3.5 w-3.5" />
             </button>
             <a href={session.previewUrl} target="_blank" rel="noreferrer" aria-label="Open preview in a new tab" className="grid h-7 w-7 place-items-center rounded-lg text-s-ink-2 hover:bg-s-hover">
@@ -781,15 +859,27 @@ export function CodeWorkspace({ id }: { id: string }) {
           </>
         )}
       </div>
-      {running && session?.previewUrl ? (
+      {running && session?.previewUrl && (site === null || site.http > 0 || siteWaiting) ? (
         <iframe key={previewKey} src={session.previewUrl} title="Live preview" className="min-h-0 w-full flex-1 bg-white" sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-modals" />
       ) : (
         <div className="grid flex-1 place-items-center p-6 text-center text-[13px] leading-relaxed text-s-ink-3">
-          <p>
-            Press <strong className="text-s-ink-2">Run</strong> to start your app, then open the preview.
-            <br />
-            Apps show here when they listen on port 3000.
-          </p>
+          <div>
+            <p>
+              {running && site && !site.running && site.exitCode !== null
+                ? `The app's server stopped (exit code ${site.exitCode}). Its output is in the terminal.`
+                : running && site
+                  ? "Nothing answers on port 3000 yet."
+                  : "Nothing is running yet."}
+            </p>
+            <p className="mt-1">
+              Press <strong className="text-s-ink-2">Run</strong> to start the site (apps show here when they listen on port 3000), or ask the agent to build one.
+            </p>
+            {project?.runCommand && (
+              <button type="button" onClick={() => void runProject()} className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-full border border-s-line px-3 text-[12.5px] text-s-ink-2 hover:text-s-ink">
+                <Play className="h-3.5 w-3.5" aria-hidden /> Run {project.runCommand.length > 40 ? "" : project.runCommand}
+              </button>
+            )}
+          </div>
         </div>
       )}
       <p className="shrink-0 border-t border-s-line px-3 py-1.5 text-[11px] text-s-ink-3">The preview address is public while the computer is on. Don&apos;t put secrets in your project.</p>
@@ -884,6 +974,14 @@ export function CodeWorkspace({ id }: { id: string }) {
       onOpenFile={openFile}
       testCommand={testCommand}
       onRunTests={() => testCommand && void run(testCommand)}
+      web={web}
+      onPreview={onPreview}
+      onOpenPreview={() => {
+        showPreview();
+        void checkSite();
+      }}
+      autoStart={buildRequest}
+      autoComputer={!!buildRequest}
     />
   );
   const sessionsView = <SessionsList projectId={id} activeId={activeRun?.id ?? null} version={sessionsVersion} onOpen={(runId) => openSession(runId)} onNew={() => openSession(null)} />;

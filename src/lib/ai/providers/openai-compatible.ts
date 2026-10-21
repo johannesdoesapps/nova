@@ -176,7 +176,17 @@ export function toOpenAIToolMessages(input: ToolMessage[]): Record<string, unkno
       });
     } else {
       for (const r of m.results ?? []) out.push({ role: "tool", tool_call_id: r.id, content: `${r.ok ? "" : "[failed] "}${r.text || "(empty)"}` });
-      if (m.text.trim() || !m.results?.length) out.push({ role: "user", content: m.text || "(continue)" });
+      // Tool messages take text only, so pictures that go with results follow as a user message.
+      const images = (m.results ?? []).flatMap((r) => r.images ?? []);
+      if (images.length) {
+        out.push({
+          role: "user",
+          content: [
+            { type: "text", text: m.text || "The screenshots from the results above:" },
+            ...images.map((i) => ({ type: "image_url", image_url: { url: `data:${i.mediaType};base64,${i.data}` } })),
+          ],
+        });
+      } else if (m.text.trim() || !m.results?.length) out.push({ role: "user", content: m.text || "(continue)" });
     }
   }
   return out;
