@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   AlertTriangle,
   Bot,
@@ -116,6 +116,7 @@ export const WEB_EXAMPLES: { label: string; task: string; start: boolean }[] = [
 ];
 
 const MODE_KEY = "orbis.code.mode";
+const noSubscribe = () => () => {};
 const readMode = (): ModeId => {
   try {
     const v = localStorage.getItem(MODE_KEY);
@@ -306,7 +307,10 @@ export function AgentPanel({
   const attachments = useAttachments(projectId);
   const catalog = useCatalog();
   const [text, setText] = useState(initialRequest ?? "");
-  const [mode, setModeState] = useState<ModeId>(readMode);
+  // The remembered mode is read after hydration (the server can't know it), so the first render matches.
+  const savedMode = useSyncExternalStore(noSubscribe, readMode, () => "plan" as ModeId);
+  const [chosenMode, setModeState] = useState<ModeId | null>(null);
+  const mode = chosenMode ?? savedMode;
   const [modelId, setModelId] = useState("auto:coding");
   const box = useRef<HTMLTextAreaElement>(null);
   /** A message typed while the agent works, sent when it finishes (and the run it was typed for). */
