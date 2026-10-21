@@ -39,3 +39,8 @@ export const LABELS = ["Response A", "Response B", "Response C", "Response D"] a
 export function isAbort(e: unknown): boolean {
   return (e as Error)?.name === "AbortError";
 }
+
+/** A model's error in plain words (timeouts said as such). */
+export function friendlyError(message: string): string {
+  return /timed? ?out|timeout|aborted due to timeout/i.test(message) ? "Timed out: the model took longer than about a minute." : message;
+}

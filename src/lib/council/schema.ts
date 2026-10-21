@@ -22,7 +22,10 @@ export const councilImproveRequest = z.object({ question, modelId, response: lab
 export const councilSynthesizeRequest = z.object({
   question,
   modelId,
-  kind: z.enum(["council", "compare"]).default("council"),
+  /** council: Council's final answer; compare: Arena's summary (older sessions); analysis, final, evaluate: Arena's agreement analysis, combined answer and criteria review. */
+  kind: z.enum(["council", "compare", "analysis", "final", "evaluate"]).default("council"),
+  /** Evaluate: what the user wants the answer for (judged as "fit for your goal"). */
+  goal: z.string().trim().max(500).optional(),
   responses: z.array(labelled).min(1).max(4),
   critiques: z.array(labelled).max(4).default([]),
   sources: z.array(councilSource).max(8).default([]),

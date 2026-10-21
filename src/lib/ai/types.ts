@@ -56,6 +56,8 @@ export interface ModelWithStatus extends ModelInfo {
   /** The plan that includes this model, and whether the caller's plan doesn't (set by /api/models). */
   requiredPlan?: "free" | "pro" | "max";
   locked?: boolean;
+  /** Allowance units one message to this model uses (set by /api/models). */
+  units?: number;
 }
 
 export interface Usage {

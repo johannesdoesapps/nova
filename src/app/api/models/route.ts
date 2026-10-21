@@ -6,7 +6,7 @@ import { recommendModel } from "@/lib/ai/router";
 import { errorResponse, parseQuery } from "@/lib/http";
 import { getAuth } from "@/lib/auth";
 import { entitlementFor } from "@/lib/entitlements";
-import { modelTier, planForTier, resolveBilling } from "@/lib/plans";
+import { modelTier, modelUnits, planForTier, resolveBilling } from "@/lib/plans";
 
 const query = z.object({
   prompt: z.string().max(100_000).optional(),
@@ -26,7 +26,8 @@ export async function GET(req: Request) {
     // Each model's tier, the plan that includes it, and whether the caller's plan does.
     const models = registry.map((m) => {
       const tier = modelTier(m);
-      return { ...m, tier, requiredPlan: planForTier(billing, tier), locked: !!allowed && !allowed.includes(tier) };
+      // Units: how much of the allowance one message to this model uses (shown before multi-model runs).
+      return { ...m, tier, units: modelUnits(m, settings.modelUnits?.[m.id], billing.tierUnits), requiredPlan: planForTier(billing, tier), locked: !!allowed && !allowed.includes(tier) };
     });
     const realAvailable = models.some((m) => m.available && m.provider !== "demo");
     const auto = !settings.autoEnabled

@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowUp, Eye, EyeOff, Scale, Sparkles, Square, Star, ThumbsUp } from "lucide-react";
+import { ArrowUp, ClipboardCheck, Eye, EyeOff, GitCompareArrows, Scale, Sparkles, Square, Star, ThumbsUp } from "lucide-react";
 import { useCatalog } from "@/components/common/model-picker";
 import { Markdown } from "@/components/common/markdown";
 import { useApp } from "@/components/layout/app-context";
@@ -10,8 +10,10 @@ import { Switch } from "@/components/studio/ui";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import { cn } from "@/lib/utils";
 import { ModelChips, defaultParticipants, participantPool } from "./model-chips";
-import { ResponseCard, StepMeta, type StepState } from "./response-card";
-import { isAbort, runStep } from "./stream";
+import { CopyButton, ResponseCard, StepMeta, type StepState } from "./response-card";
+import { friendlyError, isAbort, runStep } from "./stream";
+import { describeEstimate, estimate, MAX_OUTPUT, type EstimateModel } from "@/lib/council/estimate";
+import { useUsage } from "@/components/studio/usage";
 
 const MAX = 4;
 const BLIND = ["Model A", "Model B", "Model C", "Model D"];
@@ -25,6 +27,36 @@ function shuffle<T>(xs: T[]): T[] {
   }
   return a;
 }
+
+type InsightKind = "analysis" | "final" | "evaluate";
+
+/** The three ways to make sense of the answers, and how each is made (shown with the result). */
+const INSIGHTS: Record<InsightKind, { action: string; title: string; blurb: string; icon: React.ReactNode; how: (by: string, n: number) => string }> = {
+  analysis: {
+    action: "Analyse agreement",
+    title: "Agreement analysis",
+    blurb: "Where the answers agree and disagree, claims to verify, different approaches, and what's missing",
+    icon: <GitCompareArrows />,
+    how: (by, n) =>
+      `Written by ${by} from the ${n} answers above, labelled by letter so names don't sway it. It describes the answers; agreement between models doesn't make a claim true, so check the claims it lists before relying on them.`,
+  },
+  final: {
+    action: "Create final answer",
+    title: "Final answer",
+    blurb: "One combined answer that keeps important differences, caveats and unresolved disagreements",
+    icon: <Sparkles />,
+    how: (by, n) =>
+      `Combined by ${by} from the ${n} answers above. No web sources were used, so it's the models' own knowledge and reasoning, not checked facts; disagreements it couldn't settle are listed.`,
+  },
+  evaluate: {
+    action: "Evaluate",
+    title: "Evaluation",
+    blurb: "Rates each answer on accuracy, completeness, clarity, reasoning, code (when relevant) and fit for your goal",
+    icon: <ClipboardCheck />,
+    how: (by) =>
+      `One model's opinion: ${by} read the answers (labelled by letter) and rated them against the criteria. It didn't check facts, it can be wrong, and models can favour answers like their own. Your star ratings are kept separately.`,
+  },
+};
 
 export function ArenaView() {
   const { user } = useApp();
@@ -46,11 +78,14 @@ export function ArenaView() {
   const [preferred, setPreferred] = useState<string | null>(null);
   const [improve, setImprove] = useState<{ target: string; by: string; state: StepState } | null>(null);
   const [improveBy, setImproveBy] = useState<string>("");
-  const [summary, setSummary] = useState<StepState>(idle);
+  const [insights, setInsights] = useState<Partial<Record<InsightKind, StepState & { by: string }>>>({});
+  const [goal, setGoal] = useState("");
   const [summaryBy, setSummaryBy] = useState<string>("");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  // The allowance, refetched after each run (shown next to the estimates).
+  const usage = useUsage(running);
   const abortRef = useRef<AbortController | null>(null);
 
   const model = (id: string) => catalog?.models.find((m) => m.id === id);
@@ -62,11 +97,16 @@ export function ArenaView() {
   const answerOne = async (id: string, q: string, signal: AbortSignal): Promise<StepState> => {
     patch(id, { status: "running", text: "", error: undefined });
     let final: StepState;
+    let partial = "";
     try {
-      const r = await runStep("answer", { question: q, modelId: id }, signal, (text) => patch(id, { text }));
+      const r = await runStep("answer", { question: q, modelId: id }, signal, (text) => {
+        partial = text;
+        patch(id, { text });
+      });
       final = { status: "done", text: r.text, latencyMs: r.latencyMs, outputTokens: r.usage?.outputTokens, tokensEstimated: r.usage?.estimated, estimatedCost: r.estimatedCost, simulated: r.simulated };
     } catch (e) {
-      final = isAbort(e) ? { status: "cancelled", text: "" } : { status: "error", text: "", error: (e as Error).message };
+      // Whatever arrived before a failure, timeout or cancel stays visible, marked as partial.
+      final = isAbort(e) ? { status: "cancelled", text: partial } : { status: "error", text: partial, error: friendlyError((e as Error).message) };
     }
     patch(id, final);
     return final;
@@ -114,7 +154,7 @@ export function ArenaView() {
     setRatings({});
     setPreferred(null);
     setImprove(null);
-    setSummary(idle);
+    setInsights({});
     setSessionId(null);
     setNote(null);
     setRunning(true);
@@ -127,7 +167,9 @@ export function ArenaView() {
     }
   };
 
-  const savePrefs = async (pref: string | null, rates: Record<string, number>, sum = summary, sumBy = summaryBy) => {
+  /** The result a saved session keeps: the final answer, else the analysis, else the evaluation. */
+  const kept = () => (["final", "analysis", "evaluate"] as const).map((k) => insights[k]).find((x) => x?.status === "done");
+  const savePrefs = async (pref: string | null, rates: Record<string, number>, sum: StepState = kept() ?? idle, sumBy = kept()?.by ?? "") => {
     if (!sessionId) return;
     await persist({ result: resultBody(order, answers, pref, rates, sum, sumBy) }, sessionId);
   };
@@ -158,28 +200,54 @@ export function ArenaView() {
     }
   };
 
-  const compare = async () => {
-    const done = order.filter((id) => answers[id]?.status === "done");
-    if (done.length < 2) return;
-    const by = summaryBy || done.find((id) => model(id)?.capabilities.includes("reasoning")) || done[0]!;
-    setSummaryBy(by);
+  const doneIds = order.filter((id) => answers[id]?.status === "done" && !!answers[id]?.text);
+  /** The model that writes analyses: the one chosen, else a participating reasoning model. */
+  const writer = summaryBy || doneIds.find((id) => model(id)?.capabilities.includes("reasoning")) || doneIds[0] || "";
+
+  /** Agreement analysis, a combined final answer, or a criteria evaluation, from the finished answers (labelled, names hidden). */
+  const runInsight = async (kind: InsightKind) => {
+    if (doneIds.length < 2 || !writer) return;
+    const by = writer;
     const ac = new AbortController();
     abortRef.current = ac;
-    setSummary({ status: "running", text: "" });
+    setInsights((s) => ({ ...s, [kind]: { status: "running", text: "", by } }));
+    let partial = "";
     try {
       const r = await runStep(
         "synthesize",
-        { question: asked, modelId: by, kind: "compare", responses: done.map((id) => ({ label: slot(id), text: answers[id]!.text })) },
+        { question: asked, modelId: by, kind, responses: doneIds.map((id) => ({ label: slot(id), text: answers[id]!.text })), ...(kind === "evaluate" && goal.trim() ? { goal: goal.trim() } : {}) },
         ac.signal,
-        (text) => setSummary((s) => ({ ...s, text })),
+        (text) => {
+          partial = text;
+          setInsights((s) => ({ ...s, [kind]: { ...(s[kind] ?? { status: "running", by }), text } }));
+        },
       );
-      const final: StepState = { status: "done", text: r.text, latencyMs: r.latencyMs, outputTokens: r.usage?.outputTokens, tokensEstimated: r.usage?.estimated, estimatedCost: r.estimatedCost };
-      setSummary(final);
-      void savePrefs(preferred, ratings, final, by);
+      const done = { status: "done" as const, text: r.text, by, latencyMs: r.latencyMs, outputTokens: r.usage?.outputTokens, tokensEstimated: r.usage?.estimated, estimatedCost: r.estimatedCost };
+      setInsights((s) => {
+        const next = { ...s, [kind]: done };
+        // The saved session keeps the most useful result: the final answer, else the analysis, else the evaluation.
+        const keep = (["final", "analysis", "evaluate"] as const).map((k) => next[k]).find((x) => x?.status === "done");
+        if (keep) void savePrefs(preferred, ratings, keep, keep.by);
+        return next;
+      });
     } catch (e) {
-      setSummary(isAbort(e) ? { status: "cancelled", text: "" } : { status: "error", text: "", error: (e as Error).message });
+      setInsights((s) => ({ ...s, [kind]: isAbort(e) ? { status: "cancelled", text: partial, by } : { status: "error", text: partial, error: friendlyError((e as Error).message), by } }));
     }
   };
+
+  const estModel = (id: string): EstimateModel => {
+    const m = model(id);
+    return { id, displayName: m?.displayName ?? id, inputPrice: m?.inputPrice ?? null, outputPrice: m?.outputPrice ?? null, units: m?.units };
+  };
+  const runEstimate = estimate(selected.map((id) => ({ model: estModel(id), inputChars: prompt.length, maxOutputTokens: MAX_OUTPUT.answer })));
+  const insightEstimate = writer
+    ? estimate([{ model: estModel(writer), inputChars: asked.length + doneIds.reduce((n, id) => n + (answers[id]?.text.length ?? 0), 0) + 2000, maxOutputTokens: MAX_OUTPUT.synthesize }])
+    : null;
+  const allowance = usage?.info?.unlimited
+    ? " · not counted on your account"
+    : usage
+      ? ` · ${Math.max(0, Math.min(usage.window.limit - usage.window.used, usage.week.limit - usage.week.used))} units left now`
+      : "";
 
   const anyDone = order.some((id) => answers[id]?.status === "done");
 
@@ -233,6 +301,12 @@ export function ArenaView() {
                   <Switch label="Blind comparison" checked={blind} disabled={running} onChange={setBlind} />
                   <EyeOff className="h-3.5 w-3.5" /> Blind — hide names until you reveal
                 </label>
+                {selected.length >= 2 && !running && (
+                  <p className="order-last w-full text-[12px] text-s-ink-3 sm:order-none sm:w-auto" aria-live="polite">
+                    {describeEstimate(runEstimate)}
+                    {allowance}
+                  </p>
+                )}
                 <div className="ml-auto">
                   {running ? (
                     <button type="button" onClick={() => abortRef.current?.abort()} className="inline-flex h-10 items-center gap-2 rounded-full bg-s-ink px-4 text-[13.5px] font-medium text-s-bg transition hover:opacity-85">
@@ -267,14 +341,6 @@ export function ArenaView() {
                       {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />} {revealed ? "Hide names" : "Reveal models"}
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => void compare()}
-                    disabled={running || order.filter((id) => answers[id]?.status === "done").length < 2 || summary.status === "running"}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-full border border-s-line-strong px-3.5 text-[13px] transition hover:bg-s-hover disabled:opacity-40"
-                  >
-                    <Sparkles className="h-4 w-4" /> Summarize differences
-                  </button>
                 </div>
               </div>
 
@@ -290,6 +356,7 @@ export function ArenaView() {
                       provider={wasBlind && !revealed ? "auto" : (m?.provider ?? "demo")}
                       state={s}
                       highlight={preferred === id}
+                      clamp
                       onRetry={running ? undefined : () => void answerOne(id, asked, new AbortController().signal)}
                       footer={
                         s.status === "done" ? (
@@ -351,8 +418,8 @@ export function ArenaView() {
                       </option>
                     ))}
                   </select>
-                  <span>· Summary by</span>
-                  <select value={summaryBy} onChange={(e) => setSummaryBy(e.target.value)} aria-label="Model that writes the summary" className="h-8 rounded-lg border border-s-line bg-transparent px-2 text-[12.5px] text-s-ink outline-none">
+                  <span>· Analysis and final answer by</span>
+                  <select value={summaryBy} onChange={(e) => setSummaryBy(e.target.value)} aria-label="Model that writes analyses and the final answer" className="h-8 rounded-lg border border-s-line bg-transparent px-2 text-[12.5px] text-s-ink outline-none">
                     <option value="" className="bg-s-bg">
                       a reasoning model
                     </option>
@@ -376,31 +443,81 @@ export function ArenaView() {
                 />
               )}
 
-              {summary.status !== "idle" && (
-                <article className="glass-strong glass-edge s-in rounded-[26px] p-5 sm:p-7">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <div className="text-[11.5px] font-medium uppercase tracking-[0.1em] text-s-ink-3">Comparison summary</div>
-                      <p className="mt-1 text-[12.5px] text-s-ink-3">
-                        AI-generated by {wasBlind && !revealed ? "a participating model" : (model(summaryBy)?.displayName ?? "a model")} from the answers above; not fact-checked.
-                      </p>
-                    </div>
-                    <StepMeta s={summary} />
-                  </div>
-                  <div className="mt-4">
-                    {summary.status === "error" ? (
-                      <p className="text-[13.5px] text-s-danger">{summary.error}</p>
-                    ) : summary.text ? (
-                      <Markdown text={summary.text} className="s-prose" />
-                    ) : (
-                      <div className="space-y-2.5" aria-hidden>
-                        <div className="s-skeleton h-3.5 w-[88%]" />
-                        <div className="s-skeleton h-3.5 w-[70%]" />
-                      </div>
+              {doneIds.length >= 2 && (
+                <section aria-label="Make sense of the answers" className="glass rounded-[22px] p-4 sm:p-5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(Object.keys(INSIGHTS) as InsightKind[]).map((k) => {
+                      const info = INSIGHTS[k];
+                      const busy = insights[k]?.status === "running";
+                      return (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => void runInsight(k)}
+                          disabled={running || busy}
+                          title={info.blurb}
+                          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-s-line-strong px-3.5 text-[13px] transition hover:bg-s-hover disabled:opacity-40 [&_svg]:h-4 [&_svg]:w-4"
+                        >
+                          {info.icon} {insights[k]?.status === "done" ? `${info.action} again` : info.action}
+                        </button>
+                      );
+                    })}
+                    {Object.values(insights).some((x) => x?.status === "running") && (
+                      <button type="button" onClick={() => abortRef.current?.abort()} className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] text-s-ink-2 hover:bg-s-hover">
+                        <Square className="h-3.5 w-3.5 fill-current" /> Stop
+                      </button>
                     )}
                   </div>
-                </article>
+                  <label className="mt-3 flex flex-wrap items-center gap-2 text-[12.5px] text-s-ink-3">
+                    <span>Your goal, for the evaluation (optional):</span>
+                    <input
+                      value={goal}
+                      onChange={(e) => setGoal(e.target.value)}
+                      maxLength={500}
+                      placeholder="e.g. a short explanation for a beginner"
+                      className="h-8 min-w-0 flex-1 rounded-lg border border-s-line bg-transparent px-2.5 text-[12.5px] text-s-ink outline-none placeholder:text-s-ink-3 focus:border-s-line-strong"
+                    />
+                  </label>
+                  {insightEstimate && (
+                    <p className="mt-2 text-[12px] text-s-ink-3">
+                      Each uses {describeEstimate(insightEstimate)}
+                      {allowance}.
+                    </p>
+                  )}
+                </section>
               )}
+
+              {(["final", "analysis", "evaluate"] as const).map((k) => {
+                const st = insights[k];
+                if (!st) return null;
+                const writerName = wasBlind && !revealed ? "a participating model" : (model(st.by)?.displayName ?? "a model");
+                return (
+                  <article key={k} className="glass-strong glass-edge s-in rounded-[26px] p-5 sm:p-7" aria-label={INSIGHTS[k].title}>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-[11.5px] font-medium uppercase tracking-[0.1em] text-s-ink-3">{INSIGHTS[k].title}</div>
+                        <p className="mt-1 max-w-3xl text-[12.5px] leading-relaxed text-s-ink-3">{INSIGHTS[k].how(writerName, doneIds.length)}</p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <StepMeta s={st} />
+                        {st.status === "done" && st.text && <CopyButton text={st.text} />}
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      {st.text ? <Markdown text={st.text} className="s-prose" /> : null}
+                      {st.status === "error" && <p className="mt-2 text-[13.5px] text-s-danger">{st.text ? `Stopped early — partial result. ${st.error ?? ""}` : st.error}</p>}
+                      {st.status === "cancelled" && <p className="mt-2 text-[13px] text-s-ink-3">{st.text ? "Stopped — partial result." : "Stopped."}</p>}
+                      {st.status === "running" && !st.text && (
+                        <div className="space-y-2.5" aria-hidden>
+                          <div className="s-skeleton h-3.5 w-[88%]" />
+                          <div className="s-skeleton h-3.5 w-[70%]" />
+                        </div>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+
             </section>
           )}
 
@@ -409,7 +526,7 @@ export function ArenaView() {
               {[
                 ["Side by side", "Every model gets the same prompt at the same time; timing and usage are shown when the provider reports them."],
                 ["Blind mode", "Answers are labelled Model A, B… in random order until you reveal them."],
-                ["Keep the best", "Rate, prefer, ask another model to improve an answer, or get a summary of the differences."],
+                ["Make sense of them", "See where they agree and disagree, get one combined final answer, or an evaluation against clear criteria — with a cost estimate first."],
               ].map(([t, d]) => (
                 <div key={t} className="glass rounded-[20px] p-4">
                   <div className="text-[13.5px] font-medium">{t}</div>

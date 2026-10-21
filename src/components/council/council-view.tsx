@@ -12,7 +12,8 @@ import type { CouncilSource } from "@/lib/council/prompts";
 import { cn } from "@/lib/utils";
 import { ModelChips, defaultParticipants, participantPool } from "./model-chips";
 import { ResponseCard, StepMeta, type StepState } from "./response-card";
-import { LABELS, isAbort, runStep } from "./stream";
+import { LABELS, friendlyError, isAbort, runStep } from "./stream";
+import { describeEstimate, estimate, MAX_OUTPUT, type PlannedCall } from "@/lib/council/estimate";
 
 type Phase = "idle" | "sources" | "answers" | "review" | "synthesis" | "done" | "failed" | "cancelled";
 type Mode = "quick" | "deep";
@@ -60,6 +61,20 @@ export function CouncilView() {
   const abortRef = useRef<AbortController | null>(null);
 
   const modelById = useCallback((id: string) => catalog?.models.find((m) => m.id === id), [catalog]);
+  // Before convening: every call this run makes (answers, Deep mode's reviews, the synthesis), its allowance units and worst-case list price.
+  const planEstimate = (() => {
+    const em = (id: string) => {
+      const m = catalog?.models.find((x) => x.id === id);
+      return { id, displayName: m?.displayName ?? id, inputPrice: m?.inputPrice ?? null, outputPrice: m?.outputPrice ?? null, units: m?.units };
+    };
+    const answersChars = question.length + selected.length * MAX_OUTPUT.answer * 4;
+    const calls: PlannedCall[] = [
+      ...selected.map((id) => ({ model: em(id), inputChars: question.length, maxOutputTokens: MAX_OUTPUT.answer })),
+      ...(mode === "deep" ? selected.map((id) => ({ model: em(id), inputChars: answersChars, maxOutputTokens: MAX_OUTPUT.critique })) : []),
+      ...(chairId ? [{ model: em(chairId), inputChars: answersChars + (mode === "deep" ? selected.length * MAX_OUTPUT.critique * 4 : 0), maxOutputTokens: MAX_OUTPUT.synthesize }] : []),
+    ];
+    return estimate(calls);
+  })();
   const label = (id: string) => LABELS[order.indexOf(id)] ?? "Response";
   const running = ["sources", "answers", "review", "synthesis"].includes(phase);
 
@@ -81,11 +96,16 @@ export function CouncilView() {
   const answerOne = async (id: string, q: string, src: CouncilSource[], signal: AbortSignal): Promise<StepState> => {
     patchMap(setAnswers, id, { status: "running", text: "", error: undefined });
     let final: StepState;
+    let partial = "";
     try {
-      const r = await runStep("answer", { question: q, modelId: id, sources: src }, signal, (text) => patchMap(setAnswers, id, { text }));
+      const r = await runStep("answer", { question: q, modelId: id, sources: src }, signal, (text) => {
+        partial = text;
+        patchMap(setAnswers, id, { text });
+      });
       final = { status: "done", text: r.text, latencyMs: r.latencyMs, outputTokens: r.usage?.outputTokens, tokensEstimated: r.usage?.estimated, estimatedCost: r.estimatedCost, simulated: r.simulated };
     } catch (e) {
-      final = isAbort(e) ? { status: "cancelled", text: "" } : { status: "error", text: "", error: (e as Error).message };
+      // A partial answer stays visible (marked as such), but only finished answers go on to review and synthesis.
+      final = isAbort(e) ? { status: "cancelled", text: partial } : { status: "error", text: partial, error: friendlyError((e as Error).message) };
     }
     patchMap(setAnswers, id, final);
     return final;
@@ -344,9 +364,7 @@ export function CouncilView() {
                   </label>
                 )}
                 <div className="ml-auto flex items-center gap-2">
-                  <span className="hidden text-[12px] text-s-ink-3 sm:inline">
-                    {mode === "quick" ? `${selected.length + 1} model calls` : `${selected.length * 2 + 1} model calls`}
-                  </span>
+                  <span className="hidden max-w-[420px] text-right text-[12px] text-s-ink-3 sm:inline">{selected.length >= 2 ? describeEstimate(planEstimate) : ""}</span>
                   {running ? (
                     <button type="button" onClick={cancel} className="inline-flex h-10 items-center gap-2 rounded-full bg-s-ink px-4 text-[13.5px] font-medium text-s-bg transition hover:opacity-85">
                       <Square className="h-3.5 w-3.5 fill-current" /> Cancel
@@ -363,6 +381,7 @@ export function CouncilView() {
                   )}
                 </div>
               </div>
+              {selected.length >= 2 && <p className="text-[12px] text-s-ink-3 sm:hidden">{describeEstimate(planEstimate)}</p>}
               {mode === "deep" && <p className="text-[12px] text-s-ink-3">Deep mode: each model also reviews all answers and proposes an improved one before the synthesis.</p>}
             </div>
           </form>
@@ -456,6 +475,7 @@ export function CouncilView() {
                     return (
                       <ResponseCard
                         key={id}
+                        clamp
                         title={m?.displayName ?? id}
                         subtitle={label(id)}
                         provider={m?.provider ?? "demo"}
