@@ -33,6 +33,7 @@ import {
   type AgentReply,
   type TranscriptMessage,
 } from "./protocol";
+import { classifyCommand } from "./policy";
 import { buildReport } from "./report";
 import {
   addEvents,
@@ -865,9 +866,13 @@ async function runApproved(auth: Authed, row: RunRow, command: string, lead: New
   const test = isTestCommand(command) ? testResult({ command, ...out }) : null;
   const transcript = appendUser(row.transcript ?? [], `The user approved \`${command}\`. Result:\n${commandResultText(command, out, test)}`);
   await addEvents(auth, row.id, [commandEvent(command, out, test)]);
+  // A build that ran after the user's go-ahead (or once the computer started) counts like any other.
+  const decision = classifyCommand(command);
+  const build = !test && !out.cancelled && decision.kind !== "block" && decision.purpose === "build" ? { command: command.slice(0, 300), exitCode: out.exitCode, passed: out.exitCode === 0 && !out.timedOut, ranAt: new Date().toISOString() } : null;
   const patch: RunPatch = {
     transcript: capTranscript(transcript),
     pending: null,
+    ...(build ? { checks: addChecks(runChecks(row), { build }) } : {}),
     ...(test ? { tests: addTests(row.tests, [test]) } : {}),
     ...(out.changed.length ? { last_edit_at: new Date().toISOString() } : {}),
   };

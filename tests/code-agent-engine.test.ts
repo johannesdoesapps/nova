@@ -400,6 +400,20 @@ describe("building a website", () => {
   });
 });
 
+describe("builds that wait for the computer", () => {
+  it("records a production build that ran once the user started the computer", async () => {
+    computerOn = false;
+    const id = newRun({ status: "running", options: { approvePlans: false, reviewEdits: false, commands: "safe", modelId: null, web: true } });
+    script.turns.push(turn("Building.", call("run_command", { command: "npm install && npm run build" })));
+    const r = await stepRun(req(), auth, id);
+    expect(r.run.pending).toMatchObject({ kind: "computer", command: "npm install && npm run build" });
+    computerOn = true;
+    await respondToRun(auth, id, { decision: "continue" });
+    expect(commands).toEqual(["npm install && npm run build"]);
+    expect(run(id).checks?.build).toMatchObject({ command: "npm install && npm run build", exitCode: 0, passed: true });
+  });
+});
+
 describe("bounds", () => {
   const working = () => newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true } });
 
