@@ -220,7 +220,13 @@ export function CodeWorkspace({ id }: { id: string }) {
   // The agent is the main view; the editor, changes, preview, terminal and quick edit open beside it on demand.
   const [right, setRight] = useState<Side | null>(null);
   const [focusRun, setFocusRun] = useState<string | null>(null);
-  const [filesOpen, setFilesOpen] = useState(true);
+  // Files and sessions stay out of the way until there's a task (or the user opens them).
+  const [filesOpen, setFilesOpenState] = useState(false);
+  const filesTouched = useRef(false);
+  const setFilesOpen = (open: boolean) => {
+    filesTouched.current = true;
+    setFilesOpenState(open);
+  };
   const [leftTab, setLeftTab] = useState<"files" | "sessions">("files");
   const [leftW, setLeftW] = useStoredSize("orbis.code.left", 240, 180, 420);
   const [rightW, setRightW] = useStoredSize("orbis.code.right2", 520, 320, 900);
@@ -643,6 +649,7 @@ export function CodeWorkspace({ id }: { id: string }) {
   };
   const testCommand = useMemo(() => detectTestCommand(paths.map((path) => ({ path, content: saved[path] ?? "" }))), [paths, saved]);
   const onRunChange = useCallback((r: RunView | null) => {
+    if (r && !filesTouched.current) setFilesOpenState(true);
     setActiveRun((prev) => {
       // A new session, or one whose status changed: the sessions list shows it.
       if (prev?.id !== r?.id || prev?.status !== r?.status) setSessionsVersion((v) => v + 1);
@@ -1169,7 +1176,7 @@ export function CodeWorkspace({ id }: { id: string }) {
               <button type="button" onClick={() => setFilesOpen(!filesOpen)} aria-pressed={filesOpen} title={filesOpen ? "Hide files and sessions" : "Show files and sessions"} className="grid h-6 w-6 place-items-center rounded text-s-ink-3 hover:bg-s-hover hover:text-s-ink">
                 {filesOpen ? <PanelLeftClose className="h-3.5 w-3.5" /> : <PanelLeftOpen className="h-3.5 w-3.5" />}
               </button>
-              {allowance && <span className="ml-1 truncate text-[11px] text-s-ink-3">{minutesLine(allowance)} · counted in {block}-minute blocks</span>}
+              {allowance && running && <span className="ml-1 truncate text-[11px] text-s-ink-3">{minutesLine(allowance)} · counted in {block}-minute blocks</span>}
             </div>
           </section>
           {right && <Resizer axis="x" value={rightW} onChange={setRightW} label="Resize side panel" sign={-1} />}
@@ -1201,7 +1208,7 @@ export function CodeWorkspace({ id }: { id: string }) {
           </aside>
         </div>
       )}
-      {allowance && !wide && <p className="shrink-0 border-t border-s-line px-4 py-1 text-[11px] text-s-ink-3">{minutesLine(allowance)} · counted in {block}-minute blocks.</p>}
+      {allowance && running && !wide && <p className="shrink-0 border-t border-s-line px-4 py-1 text-[11px] text-s-ink-3">{minutesLine(allowance)} · counted in {block}-minute blocks.</p>}
     </>
   );
 }

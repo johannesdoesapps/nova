@@ -12,6 +12,7 @@ import {
   FileCode2,
   FileText,
   ImageIcon,
+  Lightbulb,
   FlaskConical,
   Globe,
   ListChecks,
@@ -578,10 +579,10 @@ export function AgentPanel({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="s-scroll min-h-0 flex-1 overflow-y-auto" aria-live="polite">
-        <div className="mx-auto w-full max-w-[780px] px-4 pb-6 pt-4 sm:px-6">
+        <div className="mx-auto flex min-h-full w-full max-w-[780px] flex-col px-4 pb-6 pt-4 sm:px-6">
           {!loaded && <div className="s-skeleton h-24 w-full rounded-2xl" />}
 
-          {loaded && !run && !(autoStart && !error) && <StartScreen web={web} starting={starting} onExample={(e) => (e.start ? void send(e.task, e.mode ?? mode) : fill(e.task))} />}
+          {loaded && !run && !(autoStart && !error) && <StartScreen web={web} />}
           {loaded && !run && autoStart && !error && (
             <p className="flex items-center gap-2 px-1 pt-10 text-[14px] text-s-ink-2">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Starting the build…
@@ -674,7 +675,6 @@ export function AgentPanel({
                   onOpenPreview={onOpenPreview}
                 />
               )}
-              {ended && web && <WebFollowUps starting={starting} onPick={(c) => (c.start ? void send(c.task) : fill(c.task))} />}
               {ended && (
                 <button
                   type="button"
@@ -752,7 +752,12 @@ export function AgentPanel({
             placeholder={inProgress ? "Enter to queue a message for when the agent finishes" : run ? "Ask for a follow-up change — Enter to send" : "Enter to send, Shift+Enter for a new line"}
             onStop={working ? () => void stop() : undefined}
             working={busy || starting || working}
-            footerLeft={<ModeMenu mode={mode} onChange={setMode} disabled={starting} />}
+            footerLeft={
+              <>
+                <ModeMenu mode={mode} onChange={setMode} disabled={starting} />
+                {!inProgress && <IdeasMenu web={web} disabled={starting || !loaded} onPick={(e) => (e.start ? void send(e.task, e.mode ?? mode) : fill(e.task))} />}
+              </>
+            }
             footerRight={<ModelSelector models={catalog?.models ?? null} value={modelId} onChange={setModelId} auto={catalog?.auto ?? null} className="h-8 px-2 text-[12.5px]" />}
           />
         </div>
@@ -763,44 +768,39 @@ export function AgentPanel({
 
 // ---------------------------------------------------------------- the task box
 
-function StartScreen({ web, starting, onExample }: { web?: boolean; starting: boolean; onExample: (e: (typeof EXAMPLES)[number]) => void }) {
+function StartScreen({ web }: { web?: boolean }) {
+  return (
+    <div className="s-in grid flex-1 place-items-center py-10">
+      <h2 className="text-center font-serif text-[clamp(28px,4vw,38px)] leading-[1.1]">{web ? "What should change on your site?" : "What would you like to build or fix?"}</h2>
+    </div>
+  );
+}
+
+/** Example tasks, behind a bulb under the prompt bar: each starts a real task, or fills in the box when it needs your details. */
+function IdeasMenu({ web, disabled, onPick }: { web?: boolean; disabled?: boolean; onPick: (e: (typeof EXAMPLES)[number]) => void }) {
   const examples: (typeof EXAMPLES)[number][] = web ? WEB_EXAMPLES : EXAMPLES;
   return (
-    <div className="s-in pt-[min(8vh,64px)]">
-      <h2 className="text-center font-serif text-[clamp(28px,4vw,38px)] leading-[1.1]">{web ? "What should change on your site?" : "What would you like to build or fix?"}</h2>
-      <p className="mx-auto mt-2 max-w-[560px] text-center text-[14px] leading-relaxed text-s-ink-3">
-        {web
-          ? "Describe it in plain English below. The agent edits the site, starts the preview, checks it in a real browser at desktop and phone sizes, and shows you what changed."
-          : "Describe it in plain English below. The agent explores the project, makes the changes, runs the checks and shows you what changed."}
-      </p>
-
-      <div className="mt-6">
-        <p className="text-[12px] font-medium uppercase tracking-[0.08em] text-s-ink-3">Try</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {examples.map((e) => (
-            <button
-              key={e.label}
-              type="button"
-              disabled={starting}
-              onClick={() => onExample(e)}
-              title={e.start ? `Starts: “${e.task}”${e.mode === "read" ? " (read-only)" : ""}` : "Fills in the box; add the details"}
-              className="inline-flex items-center gap-1.5 rounded-full border border-s-line px-3 py-1.5 text-[13px] text-s-ink-2 transition hover:border-s-line-strong hover:text-s-ink disabled:opacity-40"
-            >
-              {e.mode === "read" ? <Eye className="h-3.5 w-3.5" aria-hidden /> : e.start ? <Sparkles className="h-3.5 w-3.5" aria-hidden /> : <Plus className="h-3.5 w-3.5" aria-hidden />}
-              {e.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <p className="mt-6 flex items-start gap-2 text-[12px] leading-relaxed text-s-ink-3">
-        <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-        <span>
-          The agent works only on this project&apos;s files and its private computer — never your device or your other projects. Files like <code className="font-mono">.env</code> are never shown to
-          the AI. It never deploys, publishes or pushes on its own, and every change can be undone. Each step counts like one chat message on your plan.
-        </span>
-      </p>
-    </div>
+    <Menu
+      label="Ideas"
+      side="auto"
+      width={290}
+      disabled={disabled}
+      buttonLabel="Example tasks"
+      buttonTitle="Example tasks"
+      buttonClassName="grid h-8 w-8 place-items-center rounded-full text-s-ink-3 transition hover:bg-s-hover hover:text-s-ink disabled:opacity-50 [&_svg]:h-4 [&_svg]:w-4"
+      button={<Lightbulb />}
+    >
+      {examples.map((e) => (
+        <MenuItem
+          key={e.label}
+          icon={e.mode === "read" ? <Eye /> : e.start ? <Sparkles /> : <Plus />}
+          hint={e.start ? (e.mode === "read" ? "Starts now · read-only" : "Starts now") : "Fills in the box; add the details"}
+          onClick={() => onPick(e)}
+        >
+          {e.label}
+        </MenuItem>
+      ))}
+    </Menu>
   );
 }
 
@@ -829,6 +829,10 @@ function ModeMenu({ mode, onChange, disabled }: { mode: ModeId; onChange: (m: Mo
           {m.label} <span className="text-s-ink-3">· {m.short}</span>
         </MenuItem>
       ))}
+      <p className="mx-2.5 mb-1 mt-2 border-t border-s-line pt-2 text-[11.5px] leading-snug text-s-ink-3">
+        In every mode the agent works only on this project&apos;s files and its private computer. Files like <code className="font-mono">.env</code> are never shown to the AI; it never deploys,
+        publishes or pushes on its own; every change can be undone. Each step counts like one chat message on your plan.
+      </p>
     </Menu>
   );
 }
@@ -1218,27 +1222,6 @@ function ReportCard({
 }
 
 /** Ask for a change to what was just built: a new session on the same project, in the same mode and model, with the earlier work as context. */
-function WebFollowUps({ starting, onPick }: { starting: boolean; onPick: (c: (typeof WEB_EXAMPLES)[number]) => void }) {
-  return (
-    <div>
-      <p className="px-1 text-[12px] text-s-ink-3">Ask for changes below, or try:</p>
-      <div className="mt-1.5 flex flex-wrap gap-1.5">
-        {WEB_EXAMPLES.map((c) => (
-          <button
-            key={c.label}
-            type="button"
-            disabled={starting}
-            onClick={() => onPick(c)}
-            className="rounded-full border border-s-line px-2.5 py-1 text-[12px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink disabled:opacity-40"
-          >
-            {c.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------- waiting for you
 
 const LIMIT_TEXT: Record<LimitReason, { title: (p: { steps: number }) => string; body: string; go: string }> = {

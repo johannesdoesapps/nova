@@ -2,10 +2,11 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, ChevronDown, Code2, FlaskConical, FolderGit2, Globe, Plus, Server, ShieldCheck, Terminal, Trash2 } from "lucide-react";
+import { ArrowRight, ChevronDown, Code2, FlaskConical, FolderGit2, Globe, Lightbulb, Plus, Server, Terminal, Trash2, X } from "lucide-react";
 import { useApp } from "@/components/layout/app-context";
 import { forgetPlace } from "@/components/studio/mode-switch";
 import { StudioHeader } from "@/components/studio/frame";
+import { Menu, MenuItem } from "@/components/studio/ui";
 import { EXAMPLE_PROJECT, TEMPLATES, TEMPLATE_IDS, type ProjectSummary, type TemplateId } from "@/lib/code/projects";
 import { cn } from "@/lib/utils";
 import { api, CodeApiError, post, putBuildRequest, type Allowance } from "./api";
@@ -13,9 +14,9 @@ import { useAttachments } from "./attachments";
 import { PromptBar } from "./prompt-bar";
 
 /**
- * Code's start screen: what Code does in one sentence, the three steps, the
- * user's recent projects to continue, and the ways to start one (an example
- * with a bug to fix, a GitHub repository, or a new project from a template).
+ * Code's start screen: one prompt bar, front and centre. Starting a project
+ * another way (template, GitHub, the example) is in the New menu, ideas are
+ * behind the bulb, and the user's projects behind "Your projects".
  */
 
 const ICON: Record<TemplateId, typeof Globe> = { website: Globe, node: Server, python: Terminal, blank: Code2 };
@@ -83,12 +84,6 @@ export function siteName(prompt: string): string {
 
 const edited = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 
-const STEPS = [
-  { title: "Choose a project", text: "Start from an example, a GitHub repository or a template." },
-  { title: "Describe the task", text: "In plain English: “Fix the login bug”, “Add a contact form”." },
-  { title: "Review the result", text: "See what changed, the real test results, and undo anything." },
-];
-
 export function CodeProjectsView() {
   const { user } = useApp();
   const router = useRouter();
@@ -106,6 +101,7 @@ export function CodeProjectsView() {
   const [site, setSite] = useState("");
   const [siteTarget, setSiteTarget] = useState<string>("new");
   const siteBox = useRef<HTMLTextAreaElement>(null);
+  const [showAll, setShowAll] = useState(false);
   // Files and images for the build, uploaded once its project exists.
   const attachments = useAttachments(null);
   /** The project a failed "Build website" already made, so trying again doesn't make another. */
@@ -226,40 +222,52 @@ export function CodeProjectsView() {
   };
 
   const header = (
-    <StudioHeader>
+    <StudioHeader
+      actions={
+        user ? (
+          <Menu
+            label="Start a project"
+            align="end"
+            width={260}
+            disabled={!!busy}
+            buttonLabel="New project"
+            buttonTitle="New project, import or example"
+            buttonClassName="inline-flex h-8 items-center gap-1.5 rounded-full border border-s-line px-3 text-[12.5px] text-s-ink-2 transition hover:border-s-line-strong hover:text-s-ink disabled:opacity-50"
+            button={
+              <>
+                <Plus className="h-3.5 w-3.5" aria-hidden /> <span className="hidden sm:inline">New</span>
+              </>
+            }
+          >
+            <MenuItem icon={<Plus />} hint="Website, Node.js, Python or blank" disabled={full} onClick={() => setOpen("new")}>
+              New project from a template
+            </MenuItem>
+            <MenuItem icon={<FolderGit2 />} hint="Copies a repository; yours isn't changed" onClick={() => void loadRepos()}>
+              Import from GitHub
+            </MenuItem>
+            <MenuItem icon={<FlaskConical />} hint="A small app with a bug for the agent to fix" disabled={full} onClick={() => void tryExample()}>
+              {busy === "example" ? "Setting up…" : "Try an example"}
+            </MenuItem>
+          </Menu>
+        ) : undefined
+      }
+    >
       <span className="text-[14px] font-medium text-s-ink-2">Code</span>
     </StudioHeader>
   );
 
-  const intro = (
-    <div className="s-in">
-      <h1 className="font-serif text-[clamp(32px,5vw,46px)] leading-[1.05] tracking-[-0.01em]">What would you like to build or fix?</h1>
-      <p className="mt-3 max-w-2xl text-[15.5px] leading-relaxed text-s-ink-2">
-        Pick a project and describe the task in plain English. Orbis&apos;s coding agent explores the code, makes the changes, runs the tests on a private computer, and shows you exactly what changed.
-      </p>
-      <ol className="mt-6 grid gap-3 sm:grid-cols-3">
-        {STEPS.map((s, i) => (
-          <li key={s.title} className="flex gap-3 rounded-2xl border border-s-line p-3.5">
-            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-s-hover text-[12px] font-medium text-s-ink-2" aria-hidden>
-              {i + 1}
-            </span>
-            <span>
-              <span className="block text-[14px] font-medium text-s-ink">{s.title}</span>
-              <span className="mt-0.5 block text-[12.5px] leading-snug text-s-ink-3">{s.text}</span>
-            </span>
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
+  const title = <h1 className="s-in text-center font-serif text-[clamp(30px,4.5vw,42px)] leading-[1.08] tracking-[-0.01em]">What would you like to build?</h1>;
 
   if (!user) {
     return (
       <>
         {header}
         <div className="s-scroll min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-[1040px] px-4 pb-24 pt-4 sm:px-8">
-            {intro}
+          <div className="mx-auto flex min-h-full w-full max-w-[720px] flex-col items-center justify-center px-4 py-12 text-center sm:px-8">
+            {title}
+            <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-s-ink-3">
+              Describe it in plain English. Orbis&apos;s coding agent writes the code, runs it on a private computer, and shows you exactly what changed.
+            </p>
             <Link href="/login?next=/code" className="mt-7 inline-flex h-10 items-center rounded-full bg-s-accent px-5 text-[14px] font-medium text-s-accent-ink transition hover:brightness-110">
               Sign in to start
             </Link>
@@ -269,199 +277,145 @@ export function CodeProjectsView() {
     );
   }
 
-  const recent = data?.projects.slice(0, 3) ?? [];
-  const card = "flex flex-col rounded-2xl border border-s-line p-4 text-left transition hover:border-s-line-strong disabled:opacity-50";
+  const count = data?.projects.length ?? 0;
+  const target = data?.projects.find((p) => p.id === siteTarget);
 
   return (
     <>
       {header}
       <div className="s-scroll min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[1040px] px-4 pb-24 pt-4 sm:px-8">
-          {intro}
+        <div className="mx-auto flex min-h-full w-full max-w-[760px] flex-col px-4 sm:px-8">
+          <div className="flex flex-1 flex-col justify-center py-10">
+            {title}
 
-          {error && (
-            <p role="alert" className="mt-5 rounded-xl border border-s-danger/40 px-3.5 py-2.5 text-[13px] text-s-danger">
-              {error.message}{" "}
-              {error.upgrade && (
-                <Link href="/pricing" className="underline">
-                  See plans
-                </Link>
-              )}
-            </p>
-          )}
-
-          <section className="mt-8" aria-labelledby="build-h">
-            <div className="glass-strong glass-edge relative rounded-[24px] p-4">
-              <h2 id="build-h" className="flex items-center gap-2 text-[15px] font-medium text-s-ink">
-                <Globe className="h-4 w-4 text-s-ink-2" aria-hidden /> Build a website
-              </h2>
-              <div className="mt-3">
-                <PromptBar
-                  id="build-site"
-                  label="Describe the website you want to build"
-                  inputRef={siteBox}
-                  value={site}
-                  onChange={setSite}
-                  onSubmit={() => void buildSite()}
-                  sending={busy === "build"}
-                  attachments={attachments}
-                  placeholder="Describe the website you want to build — Enter to start"
-                  working={busy === "build"}
-                  footerLeft={
-                    <>
-                      <label htmlFor="build-target" className="sr-only">
-                        Project
-                      </label>
-                      <select
-                        id="build-target"
-                        value={siteTarget}
-                        onChange={(e) => setSiteTarget(e.target.value)}
-                        className="h-8 max-w-[230px] truncate rounded-full bg-transparent px-2 text-[12.5px] text-s-ink-2 hover:bg-s-hover hover:text-s-ink"
-                      >
-                        <option value="new">New website project</option>
-                        {(data?.projects ?? []).map((p) => (
-                          <option key={p.id} value={p.id}>
-                            Change “{p.name}”
-                          </option>
-                        ))}
-                      </select>
-                    </>
-                  }
-                  footerRight={
-                    siteTarget === "new" && full ? (
-                      <span className="text-s-danger">Project limit reached</span>
-                    ) : (
-                      <span className="hidden sm:inline">{busy === "build" ? "Setting up…" : "Builds on its own computer"}</span>
-                    )
-                  }
-                />
-              </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {SITE_EXAMPLES.map((x) => (
-                  <button
-                    key={x.label}
-                    type="button"
-                    onClick={() => {
-                      setSite(x.prompt);
-                      siteBox.current?.focus();
-                    }}
-                    title="Fills in the box: edit it, then press Build website"
-                    className="rounded-full border border-s-line px-2.5 py-1 text-[12.5px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink"
-                  >
-                    {x.label}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-3 text-[12px] leading-relaxed text-s-ink-3">
-                The agent writes the site&apos;s files, starts it on the project&apos;s private computer (this uses workspace minutes), checks it in a real browser at desktop and phone sizes, and
-                fixes what it finds. You see the live preview and can ask for changes; every change can be undone.
-              </p>
-            </div>
-          </section>
-
-          {recent.length > 0 && (
-            <section className="mt-9" aria-labelledby="continue-h">
-              <h2 id="continue-h" className="text-[13px] font-medium uppercase tracking-[0.08em] text-s-ink-3">
-                Continue where you left off
-              </h2>
-              <ul className="mt-3 grid gap-3 sm:grid-cols-3">
-                {recent.map((p) => {
-                  const Icon = ICON[p.template as TemplateId] ?? FolderGit2;
-                  return (
-                    <li key={p.id}>
-                      <Link href={`/code/${p.id}`} className={cn(card, "h-full")}>
-                        <Icon className="h-4 w-4 text-s-ink-3" />
-                        <span className="mt-2 line-clamp-2 text-[14.5px] font-medium text-s-ink">{p.name}</span>
-                        <span className="mt-auto pt-2 text-[12px] text-s-ink-3">
-                          {p.sourceRepo ? `From ${p.sourceRepo} · ` : ""}Edited {edited(p.updatedAt)}
-                        </span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
+            <section className="mt-7" aria-label="Describe what to build">
+              <PromptBar
+                id="build-site"
+                label={target ? `Describe the change to ${target.name}` : "Describe the website you want to build"}
+                inputRef={siteBox}
+                value={site}
+                onChange={setSite}
+                onSubmit={() => void buildSite()}
+                sending={busy === "build"}
+                attachments={attachments}
+                placeholder={target ? `Describe the change to “${target.name}”…` : "Describe the website you want to build…"}
+                working={busy === "build"}
+                footerLeft={
+                  <>
+                    <label htmlFor="build-target" className="sr-only">
+                      Project
+                    </label>
+                    <select
+                      id="build-target"
+                      value={siteTarget}
+                      onChange={(e) => setSiteTarget(e.target.value)}
+                      title="Where the agent works: a new website project, or one of yours. It writes the files, runs the site on the project's private computer (this uses workspace minutes), checks it in a real browser and fixes what it finds. Every change can be undone."
+                      className="h-8 max-w-[230px] truncate rounded-full bg-transparent px-2 text-[12.5px] text-s-ink-2 hover:bg-s-hover hover:text-s-ink"
+                    >
+                      <option value="new">New website project</option>
+                      {(data?.projects ?? []).map((p) => (
+                        <option key={p.id} value={p.id}>
+                          Change “{p.name}”
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                }
+                footerRight={
+                  <>
+                    {siteTarget === "new" && full && <span className="text-s-danger">Project limit reached</span>}
+                    <Menu
+                      label="Ideas"
+                      align="end"
+                      side="auto"
+                      width={250}
+                      buttonLabel="Ideas to start from"
+                      buttonTitle="Ideas to start from"
+                      buttonClassName="grid h-8 w-8 place-items-center rounded-full text-s-ink-3 transition hover:bg-s-hover hover:text-s-ink [&_svg]:h-4 [&_svg]:w-4"
+                      button={<Lightbulb />}
+                    >
+                      {SITE_EXAMPLES.map((x) => (
+                        <MenuItem
+                          key={x.label}
+                          onClick={() => {
+                            setSite(x.prompt);
+                            requestAnimationFrame(() => siteBox.current?.focus());
+                          }}
+                        >
+                          {x.label}
+                        </MenuItem>
+                      ))}
+                    </Menu>
+                  </>
+                }
+              />
             </section>
-          )}
 
-          <section ref={newRef} className="mt-9 scroll-mt-4" aria-labelledby="start-h">
-            <h2 id="start-h" className="text-[13px] font-medium uppercase tracking-[0.08em] text-s-ink-3">
-              Start something new
-            </h2>
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
-              <button type="button" onClick={() => void tryExample()} disabled={!!busy || full} className={card}>
-                <FlaskConical className="h-4 w-4 text-s-ink-2" />
-                <span className="mt-2 text-[14.5px] font-medium text-s-ink">{busy === "example" ? "Setting up…" : "Try an example"}</span>
-                <span className="mt-1 text-[12.5px] leading-snug text-s-ink-3">A small calculator whose tests fail. Watch the agent find the bug, fix it and prove it with the tests.</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => void loadRepos()}
-                aria-expanded={open === "github"}
-                disabled={!!busy}
-                className={cn(card, open === "github" && "border-s-line-strong bg-s-hover/40")}
-              >
-                <FolderGit2 className="h-4 w-4 text-s-ink-2" />
-                <span className="mt-2 text-[14.5px] font-medium text-s-ink">Import from GitHub</span>
-                <span className="mt-1 text-[12.5px] leading-snug text-s-ink-3">Copy one of your repositories into a project. Your repository isn&apos;t changed.</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setOpen(open === "new" ? null : "new")}
-                aria-expanded={open === "new"}
-                disabled={!!busy}
-                className={cn(card, open === "new" && "border-s-line-strong bg-s-hover/40")}
-              >
-                <Plus className="h-4 w-4 text-s-ink-2" />
-                <span className="mt-2 flex items-center gap-1 text-[14.5px] font-medium text-s-ink">
-                  New project <ChevronDown className={cn("h-3.5 w-3.5 transition", open === "new" && "rotate-180")} aria-hidden />
-                </span>
-                <span className="mt-1 text-[12.5px] leading-snug text-s-ink-3">Start from a website, Node.js, Python or blank template.</span>
-              </button>
-            </div>
-            {full && (
-              <p className="mt-2 text-[12.5px] text-s-ink-3">
-                You have {data!.maxProjects} projects, the most your plan keeps. Delete one to make room, or{" "}
-                <Link href="/pricing" className="underline">
-                  upgrade
-                </Link>
-                .
+            {error && (
+              <p role="alert" className="mt-4 rounded-xl border border-s-danger/40 px-3.5 py-2.5 text-[13px] text-s-danger">
+                {error.message}{" "}
+                {error.upgrade && (
+                  <Link href="/pricing" className="underline">
+                    See plans
+                  </Link>
+                )}
               </p>
             )}
 
             {open === "github" && (
-              <div className="glass-strong mt-3 rounded-2xl p-4">
-                {repos && repos.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    <label htmlFor="code-repo" className="sr-only">
-                      Repository
-                    </label>
-                    <select id="code-repo" value={repo} onChange={(e) => setRepo(e.target.value)} className="h-10 min-w-0 flex-1 rounded-full border border-s-line bg-s-bg px-3 text-[13.5px]">
-                      <option value="">Choose a repository…</option>
-                      {repos.map((r) => (
-                        <option key={r.fullName} value={r.fullName}>
-                          {r.fullName}
-                          {r.private ? " (private)" : ""}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      disabled={!repo || !!busy || full}
-                      onClick={() => void importRepo()}
-                      className="h-10 rounded-full bg-s-accent px-4 text-[13.5px] font-medium text-s-accent-ink disabled:opacity-40"
-                    >
-                      {busy === "github" ? "Importing…" : "Import"}
-                    </button>
+              <section ref={newRef} className="glass-strong mt-4 rounded-2xl p-4" aria-label="Import from GitHub">
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    {repos && repos.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        <label htmlFor="code-repo" className="sr-only">
+                          Repository
+                        </label>
+                        <select id="code-repo" value={repo} onChange={(e) => setRepo(e.target.value)} className="h-10 min-w-0 flex-1 rounded-full border border-s-line bg-s-bg px-3 text-[13.5px]">
+                          <option value="">Choose a repository…</option>
+                          {repos.map((r) => (
+                            <option key={r.fullName} value={r.fullName}>
+                              {r.fullName}
+                              {r.private ? " (private)" : ""}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!repo || !!busy || full}
+                          onClick={() => void importRepo()}
+                          className="h-10 rounded-full bg-s-accent px-4 text-[13.5px] font-medium text-s-accent-ink disabled:opacity-40"
+                        >
+                          {busy === "github" ? "Importing…" : "Import"}
+                        </button>
+                      </div>
+                    )}
+                    {!repos && !repoNote && <p className="text-[13px] text-s-ink-3">Looking for your repositories…</p>}
+                    {repoNote && <p className="text-[13px] text-s-ink-2">{repoNote}</p>}
+                    <p className="mt-2 text-[12px] text-s-ink-3">
+                      Text files up to 100 KB from the default branch are copied. To send changes back, use Push to GitHub, which always makes a new branch.
+                    </p>
                   </div>
-                )}
-                {!repos && !repoNote && <p className="text-[13px] text-s-ink-3">Looking for your repositories…</p>}
-                {repoNote && <p className="text-[13px] text-s-ink-2">{repoNote}</p>}
-                <p className="mt-2 text-[12px] text-s-ink-3">Text files up to 100 KB from the default branch are copied. To send changes back, use Push to GitHub, which always makes a new branch.</p>
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => setOpen(null)}
+                    aria-label="Close"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-s-ink-3 hover:bg-s-hover hover:text-s-ink"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </section>
             )}
 
             {open === "new" && (
-              <div className="glass-strong mt-3 rounded-2xl p-4">
+              <section ref={newRef} className="glass-strong mt-4 scroll-mt-4 rounded-2xl p-4" aria-label="New project">
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-[14px] font-medium text-s-ink">New project</h2>
+                  <button type="button" onClick={() => setOpen(null)} aria-label="Close" className="grid h-8 w-8 place-items-center rounded-full text-s-ink-3 hover:bg-s-hover hover:text-s-ink">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
                 <div className="grid gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Template">
                   {TEMPLATE_IDS.map((id) => {
                     const t = TEMPLATES[id];
@@ -508,54 +462,67 @@ export function CodeProjectsView() {
                     <Plus className="h-4 w-4" /> {busy === "new" ? "Creating…" : "Create project"}
                   </button>
                 </form>
-              </div>
+                {full && (
+                  <p className="mt-2 text-[12.5px] text-s-ink-3">
+                    You have {data!.maxProjects} projects, the most your plan keeps. Delete one to make room, or{" "}
+                    <Link href="/pricing" className="underline">
+                      upgrade
+                    </Link>
+                    .
+                  </p>
+                )}
+              </section>
             )}
-          </section>
+          </div>
 
-          <section className="mt-9" aria-labelledby="all-h">
-            <h2 id="all-h" className="text-[13px] font-medium uppercase tracking-[0.08em] text-s-ink-3">
-              All projects
-            </h2>
-            {!data && !error && <div className="s-skeleton mt-3 h-14 w-full" />}
-            {data && data.projects.length === 0 && <p className="mt-3 text-[14px] text-s-ink-3">No projects yet. Try the example to see how it works.</p>}
-            {data && data.projects.length > 0 && (
-              <ul className="mt-3 divide-y divide-s-line rounded-2xl border border-s-line">
-                {data.projects.map((p) => {
-                  const Icon = ICON[p.template as TemplateId] ?? FolderGit2;
-                  return (
-                    <li key={p.id} className="flex items-center gap-3 px-4 py-3">
-                      <Icon className="h-4 w-4 shrink-0 text-s-ink-3" />
-                      <Link href={`/code/${p.id}`} className="min-w-0 flex-1">
-                        <div className="truncate text-[14.5px] font-medium">{p.name}</div>
-                        <div className="truncate text-[12.5px] text-s-ink-3">
-                          {p.sourceRepo ? `From ${p.sourceRepo} · ` : ""}Edited {edited(p.updatedAt)}
-                        </div>
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => void remove(p)}
-                        aria-label={`Delete ${p.name}`}
-                        title="Delete project"
-                        className="grid h-9 w-9 place-items-center rounded-xl text-s-ink-3 hover:bg-s-hover hover:text-s-danger"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                      <Link href={`/code/${p.id}`} aria-label={`Open ${p.name}`} title="Open" className="grid h-9 w-9 place-items-center rounded-xl text-s-ink-2 hover:bg-s-hover">
-                        <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-
-          <p className="mt-8 flex items-start gap-2 text-[12.5px] leading-relaxed text-s-ink-3">
-            <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-            <span>
-              Your files are saved to your account. Code runs on a private computer for each project, which can only download packages from npm and PyPI. {data && minutesLine(data.allowance)}
-            </span>
-          </p>
+          {count > 0 && (
+            <section className="pb-6" aria-label="Your projects">
+              <button
+                type="button"
+                onClick={() => setShowAll(!showAll)}
+                aria-expanded={showAll}
+                aria-controls="code-projects"
+                className="mx-auto flex items-center gap-1 rounded-full px-3 py-1.5 text-[12.5px] text-s-ink-3 transition hover:bg-s-hover hover:text-s-ink"
+              >
+                Your projects ({count}) <ChevronDown className={cn("h-3.5 w-3.5 transition", showAll && "rotate-180")} aria-hidden />
+              </button>
+              {showAll && data && (
+                <div id="code-projects" className="mt-2">
+                  <ul className="divide-y divide-s-line rounded-2xl border border-s-line">
+                    {data.projects.map((p) => {
+                      const Icon = ICON[p.template as TemplateId] ?? FolderGit2;
+                      return (
+                        <li key={p.id} className="flex items-center gap-3 px-4 py-2.5">
+                          <Icon className="h-4 w-4 shrink-0 text-s-ink-3" />
+                          <Link href={`/code/${p.id}`} className="min-w-0 flex-1">
+                            <div className="truncate text-[14px] font-medium">{p.name}</div>
+                            <div className="truncate text-[12px] text-s-ink-3">
+                              {p.sourceRepo ? `From ${p.sourceRepo} · ` : ""}Edited {edited(p.updatedAt)}
+                            </div>
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => void remove(p)}
+                            aria-label={`Delete ${p.name}`}
+                            title="Delete project"
+                            className="grid h-8 w-8 place-items-center rounded-xl text-s-ink-3 hover:bg-s-hover hover:text-s-danger"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                          <Link href={`/code/${p.id}`} aria-label={`Open ${p.name}`} title="Open" className="grid h-8 w-8 place-items-center rounded-xl text-s-ink-2 hover:bg-s-hover">
+                            <ArrowRight className="h-4 w-4" />
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <p className="mt-3 text-[12px] leading-relaxed text-s-ink-3">
+                    Your files are saved to your account. Code runs on a private computer for each project, which can only download packages from npm and PyPI. {minutesLine(data.allowance)}
+                  </p>
+                </div>
+              )}
+            </section>
+          )}
         </div>
       </div>
     </>
