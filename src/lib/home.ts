@@ -288,6 +288,7 @@ export const HOME_SECTIONS = [
   { id: "continue", label: "Pick up where you left off" },
   { id: "projects", label: "My projects" },
   { id: "conversations", label: "Recent conversations" },
+  { id: "agents", label: "Agents and shortcuts" },
   { id: "day", label: "My day" },
   { id: "tools", label: "Quick tools" },
   { id: "discover", label: "Discover" },
@@ -304,14 +305,21 @@ const prefFields = {
   dismissed: z.array(z.string().max(60)).max(60),
   /** Today's priorities: the date they're for (the user's local date) and the items. */
   focus: z.object({ day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), items: z.array(focusItem).max(FOCUS_LIMIT) }).nullable(),
+  /** Agents pinned to the top of "Agents and shortcuts" (built-in keys or custom agent ids). */
+  pinnedAgents: z.array(z.string().max(80)).max(12),
 };
 
 /** What the user chose for their home, kept in their profile's preferences. */
 /** Shown until the user chooses otherwise: a calm home (My day, Quick tools and Discover are one switch away in Customize). */
 export const DEFAULT_HIDDEN: HomeSectionId[] = ["day", "tools", "discover"];
-export const homePrefs = z.object({ hidden: prefFields.hidden.default(DEFAULT_HIDDEN), dismissed: prefFields.dismissed.default([]), focus: prefFields.focus.default(null) });
+export const homePrefs = z.object({
+  hidden: prefFields.hidden.default(DEFAULT_HIDDEN),
+  dismissed: prefFields.dismissed.default([]),
+  focus: prefFields.focus.default(null),
+  pinnedAgents: prefFields.pinnedAgents.default([]),
+});
 export type HomePrefs = z.infer<typeof homePrefs>;
-export const EMPTY_PREFS: HomePrefs = { hidden: DEFAULT_HIDDEN, dismissed: [], focus: null };
+export const EMPTY_PREFS: HomePrefs = { hidden: DEFAULT_HIDDEN, dismissed: [], focus: null, pinnedAgents: [] };
 
 /** Stored preferences, tolerating anything malformed (it's ignored rather than breaking the page). */
 export function readPrefs(raw: unknown): HomePrefs {
@@ -321,7 +329,7 @@ export function readPrefs(raw: unknown): HomePrefs {
 
 /** A change to the preferences: only what's given changes (no defaults, so nothing else is reset). */
 export const homePrefsPatch = z
-  .object({ hidden: prefFields.hidden.optional(), dismissed: prefFields.dismissed.optional(), focus: prefFields.focus.optional() })
+  .object({ hidden: prefFields.hidden.optional(), dismissed: prefFields.dismissed.optional(), focus: prefFields.focus.optional(), pinnedAgents: prefFields.pinnedAgents.optional() })
   .strict()
   .refine((p) => Object.keys(p).length > 0, "Nothing to update.");
 export type HomePrefsPatch = z.infer<typeof homePrefsPatch>;

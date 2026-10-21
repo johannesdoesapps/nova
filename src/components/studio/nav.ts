@@ -17,18 +17,20 @@ export interface NavEntry {
   group: "mode" | "main" | "tools" | "admin";
   /** What it's for, in a few words (tooltips and the command palette). */
   hint: string;
+  /** Reached from another entry's page rather than the sidebar (Missions from Projects); that entry is shown active. */
+  parent?: Section;
 }
 
 export const NAV_ENTRIES: NavEntry[] = [
   { id: "home", label: "Home", href: "/home", icon: House, group: "main", hint: "Your start page: recent work, your day and suggestions" },
   { id: "chat", label: "Chat", href: "/chat", icon: MessagesSquare, group: "mode", hint: "Ask, research and write with AI" },
   { id: "code", label: "Code", href: "/code", icon: Code2, group: "mode", hint: "Build and fix software with the coding agent" },
-  { id: "projects", label: "Projects", href: "/projects", icon: FolderKanban, group: "main", hint: "All your code projects and missions" },
   { id: "agents", label: "Agents", href: "/agents", icon: Bot, group: "main", hint: "Specialised assistants, including the Security Team" },
+  { id: "projects", label: "Projects", href: "/projects", icon: FolderKanban, group: "main", hint: "Ongoing work: code projects, missions and their tasks" },
   { id: "discover", label: "Discover", href: "/discover", icon: Compass, group: "tools", hint: "What Orbis can do, with ways to try it" },
-  { id: "missions", label: "Missions", href: "/missions", icon: Flag, group: "tools", hint: "Plan projects and track tasks" },
+  { id: "missions", label: "Missions", href: "/missions", icon: Flag, group: "main", hint: "Plan projects and track tasks", parent: "projects" },
   { id: "council", label: "Council", href: "/council", icon: Users, group: "tools", hint: "Several models answer; one combined reply" },
-  { id: "arena", label: "Arena", href: "/arena", icon: Swords, group: "tools", hint: "Compare models side by side" },
+  { id: "arena", label: "Arena", href: "/arena", icon: Swords, group: "tools", hint: "Compare models side by side, blind if you like" },
   { id: "connectors", label: "Connectors", href: "/connectors", icon: Plug, group: "tools", hint: "Connect Gmail, GitHub, Drive and more" },
   { id: "workforce", label: "Workforce", href: "/workforce", icon: Workflow, group: "admin", hint: "Internal AI engineers" },
   { id: "admin", label: "Admin", href: "/admin", icon: SlidersHorizontal, group: "admin", hint: "Models, plans and finance" },
@@ -39,9 +41,14 @@ export function navFor(isAdmin: boolean): NavEntry[] {
   return NAV_ENTRIES.filter((e) => e.group !== "admin" || isAdmin);
 }
 
-/** The sidebar's entries: everything except Chat and Code, which are in the top bar's switcher. */
+/** The sidebar's entries: everything except Chat and Code (in the top bar's switcher) and pages reached from another entry. */
 export function sidebarFor(isAdmin: boolean): NavEntry[] {
-  return navFor(isAdmin).filter((e) => e.group !== "mode");
+  return navFor(isAdmin).filter((e) => e.group !== "mode" && !e.parent);
+}
+
+/** The sidebar entry to show as current for a section (Missions → Projects). */
+export function activeEntryFor(section: Section): Section {
+  return NAV_ENTRIES.find((e) => e.id === section)?.parent ?? section;
 }
 
 /** The two modes in the top bar. */

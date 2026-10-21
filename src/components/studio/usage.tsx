@@ -98,6 +98,30 @@ export function UsageNotice({ usage }: { usage: UsageState | null }) {
   );
 }
 
+/** One quiet line for the home: the plan and how much of the tighter limit is used (details are in Settings). */
+export function UsageSummary({ usage, onDetails }: { usage: UsageState; onDetails?: () => void }) {
+  const label = usage.info?.label ?? PLAN_LABEL[usage.plan];
+  if (usage.info?.unlimited) return <span>{label} · no usage limits on your account</span>;
+  const weekShare = usage.week.limit ? usage.week.used / usage.week.limit : 0;
+  const windowShare = usage.window.limit ? usage.window.used / usage.window.limit : 0;
+  const weekly = weekShare >= windowShare;
+  const pct = Math.min(100, Math.round((weekly ? weekShare : windowShare) * 100));
+  return (
+    <span className={cn(pct >= 80 && "text-s-ink-2")}>
+      {label} plan · {pct}% of {weekly ? "this week's" : "this 5-hour"} allowance used
+      {onDetails && (
+        <>
+          {" · "}
+          <button type="button" onClick={onDetails} className="underline-offset-2 hover:text-s-ink hover:underline">
+            Details
+          </button>
+        </>
+      )}
+      <UpgradeLink usage={usage} />
+    </span>
+  );
+}
+
 function UpgradeLink({ usage }: { usage: UsageState }) {
   const up = usage.info?.upgradeTo;
   if (!up) return null;

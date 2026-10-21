@@ -205,10 +205,11 @@ describe("preferences", () => {
   it("a change only touches what it names", () => {
     const patch = homePrefsPatch.parse({ dismissed: ["council"] });
     expect(patch).toEqual({ dismissed: ["council"] });
-    expect(applyPrefs({ hidden: ["day"], dismissed: [], focus: { day: "2026-10-21", items: [] } }, patch)).toEqual({
+    expect(applyPrefs({ hidden: ["day"], dismissed: [], focus: { day: "2026-10-21", items: [] }, pinnedAgents: ["writing"] }, patch)).toEqual({
       hidden: ["day"],
       dismissed: ["council"],
       focus: { day: "2026-10-21", items: [] },
+      pinnedAgents: ["writing"],
     });
     expect(homePrefsPatch.safeParse({}).success).toBe(false);
     expect(homePrefsPatch.safeParse({ admin: true }).success).toBe(false);
@@ -271,7 +272,7 @@ describe("loading the home", () => {
     // In-progress tasks first.
     expect(h.tasks.map((t) => t.id)).toEqual(["t2", "t1"]);
     expect(h.tasks[0]).toMatchObject({ project: "Launch newsletter", href: "/missions/m1" });
-    expect(h.prefs).toEqual({ hidden: ["discover"], dismissed: ["arena"], focus: null });
+    expect(h.prefs).toEqual({ hidden: ["discover"], dismissed: ["arena"], focus: null, pinnedAgents: [] });
     // No Google sign-in for connectors in the test environment.
     expect(h.calendar).toBe("unavailable");
   });
@@ -314,8 +315,8 @@ describe("GET and PATCH /api/home", () => {
   it("saves a change without touching other preferences", async () => {
     const res = await patch({ hidden: [] });
     expect(res.status).toBe(200);
-    expect((await res.json()).prefs).toEqual({ hidden: [], dismissed: ["arena"], focus: null });
-    expect(db.updates).toEqual([{ preferences: { chatModel: "auto", home: { hidden: [], dismissed: ["arena"], focus: null } } }]);
+    expect((await res.json()).prefs).toEqual({ hidden: [], dismissed: ["arena"], focus: null, pinnedAgents: [] });
+    expect(db.updates).toEqual([{ preferences: { chatModel: "auto", home: { hidden: [], dismissed: ["arena"], focus: null, pinnedAgents: [] } } }]);
   });
 
   it("refuses bad changes and guests", async () => {

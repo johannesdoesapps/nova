@@ -63,8 +63,8 @@ export const STARTER_TASKS: StarterTask[] = [
     label: "Writing",
     short: "Draft, rewrite and polish emails, posts and documents.",
     setup: { mode: "research", router: "balanced", web: false },
-    why: `Auto picks a capable, low-cost model for everyday writing: ${blurb("balanced")} For feedback on your own text, try “Improve my writing”, which uses Critic mode. To keep your tone every time, make an agent with your instructions.`,
-    next: { href: "/agents?create=1", label: "Create a writing agent" },
+    why: `Auto picks a capable, low-cost model for everyday writing: ${blurb("balanced")} For feedback on your own text, try “Improve my writing”, which uses Critic mode. The Writing Agent is set up for drafting and editing, with its own instructions you can adjust.`,
+    next: { href: "/agents/writing", label: "Open the Writing Agent" },
     examples: [
       { label: "Draft an email", action: "send", prompt: "Draft a short, friendly email to my team saying our product launch moves to next Monday, and why that's good news." },
       { label: "Write a post…", action: "draft", prompt: "Write a short LinkedIn post about " },

@@ -211,3 +211,29 @@ describe("the Chat / Code switch", () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe("the redesigned sidebar", () => {
+  it("is Home, Agents, Projects, then Tools; Missions lives under Projects", () => {
+    expect(
+      sidebarFor(false)
+        .filter((e) => e.group === "main")
+        .map((e) => e.id),
+    ).toEqual(["home", "agents", "projects"]);
+    expect(
+      sidebarFor(false)
+        .filter((e) => e.group === "tools")
+        .map((e) => e.id),
+    ).toEqual(["discover", "council", "arena", "connectors"]);
+    expect(sidebarFor(true).some((e) => e.id === "missions")).toBe(false);
+    // Still one command-palette destination.
+    expect(navFor(false).filter((e) => e.id === "missions")).toHaveLength(1);
+  });
+
+  it("shows Projects as current on a mission page, and a Tools toggle", () => {
+    const html = render({ section: "missions" });
+    expect(html).toMatch(/href="\/projects"[^>]*aria-current="page"/);
+    expect(links(html, "/missions")).toBe(0);
+    expect(navHtml(html)).toMatch(/>Tools</);
+    expect(navHtml(html)).not.toMatch(/>More</);
+  });
+});

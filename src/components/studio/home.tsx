@@ -21,6 +21,8 @@ import {
   Lightbulb,
   MessageSquare,
   PenLine,
+  Pin,
+  PinOff,
   Play,
   Plug,
   Plus,
@@ -61,6 +63,10 @@ import {
 import type { StarterTask, StarterTaskId } from "@/lib/starter";
 import { cn } from "@/lib/utils";
 import { useStudio } from "./frame";
+import { useSavedPrompts } from "./prefs";
+import { UsageSummary, useUsage } from "./usage";
+import { AgentAvatar } from "@/components/agents/agent-visuals";
+import { useAgents } from "@/components/agents/use-agents";
 import { TaskStarter, type StarterEnv } from "./task-starter";
 import { Dialog, iconButtonClass, Menu, MenuItem, Switch } from "./ui";
 
@@ -218,6 +224,7 @@ export function Home({ name, composer, onAction, notice, starter }: HomeProps) {
   const discover = useMemo(() => (today ? dailyPicks(discoverFor({ search: integrations.search }), today, prefs.dismissed) : []), [today, integrations.search, prefs.dismissed]);
   const resume = pickResume(projects, conversations);
   const loading = signedIn && state.status === "loading";
+  const usage = useUsage();
 
   return (
     <div className="mx-auto w-full max-w-[1080px] px-4 pb-24 pt-6 sm:px-6 sm:pt-10 lg:pt-14">
@@ -233,6 +240,12 @@ export function Home({ name, composer, onAction, notice, starter }: HomeProps) {
 
       <div className="s-in mt-12 flex items-center gap-2 [animation-delay:220ms]">
         <h2 className="text-[12px] font-medium uppercase tracking-[0.08em] text-s-ink-3">{signedIn ? "Your workspace" : "Get started"}</h2>
+        {signedIn && usage && (
+          <p className="hidden min-w-0 truncate text-[12.5px] text-s-ink-3 sm:block">
+            <span aria-hidden>· </span>
+            <UsageSummary usage={usage} onDetails={studio.openSettings} />
+          </p>
+        )}
         <button
           type="button"
           onClick={() => setCustomizing(true)}
@@ -307,6 +320,17 @@ export function Home({ name, composer, onAction, notice, starter }: HomeProps) {
                 ))}
               </ul>
             )}
+          </Section>
+        )}
+
+        {shown("agents") && (
+          <Section id="agents" title="Agents and shortcuts" icon={<Bot />} onHide={hide} footer={{ href: "/agents", label: "All agents" }}>
+            <AgentsAndShortcuts
+              pinned={prefs.pinnedAgents}
+              onPin={(id) => update({ pinnedAgents: prefs.pinnedAgents.includes(id) ? prefs.pinnedAgents.filter((p) => p !== id) : [id, ...prefs.pinnedAgents].slice(0, 12) })}
+              onPrompt={(text) => onAction({ kind: "draft", prompt: text, mode: studio.settings.defaultMode })}
+              onManagePrompts={studio.openPrompts}
+            />
           </Section>
         )}
 
@@ -471,6 +495,88 @@ export function Home({ name, composer, onAction, notice, starter }: HomeProps) {
 }
 
 // ---------------------------------------------------------------- pieces
+
+/** Pinned agents first, then the user's own, then built-ins; and saved prompts as one-click shortcuts. */
+function AgentsAndShortcuts({ pinned, onPin, onPrompt, onManagePrompts }: { pinned: string[]; onPin: (id: string) => void; onPrompt: (text: string) => void; onManagePrompts: () => void }) {
+  const agents = useAgents();
+  const { prompts } = useSavedPrompts();
+  if (agents.status === "loading") return <Rows n={3} />;
+  const list =
+    agents.status === "ready"
+      ? (() => {
+          const all = [...agents.custom, ...agents.builtins];
+          const pins = pinned.map((id) => all.find((a) => a.id === id)).filter((a): a is NonNullable<typeof a> => !!a);
+          return [...pins, ...all.filter((a) => !pinned.includes(a.id))].slice(0, 4);
+        })()
+      : [];
+  return (
+    <>
+      {agents.status === "error" ? (
+        <p className="text-[13px] text-s-ink-3">Agents couldn’t load: {agents.message}</p>
+      ) : (
+        <ul className="-mx-1.5 flex flex-col">
+          {list.map((a) => {
+            const isPinned = pinned.includes(a.id);
+            return (
+              <li key={a.id} className="group flex items-center gap-1 rounded-xl transition hover:bg-s-hover">
+                <Link href={`/agents/${a.id}`} className="flex min-w-0 flex-1 items-center gap-3 px-1.5 py-2">
+                  <AgentAvatar agent={a} size="sm" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-medium">{a.name}</span>
+                    <span className="block truncate text-[12.5px] text-s-ink-3">
+                      {a.kind === "custom" ? "Your agent · " : ""}
+                      {a.description}
+                    </span>
+                  </span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => onPin(a.id)}
+                  aria-pressed={isPinned}
+                  aria-label={isPinned ? `Unpin ${a.name}` : `Pin ${a.name} to the top`}
+                  title={isPinned ? "Unpin" : "Pin to the top"}
+                  className={cn(
+                    iconButtonClass("sm"),
+                    "mr-1 h-8 w-8 shrink-0",
+                    isPinned ? "text-s-ink" : "opacity-0 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
+                  )}
+                >
+                  {isPinned ? <PinOff /> : <Pin />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <div className="mt-3 border-t border-s-line pt-3">
+        <div className="mb-1.5 flex items-center gap-2">
+          <h3 className="text-[12px] font-medium text-s-ink-3">Saved prompts</h3>
+          <button type="button" onClick={onManagePrompts} className="ml-auto text-[12px] text-s-ink-3 underline-offset-2 hover:text-s-ink hover:underline">
+            {prompts.length ? "Manage" : "Add one"}
+          </button>
+        </div>
+        {prompts.length === 0 ? (
+          <p className="text-[12.5px] leading-relaxed text-s-ink-3">Save a prompt you use often (from a message’s menu, or here) to start it again in one click.</p>
+        ) : (
+          <ul className="flex flex-wrap gap-1.5">
+            {prompts.slice(0, 4).map((p) => (
+              <li key={p.id} className="min-w-0 max-w-full">
+                <button
+                  type="button"
+                  onClick={() => onPrompt(p.text)}
+                  title={p.text}
+                  className="inline-flex h-8 max-w-[260px] items-center rounded-full border border-s-line px-3 text-[12.5px] text-s-ink-2 transition hover:border-s-line-strong hover:text-s-ink"
+                >
+                  <span className="truncate">{p.text}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </>
+  );
+}
 
 function Section({
   id,

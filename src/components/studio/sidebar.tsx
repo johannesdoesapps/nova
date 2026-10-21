@@ -2,11 +2,11 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
-import { Archive, Bookmark, ChevronDown, Code2, Ellipsis, FolderPlus, LogIn, LogOut, Monitor, Moon, Pencil, Search, Settings2, SquarePen, Sun, Trash2, X } from "lucide-react";
+import { Archive, Bookmark, ChevronDown, Code2, CreditCard, Ellipsis, LayoutGrid, FolderPlus, LogIn, LogOut, Monitor, Moon, Pencil, Search, Settings2, SquarePen, Sun, Trash2, X } from "lucide-react";
 import type { AppUser } from "@/components/layout/app-context";
 import { cn } from "@/lib/utils";
 import { groupByDate, type ConvSummary } from "./history";
-import { sidebarFor, type NavEntry, type Section } from "./nav";
+import { activeEntryFor, sidebarFor, type NavEntry, type Section } from "./nav";
 import type { ThemePref } from "./prefs";
 import { IconButton, iconButtonClass, Kbd, Menu, MenuItem, MenuSeparator, OrbisMark, Segmented } from "./ui";
 
@@ -81,9 +81,10 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
   const inCode = p.section === "code";
   // Chat and Code are switched in the top bar, not here.
   const entries = sidebarFor(!!p.user?.isAdmin);
+  const current = activeEntryFor(p.section);
   // More: remembered between visits (read after hydration), and always open while on one of its pages.
   const savedMore = useSyncExternalStore(subscribeMore, readMore, () => false);
-  const inMore = entries.some((e) => e.group === "tools" && e.id === p.section);
+  const inMore = entries.some((e) => e.group === "tools" && e.id === current);
   const [closedOn, setClosedOn] = useState<Section | null>(null);
   const showMore = savedMore || (inMore && closedOn !== p.section);
   const setMoreOpen = (open: boolean) => {
@@ -193,19 +194,20 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
             {entries
               .filter((e) => e.group === "main")
               .map((e) => (
-                <NavLink key={e.id} entry={e} rail={rail} active={p.section === e.id} onClick={p.onCloseMobile} />
+                <NavLink key={e.id} entry={e} rail={rail} active={current === e.id} onClick={p.onCloseMobile} />
               ))}
-            {/* The other tools wait behind More (always open on the page of one of them; icons stay in the narrow rail). */}
+            {/* Tools wait behind one toggle (always open on the page of one of them; icons stay in the narrow rail). */}
             <li className={cn(rail && "md:hidden")}>
               <button
                 type="button"
                 onClick={() => setMoreOpen(!showMore)}
                 aria-expanded={showMore}
                 aria-controls="nav-more"
+                title="Arena, Council, Connectors, Discover and saved prompts"
                 className="flex h-9 w-full items-center gap-3 rounded-xl px-3 text-[13.5px] text-s-ink-2 transition duration-200 hover:bg-s-hover hover:text-s-ink [&_svg]:h-[17px] [&_svg]:w-[17px] [&_svg]:shrink-0"
               >
-                <Ellipsis />
-                <span className="flex-1 text-left">More</span>
+                <LayoutGrid />
+                <span className="flex-1 text-left">Tools</span>
                 <ChevronDown className={cn("transition", showMore && "rotate-180")} aria-hidden />
               </button>
             </li>
@@ -214,7 +216,7 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
             {entries
               .filter((e) => e.group === "tools")
               .map((e) => (
-                <NavLink key={e.id} entry={e} rail={rail} active={p.section === e.id} onClick={p.onCloseMobile} />
+                <NavLink key={e.id} entry={e} rail={rail} active={current === e.id} onClick={p.onCloseMobile} />
               ))}
             <NavItem rail={rail} icon={<Bookmark />} label="Saved prompts" onClick={p.onOpenPrompts} />
           </ul>
@@ -225,7 +227,7 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
                 {entries
                   .filter((e) => e.group === "admin")
                   .map((e) => (
-                    <NavLink key={e.id} entry={e} rail={rail} active={p.section === e.id} onClick={p.onCloseMobile} />
+                    <NavLink key={e.id} entry={e} rail={rail} active={current === e.id} onClick={p.onCloseMobile} />
                   ))}
               </ul>
             </div>
@@ -544,9 +546,13 @@ function ProfileMenu(p: Omit<SidebarProps, "searchRef"> & { rail: boolean }) {
             <MenuSeparator />
             <MenuItem
               icon={<Settings2 />}
+              hint="Preferences, usage and your account"
               onClick={p.onOpenSettings}
             >
               Settings
+            </MenuItem>
+            <MenuItem icon={<CreditCard />} hint="Compare plans or upgrade" onClick={() => router.push("/pricing")}>
+              Plans and pricing
             </MenuItem>
             {p.accountsEnabled && <MenuSeparator />}
             {p.accountsEnabled &&
