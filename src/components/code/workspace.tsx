@@ -44,7 +44,7 @@ import type { RunView } from "@/lib/code/agent/types";
 import { EXAMPLE_PROJECT, validProjectPath, type FileChange, type ProjectSummary } from "@/lib/code/projects";
 import { cn } from "@/lib/utils";
 import { AgentPanel, SessionsList } from "./agent-panel";
-import { api, CodeApiError, plainText, post, takeBuildRequest, type AiResult, type Allowance, type JobRead, type ProjectData, type Session } from "./api";
+import { api, CodeApiError, plainText, post, takeBuildRequest, type AiResult, type BuildRequest, type Allowance, type JobRead, type ProjectData, type Session } from "./api";
 import { ChangesPanel } from "./changes-panel";
 import { MemoryPanel } from "./memory-panel";
 import { FileDiff } from "./diff-view";
@@ -234,7 +234,7 @@ export function CodeWorkspace({ id }: { id: string }) {
   const [draftRequest, setDraftRequest] = useState<string | null>(null);
   const initialRequest = draftRequest ?? (params.get("task") === "example" ? EXAMPLE_PROJECT.task : undefined);
   // "Build website": the request comes from the start screen (kept for this page, so later URL changes don't matter).
-  const [buildRequest] = useState<string | undefined>(() => (params.get("build") === "1" ? takeBuildRequest(id) : undefined));
+  const [buildRequest] = useState<BuildRequest | undefined>(() => (params.get("build") === "1" ? takeBuildRequest(id) : undefined));
   // The live site: whether it answers on the preview port (asked from the computer, not assumed).
   const [site, setSite] = useState<{ http: number; running: boolean; exitCode: number | null } | null>(null);
   const [siteWaiting, setSiteWaiting] = useState(false);
@@ -315,7 +315,7 @@ export function CodeWorkspace({ id }: { id: string }) {
   const content = (p: string) => drafts[p] ?? saved[p] ?? "";
   const paths = useMemo(() => [...new Set([...Object.keys(saved), ...Object.keys(drafts)])].sort(), [saved, drafts]);
   // A website project: the agent shows website examples and the preview opens on its own.
-  const web = useMemo(() => isWebTask(buildRequest ?? "", Object.entries(saved).map(([path, content]) => ({ path, content })), project?.template ?? ""), [buildRequest, saved, project?.template]);
+  const web = useMemo(() => isWebTask(buildRequest?.request ?? "", Object.entries(saved).map(([path, content]) => ({ path, content })), project?.template ?? ""), [buildRequest, saved, project?.template]);
   const tree = useMemo(() => buildTree(paths), [paths]);
 
   // ------------------------------------------------------------ saving
@@ -993,7 +993,8 @@ export function CodeWorkspace({ id }: { id: string }) {
         showPreview();
         void checkSite();
       }}
-      autoStart={buildRequest}
+      autoStart={buildRequest?.request}
+      autoAttachments={buildRequest?.attachments}
       autoComputer={!!buildRequest}
     />
   );

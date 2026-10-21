@@ -2,13 +2,15 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, ChevronDown, Code2, FlaskConical, FolderGit2, Globe, Loader2, Plus, Server, ShieldCheck, Sparkles, Terminal, Trash2 } from "lucide-react";
+import { ArrowRight, ChevronDown, Code2, FlaskConical, FolderGit2, Globe, Plus, Server, ShieldCheck, Terminal, Trash2 } from "lucide-react";
 import { useApp } from "@/components/layout/app-context";
 import { forgetPlace } from "@/components/studio/mode-switch";
 import { StudioHeader } from "@/components/studio/frame";
 import { EXAMPLE_PROJECT, TEMPLATES, TEMPLATE_IDS, type ProjectSummary, type TemplateId } from "@/lib/code/projects";
 import { cn } from "@/lib/utils";
 import { api, CodeApiError, post, putBuildRequest, type Allowance } from "./api";
+import { useAttachments } from "./attachments";
+import { PromptBar } from "./prompt-bar";
 
 /**
  * Code's start screen: what Code does in one sentence, the three steps, the
@@ -104,6 +106,10 @@ export function CodeProjectsView() {
   const [site, setSite] = useState("");
   const [siteTarget, setSiteTarget] = useState<string>("new");
   const siteBox = useRef<HTMLTextAreaElement>(null);
+  // Files and images for the build, uploaded once its project exists.
+  const attachments = useAttachments(null);
+  /** The project a failed "Build website" already made, so trying again doesn't make another. */
+  const created = useRef<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -145,15 +151,17 @@ export function CodeProjectsView() {
   const buildSite = async () => {
     const text = site.trim();
     if (!text) return siteBox.current?.focus();
+    if (attachments.busy || busy || (siteTarget === "new" && full)) return;
     setBusy("build");
     setError(null);
     try {
       let pid = siteTarget;
-      if (pid === "new") pid = (await post<{ project: ProjectSummary }>("/api/code/projects", { name: siteName(text), template: "website" })).project.id;
-      putBuildRequest(pid, text);
+      if (pid === "new") pid = created.current ??= (await post<{ project: ProjectSummary }>("/api/code/projects", { name: siteName(text), template: "website" })).project.id;
+      const ids = await attachments.uploadTo(pid);
+      putBuildRequest(pid, text, ids);
       router.push(`/code/${pid}?build=1`);
     } catch (e) {
-      setError(e as CodeApiError);
+      setError(e instanceof CodeApiError ? e : new CodeApiError((e as Error).message, 0, null, null));
       setBusy(null);
     }
   };
@@ -283,60 +291,50 @@ export function CodeProjectsView() {
           )}
 
           <section className="mt-8" aria-labelledby="build-h">
-            <form
-              className="glass-strong glass-edge rounded-[24px] p-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void buildSite();
-              }}
-            >
+            <div className="glass-strong glass-edge relative rounded-[24px] p-4">
               <h2 id="build-h" className="flex items-center gap-2 text-[15px] font-medium text-s-ink">
                 <Globe className="h-4 w-4 text-s-ink-2" aria-hidden /> Build a website
               </h2>
-              <label htmlFor="build-site" className="sr-only">
-                Describe the website you want to build
-              </label>
-              <textarea
-                id="build-site"
-                ref={siteBox}
-                value={site}
-                onChange={(e) => setSite(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                    e.preventDefault();
-                    void buildSite();
+              <div className="mt-3">
+                <PromptBar
+                  id="build-site"
+                  label="Describe the website you want to build"
+                  inputRef={siteBox}
+                  value={site}
+                  onChange={setSite}
+                  onSubmit={() => void buildSite()}
+                  sending={busy === "build"}
+                  attachments={attachments}
+                  placeholder="Describe the website you want to build — Enter to start"
+                  working={busy === "build"}
+                  footerLeft={
+                    <>
+                      <label htmlFor="build-target" className="sr-only">
+                        Project
+                      </label>
+                      <select
+                        id="build-target"
+                        value={siteTarget}
+                        onChange={(e) => setSiteTarget(e.target.value)}
+                        className="h-8 max-w-[230px] truncate rounded-full bg-transparent px-2 text-[12.5px] text-s-ink-2 hover:bg-s-hover hover:text-s-ink"
+                      >
+                        <option value="new">New website project</option>
+                        {(data?.projects ?? []).map((p) => (
+                          <option key={p.id} value={p.id}>
+                            Change “{p.name}”
+                          </option>
+                        ))}
+                      </select>
+                    </>
                   }
-                }}
-                rows={3}
-                maxLength={8000}
-                placeholder="Describe the website you want to build…"
-                className="mt-2 block w-full resize-none bg-transparent px-1 py-1 text-[15px] leading-relaxed outline-none placeholder:text-s-ink-3"
-              />
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <label htmlFor="build-target" className="sr-only">
-                  Project
-                </label>
-                <select
-                  id="build-target"
-                  value={siteTarget}
-                  onChange={(e) => setSiteTarget(e.target.value)}
-                  className="h-9 max-w-[260px] rounded-full border border-s-line bg-transparent px-3 text-[13px] text-s-ink-2"
-                >
-                  <option value="new">New website project</option>
-                  {(data?.projects ?? []).map((p) => (
-                    <option key={p.id} value={p.id}>
-                      Change “{p.name}”
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="submit"
-                  disabled={!!busy || (siteTarget === "new" && full)}
-                  className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-full bg-s-accent px-4 text-[13.5px] font-medium text-s-accent-ink transition hover:brightness-110 disabled:opacity-40"
-                >
-                  {busy === "build" ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Sparkles className="h-3.5 w-3.5" aria-hidden />}
-                  {busy === "build" ? "Setting up…" : "Build website"}
-                </button>
+                  footerRight={
+                    siteTarget === "new" && full ? (
+                      <span className="text-s-danger">Project limit reached</span>
+                    ) : (
+                      <span className="hidden sm:inline">{busy === "build" ? "Setting up…" : "Builds on its own computer"}</span>
+                    )
+                  }
+                />
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {SITE_EXAMPLES.map((x) => (
@@ -358,7 +356,7 @@ export function CodeProjectsView() {
                 The agent writes the site&apos;s files, starts it on the project&apos;s private computer (this uses workspace minutes), checks it in a real browser at desktop and phone sizes, and
                 fixes what it finds. You see the live preview and can ask for changes; every change can be undone.
               </p>
-            </form>
+            </div>
           </section>
 
           {recent.length > 0 && (

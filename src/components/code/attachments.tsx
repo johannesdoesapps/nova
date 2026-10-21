@@ -87,11 +87,17 @@ function upload(url: string, body: unknown, onProgress: (p: number) => void): Pr
   });
 }
 
-/** Attachments for the next task: choosing, checking, reading, uploading and removing them. */
-export function useAttachments(projectId: string) {
+/**
+ * Attachments for the next task: choosing, checking, reading, uploading and
+ * removing them. Without a project yet (the start screen, where Build makes
+ * one), files are read and checked at once and uploaded by `uploadTo`.
+ */
+export function useAttachments(projectId: string | null) {
   const [items, setItems] = useState<DraftAttachment[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const live = useRef(items);
+  /** Read files waiting for a project (no project yet), by key. */
+  const held = useRef(new Map<string, unknown>());
   useEffect(() => {
     live.current = items;
   }, [items]);
@@ -120,6 +126,12 @@ export function useAttachments(projectId: string) {
           if (looksBinary(content)) throw new Error("This isn't a text file.");
           body = { kind: "text", name, content };
           patch(key, { status: "uploading" });
+        }
+        if (!projectId) {
+          if (!live.current.some((i) => i.key === key)) return;
+          held.current.set(key, body);
+          patch(key, { status: "ready" });
+          return;
         }
         const meta = await upload(`/api/code/projects/${projectId}/attachments`, body, (p) => patch(key, { progress: p }));
         // Removed while uploading: remove it on the server too.
@@ -168,6 +180,7 @@ export function useAttachments(projectId: string) {
       if (!item) return;
       if (item.preview) URL.revokeObjectURL(item.preview);
       setItems((list) => list.filter((i) => i.key !== key));
+      held.current.delete(key);
       if (item.id) void fetch(`/api/code/projects/${projectId}/attachments/${item.id}`, { method: "DELETE" });
     },
     [projectId],
@@ -176,19 +189,50 @@ export function useAttachments(projectId: string) {
   /** After the task starts: the attachments now belong to it, so they're only cleared here. */
   const reset = useCallback(() => {
     live.current.forEach((i) => i.preview && URL.revokeObjectURL(i.preview));
+    held.current.clear();
     setItems([]);
     setNotice(null);
   }, []);
 
+  /**
+   * Upload the files read before there was a project to `pid`, and return all
+   * the uploaded ids. Throws when any upload fails (that file shows the error);
+   * files already uploaded are kept, so trying again sends only the rest.
+   */
+  const uploadTo = useCallback(
+    async (pid: string): Promise<string[]> => {
+      const waiting = live.current.filter((i) => i.status === "ready" && !i.id && held.current.has(i.key));
+      const ids = live.current.filter((i) => i.status === "ready" && i.id).map((i) => i.id!);
+      const failed: string[] = [];
+      await Promise.all(
+        waiting.map(async (i) => {
+          patch(i.key, { status: "uploading", progress: 0 });
+          try {
+            const meta = await upload(`/api/code/projects/${pid}/attachments`, held.current.get(i.key), (p) => patch(i.key, { progress: p }));
+            held.current.delete(i.key);
+            patch(i.key, { status: "ready", id: meta.id, progress: 1, size: meta.size });
+            ids.push(meta.id);
+          } catch (e) {
+            failed.push(baseName(i.name));
+            patch(i.key, { status: "error", error: (e as Error).message });
+          }
+        }),
+      );
+      if (failed.length) throw new Error(`Couldn't attach ${failed.join(", ")}. Remove ${failed.length === 1 ? "it" : "them"} or try again.`);
+      return ids;
+    },
+    [patch],
+  );
+
   const busy = items.some((i) => i.status === "reading" || i.status === "uploading");
   const ids = items.filter((i) => i.status === "ready" && i.id).map((i) => i.id!);
-  return { items, ids, busy, notice, add, remove, reset, dismissNotice: () => setNotice(null) };
+  return { items, ids, busy, notice, add, remove, reset, uploadTo, dismissNotice: () => setNotice(null) };
 }
 
 export type Attachments = ReturnType<typeof useAttachments>;
 
 /** The + button at the composer's bottom left: add files, images, or a folder. */
-export function PlusMenu({ attachments, disabled }: { attachments: Attachments; disabled?: boolean }) {
+export function PlusMenu({ attachments, disabled, bare }: { attachments: Attachments; disabled?: boolean; bare?: boolean }) {
   const files = useRef<HTMLInputElement>(null);
   const images = useRef<HTMLInputElement>(null);
   const folder = useRef<HTMLInputElement>(null);
@@ -205,7 +249,7 @@ export function PlusMenu({ attachments, disabled }: { attachments: Attachments; 
         disabled={disabled}
         buttonLabel="Add files, images or a folder"
         buttonTitle="Add files, images or a folder"
-        buttonClassName={cn(iconButtonClass(), "h-9 w-9 border border-s-line")}
+        buttonClassName={cn(iconButtonClass(), "h-9 w-9", !bare && "border border-s-line")}
         button={<Plus />}
       >
         <MenuItem icon={<Paperclip />} hint="Source, text and config files" onClick={() => files.current?.click()}>

@@ -367,7 +367,7 @@ function speechCtor(): RecognitionCtor | undefined {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition;
 }
 
-function useSpeech(onText: (t: string) => void) {
+export function useSpeech(onText: (t: string) => void) {
   const supported = useSyncExternalStore(noSubscribe, () => !!speechCtor(), () => false);
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);

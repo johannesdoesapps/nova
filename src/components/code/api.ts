@@ -36,7 +36,7 @@ export async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-export const post = <T,>(url: string, body: unknown) => api<T>(url, { method: "POST", body: JSON.stringify(body) });
+export const post = <T>(url: string, body: unknown) => api<T>(url, { method: "POST", body: JSON.stringify(body) });
 
 export interface Allowance {
   used: number;
@@ -72,7 +72,10 @@ export interface AiResult {
 
 /** Terminal output without colour codes and carriage-return redraws. */
 export function plainText(s: string): string {
-  return s.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "").replace(/\u001b\][^\u0007]*\u0007/g, "").replace(/[^\n]*\r(?!\n)/g, "");
+  return s
+    .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "")
+    .replace(/\u001b\][^\u0007]*\u0007/g, "")
+    .replace(/[^\n]*\r(?!\n)/g, "");
 }
 
 export function languageOf(path: string): "javascript" | "typescript" | "jsx" | "tsx" | "python" | "html" | "css" | "json" | "markdown" | null {
@@ -91,21 +94,31 @@ export function languageOf(path: string): "javascript" | "typescript" | "jsx" | 
 
 const BUILD_KEY = (projectId: string) => `orbis.code.build.${projectId}`;
 
+/** A "Build website" request handed from the start screen to the project's page, with the attachments uploaded for it. */
+export interface BuildRequest {
+  request: string;
+  attachments: string[];
+}
+
 /** Hand a "Build website" request from the start screen to the project's page (kept out of the URL: it can be long). */
-export function putBuildRequest(projectId: string, request: string): void {
+export function putBuildRequest(projectId: string, request: string, attachments: string[] = []): void {
   try {
-    sessionStorage.setItem(BUILD_KEY(projectId), request);
+    sessionStorage.setItem(BUILD_KEY(projectId), JSON.stringify({ request, attachments } satisfies BuildRequest));
   } catch {
     /* the page then shows the box with nothing filled in */
   }
 }
 
 /** The request handed over for this project, once (it's removed when read). */
-export function takeBuildRequest(projectId: string): string | undefined {
+export function takeBuildRequest(projectId: string): BuildRequest | undefined {
   try {
     const v = sessionStorage.getItem(BUILD_KEY(projectId));
     sessionStorage.removeItem(BUILD_KEY(projectId));
-    return v?.trim() || undefined;
+    if (!v) return undefined;
+    const parsed = JSON.parse(v) as Partial<BuildRequest>;
+    const request = typeof parsed.request === "string" ? parsed.request.trim() : "";
+    const attachments = Array.isArray(parsed.attachments) ? parsed.attachments.filter((a): a is string => typeof a === "string").slice(0, 20) : [];
+    return request ? { request, attachments } : undefined;
   } catch {
     return undefined;
   }

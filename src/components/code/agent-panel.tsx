@@ -2,11 +2,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
-  ArrowUp,
   Bot,
   Check,
   ChevronDown,
   ChevronRight,
+  Clock,
   CircleHelp,
   Eye,
   FileCode2,
@@ -31,11 +31,13 @@ import {
 } from "lucide-react";
 import { useCatalog } from "@/components/common/model-picker";
 import { ModelSelector } from "@/components/studio/model-selector";
+import { Menu, MenuItem } from "@/components/studio/ui";
 import { VERIFICATION_LABEL } from "@/lib/code/agent/report";
 import { ENDED_STATUSES, STATUS_LABEL, WORKING_STATUSES, type AgentEvent, type Decision, type LimitReason, type RunOptions, type RunReport, type RunView } from "@/lib/code/agent/types";
 import { formatBytes, type AttachmentMeta } from "@/lib/code/attachments";
 import { cn } from "@/lib/utils";
-import { AttachmentTray, Dragging, dropAndPaste, PlusMenu, useAttachments } from "./attachments";
+import { useAttachments } from "./attachments";
+import { PromptBar } from "./prompt-bar";
 import { api, CodeApiError, post } from "./api";
 import { FileDiff } from "./diff-view";
 
@@ -266,6 +268,8 @@ export interface AgentPanelProps {
   onOpenPreview?: () => void;
   /** Start this request straight away ("Build website"), working on its own. */
   autoStart?: string;
+  /** Attachments already uploaded for `autoStart`. */
+  autoAttachments?: string[];
   /** Start the project's computer without asking when the run needs it (the user asked for a build). */
   autoComputer?: boolean;
 }
@@ -286,6 +290,7 @@ export function AgentPanel({
   onPreview,
   onOpenPreview,
   autoStart,
+  autoAttachments,
   autoComputer,
 }: AgentPanelProps) {
   const [run, setRun] = useState<RunView | null>(null);
@@ -296,6 +301,16 @@ export function AgentPanel({
   const [answering, setAnswering] = useState(false);
   const [error, setError] = useState<CodeApiError | null>(null);
   const [starting, setStarting] = useState(false);
+  // The prompt bar: what to ask, how the agent may work, which model, and attachments.
+  const attachments = useAttachments(projectId);
+  const catalog = useCatalog();
+  const [text, setText] = useState(initialRequest ?? "");
+  const [mode, setModeState] = useState<ModeId>(readMode);
+  const [modelId, setModelId] = useState("auto:coding");
+  const box = useRef<HTMLTextAreaElement>(null);
+  /** A message typed while the agent works, sent when it finishes (and the run it was typed for). */
+  const [queued, setQueued] = useState<string | null>(null);
+  const queuedFor = useRef<string | null>(null);
 
   const alive = useRef(true);
   const lastSeq = useRef(0);
@@ -468,7 +483,7 @@ export function AgentPanel({
   useEffect(() => {
     if (!loaded || run || !autoStart || autoStarted.current) return;
     autoStarted.current = true;
-    void start(autoStart, "auto", "auto:coding");
+    void start(autoStart, "auto", "auto:coding", autoAttachments ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once when the panel is ready
   }, [loaded, run, autoStart]);
 
@@ -503,7 +518,63 @@ export function AgentPanel({
   const busy = driving || answering || !!run?.busy;
   const blocks = useMemo(() => groupStages(events), [events]);
   const readOnly = !!run && (!!run.options.readOnly || (run.options.approvePlans && !run.plan?.approved && !ended));
-  const mode = run ? modeOf(run.options) : null;
+  const runMode = run ? modeOf(run.options) : null;
+  const inProgress = !!run && !ended;
+
+  const setMode = (m: ModeId) => {
+    setModeState(m);
+    try {
+      localStorage.setItem(MODE_KEY, m);
+    } catch {
+      /* the choice just isn't remembered */
+    }
+  };
+
+  /** Start a task (a new one, or a follow-up: the agent already knows the project and what was just done). */
+  const send = async (request: string, m: ModeId = mode): Promise<boolean> => {
+    if (attachments.busy) return false;
+    const ok = await start(request, m, modelId, attachments.ids);
+    if (ok) {
+      attachments.reset();
+      setText("");
+    }
+    return ok;
+  };
+
+  const submit = (t: string) => {
+    if (inProgress) {
+      // While the agent works, Enter queues the message for when it finishes.
+      queuedFor.current = run!.id;
+      setQueued((q) => (q ? `${q}\n\n${t}` : t));
+      setText("");
+      return;
+    }
+    void send(t);
+  };
+
+  const fill = (task: string) => {
+    setText(task);
+    requestAnimationFrame(() => {
+      box.current?.focus();
+      box.current?.setSelectionRange(task.length, task.length);
+    });
+  };
+
+  // Send the queued message once the run it was typed for finishes; if it stopped or failed, or another
+  // session was opened, put it back in the box instead. (Deferred a tick: state changes after this render.)
+  useEffect(() => {
+    if (!queued) return;
+    const other = !run || run.id !== queuedFor.current;
+    if (!other && (!ended || busy || starting)) return;
+    const restore = () => setText((t) => (t.trim() ? t : queued));
+    const timer = setTimeout(() => {
+      setQueued(null);
+      if (other || run.status !== "completed") return restore();
+      void send(queued).then((ok) => !ok && restore());
+    }, 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reacts to the run finishing
+  }, [queued, run?.id, run?.status, ended, busy, starting]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -511,7 +582,7 @@ export function AgentPanel({
         <div className="mx-auto w-full max-w-[780px] px-4 pb-6 pt-4 sm:px-6">
           {!loaded && <div className="s-skeleton h-24 w-full rounded-2xl" />}
 
-          {loaded && !run && !(autoStart && !error) && <Composer projectId={projectId} initialRequest={initialRequest} starting={starting} onStart={start} web={web} />}
+          {loaded && !run && !(autoStart && !error) && <StartScreen web={web} starting={starting} onExample={(e) => (e.start ? void send(e.task, e.mode ?? mode) : fill(e.task))} />}
           {loaded && !run && autoStart && !error && (
             <p className="flex items-center gap-2 px-1 pt-10 text-[14px] text-s-ink-2">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Starting the build…
@@ -541,7 +612,7 @@ export function AgentPanel({
                       <ShieldCheck className="h-3 w-3" aria-hidden /> Read-only
                     </span>
                   )}
-                  {mode && <span className="text-[11.5px] text-s-ink-3">{mode.label}</span>}
+                  {runMode && <span className="text-[11.5px] text-s-ink-3">{runMode.label}</span>}
                   {!ended && (
                     <button
                       type="button"
@@ -604,7 +675,7 @@ export function AgentPanel({
                   onOpenPreview={onOpenPreview}
                 />
               )}
-              {ended && <FollowUp projectId={projectId} run={run} web={web} starting={starting} onStart={start} />}
+              {ended && web && <WebFollowUps starting={starting} onPick={(c) => (c.start ? void send(c.task) : fill(c.task))} />}
               {ended && (
                 <button
                   type="button"
@@ -645,124 +716,66 @@ export function AgentPanel({
           <div ref={feedEnd} />
         </div>
       </div>
+
+      <div className="shrink-0 px-3 pb-2 pt-1 sm:px-6">
+        <div className="mx-auto w-full max-w-[780px]">
+          {queued && (
+            <div className="mb-2 flex items-start gap-2 rounded-xl border border-dashed border-s-line px-3 py-2 text-[12.5px] text-s-ink-2" role="status">
+              <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-s-ink-3" aria-hidden />
+              <p className="min-w-0 flex-1">
+                <span className="text-s-ink-3">Queued — sends when the agent finishes:</span> <span className="line-clamp-2 whitespace-pre-wrap text-s-ink">{queued}</span>
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setText((t) => (t.trim() ? `${t}\n\n${queued}` : queued));
+                  setQueued(null);
+                }}
+                className="shrink-0 rounded-full px-2 py-0.5 text-s-ink-3 hover:bg-s-hover hover:text-s-ink"
+              >
+                Edit
+              </button>
+              <button type="button" onClick={() => setQueued(null)} aria-label="Remove the queued message" className="shrink-0 text-s-ink-3 hover:text-s-ink">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+          <PromptBar
+            id="agent-ask"
+            label={run ? "Ask for a follow-up change" : "What would you like to build or fix?"}
+            inputRef={box}
+            value={text}
+            onChange={setText}
+            onSubmit={submit}
+            sending={starting}
+            disabled={!loaded}
+            attachments={attachments}
+            placeholder={inProgress ? "Enter to queue a message for when the agent finishes" : run ? "Ask for a follow-up change — Enter to send" : "Enter to send, Shift+Enter for a new line"}
+            onStop={working ? () => void stop() : undefined}
+            working={busy || starting || working}
+            footerLeft={<ModeMenu mode={mode} onChange={setMode} disabled={starting} />}
+            footerRight={<ModelSelector models={catalog?.models ?? null} value={modelId} onChange={setModelId} auto={catalog?.auto ?? null} className="h-8 px-2 text-[12.5px]" />}
+          />
+        </div>
+      </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------- the task box
 
-type StartFn = (request: string, mode: ModeId, modelId: string, attachments?: string[]) => Promise<boolean>;
-
-function Composer({ projectId, initialRequest, starting, onStart, web }: { projectId: string; initialRequest?: string; starting: boolean; onStart: StartFn; web?: boolean }) {
-  const attachments = useAttachments(projectId);
-  const [dragging, setDragging] = useState(false);
-  const go = async (text: string, m: ModeId, model: string) => {
-    if (attachments.busy) return;
-    if (await onStart(text, m, model, attachments.ids)) attachments.reset();
-  };
-  const catalog = useCatalog();
-  const [request, setRequest] = useState(initialRequest ?? "");
-  const [mode, setModeState] = useState<ModeId>(readMode);
-  const [modelId, setModelId] = useState("auto:coding");
-  const [choosing, setChoosing] = useState(false);
-  const box = useRef<HTMLTextAreaElement>(null);
-  const setMode = (m: ModeId) => {
-    setModeState(m);
-    setChoosing(false);
-    try {
-      localStorage.setItem(MODE_KEY, m);
-    } catch {
-      /* the choice just isn't remembered */
-    }
-  };
-  const current = MODES.find((m) => m.id === mode)!;
-
-  const examples: { label: string; task: string; mode?: ModeId; start: boolean }[] = web ? WEB_EXAMPLES : EXAMPLES;
-  const example = (e: (typeof examples)[number]) => {
-    if (e.start) return void go(e.task, e.mode ?? mode, modelId);
-    setRequest(e.task);
-    requestAnimationFrame(() => {
-      box.current?.focus();
-      box.current?.setSelectionRange(e.task.length, e.task.length);
-    });
-  };
-
+function StartScreen({ web, starting, onExample }: { web?: boolean; starting: boolean; onExample: (e: (typeof EXAMPLES)[number]) => void }) {
+  const examples: (typeof EXAMPLES)[number][] = web ? WEB_EXAMPLES : EXAMPLES;
   return (
     <div className="s-in pt-[min(8vh,64px)]">
       <h2 className="text-center font-serif text-[clamp(28px,4vw,38px)] leading-[1.1]">{web ? "What should change on your site?" : "What would you like to build or fix?"}</h2>
       <p className="mx-auto mt-2 max-w-[560px] text-center text-[14px] leading-relaxed text-s-ink-3">
         {web
-          ? "Describe it in plain English. The agent edits the site, starts the preview, checks it in a real browser at desktop and phone sizes, and shows you what changed."
-          : "Describe it in plain English. The agent explores the project, makes the changes, runs the checks and shows you what changed."}
+          ? "Describe it in plain English below. The agent edits the site, starts the preview, checks it in a real browser at desktop and phone sizes, and shows you what changed."
+          : "Describe it in plain English below. The agent explores the project, makes the changes, runs the checks and shows you what changed."}
       </p>
-      <form
-        className="glass-strong glass-edge relative mt-6 rounded-[24px] p-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void go(request, mode, modelId);
-        }}
-        {...dropAndPaste(attachments, setDragging)}
-      >
-        <Dragging show={dragging} />
-        <AttachmentTray attachments={attachments} />
-        <label htmlFor="agent-ask" className="sr-only">
-          What would you like to build or fix?
-        </label>
-        <textarea
-          id="agent-ask"
-          ref={box}
-          value={request}
-          onChange={(e) => setRequest(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              void go(request, mode, modelId);
-            }
-          }}
-          rows={3}
-          maxLength={8000}
-          placeholder={web ? "Describe the website you want, or the change to make…" : "What would you like to build or fix?"}
-          className="block w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-relaxed outline-none placeholder:text-s-ink-3"
-        />
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <PlusMenu attachments={attachments} disabled={starting} />
-          <button
-            type="button"
-            onClick={() => setChoosing(!choosing)}
-            aria-expanded={choosing}
-            aria-controls="agent-modes"
-            title="What the agent may do"
-            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-s-line px-3 text-[12.5px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink"
-          >
-            <ShieldCheck className="h-3.5 w-3.5" aria-hidden /> {current.label} <ChevronDown className={cn("h-3.5 w-3.5 transition", choosing && "rotate-180")} aria-hidden />
-          </button>
-          <ModelSelector models={catalog?.models ?? null} value={modelId} onChange={setModelId} auto={catalog?.auto ?? null} />
-          <button
-            type="submit"
-            disabled={!request.trim() || starting || attachments.busy}
-            title={attachments.busy ? "Waiting for attachments to finish uploading" : undefined}
-            className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-full bg-s-accent px-4 text-[13px] font-medium text-s-accent-ink transition hover:brightness-110 disabled:opacity-40"
-          >
-            {starting ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <ArrowUp className="h-3.5 w-3.5" aria-hidden />} {starting ? "Starting…" : "Start"}
-          </button>
-        </div>
-        {choosing && (
-          <fieldset id="agent-modes" className="mt-3 space-y-1.5 border-t border-s-line pt-3">
-            <legend className="sr-only">What the agent may do</legend>
-            {MODES.map((m) => (
-              <label key={m.id} className={cn("flex cursor-pointer gap-3 rounded-xl border p-2.5", mode === m.id ? "border-s-line-strong bg-s-hover" : "border-transparent hover:bg-s-hover/60")}>
-                <input type="radio" name="agent-mode" value={m.id} checked={mode === m.id} onChange={() => setMode(m.id)} className="mt-1 accent-[var(--s-accent)]" />
-                <span>
-                  <span className="text-[13.5px] font-medium text-s-ink">{m.label}</span> <span className="text-[12px] text-s-ink-3">· {m.short}</span>
-                  <span className="mt-0.5 block text-[12.5px] leading-snug text-s-ink-2">{m.detail}</span>
-                </span>
-              </label>
-            ))}
-          </fieldset>
-        )}
-      </form>
 
-      <div className="mt-4">
+      <div className="mt-6">
         <p className="text-[12px] font-medium uppercase tracking-[0.08em] text-s-ink-3">Try</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {examples.map((e) => (
@@ -770,7 +783,7 @@ function Composer({ projectId, initialRequest, starting, onStart, web }: { proje
               key={e.label}
               type="button"
               disabled={starting}
-              onClick={() => example(e)}
+              onClick={() => onExample(e)}
               title={e.start ? `Starts: “${e.task}”${e.mode === "read" ? " (read-only)" : ""}` : "Fills in the box; add the details"}
               className="inline-flex items-center gap-1.5 rounded-full border border-s-line px-3 py-1.5 text-[13px] text-s-ink-2 transition hover:border-s-line-strong hover:text-s-ink disabled:opacity-40"
             >
@@ -789,6 +802,35 @@ function Composer({ projectId, initialRequest, starting, onStart, web }: { proje
         </span>
       </p>
     </div>
+  );
+}
+
+/** What the agent may do, under the prompt bar. */
+function ModeMenu({ mode, onChange, disabled }: { mode: ModeId; onChange: (m: ModeId) => void; disabled?: boolean }) {
+  const current = MODES.find((m) => m.id === mode)!;
+  return (
+    <Menu
+      label="What the agent may do"
+      side="auto"
+      width={330}
+      disabled={disabled}
+      buttonLabel={`What the agent may do: ${current.label}`}
+      buttonTitle="What the agent may do"
+      buttonClassName="inline-flex h-8 max-w-full items-center gap-1 rounded-full px-2 text-[12.5px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink disabled:opacity-50"
+      button={
+        <>
+          <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span className="truncate">{current.label}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        </>
+      }
+    >
+      {MODES.map((m) => (
+        <MenuItem key={m.id} role="menuitemradio" checked={mode === m.id} right={mode === m.id ? <Check /> : undefined} hint={m.detail} onClick={() => onChange(m.id)} className="[&>span>span:first-child]:whitespace-normal">
+          {m.label} <span className="text-s-ink-3">· {m.short}</span>
+        </MenuItem>
+      ))}
+    </Menu>
   );
 }
 
@@ -1177,75 +1219,24 @@ function ReportCard({
 }
 
 /** Ask for a change to what was just built: a new session on the same project, in the same mode and model, with the earlier work as context. */
-function FollowUp({ projectId, run, web, starting, onStart }: { projectId: string; run: RunView; web?: boolean; starting: boolean; onStart: StartFn }) {
-  const [text, setText] = useState("");
-  const attachments = useAttachments(projectId);
-  const [dragging, setDragging] = useState(false);
-  const mode = modeOf(run.options)?.id ?? "plan";
-  const model = run.options.modelId ?? "auto:coding";
-  const send = async (t: string) => {
-    if (attachments.busy) return;
-    if (await onStart(t, mode === "read" ? "plan" : mode, model, attachments.ids)) attachments.reset();
-  };
-  const chips = web ? WEB_EXAMPLES : [];
+function WebFollowUps({ starting, onPick }: { starting: boolean; onPick: (c: (typeof WEB_EXAMPLES)[number]) => void }) {
   return (
-    <form
-      className="relative rounded-2xl border border-s-line p-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (text.trim()) void send(text.trim());
-      }}
-      {...dropAndPaste(attachments, setDragging)}
-    >
-      <Dragging show={dragging} />
-      <label htmlFor="agent-followup" className="text-[13px] font-medium text-s-ink">
-        {web ? "Ask for changes to the site" : "Ask for a follow-up change"}
-      </label>
-      <p className="text-[12px] text-s-ink-3">The agent already knows this project and what was just done.</p>
-      <div className="mt-2">
-        <AttachmentTray attachments={attachments} />
+    <div>
+      <p className="px-1 text-[12px] text-s-ink-3">Ask for changes below, or try:</p>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {WEB_EXAMPLES.map((c) => (
+          <button
+            key={c.label}
+            type="button"
+            disabled={starting}
+            onClick={() => onPick(c)}
+            className="rounded-full border border-s-line px-2.5 py-1 text-[12px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink disabled:opacity-40"
+          >
+            {c.label}
+          </button>
+        ))}
       </div>
-      <div className="mt-1 flex items-end gap-2">
-        <PlusMenu attachments={attachments} disabled={starting} />
-        <textarea
-          id="agent-followup"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && text.trim()) {
-              e.preventDefault();
-              void send(text.trim());
-            }
-          }}
-          rows={2}
-          maxLength={8000}
-          placeholder={web ? "For example: change the colours to blue and white" : "For example: also add tests for the edge cases"}
-          className="min-h-[44px] flex-1 resize-none rounded-xl border border-s-line bg-transparent px-3 py-2 text-[14px] outline-none placeholder:text-s-ink-3 focus:border-s-line-strong"
-        />
-        <button
-          type="submit"
-          disabled={starting || !text.trim() || attachments.busy}
-          className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-s-accent px-4 text-[13px] font-medium text-s-accent-ink disabled:opacity-40"
-        >
-          {starting ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <ArrowUp className="h-3.5 w-3.5" aria-hidden />} Send
-        </button>
-      </div>
-      {chips.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {chips.map((c) => (
-            <button
-              key={c.label}
-              type="button"
-              disabled={starting}
-              onClick={() => (c.start ? void send(c.task) : setText(c.task))}
-              className="rounded-full border border-s-line px-2.5 py-1 text-[12px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink disabled:opacity-40"
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </form>
+    </div>
   );
 }
 
