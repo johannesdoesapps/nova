@@ -15,6 +15,7 @@ import {
   PanelRightOpen,
   PanelLeft,
   Code2,
+  Download,
   FolderOpen,
   FolderPlus,
   PanelLeftClose,
@@ -1112,6 +1113,7 @@ export function CodeWorkspace({ id }: { id: string }) {
         <ProjectMenu
           name={project?.name ?? "…"}
           projectId={id}
+          unsaved={Object.keys(drafts).length > 0}
           onRename={() => void renameProject()}
           onRunCommand={() => void editRunCommand()}
           onMemory={() => (wide ? setRight("memory") : setPane("memory"))}
@@ -1351,7 +1353,32 @@ function HeaderIcon({ label, pressed, onClick, className, children }: { label: s
 }
 
 /** The project's name in the top bar, with a menu: rename, memory, Run command, and switching to another project. */
-function ProjectMenu({ name, projectId, onRename, onRunCommand, onMemory }: { name: string; projectId: string; onRename: () => void; onRunCommand: () => void; onMemory: () => void }) {
+/** Start a download (the server names the file). */
+function downloadFile(href: string) {
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = "";
+  document.body.append(a);
+  a.click();
+  a.remove();
+}
+
+function ProjectMenu({
+  name,
+  projectId,
+  unsaved,
+  onRename,
+  onRunCommand,
+  onMemory,
+}: {
+  name: string;
+  projectId: string;
+  /** Edits not saved yet: the download has only saved files. */
+  unsaved: boolean;
+  onRename: () => void;
+  onRunCommand: () => void;
+  onMemory: () => void;
+}) {
   const router = useRouter();
   const [others, setOthers] = useState<{ id: string; name: string }[] | null>(null);
   useEffect(() => {
@@ -1385,6 +1412,9 @@ function ProjectMenu({ name, projectId, onRename, onRunCommand, onMemory }: { na
       </MenuItem>
       <MenuItem icon={<Settings2 />} onClick={onRunCommand}>
         Run command…
+      </MenuItem>
+      <MenuItem icon={<Download />} hint={unsaved ? "Saved files only: save your edits first" : "All its files, to open on your computer"} onClick={() => downloadFile(`/api/code/projects/${projectId}/download`)}>
+        Download as .zip
       </MenuItem>
       <MenuSeparator />
       {others && others.length > 0 && <MenuLabel>Switch project</MenuLabel>}

@@ -307,9 +307,11 @@ const prefFields = {
 };
 
 /** What the user chose for their home, kept in their profile's preferences. */
-export const homePrefs = z.object({ hidden: prefFields.hidden.default([]), dismissed: prefFields.dismissed.default([]), focus: prefFields.focus.default(null) });
+/** Shown until the user chooses otherwise: a calm home (My day, Quick tools and Discover are one switch away in Customize). */
+export const DEFAULT_HIDDEN: HomeSectionId[] = ["day", "tools", "discover"];
+export const homePrefs = z.object({ hidden: prefFields.hidden.default(DEFAULT_HIDDEN), dismissed: prefFields.dismissed.default([]), focus: prefFields.focus.default(null) });
 export type HomePrefs = z.infer<typeof homePrefs>;
-export const EMPTY_PREFS: HomePrefs = { hidden: [], dismissed: [], focus: null };
+export const EMPTY_PREFS: HomePrefs = { hidden: DEFAULT_HIDDEN, dismissed: [], focus: null };
 
 /** Stored preferences, tolerating anything malformed (it's ignored rather than breaking the page). */
 export function readPrefs(raw: unknown): HomePrefs {

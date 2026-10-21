@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
-import { Archive, Bookmark, Code2, Ellipsis, FolderPlus, LogIn, LogOut, Monitor, Moon, Pencil, Search, Settings2, SquarePen, Sun, Trash2, X } from "lucide-react";
+import { Archive, Bookmark, ChevronDown, Code2, Ellipsis, FolderPlus, LogIn, LogOut, Monitor, Moon, Pencil, Search, Settings2, SquarePen, Sun, Trash2, X } from "lucide-react";
 import type { AppUser } from "@/components/layout/app-context";
 import { cn } from "@/lib/utils";
 import { groupByDate, type ConvSummary } from "./history";
@@ -81,6 +81,20 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
   const inCode = p.section === "code";
   // Chat and Code are switched in the top bar, not here.
   const entries = sidebarFor(!!p.user?.isAdmin);
+  // More: remembered between visits (read after hydration), and always open while on one of its pages.
+  const savedMore = useSyncExternalStore(subscribeMore, readMore, () => false);
+  const inMore = entries.some((e) => e.group === "tools" && e.id === p.section);
+  const [closedOn, setClosedOn] = useState<Section | null>(null);
+  const showMore = savedMore || (inMore && closedOn !== p.section);
+  const setMoreOpen = (open: boolean) => {
+    setClosedOn(open ? null : p.section);
+    try {
+      localStorage.setItem(MORE_KEY, open ? "1" : "0");
+    } catch {
+      /* not remembered */
+    }
+    moreListeners.forEach((l) => l());
+  };
   const expandAndSearch = () => {
     p.onToggleCollapsed();
     requestAnimationFrame(() => searchRef.current?.focus());
@@ -175,24 +189,48 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
         </div>
 
         <nav aria-label="Main" className={cn("shrink-0 px-3 pb-2", rail && "md:px-0")}>
-          {(["main", "tools", "admin"] as const).map((group) => {
-            const items = entries.filter((e) => e.group === group);
-            if (!items.length) return null;
-            return (
-              <div key={group} className={cn(group !== "main" && "mt-2")}>
-                {group !== "main" && (
-                  <h2 className={cn("px-3 pb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-s-ink-3", rail && "md:sr-only")}>{group === "tools" ? "Tools" : "Admin"}</h2>
-                )}
-                <ul className={cn("flex flex-col gap-0.5", rail && "md:items-center")}>
-                  {items.map((e) => (
+          <ul className={cn("flex flex-col gap-0.5", rail && "md:items-center")}>
+            {entries
+              .filter((e) => e.group === "main")
+              .map((e) => (
+                <NavLink key={e.id} entry={e} rail={rail} active={p.section === e.id} onClick={p.onCloseMobile} />
+              ))}
+            {/* The other tools wait behind More (always open on the page of one of them; icons stay in the narrow rail). */}
+            <li className={cn(rail && "md:hidden")}>
+              <button
+                type="button"
+                onClick={() => setMoreOpen(!showMore)}
+                aria-expanded={showMore}
+                aria-controls="nav-more"
+                className="flex h-9 w-full items-center gap-3 rounded-xl px-3 text-[13.5px] text-s-ink-2 transition duration-200 hover:bg-s-hover hover:text-s-ink [&_svg]:h-[17px] [&_svg]:w-[17px] [&_svg]:shrink-0"
+              >
+                <Ellipsis />
+                <span className="flex-1 text-left">More</span>
+                <ChevronDown className={cn("transition", showMore && "rotate-180")} aria-hidden />
+              </button>
+            </li>
+          </ul>
+          <ul id="nav-more" className={cn("flex flex-col gap-0.5", !showMore && "hidden", rail && "md:flex md:items-center", showMore && !rail && "mt-0.5 border-l border-s-line pl-1.5 ml-3")}>
+            {entries
+              .filter((e) => e.group === "tools")
+              .map((e) => (
+                <NavLink key={e.id} entry={e} rail={rail} active={p.section === e.id} onClick={p.onCloseMobile} />
+              ))}
+            <NavItem rail={rail} icon={<Bookmark />} label="Saved prompts" onClick={p.onOpenPrompts} />
+          </ul>
+          {entries.some((e) => e.group === "admin") && (
+            <div className="mt-2">
+              <h2 className={cn("px-3 pb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-s-ink-3", rail && "md:sr-only")}>Admin</h2>
+              <ul className={cn("flex flex-col gap-0.5", rail && "md:items-center")}>
+                {entries
+                  .filter((e) => e.group === "admin")
+                  .map((e) => (
                     <NavLink key={e.id} entry={e} rail={rail} active={p.section === e.id} onClick={p.onCloseMobile} />
                   ))}
-                </ul>
-              </div>
-            );
-          })}
+              </ul>
+            </div>
+          )}
           <ul className={cn("mt-2 flex flex-col gap-0.5", rail && "md:items-center")}>
-            <NavItem rail={rail} icon={<Bookmark />} label="Saved prompts" onClick={p.onOpenPrompts} />
             <NavItem rail={rail} icon={<Settings2 />} label="Settings" onClick={p.onOpenSettings} />
           </ul>
         </nav>
@@ -249,6 +287,20 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
       </aside>
     </>
   );
+}
+
+const MORE_KEY = "orbis.nav.more";
+const moreListeners = new Set<() => void>();
+function subscribeMore(l: () => void) {
+  moreListeners.add(l);
+  return () => moreListeners.delete(l);
+}
+function readMore(): boolean {
+  try {
+    return localStorage.getItem(MORE_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
 function NavLink({ entry, rail, active, onClick }: { entry: NavEntry; rail: boolean; active: boolean; onClick: () => void }) {

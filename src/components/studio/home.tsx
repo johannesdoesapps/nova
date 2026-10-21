@@ -38,7 +38,6 @@ import { jsonFetch } from "@/hooks/use-ndjson";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import {
   ago,
-  contextLine,
   dailyPicks,
   discoverFor,
   FOCUS_LIMIT,
@@ -216,7 +215,6 @@ export function Home({ name, composer, onAction, notice }: HomeProps) {
   };
 
   const greeting = date ? greetingFor(date.getHours(), name) : null;
-  const ctx = contextLine({ signedIn, conversations: conversations ?? [], projects: projects ?? [], tasks: tasks ?? [] });
   const discover = useMemo(() => (today ? dailyPicks(discoverFor({ search: integrations.search }), today, prefs.dismissed) : []), [today, integrations.search, prefs.dismissed]);
   const resume = pickResume(projects, conversations);
   const loading = signedIn && state.status === "loading";
@@ -228,9 +226,6 @@ export function Home({ name, composer, onAction, notice }: HomeProps) {
           {date?.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}
         </p>
         <h1 className="s-in mt-1.5 min-h-[1.1em] text-balance font-serif text-[clamp(32px,5.6vw,48px)] leading-[1.08] tracking-[-0.01em] [animation-delay:40ms]">{greeting ?? " "}</h1>
-        <p className="s-in mt-2.5 max-w-xl text-balance text-[15px] leading-relaxed text-s-ink-2 [animation-delay:80ms]" aria-live="polite">
-          {loading ? " " : ctx}
-        </p>
         <div className="s-in mt-7 w-full text-left [animation-delay:120ms]">{composer}</div>
         <ul className="s-in mt-4 flex w-full flex-wrap justify-center gap-1.5 [animation-delay:160ms]" aria-label="Suggestions">
           {SUGGESTIONS.map((s) => (

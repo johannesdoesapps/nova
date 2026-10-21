@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { ArrowRight, Bot, CodeXml, FileText, ListChecks, Telescope } from "lucide-react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import type { ChatMode } from "@/lib/ai/modes";
@@ -84,10 +84,11 @@ export function Welcome({
   onDraft?: (prompt: string, mode: ChatMode) => void;
   notice?: ReactNode;
 }) {
-  const [goal, setGoal] = useState<Goal>("ask");
+  // Ideas for a goal appear only once its chip is chosen (and hide when it's chosen again).
+  const [goal, setGoal] = useState<Goal | null>(null);
   // New here: a one-line introduction until the first message is sent.
   const [welcomed, setWelcomed] = useLocalStorage("orbis:welcomed");
-  const g = GOALS.find((x) => x.id === goal)!;
+  const g = GOALS.find((x) => x.id === goal);
   // The hour is only known in the browser; render nothing on the server.
   const hour = useSyncExternalStore(noSubscribe, () => new Date().getHours(), () => null);
   const part = hour === null ? null : hour < 5 || hour >= 18 ? "Good evening" : hour < 12 ? "Good morning" : "Good afternoon";
@@ -100,36 +101,20 @@ export function Welcome({
       <h1 className="s-in mt-2 text-balance text-center font-serif text-[clamp(34px,6vw,50px)] leading-[1.08] tracking-[-0.01em] [animation-delay:80ms]">
         What can I help you explore?
       </h1>
-      <p className="s-in mt-3 max-w-md text-balance text-center text-[15.5px] leading-relaxed text-s-ink-2 [animation-delay:120ms]">
-        {welcomed ? "Research a topic, work with documents, write code or plan a project." : "New here? Orbis gives you several AI models, a coding agent and planning tools in one place. Pick what you want to do first."}
-      </p>
-
-      <div className="s-in mt-9 w-full [animation-delay:160ms]">{composer}</div>
+      <div className="s-in mt-8 w-full [animation-delay:120ms]">{composer}</div>
 
       <div
-        role="tablist"
-        aria-label="What do you want to do?"
-        className="s-in mt-5 flex w-full gap-1.5 overflow-x-auto pb-1 [animation-delay:200ms] sm:flex-wrap sm:justify-center"
-        onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
-          const dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
-          if (!dir) return;
-          e.preventDefault();
-          const i = (GOALS.findIndex((x) => x.id === goal) + dir + GOALS.length) % GOALS.length;
-          setGoal(GOALS[i]!.id);
-          e.currentTarget.querySelector<HTMLButtonElement>(`[data-goal="${GOALS[i]!.id}"]`)?.focus();
-        }}
+        role="group"
+        aria-label={welcomed ? "Ideas" : "New here? Pick what you want to do first"}
+        className="s-in mt-5 flex w-full gap-1.5 overflow-x-auto pb-1 [animation-delay:160ms] sm:flex-wrap sm:justify-center"
       >
         {GOALS.map((x) => (
           <button
             key={x.id}
             type="button"
-            role="tab"
-            data-goal={x.id}
-            id={`goal-${x.id}`}
-            aria-selected={goal === x.id}
+            aria-pressed={goal === x.id}
             aria-controls="goal-panel"
-            tabIndex={goal === x.id ? 0 : -1}
-            onClick={() => setGoal(x.id)}
+            onClick={() => setGoal(goal === x.id ? null : x.id)}
             className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] transition [&_svg]:h-3.5 [&_svg]:w-3.5 ${goal === x.id ? "border-s-line-strong bg-s-hover text-s-ink" : "border-s-line text-s-ink-3 hover:text-s-ink"}`}
           >
             {x.icon}
@@ -138,7 +123,8 @@ export function Welcome({
         ))}
       </div>
 
-      <div id="goal-panel" role="tabpanel" aria-labelledby={`goal-${goal}`} className="mt-3 w-full">
+      {g && (
+      <div id="goal-panel" className="s-in mt-3 w-full">
         <p className="mb-2.5 text-center text-[13px] text-s-ink-3">{g.intro}</p>
         <ul className="grid w-full gap-2 sm:grid-cols-2">
           {g.link && (
@@ -177,6 +163,7 @@ export function Welcome({
           ))}
         </ul>
       </div>
+      )}
 
       {notice && <div className="s-in mt-7 text-center text-[12.5px] text-s-ink-3 [animation-delay:380ms]">{notice}</div>}
     </div>
