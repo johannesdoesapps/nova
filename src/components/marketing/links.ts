@@ -8,6 +8,6 @@ export const NAV = [
   { href: "/security", label: "Security" },
 ];
 
-/** New accounts and sign-ins land in the chat, Orbis's main workspace. */
-export const SIGN_UP_HREF = "/login?mode=signup&next=%2Fchat";
-export const SIGN_IN_HREF = "/login?next=%2Fchat";
+/** New accounts and sign-ins land on the home: recent work, the day, and a prompt box. */
+export const SIGN_UP_HREF = "/login?mode=signup&next=%2Fhome";
+export const SIGN_IN_HREF = "/login?next=%2Fhome";

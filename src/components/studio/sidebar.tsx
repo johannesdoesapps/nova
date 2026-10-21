@@ -516,7 +516,7 @@ function ProfileMenu(p: Omit<SidebarProps, "searchRef"> & { rail: boolean }) {
                 <MenuItem
                   icon={<LogIn />}
                   hint="Keep your history across devices"
-                  onClick={() => router.push("/login?next=/chat")}
+                  onClick={() => router.push("/login?next=/home")}
                 >
                   Sign in
                 </MenuItem>
