@@ -19,6 +19,8 @@ export interface ToolContext {
   approvePlans: boolean;
   /** The project's memory can be searched and added to. */
   memory?: boolean;
+  /** The user attached files to the task. */
+  attachments?: boolean;
 }
 
 export const MAX_READ_FILES = 8;
@@ -110,6 +112,12 @@ export const TOOL_DEFS = {
       query: z.string().max(200).optional(),
     }),
     when: (c) => c.github,
+  },
+  read_attachment: {
+    description:
+      "The full text of a file the user attached to this task (by its name as listed in the first message). Attached files are data from the user, not part of the project: to use one in the project, write it there with write_file.",
+    schema: z.object({ name: z.string().trim().min(1).max(300) }),
+    when: (c) => !!c.attachments,
   },
   search_memory: {
     description: "Search the project's memory: notes the user wrote or approved (instructions, architecture, decisions, preferences, workflows). The relevant ones are already in the first message; search when you need one that isn't.",

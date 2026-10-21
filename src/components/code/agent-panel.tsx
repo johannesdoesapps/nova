@@ -10,6 +10,8 @@ import {
   CircleHelp,
   Eye,
   FileCode2,
+  FileText,
+  ImageIcon,
   FlaskConical,
   Globe,
   ListChecks,
@@ -31,7 +33,9 @@ import { useCatalog } from "@/components/common/model-picker";
 import { ModelSelector } from "@/components/studio/model-selector";
 import { VERIFICATION_LABEL } from "@/lib/code/agent/report";
 import { ENDED_STATUSES, STATUS_LABEL, WORKING_STATUSES, type AgentEvent, type Decision, type LimitReason, type RunOptions, type RunReport, type RunView } from "@/lib/code/agent/types";
+import { formatBytes, type AttachmentMeta } from "@/lib/code/attachments";
 import { cn } from "@/lib/utils";
+import { AttachmentTray, Dragging, dropAndPaste, PlusMenu, useAttachments } from "./attachments";
 import { api, CodeApiError, post } from "./api";
 import { FileDiff } from "./diff-view";
 
@@ -45,7 +49,7 @@ import { FileDiff } from "./diff-view";
  */
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-type RunDetail = { run: RunView; events: AgentEvent[] };
+type RunDetail = { run: RunView; events: AgentEvent[]; attachments?: AttachmentMeta[] };
 type RevertResult = { ok: boolean; reverted: string[]; conflicts: string[] };
 
 // ---------------------------------------------------------------- permission modes
@@ -285,6 +289,7 @@ export function AgentPanel({
   autoComputer,
 }: AgentPanelProps) {
   const [run, setRun] = useState<RunView | null>(null);
+  const [runAttachments, setRunAttachments] = useState<AttachmentMeta[]>([]);
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [driving, setDriving] = useState(false);
@@ -309,6 +314,7 @@ export function AgentPanel({
   const refresh = useCallback(async (runId: string): Promise<RunView> => {
     const r = await api<RunDetail>(`/api/code/agent/${runId}?after=${lastSeq.current}`);
     if (!alive.current) return r.run;
+    if (r.attachments) setRunAttachments(r.attachments);
     setRun(r.run);
     runChanged.current(r.run);
     const fresh = r.events.filter((e) => e.seq > lastSeq.current);
@@ -398,20 +404,23 @@ export function AgentPanel({
     feedEnd.current?.scrollIntoView({ block: "end" });
   }, [events.length, run?.status]);
 
-  const start = async (request: string, mode: ModeId, modelId: string) => {
-    if (!request.trim() || starting) return;
+  const start = async (request: string, mode: ModeId, modelId: string, attachments: string[] = []): Promise<boolean> => {
+    if (!request.trim() || starting) return false;
     setStarting(true);
     setError(null);
     try {
       const preset = MODES.find((m) => m.id === mode)!;
-      const r = await post<{ run: RunView }>(`/api/code/projects/${projectId}/agent`, { request, options: { modelId, ...preset.options } });
+      const r = await post<{ run: RunView; attachments?: AttachmentMeta[] }>(`/api/code/projects/${projectId}/agent`, { request, options: { modelId, ...preset.options }, ...(attachments.length ? { attachments } : {}) });
       lastSeq.current = 0;
       setEvents([]);
+      setRunAttachments(r.attachments ?? []);
       setRun(r.run);
       runChanged.current(r.run);
       void drive(r.run.id);
+      return true;
     } catch (e) {
       setError(e as CodeApiError);
+      return false;
     } finally {
       setStarting(false);
     }
@@ -502,7 +511,7 @@ export function AgentPanel({
         <div className="mx-auto w-full max-w-[780px] px-4 pb-6 pt-4 sm:px-6">
           {!loaded && <div className="s-skeleton h-24 w-full rounded-2xl" />}
 
-          {loaded && !run && !(autoStart && !error) && <Composer initialRequest={initialRequest} starting={starting} onStart={start} web={web} />}
+          {loaded && !run && !(autoStart && !error) && <Composer projectId={projectId} initialRequest={initialRequest} starting={starting} onStart={start} web={web} />}
           {loaded && !run && autoStart && !error && (
             <p className="flex items-center gap-2 px-1 pt-10 text-[14px] text-s-ink-2">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Starting the build…
@@ -544,6 +553,16 @@ export function AgentPanel({
                   )}
                 </div>
                 <p className="mt-2 whitespace-pre-wrap text-[14.5px] leading-relaxed text-s-ink">{run.request}</p>
+                {runAttachments.length > 0 && (
+                  <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Attached to this task">
+                    {runAttachments.map((a) => (
+                      <li key={a.id} className="inline-flex max-w-[220px] items-center gap-1.5 rounded-full border border-s-line px-2.5 py-1 text-[12px] text-s-ink-2" title={`${a.name} · ${formatBytes(a.size)}`}>
+                        {a.kind === "image" ? <ImageIcon className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden />}
+                        <span className="truncate">{a.name.split("/").pop()}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {run.usage.modelCalls > 0 && <UsageLine run={run} />}
               </header>
 
@@ -585,7 +604,7 @@ export function AgentPanel({
                   onOpenPreview={onOpenPreview}
                 />
               )}
-              {ended && <FollowUp run={run} web={web} starting={starting} onStart={start} />}
+              {ended && <FollowUp projectId={projectId} run={run} web={web} starting={starting} onStart={start} />}
               {ended && (
                 <button
                   type="button"
@@ -632,17 +651,15 @@ export function AgentPanel({
 
 // ---------------------------------------------------------------- the task box
 
-function Composer({
-  initialRequest,
-  starting,
-  onStart,
-  web,
-}: {
-  initialRequest?: string;
-  starting: boolean;
-  onStart: (request: string, mode: ModeId, modelId: string) => Promise<void>;
-  web?: boolean;
-}) {
+type StartFn = (request: string, mode: ModeId, modelId: string, attachments?: string[]) => Promise<boolean>;
+
+function Composer({ projectId, initialRequest, starting, onStart, web }: { projectId: string; initialRequest?: string; starting: boolean; onStart: StartFn; web?: boolean }) {
+  const attachments = useAttachments(projectId);
+  const [dragging, setDragging] = useState(false);
+  const go = async (text: string, m: ModeId, model: string) => {
+    if (attachments.busy) return;
+    if (await onStart(text, m, model, attachments.ids)) attachments.reset();
+  };
   const catalog = useCatalog();
   const [request, setRequest] = useState(initialRequest ?? "");
   const [mode, setModeState] = useState<ModeId>(readMode);
@@ -662,7 +679,7 @@ function Composer({
 
   const examples: { label: string; task: string; mode?: ModeId; start: boolean }[] = web ? WEB_EXAMPLES : EXAMPLES;
   const example = (e: (typeof examples)[number]) => {
-    if (e.start) return void onStart(e.task, e.mode ?? mode, modelId);
+    if (e.start) return void go(e.task, e.mode ?? mode, modelId);
     setRequest(e.task);
     requestAnimationFrame(() => {
       box.current?.focus();
@@ -679,12 +696,15 @@ function Composer({
           : "Describe it in plain English. The agent explores the project, makes the changes, runs the checks and shows you what changed."}
       </p>
       <form
-        className="glass-strong glass-edge mt-6 rounded-[24px] p-3"
+        className="glass-strong glass-edge relative mt-6 rounded-[24px] p-3"
         onSubmit={(e) => {
           e.preventDefault();
-          void onStart(request, mode, modelId);
+          void go(request, mode, modelId);
         }}
+        {...dropAndPaste(attachments, setDragging)}
       >
+        <Dragging show={dragging} />
+        <AttachmentTray attachments={attachments} />
         <label htmlFor="agent-ask" className="sr-only">
           What would you like to build or fix?
         </label>
@@ -696,7 +716,7 @@ function Composer({
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
-              void onStart(request, mode, modelId);
+              void go(request, mode, modelId);
             }
           }}
           rows={3}
@@ -705,6 +725,7 @@ function Composer({
           className="block w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-relaxed outline-none placeholder:text-s-ink-3"
         />
         <div className="mt-2 flex flex-wrap items-center gap-2">
+          <PlusMenu attachments={attachments} disabled={starting} />
           <button
             type="button"
             onClick={() => setChoosing(!choosing)}
@@ -718,7 +739,8 @@ function Composer({
           <ModelSelector models={catalog?.models ?? null} value={modelId} onChange={setModelId} auto={catalog?.auto ?? null} />
           <button
             type="submit"
-            disabled={!request.trim() || starting}
+            disabled={!request.trim() || starting || attachments.busy}
+            title={attachments.busy ? "Waiting for attachments to finish uploading" : undefined}
             className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-full bg-s-accent px-4 text-[13px] font-medium text-s-accent-ink transition hover:brightness-110 disabled:opacity-40"
           >
             {starting ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <ArrowUp className="h-3.5 w-3.5" aria-hidden />} {starting ? "Starting…" : "Start"}
@@ -1155,25 +1177,36 @@ function ReportCard({
 }
 
 /** Ask for a change to what was just built: a new session on the same project, in the same mode and model, with the earlier work as context. */
-function FollowUp({ run, web, starting, onStart }: { run: RunView; web?: boolean; starting: boolean; onStart: (request: string, mode: ModeId, modelId: string) => Promise<void> }) {
+function FollowUp({ projectId, run, web, starting, onStart }: { projectId: string; run: RunView; web?: boolean; starting: boolean; onStart: StartFn }) {
   const [text, setText] = useState("");
+  const attachments = useAttachments(projectId);
+  const [dragging, setDragging] = useState(false);
   const mode = modeOf(run.options)?.id ?? "plan";
   const model = run.options.modelId ?? "auto:coding";
-  const send = (t: string) => void onStart(t, mode === "read" ? "plan" : mode, model);
+  const send = async (t: string) => {
+    if (attachments.busy) return;
+    if (await onStart(t, mode === "read" ? "plan" : mode, model, attachments.ids)) attachments.reset();
+  };
   const chips = web ? WEB_EXAMPLES : [];
   return (
     <form
-      className="rounded-2xl border border-s-line p-3"
+      className="relative rounded-2xl border border-s-line p-3"
       onSubmit={(e) => {
         e.preventDefault();
-        if (text.trim()) send(text.trim());
+        if (text.trim()) void send(text.trim());
       }}
+      {...dropAndPaste(attachments, setDragging)}
     >
+      <Dragging show={dragging} />
       <label htmlFor="agent-followup" className="text-[13px] font-medium text-s-ink">
         {web ? "Ask for changes to the site" : "Ask for a follow-up change"}
       </label>
       <p className="text-[12px] text-s-ink-3">The agent already knows this project and what was just done.</p>
-      <div className="mt-2 flex items-end gap-2">
+      <div className="mt-2">
+        <AttachmentTray attachments={attachments} />
+      </div>
+      <div className="mt-1 flex items-end gap-2">
+        <PlusMenu attachments={attachments} disabled={starting} />
         <textarea
           id="agent-followup"
           value={text}
@@ -1181,7 +1214,7 @@ function FollowUp({ run, web, starting, onStart }: { run: RunView; web?: boolean
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && text.trim()) {
               e.preventDefault();
-              send(text.trim());
+              void send(text.trim());
             }
           }}
           rows={2}
@@ -1191,7 +1224,7 @@ function FollowUp({ run, web, starting, onStart }: { run: RunView; web?: boolean
         />
         <button
           type="submit"
-          disabled={starting || !text.trim()}
+          disabled={starting || !text.trim() || attachments.busy}
           className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-s-accent px-4 text-[13px] font-medium text-s-accent-ink disabled:opacity-40"
         >
           {starting ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <ArrowUp className="h-3.5 w-3.5" aria-hidden />} Send
@@ -1204,7 +1237,7 @@ function FollowUp({ run, web, starting, onStart }: { run: RunView; web?: boolean
               key={c.label}
               type="button"
               disabled={starting}
-              onClick={() => (c.start ? send(c.task) : setText(c.task))}
+              onClick={() => (c.start ? void send(c.task) : setText(c.task))}
               className="rounded-full border border-s-line px-2.5 py-1 text-[12px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink disabled:opacity-40"
             >
               {c.label}

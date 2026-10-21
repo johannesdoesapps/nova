@@ -176,8 +176,8 @@ export function toOpenAIToolMessages(input: ToolMessage[]): Record<string, unkno
       });
     } else {
       for (const r of m.results ?? []) out.push({ role: "tool", tool_call_id: r.id, content: `${r.ok ? "" : "[failed] "}${r.text || "(empty)"}` });
-      // Tool messages take text only, so pictures that go with results follow as a user message.
-      const images = (m.results ?? []).flatMap((r) => r.images ?? []);
+      // Tool messages take text only, so pictures that go with results (or that the user attached) follow as a user message.
+      const images = [...(m.results ?? []).flatMap((r) => r.images ?? []), ...(m.images ?? [])];
       if (images.length) {
         out.push({
           role: "user",

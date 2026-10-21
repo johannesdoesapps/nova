@@ -1,7 +1,7 @@
 "use client";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   ChevronDown,
@@ -13,6 +13,10 @@ import {
   History,
   ListChecks,
   PanelRightOpen,
+  PanelLeft,
+  Code2,
+  FolderOpen,
+  FolderPlus,
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
@@ -33,6 +37,7 @@ import {
 import { useCatalog } from "@/components/common/model-picker";
 import { StudioHeader, useStudio } from "@/components/studio/frame";
 import { ModelSelector } from "@/components/studio/model-selector";
+import { Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/studio/ui";
 import { isWebTask } from "@/lib/code/agent/protocol";
 import { detectTestCommand } from "@/lib/code/agent/test-results";
 import type { RunView } from "@/lib/code/agent/types";
@@ -683,7 +688,7 @@ export function CodeWorkspace({ id }: { id: string }) {
   const block = allowance?.blockMinutes ?? 10;
 
   const status = (
-    <span className={cn("hidden items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] sm:inline-flex", running ? "border-emerald-500/40 text-s-ink" : "border-s-line text-s-ink-3")}>
+    <span className={cn("hidden items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] xl:inline-flex", running ? "border-emerald-500/40 text-s-ink" : "border-s-line text-s-ink-3")}>
       <span className={cn("h-1.5 w-1.5 rounded-full", running ? "bg-emerald-500" : "bg-s-ink-3")} />
       {starting ? "Starting…" : running ? `Computer on · ${mm}:${ss} left` : "Computer off"}
     </span>
@@ -1043,41 +1048,66 @@ export function CodeWorkspace({ id }: { id: string }) {
     <>
       <StudioHeader
         actions={
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
+            {/* Panels (larger screens; on phones they're the tabs below). */}
+            {wide && (
+              <>
+                <HeaderIcon label={filesOpen && leftTab === "files" ? "Hide files" : "Files"} pressed={filesOpen && leftTab === "files"} onClick={() => (filesOpen && leftTab === "files" ? setFilesOpen(false) : (setFilesOpen(true), setLeftTab("files")))} className="hidden lg:inline-grid">
+                  <PanelLeft />
+                </HeaderIcon>
+                <HeaderIcon label="Tasks" pressed={filesOpen && leftTab === "sessions"} onClick={() => (filesOpen && leftTab === "sessions" ? setFilesOpen(false) : (setFilesOpen(true), setLeftTab("sessions")))} className="hidden lg:inline-grid">
+                  <ListChecks />
+                </HeaderIcon>
+                <HeaderIcon label="Changes" pressed={right === "changes"} onClick={() => setRight(right === "changes" ? null : "changes")} className="hidden lg:inline-grid">
+                  <History />
+                </HeaderIcon>
+                <span className="mx-1 hidden h-5 w-px bg-s-line lg:block" aria-hidden />
+              </>
+            )}
             {status}
             {running ? (
-              <>
-                <Btn onClick={() => void sessionAction("extend")} disabled={starting} title={`Keep the computer on for ${block} more minutes`} className="hidden sm:inline-flex">
-                  <Plus className="h-3.5 w-3.5" /> {block} min
-                </Btn>
-                <Btn onClick={() => void sessionAction("stop")} title="Turn the project's computer off">
-                  <Power className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Stop</span>
-                </Btn>
-              </>
+              <Btn onClick={() => void sessionAction("stop")} title="Turn the project's computer off">
+                <Power className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Stop</span>
+              </Btn>
             ) : (
               <Btn onClick={() => void sessionAction("start")} disabled={starting} title={`Turn on the project's private computer for ${block} minutes (to run code, tests and the preview)`}>
                 <Power className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{starting ? "Starting…" : "Start computer"}</span>
               </Btn>
             )}
             <Btn onClick={() => void runProject()} disabled={starting || !project} title={project?.runCommand ? `Runs: ${project.runCommand}` : "Set the command Run uses"}>
-              <Play className="h-3.5 w-3.5" /> Run
+              <Play className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Run</span>
             </Btn>
-            <button type="button" onClick={() => void editRunCommand()} aria-label="Run command settings" title="Change the Run command" className="hidden h-8 w-8 place-items-center rounded-full text-s-ink-3 hover:bg-s-hover sm:grid">
-              <Settings2 className="h-4 w-4" />
-            </button>
           </div>
         }
+        menu={
+          <>
+            {running && (
+              <MenuItem icon={<Plus />} onClick={() => void sessionAction("extend")} disabled={starting}>
+                Keep the computer on {block} more min
+              </MenuItem>
+            )}
+            <MenuItem icon={<Settings2 />} hint={project?.runCommand ? `Now: ${project.runCommand}` : "Not set"} onClick={() => void editRunCommand()}>
+              Run command…
+            </MenuItem>
+            <MenuItem icon={<Eye />} onClick={() => (wide ? setRight("preview") : setPane("preview"))}>
+              Preview
+            </MenuItem>
+            <MenuItem icon={<TerminalIcon />} onClick={() => (wide ? setRight("terminal") : setPane("terminal"))}>
+              Terminal
+            </MenuItem>
+            <MenuItem icon={<History />} hint="Diffs, undo, push to GitHub" onClick={() => (wide ? setRight("changes") : setPane("changes"))}>
+              Changes
+            </MenuItem>
+          </>
+        }
       >
-        <Link href="/code" className="shrink-0 text-[14px] font-medium text-s-ink-3 hover:text-s-ink">
-          Code
-        </Link>
-        <span className="text-s-ink-3" aria-hidden>
-          /
-        </span>
-        <button type="button" onClick={() => void renameProject()} className="group flex min-w-0 items-center gap-1 text-[14px] font-medium text-s-ink-2 hover:text-s-ink" title="Rename project">
-          <span className="truncate">{project?.name ?? "…"}</span>
-          <Pencil className="h-3 w-3 shrink-0 opacity-0 group-hover:opacity-100" aria-hidden />
-        </button>
+        <ProjectMenu
+          name={project?.name ?? "…"}
+          projectId={id}
+          onRename={() => void renameProject()}
+          onRunCommand={() => void editRunCommand()}
+          onMemory={() => (wide ? setRight("memory") : setPane("memory"))}
+        />
       </StudioHeader>
 
       {error && (
@@ -1293,5 +1323,74 @@ function TreeList(p: {
         ),
       )}
     </ul>
+  );
+}
+
+/** A compact icon action in the top bar. */
+function HeaderIcon({ label, pressed, onClick, className, children }: { label: string; pressed?: boolean; onClick: () => void; className?: string; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={pressed}
+      title={label}
+      className={cn("grid h-8 w-8 place-items-center rounded-lg border transition-colors [&_svg]:h-4 [&_svg]:w-4", pressed ? "border-s-line-strong bg-s-hover text-s-ink" : "border-transparent text-s-ink-3 hover:bg-s-hover hover:text-s-ink", className)}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** The project's name in the top bar, with a menu: rename, memory, Run command, and switching to another project. */
+function ProjectMenu({ name, projectId, onRename, onRunCommand, onMemory }: { name: string; projectId: string; onRename: () => void; onRunCommand: () => void; onMemory: () => void }) {
+  const router = useRouter();
+  const [others, setOthers] = useState<{ id: string; name: string }[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api<{ projects: { id: string; name: string }[] }>("/api/code/projects")
+      .then((r) => alive && setOthers(r.projects.filter((p) => p.id !== projectId).slice(0, 6)))
+      .catch(() => alive && setOthers([]));
+    return () => {
+      alive = false;
+    };
+  }, [projectId]);
+  return (
+    <Menu
+      label="Project"
+      align="start"
+      width={260}
+      buttonTitle="Project menu"
+      buttonClassName="inline-flex min-w-0 max-w-full items-center gap-1 rounded-lg px-2 py-1 text-[14px] font-medium text-s-ink transition hover:bg-s-hover"
+      button={
+        <>
+          <span className="truncate">{name}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-s-ink-3" aria-hidden />
+        </>
+      }
+    >
+      <MenuItem icon={<Pencil />} onClick={onRename}>
+        Rename project…
+      </MenuItem>
+      <MenuItem icon={<BookMarked />} hint="Notes and workflows for the agent" onClick={onMemory}>
+        Project memory
+      </MenuItem>
+      <MenuItem icon={<Settings2 />} onClick={onRunCommand}>
+        Run command…
+      </MenuItem>
+      <MenuSeparator />
+      {others && others.length > 0 && <MenuLabel>Switch project</MenuLabel>}
+      {others?.map((p) => (
+        <MenuItem key={p.id} icon={<Code2 />} onClick={() => router.push(`/code/${p.id}`)}>
+          {p.name}
+        </MenuItem>
+      ))}
+      <MenuItem icon={<FolderOpen />} onClick={() => router.push("/code")}>
+        All projects
+      </MenuItem>
+      <MenuItem icon={<FolderPlus />} onClick={() => router.push("/code?new=1")}>
+        New project
+      </MenuItem>
+    </Menu>
   );
 }

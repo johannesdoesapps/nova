@@ -30,7 +30,7 @@ const MODEL: ModelInfo = {
 const JSON_MODEL: ModelInfo = { ...MODEL, id: "deepseek-flash", provider: "deepseek", providerModelId: "deepseek-flash", displayName: "DeepSeek Flash", inputPrice: null, outputPrice: null };
 
 type Turn = Partial<ToolTurnResult> | ((p: ToolTurnParams) => Partial<ToolTurnResult> | Promise<Partial<ToolTurnResult>>);
-const script: { turns: Turn[]; seen: ToolTurnParams[]; json: string[]; model: ModelInfo } = { turns: [], seen: [], json: [], model: MODEL };
+const script: { turns: Turn[]; seen: ToolTurnParams[]; json: string[]; model: ModelInfo; needs?: string[] } = { turns: [], seen: [], json: [], model: MODEL };
 const call = (name: string, args: Record<string, unknown> = {}, id = `toolu_${Math.random().toString(36).slice(2, 8)}`) => ({ id, name, args });
 const turn = (text: string, ...calls: ReturnType<typeof call>[]): Partial<ToolTurnResult> => ({ text, calls, stop: calls.length ? "tool_use" : "end_turn" });
 
@@ -45,7 +45,10 @@ const generate = vi.fn(async () => ({ text: script.json.shift() ?? "", usage: { 
 
 vi.mock("@/lib/ai", () => ({
   getProvider: (id: string) => (id === "anthropic" ? { id, toolTurn, generate } : { id, generate }),
-  resolveModelChoice: async () => ({ model: script.model, routing: null }),
+  resolveModelChoice: async (_id: string, ctx: { needs?: string[] }) => {
+    script.needs = ctx.needs ?? [];
+    return { model: script.model, routing: null };
+  },
   withTimeout: () => new AbortController().signal,
 }));
 vi.mock("@/lib/ai/platform", () => ({ autoIdFor: () => "auto:coding" }));
@@ -216,6 +219,10 @@ vi.mock("@/lib/code/agent/runs", async (orig) => {
   };
 });
 
+// Attachments: an in-memory stand-in for the table.
+const attachmentRows = { list: [] as { id: string; name: string; kind: "text" | "image"; mediaType: string; size: number; content: string }[] };
+vi.mock("@/lib/code/attachments-store", () => ({ runAttachments: async () => structuredClone(attachmentRows.list) }));
+
 // Project memory: an in-memory stand-in for the table.
 const memory = { notes: [] as import("@/lib/code/memory").MemoryEntry[], added: [] as Record<string, unknown>[] };
 vi.mock("@/lib/code/memory-store", () => ({
@@ -271,6 +278,7 @@ const FAILING = " ❯ sum.test.js (2 tests | 1 failed)\n   × sum > adds negativ
 const PASSING = "      Tests  2 passed (2)\n";
 
 beforeEach(() => {
+  attachmentRows.list = [];
   memory.notes = [];
   memory.added = [];
   script.turns = [];
@@ -706,5 +714,58 @@ describe("project memory", () => {
     const first = script.seen[0]!.messages[0]!;
     expect(first.text).not.toContain("Project memory");
     expect(events(id).some((e) => e.title.includes("project memory"))).toBe(false);
+  });
+});
+
+describe("attachments", () => {
+  const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  const VISION = { ...MODEL, capabilities: ["coding", "vision"] as ModelInfo["capabilities"] };
+  const withAttachments = () =>
+    newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true }, request: "Recreate this design and fix the bug in the attached file", options: { approvePlans: false, reviewEdits: false, commands: "safe" as const, modelId: null, attachments: { texts: 1, images: 1 } } });
+
+  it("gives the agent the attached file's text and shows the image to a model that can see images", async () => {
+    script.model = VISION;
+    attachmentRows.list = [
+      { id: "t", name: "src/buggy.js", kind: "text", mediaType: "text/plain", size: 30, content: "export const x = () => 1 / 0; // ATTACHED-MARKER" },
+      { id: "i", name: "design.png", kind: "image", mediaType: "image/png", size: 68, content: PNG },
+    ];
+    const id = withAttachments();
+    script.turns.push(turn("Reading it.", call("read_attachment", { name: "buggy.js" })), turn("Done.", call("finish", { summary: "ok" })));
+    await stepRun(req(), auth, id);
+    const first = script.seen[0]!.messages[0]!;
+    expect(first.text).toContain("ATTACHED-MARKER");
+    expect(first.text).toContain("Attached images (shown with this message, in this order): design.png");
+    expect(first.role === "user" && first.images).toEqual([{ mediaType: "image/png", data: PNG }]);
+    // Every later turn still carries the image with the first message, and only there.
+    const second = script.seen[1]!.messages;
+    expect(second[0]!.role === "user" && second[0]!.images?.length).toBe(1);
+    expect(second.slice(1).every((m) => m.role !== "user" || !m.images)).toBe(true);
+    // Auto was asked for a model that can see images.
+    expect(script.needs).toEqual(["vision"]);
+    expect(script.seen[0]!.tools.map((t) => t.name)).toContain("read_attachment");
+    const read = run(id).transcript[2]!.results![0]!;
+    expect(read).toMatchObject({ ok: true });
+    expect(read.text).toContain("ATTACHED-MARKER");
+    expect(events(id).map((e) => e.title)).toEqual(expect.arrayContaining(["Given 1 attached file: src/buggy.js", "Shown 1 attached image: design.png"]));
+  });
+
+  it("says plainly when the model can't see images, and never sends them", async () => {
+    script.model = MODEL; // no vision
+    attachmentRows.list = [{ id: "i", name: "design.png", kind: "image", mediaType: "image/png", size: 68, content: PNG }];
+    const id = newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true }, options: { approvePlans: false, reviewEdits: false, commands: "safe" as const, modelId: null, attachments: { texts: 0, images: 1 } } });
+    script.turns.push(turn("Done.", call("finish", { summary: "ok" })));
+    await stepRun(req(), auth, id);
+    const first = script.seen[0]!.messages[0]!;
+    expect(first.role === "user" && first.images).toBeFalsy();
+    expect(first.text).toContain("can't view images, so you have NOT seen them");
+    expect(events(id).find((e) => e.kind === "error")?.title).toMatch(/can't view images, so the attached image wasn't looked at/);
+  });
+
+  it("runs without attachments as before", async () => {
+    const id = newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true } });
+    script.turns.push(turn("Done.", call("finish", { summary: "ok" })));
+    await stepRun(req(), auth, id);
+    expect(script.seen[0]!.tools.map((t) => t.name)).not.toContain("read_attachment");
+    expect(script.needs).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
-import { Archive, Bookmark, Code2, Ellipsis, FolderPlus, LogIn, LogOut, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Search, Settings2, SquarePen, Sun, Trash2, X } from "lucide-react";
+import { Archive, Bookmark, Code2, Ellipsis, FolderPlus, LogIn, LogOut, Monitor, Moon, Pencil, Search, Settings2, SquarePen, Sun, Trash2, X } from "lucide-react";
 import type { AppUser } from "@/components/layout/app-context";
 import { cn } from "@/lib/utils";
 import { groupByDate, type ConvSummary } from "./history";
@@ -105,28 +105,17 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
           rail ? "md:w-[68px]" : "md:w-[248px] lg:w-[276px]",
         )}
       >
-        {/* Brand + collapse */}
-        <div className={cn("flex h-14 shrink-0 items-center gap-2 px-3", rail && "md:justify-center md:px-0")}>
-          <Link
-            href="/home"
-            onClick={p.onCloseMobile}
-            className={cn("flex min-w-0 items-center gap-2.5 rounded-xl px-1.5 py-1 transition hover:opacity-80", rail && "md:hidden")}
-            aria-label="Orbis — home"
-          >
+        {/* On phones the sidebar is a drawer over the top bar: it has its own heading and close button. (On larger screens, the top bar holds Orbis and the collapse button.) */}
+        <div className="flex h-12 shrink-0 items-center gap-2 px-3 md:hidden">
+          <Link href="/home" onClick={p.onCloseMobile} className="flex min-w-0 items-center gap-2.5 rounded-xl px-1.5 py-1 transition hover:opacity-80" aria-label="Orbis — home">
             <OrbisMark className="h-7 w-7 text-s-ink" />
             <span className="text-[15px] font-semibold tracking-[0.22em]">ORBIS</span>
           </Link>
-          <IconButton
-            label={rail ? "Expand sidebar" : "Collapse sidebar"}
-            onClick={p.onToggleCollapsed}
-            className={cn("ml-auto hidden md:inline-grid", rail && "md:ml-0")}
-          >
-            {rail ? <PanelLeftOpen /> : <PanelLeftClose />}
-          </IconButton>
-          <IconButton label="Close sidebar" onClick={p.onCloseMobile} className="ml-auto md:hidden">
+          <IconButton label="Close sidebar" onClick={p.onCloseMobile} className="ml-auto">
             <X />
           </IconButton>
         </div>
+        <div className="hidden h-2 shrink-0 md:block" aria-hidden />
 
         {/* Primary actions */}
         <div className={cn("flex shrink-0 flex-col gap-1 px-3 pb-2", rail && "md:items-center md:px-0")}>

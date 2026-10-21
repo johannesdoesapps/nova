@@ -130,7 +130,9 @@ export interface ToolResult {
  * results of the previous assistant turn's calls (all of them, in order),
  * then any text; an assistant turn carries its text and its calls.
  */
-export type ToolMessage = { role: "user"; text: string; results?: ToolResult[] } | { role: "assistant"; text: string; calls?: ToolCall[] };
+export type ToolMessage =
+  | { role: "user"; text: string; results?: ToolResult[]; /** Pictures the user attached (models that take images only). */ images?: ToolResult["images"] }
+  | { role: "assistant"; text: string; calls?: ToolCall[] };
 
 export interface ToolTurnParams {
   model: ModelInfo;

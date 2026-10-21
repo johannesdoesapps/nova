@@ -305,7 +305,7 @@ describe("tool calls are validated before anything runs", () => {
 
 describe("tool schemas for providers", () => {
   it("are plain JSON Schema objects with valid names, offered per the run's settings", () => {
-    const all = toolSchemas({ commands: "safe", docs: true, github: true, approvePlans: true, memory: true });
+    const all = toolSchemas({ commands: "safe", docs: true, github: true, approvePlans: true, memory: true, attachments: true });
     expect(all.map((t) => t.name)).toEqual(TOOL_NAMES);
     for (const t of all) {
       expect(t.name).toMatch(/^[a-zA-Z0-9_-]{1,64}$/);
@@ -321,6 +321,7 @@ describe("tool schemas for providers", () => {
     expect(off).not.toContain("github");
     expect(off).not.toContain("search_memory");
     expect(off).not.toContain("propose_memory");
+    expect(off).not.toContain("read_attachment");
   });
 });
 

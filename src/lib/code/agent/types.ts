@@ -40,6 +40,8 @@ export interface RunOptions {
   readOnly?: boolean;
   /** A website task: the agent gets the website guidance (set when the run starts). */
   web?: boolean;
+  /** Files and images the user attached to the task (set when the run starts). */
+  attachments?: { texts: number; images: number };
 }
 
 export const DEFAULT_OPTIONS: RunOptions = { modelId: null, approvePlans: true, reviewEdits: false, commands: "safe", readOnly: false };

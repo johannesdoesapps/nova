@@ -72,6 +72,8 @@ export interface AgentEnv {
     setRunCommand(command: string): Promise<void>;
   };
   lookupDocs?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]>;
+  /** Files the user attached to the task (text; images are shown to the model with the first message). */
+  attachments?: { read(name: string): Promise<{ kind: "text" | "image"; content: string } | null> };
   /** The project's memory: approved notes to search, and suggestions that wait for the user's approval. */
   memory?: {
     search(query: string): Promise<MemoryEntry[]>;
@@ -675,6 +677,20 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
         const r = await env.github(`github_${a.action as string}`, Object.fromEntries(Object.entries(a).filter(([k]) => k !== "action")));
         result(id, tool, r.ok, r.text);
         await log({ kind: "inspect", title: r.ok ? `GitHub: ${r.summary}` : `GitHub: ${r.text.slice(0, 200)}` });
+        break;
+      }
+      case "read_attachment": {
+        const found = env.attachments ? await env.attachments.read(a.name as string) : null;
+        if (!found) {
+          result(id, tool, false, `No attached file is called "${a.name as string}".`);
+          break;
+        }
+        if (found.kind === "image") {
+          result(id, tool, true, "That's an image: it's shown with the first message when the model can see images. It has no text to read.");
+          break;
+        }
+        result(id, tool, true, `<attachment name="${a.name as string}">\n${clipText(found.content, MAX_READ_CHARS)}\n</attachment>`);
+        await log({ kind: "inspect", title: `Read the attached file ${(a.name as string).slice(0, 200)}` });
         break;
       }
       case "search_memory": {

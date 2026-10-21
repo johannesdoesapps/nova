@@ -58,9 +58,11 @@ import {
   updateRunIfNotCancelled,
 } from "./runs";
 import { isTestCommand, testResult, type TestResult } from "./test-results";
+import { attachmentsBlock } from "./protocol";
 import { toolSchemas, type ToolContext } from "./tool-specs";
 import { memoryBlock, searchMemory, selectMemory, type MemoryEntry } from "../memory";
 import { addMemory, listMemory } from "../memory-store";
+import { runAttachments } from "../attachments-store";
 import { commandEvent, commandResultText, describeChange, planRestore, runActions, type AgentEnv, type CommandOutcome } from "./tools";
 import {
   DEFAULT_TEST_ATTEMPTS,
@@ -271,6 +273,32 @@ async function execCommand(auth: Authed, runId: string, projectId: string, comma
   return { exitCode, output, durationMs: Date.now() - started, timedOut, cancelled, changed, skipped };
 }
 
+/** Whether the model is shown attached images: it must take images and be called with native tools (the JSON format is text only). */
+function seesImages(model: Pick<ModelInfo, "provider" | "capabilities">): boolean {
+  return model.capabilities.includes("vision") && usesNativeTools(model);
+}
+
+/** The run's attached images, for models that can see them (loaded each step: they go with the first message). */
+async function attachedImages(auth: Authed, runId: string, count: number, model: Pick<ModelInfo, "provider" | "capabilities">): Promise<{ mediaType: "image/jpeg" | "image/png"; data: string }[]> {
+  if (!count || !seesImages(model)) return [];
+  return (await runAttachments(auth, runId, true)).filter((a) => a.kind === "image").map((a) => ({ mediaType: a.mediaType as "image/jpeg" | "image/png", data: a.content }));
+}
+
+/** The activity log says what the agent was given — and plainly when it can't see the images. */
+function attachmentEvents(atts: { name: string; kind: "text" | "image" }[], canSee: boolean, modelName: string): NewEvent[] {
+  const texts = atts.filter((a) => a.kind === "text").map((a) => a.name);
+  const images = atts.filter((a) => a.kind === "image").map((a) => a.name);
+  const out: NewEvent[] = [];
+  if (texts.length) out.push({ kind: "inspect", title: `Given ${texts.length} attached file${texts.length === 1 ? "" : "s"}: ${texts.join(", ").slice(0, 280)}`, detail: { attachments: texts } });
+  if (images.length)
+    out.push(
+      canSee
+        ? { kind: "inspect", title: `Shown ${images.length} attached image${images.length === 1 ? "" : "s"}: ${images.join(", ").slice(0, 280)}`, detail: { attachments: images } }
+        : { kind: "error", title: `${modelName} can't view images, so ${images.length === 1 ? "the attached image wasn't" : `the ${images.length} attached images weren't`} looked at. Choose a model that can see images to use them.`, detail: { attachments: images } },
+    );
+  return out;
+}
+
 function realEnv(c: EnvContext): AgentEnv {
   const { auth, run, project } = c;
   const env: AgentEnv = {
@@ -304,6 +332,14 @@ function realEnv(c: EnvContext): AgentEnv {
       setRunCommand: (command) => setRunCommand(auth, project.id, command),
     },
   };
+  if (runOptions(c.run).attachments) {
+    env.attachments = {
+      read: async (name) => {
+        const a = (await runAttachments(auth, run.id, true)).find((x) => x.name === name || x.name.split("/").pop() === name);
+        return a ? { kind: a.kind, content: a.content } : null;
+      },
+    };
+  }
   env.memory = {
     search: async (query) => searchMemory(await listMemory(auth, project.id), query),
     propose: (note) => addMemory(auth, project.id, { ...note, status: "proposed", source: "agent", runId: run.id }),
@@ -448,7 +484,9 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
   }
 
   const limits = await planLimits(auth);
-  const choice = await resolveModelChoice(opts.modelId ?? autoIdFor("coding"), { prompt: row.request, mode: "coding", tiers: limits.tiers });
+  const attached = opts.attachments ?? { texts: 0, images: 0 };
+  // With images attached, Auto picks a model that can see them.
+  const choice = await resolveModelChoice(opts.modelId ?? autoIdFor("coding"), { prompt: row.request, mode: "coding", tiers: limits.tiers, ...(attached.images ? { needs: ["vision" as const] } : {}) });
   const model = choice.model;
   if (model.provider === "demo") {
     const message = "No AI model is set up on this site, so the agent can't run.";
@@ -468,13 +506,17 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
       .filter((r) => r.id !== row.id && ENDED_STATUSES.includes(r.status))
       .slice(0, 3)
       .map((r) => ({ request: r.request, status: r.status, summary: r.report?.summary ?? r.summary, files: (r.report?.files ?? []).map((f) => f.path) }));
+    // What the user attached: text in the first message, images shown with it when the model can see them.
+    const atts = attached.texts + attached.images ? await runAttachments(auth, row.id, true) : [];
+    const canSee = seesImages(model);
     // Project memory: approved notes that fit this request (instructions and "always" notes every time).
     const notes = await listMemory(auth, project.id).catch(() => [] as MemoryEntry[]);
     const active = notes.filter((n) => n.status === "active");
     const used = selectMemory(active, row.request);
-    transcript = [{ role: "user", content: initialMessage(row.request, files, { projectName: project.name, runCommand: project.runCommand, computer, earlier, memory: memoryBlock(used, active.length) }) }];
+    transcript = [{ role: "user", content: initialMessage(row.request, files, { projectName: project.name, runCommand: project.runCommand, computer, earlier, memory: memoryBlock(used, active.length), attachments: attachmentsBlock(atts, canSee) }) }];
     await addEvents(auth, row.id, [
       { kind: "status", title: `Started with ${model.displayName}`, detail: { model: model.displayName, routing: choice.routing?.reason ?? null } },
+      ...attachmentEvents(atts, canSee, model.displayName),
       ...(used.length
         ? [{ kind: "inspect" as const, title: `Using ${used.length} note${used.length === 1 ? "" : "s"} from project memory: ${used.map((n) => n.title).join(", ").slice(0, 300)}`, detail: { memory: used.map((n) => ({ id: n.id, kind: n.kind, title: n.title })) } }]
         : []),
@@ -502,7 +544,7 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
 
   const readOnly = !!opts.readOnly;
   const planApproved = !readOnly && (!opts.approvePlans || !!row.plan?.approved);
-  const ctx: ToolContext = { commands: readOnly ? "off" : opts.commands, docs, github, approvePlans: opts.approvePlans, readOnly, memory: true };
+  const ctx: ToolContext = { commands: readOnly ? "off" : opts.commands, docs, github, approvePlans: opts.approvePlans, readOnly, memory: true, attachments: attached.texts + attached.images > 0 };
   const native = usesNativeTools(model);
   const maxOutputTokens = Math.max(limits.maxOutputTokens, AGENT_OUTPUT_TOKENS);
   const replyChars = maxOutputTokens * 3;
@@ -522,7 +564,7 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
   let stop: "tool_use" | "end_turn" | "max_tokens" | "refusal" | "other" | "json" = "json";
   try {
     if (native) {
-      const r = await getProvider(model.provider).toolTurn!({ model, system, messages: toToolMessages(history, await screenshots(auth, row.id, history)), tools: toolSchemas(ctx), maxOutputTokens, signal: withTimeout(MODEL_TIMEOUT_MS) });
+      const r = await getProvider(model.provider).toolTurn!({ model, system, messages: toToolMessages(history, await screenshots(auth, row.id, history), await attachedImages(auth, row.id, attached.images, model)), tools: toolSchemas(ctx), maxOutputTokens, signal: withTimeout(MODEL_TIMEOUT_MS) });
       reply = { thought: clipText(r.text, 6_000), actions: r.calls.slice(0, 8).map((c) => ({ id: c.id, tool: c.name, args: c.args })) };
       raw = `${r.text}\n${JSON.stringify(r.calls)}`;
       callUsage = r.usage;

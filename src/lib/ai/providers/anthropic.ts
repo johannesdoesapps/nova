@@ -174,6 +174,7 @@ export function toAnthropicToolMessages(input: ToolMessage[]): Anthropic.Beta.Me
         ...(r.ok ? {} : { is_error: true }),
       }));
       if (m.text.trim()) blocks.push({ type: "text", text: m.text });
+      for (const i of m.images ?? []) blocks.push({ type: "image", source: { type: "base64", media_type: i.mediaType, data: i.data } });
       if (!blocks.length) blocks.push({ type: "text", text: "(continue)" });
       out.push({ role: "user", content: blocks });
     }

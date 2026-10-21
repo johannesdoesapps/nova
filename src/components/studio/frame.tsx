@@ -1,7 +1,9 @@
 "use client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { Menu as MenuIcon, Moon, SquarePen, Sun } from "lucide-react";
+import Link from "next/link";
+import { createPortal } from "react-dom";
+import { Bookmark, Ellipsis, Menu as MenuIcon, Moon, PanelLeftClose, PanelLeftOpen, Settings2, SquarePen, Sun } from "lucide-react";
 import { useApp } from "@/components/layout/app-context";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { cn } from "@/lib/utils";
@@ -12,7 +14,7 @@ import { useFeedback, useSavedPrompts, useSettings, useTheme, type Feedback, typ
 import { forgetPlace, ModeSwitch, rememberPlace } from "./mode-switch";
 import { sectionFor } from "./nav";
 import { Sidebar } from "./sidebar";
-import { IconButton } from "./ui";
+import { IconButton, iconButtonClass, Menu, MenuItem, MenuSeparator, OrbisMark } from "./ui";
 
 type FrameEvent = "new-chat" | "use-prompt" | "renamed";
 
@@ -27,6 +29,10 @@ interface StudioContext {
   feedback: Record<string, Feedback>;
   giveFeedback: (id: string, f: Feedback) => void;
   openSidebar: () => void;
+  openSettings: () => void;
+  openPrompts: () => void;
+  /** Where pages put their title (centre of the top bar) and their actions (right). */
+  slots: { center: HTMLElement | null; right: HTMLElement | null };
   notify: (text: string) => void;
   /** Subscribe to frame events (new chat, saved prompt chosen, chat renamed). */
   on: <T = unknown>(event: FrameEvent, cb: (detail: T) => void) => () => void;
@@ -184,7 +190,20 @@ export function StudioFrame({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener("change", close);
   }, []);
 
+  // The top bar's two page areas (set once mounted; pages render into them).
+  const [center, setCenter] = useState<HTMLElement | null>(null);
+  const [right, setRight] = useState<HTMLElement | null>(null);
+
   const value: StudioContext = {
+    slots: { center, right },
+    openSettings: () => {
+      setMobileOpen(false);
+      setSettingsOpen(true);
+    },
+    openPrompts: () => {
+      setMobileOpen(false);
+      setPromptsOpen(true);
+    },
     theme,
     settings,
     history: { store, refresh },
@@ -200,8 +219,29 @@ export function StudioFrame({ children }: { children: ReactNode }) {
 
   return (
     <Ctx value={value}>
-      <div className="studio fixed inset-x-0 top-[var(--app-top,0px)] flex h-[var(--app-h,100dvh)] overflow-hidden">
+      <div className="studio fixed inset-x-0 top-[var(--app-top,0px)] flex h-[var(--app-h,100dvh)] flex-col overflow-hidden">
         <div className="studio-ambient" aria-hidden />
+
+        {/* One slim bar across the top: sidebar, Orbis and the Chat / Code switch; the page's title; the page's actions. */}
+        <header className="relative z-20 flex h-12 shrink-0 items-center gap-2 border-b border-s-line px-2 pt-[env(safe-area-inset-top)] sm:px-3">
+          <div className="flex flex-1 basis-0 items-center gap-1">
+            <IconButton label="Open sidebar" onClick={() => setMobileOpen(true)} className="md:hidden">
+              <MenuIcon />
+            </IconButton>
+            <IconButton label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setRailStored(collapsed ? "0" : "1")} className="hidden md:inline-grid">
+              {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+            </IconButton>
+            <Link href="/home" aria-label="Orbis — home" className="flex shrink-0 items-center gap-2 rounded-lg px-1.5 py-1 transition hover:opacity-80">
+              <OrbisMark className="h-6 w-6 text-s-ink" />
+              <span className="hidden text-[13.5px] font-semibold tracking-[0.22em] lg:inline">ORBIS</span>
+            </Link>
+            <ModeSwitch className="ml-1" />
+          </div>
+          <div ref={setCenter} className="flex min-w-0 max-w-[50%] shrink items-center justify-center gap-2" />
+          <div ref={setRight} className="flex flex-1 basis-0 items-center justify-end gap-0.5" />
+        </header>
+
+        <div className="relative flex min-h-0 flex-1">
 
         <Sidebar
           collapsed={collapsed}
@@ -256,6 +296,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
         />
 
         <main className="relative flex min-w-0 flex-1 flex-col">{children}</main>
+        </div>
 
         <div id="studio-layer" />
 
@@ -349,32 +390,41 @@ export function StudioFrame({ children }: { children: ReactNode }) {
   );
 }
 
-/** Top bar shared by studio pages: drawer button, title area, page actions, theme toggle. */
-export function StudioHeader({ children, actions, onNewChat }: { children?: ReactNode; actions?: ReactNode; onNewChat?: () => void }) {
-  const { openSidebar, theme } = useStudio();
+/**
+ * A page's part of the top bar: its title (shown in the centre) and its
+ * actions (on the right, followed by a ⋯ menu with the page's less-used
+ * actions and the app's own). Rendered into the frame's top bar.
+ */
+export function StudioHeader({ children, actions, menu, onNewChat }: { children?: ReactNode; actions?: ReactNode; menu?: ReactNode; onNewChat?: () => void }) {
+  const { slots, theme, openSettings, openPrompts } = useStudio();
   return (
-    <header className="relative z-10 flex h-14 shrink-0 items-center gap-1 px-2 sm:px-4">
-      <IconButton label="Open sidebar" onClick={openSidebar} className="md:hidden">
-        <MenuIcon />
-      </IconButton>
-      <div className="flex min-w-0 flex-1 items-center gap-2 px-1 sm:px-2">{children}</div>
-      <div className="flex shrink-0 items-center gap-0.5">
-        <ModeSwitch className="mr-1" />
-        {actions}
-        <IconButton
-          label={theme.resolved === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-          onClick={() => theme.setTheme(theme.resolved === "dark" ? "light" : "dark")}
-          // Pages with their own actions are tight on phones; the theme is also in the profile menu.
-          className={cn(actions && "hidden sm:inline-grid")}
-        >
-          {theme.resolved === "dark" ? <Sun /> : <Moon />}
-        </IconButton>
-        {onNewChat && (
-          <IconButton label="New chat" onClick={onNewChat} className="md:hidden">
-            <SquarePen />
-          </IconButton>
+    <>
+      {slots.center && createPortal(<div className="flex min-w-0 items-center gap-2 text-[14px]">{children}</div>, slots.center)}
+      {slots.right &&
+        createPortal(
+          <>
+            {actions}
+            {onNewChat && (
+              <IconButton label="New chat" onClick={onNewChat} className="md:hidden">
+                <SquarePen />
+              </IconButton>
+            )}
+            <Menu label="More" align="end" width={240} buttonLabel="More actions" buttonTitle="More" buttonClassName={iconButtonClass()} button={<Ellipsis />}>
+              {menu}
+              {menu && <MenuSeparator />}
+              <MenuItem icon={theme.resolved === "dark" ? <Sun /> : <Moon />} onClick={() => theme.setTheme(theme.resolved === "dark" ? "light" : "dark")}>
+                {theme.resolved === "dark" ? "Light theme" : "Dark theme"}
+              </MenuItem>
+              <MenuItem icon={<Bookmark />} onClick={openPrompts}>
+                Saved prompts
+              </MenuItem>
+              <MenuItem icon={<Settings2 />} onClick={openSettings}>
+                Settings
+              </MenuItem>
+            </Menu>
+          </>,
+          slots.right,
         )}
-      </div>
-    </header>
+    </>
   );
 }
