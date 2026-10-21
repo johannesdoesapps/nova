@@ -13,16 +13,16 @@ export interface NavEntry {
   label: string;
   href: string;
   icon: LucideIcon;
-  /** main: everyday work; tools: more ways to use the models; admin: administrators only. */
-  group: "main" | "tools" | "admin";
+  /** mode: Chat and Code, switched in the top bar (not the sidebar); main: everyday work; tools: more ways to use the models; admin: administrators only. */
+  group: "mode" | "main" | "tools" | "admin";
   /** What it's for, in a few words (tooltips and the command palette). */
   hint: string;
 }
 
 export const NAV_ENTRIES: NavEntry[] = [
   { id: "home", label: "Home", href: "/home", icon: House, group: "main", hint: "Your start page: recent work, your day and suggestions" },
-  { id: "chat", label: "Chat", href: "/chat", icon: MessagesSquare, group: "main", hint: "Ask, research and write with AI" },
-  { id: "code", label: "Code", href: "/code", icon: Code2, group: "main", hint: "Build and fix software with the coding agent" },
+  { id: "chat", label: "Chat", href: "/chat", icon: MessagesSquare, group: "mode", hint: "Ask, research and write with AI" },
+  { id: "code", label: "Code", href: "/code", icon: Code2, group: "mode", hint: "Build and fix software with the coding agent" },
   { id: "projects", label: "Projects", href: "/projects", icon: FolderKanban, group: "main", hint: "All your code projects and missions" },
   { id: "agents", label: "Agents", href: "/agents", icon: Bot, group: "main", hint: "Specialised assistants, including the Security Team" },
   { id: "discover", label: "Discover", href: "/discover", icon: Compass, group: "tools", hint: "What Orbis can do, with ways to try it" },
@@ -37,6 +37,20 @@ export const NAV_ENTRIES: NavEntry[] = [
 /** The entries a user sees: administrators also get the admin group. */
 export function navFor(isAdmin: boolean): NavEntry[] {
   return NAV_ENTRIES.filter((e) => e.group !== "admin" || isAdmin);
+}
+
+/** The sidebar's entries: everything except Chat and Code, which are in the top bar's switcher. */
+export function sidebarFor(isAdmin: boolean): NavEntry[] {
+  return navFor(isAdmin).filter((e) => e.group !== "mode");
+}
+
+/** The two modes in the top bar. */
+export const MODES = NAV_ENTRIES.filter((e) => e.group === "mode") as (NavEntry & { id: "chat" | "code" })[];
+
+/** Which mode a page belongs to: Code pages, or Chat (the chat, the home where chats start, and chat history); none elsewhere. */
+export function modeFor(pathname: string): "chat" | "code" | null {
+  const s = sectionFor(pathname);
+  return s === "code" ? "code" : s === "chat" || s === "home" ? (pathname === "/" ? null : "chat") : null;
 }
 
 /** Which entry a path belongs to (pages without their own entry, like settings dialogs on /chat or /history, count as Chat). */

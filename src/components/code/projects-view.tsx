@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ChevronDown, Code2, FlaskConical, FolderGit2, Globe, Loader2, Plus, Server, ShieldCheck, Sparkles, Terminal, Trash2 } from "lucide-react";
 import { useApp } from "@/components/layout/app-context";
+import { forgetPlace } from "@/components/studio/mode-switch";
 import { StudioHeader } from "@/components/studio/frame";
 import { EXAMPLE_PROJECT, TEMPLATES, TEMPLATE_IDS, type ProjectSummary, type TemplateId } from "@/lib/code/projects";
 import { cn } from "@/lib/utils";
@@ -209,6 +210,7 @@ export function CodeProjectsView() {
     if (!confirm(`Delete “${p.name}” and all its files? This can't be undone.`)) return;
     try {
       await api(`/api/code/projects/${p.id}`, { method: "DELETE" });
+      forgetPlace("code", `/code/${p.id}`);
       setData((d) => d && { ...d, projects: d.projects.filter((x) => x.id !== p.id) });
     } catch (e) {
       setError(e as CodeApiError);

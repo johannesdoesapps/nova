@@ -6,7 +6,7 @@ import { Archive, Bookmark, Code2, Ellipsis, FolderPlus, LogIn, LogOut, Monitor,
 import type { AppUser } from "@/components/layout/app-context";
 import { cn } from "@/lib/utils";
 import { groupByDate, type ConvSummary } from "./history";
-import { navFor, type NavEntry, type Section } from "./nav";
+import { sidebarFor, type NavEntry, type Section } from "./nav";
 import type { ThemePref } from "./prefs";
 import { IconButton, iconButtonClass, Kbd, Menu, MenuItem, MenuSeparator, OrbisMark, Segmented } from "./ui";
 
@@ -79,7 +79,8 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
   const rail = p.collapsed;
   // In Code, the sidebar is about projects; everywhere else, about chats.
   const inCode = p.section === "code";
-  const entries = navFor(!!p.user?.isAdmin);
+  // Chat and Code are switched in the top bar, not here.
+  const entries = sidebarFor(!!p.user?.isAdmin);
   const expandAndSearch = () => {
     p.onToggleCollapsed();
     requestAnimationFrame(() => searchRef.current?.focus());

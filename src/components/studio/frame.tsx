@@ -9,6 +9,7 @@ import { CommandPalette } from "./command-palette";
 import { ArchivedDialog, DeleteDialog, PromptsDialog, SettingsDialog } from "./dialogs";
 import { localHistory, serverHistory, type ConvSummary, type HistoryStore } from "./history";
 import { useFeedback, useSavedPrompts, useSettings, useTheme, type Feedback, type StudioSettings } from "./prefs";
+import { forgetPlace, ModeSwitch, rememberPlace } from "./mode-switch";
 import { sectionFor } from "./nav";
 import { Sidebar } from "./sidebar";
 import { IconButton } from "./ui";
@@ -129,6 +130,9 @@ export function StudioFrame({ children }: { children: ReactNode }) {
     router.push(onHome ? "/home?new=1" : "/chat?new=1");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onChat, onHome, router]);
+
+  // Where Chat and Code were last left, for the top bar's switch.
+  useEffect(() => rememberPlace(pathname, params), [pathname, params]);
 
   // Keep the layout above the on-screen keyboard on mobile browsers.
   useEffect(() => {
@@ -334,6 +338,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
           onClose={() => setToDelete(null)}
           onConfirm={async (c) => {
             await store.remove(c.id);
+            forgetPlace("chat", `/chat?c=${encodeURIComponent(c.id)}`);
             if (c.id === activeChat) router.replace(onHome ? "/home?new=1" : "/chat?new=1");
             await refresh();
             notify("Chat deleted");
@@ -354,6 +359,7 @@ export function StudioHeader({ children, actions, onNewChat }: { children?: Reac
       </IconButton>
       <div className="flex min-w-0 flex-1 items-center gap-2 px-1 sm:px-2">{children}</div>
       <div className="flex shrink-0 items-center gap-0.5">
+        <ModeSwitch className="mr-1" />
         {actions}
         <IconButton
           label={theme.resolved === "dark" ? "Switch to light theme" : "Switch to dark theme"}
