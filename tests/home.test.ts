@@ -97,8 +97,11 @@ const dayRoute = await import("@/app/api/home/day/route");
 beforeEach(() => {
   db.tables = {
     messages: [
-      { conversation_id: "c1", content: "## Plan\nHere is a **three-day** plan for [Lisbon](https://x.example).", created_at: "2026-10-21T08:00:00Z" },
-      { conversation_id: "c1", content: "older reply", created_at: "2026-10-21T07:00:00Z" },
+      { conversation_id: "c1", role: "assistant", content: "## Plan\nHere is a **three-day** plan for [Lisbon](https://x.example).", created_at: "2026-10-21T08:00:00Z" },
+      { conversation_id: "c1", role: "user", content: "older question", created_at: "2026-10-21T07:00:00Z" },
+      // Saved together with its reply: the reply is the preview.
+      { conversation_id: "c2", role: "user", content: "What should we charge?", created_at: "2026-10-20T08:00:00Z" },
+      { conversation_id: "c2", role: "assistant", content: "Start at $12 a month.", created_at: "2026-10-20T08:00:00Z" },
     ],
     code_agent_runs: [{ project_id: "p1", status: "needs_input", request: "Build the site", updated_at: "2026-10-21T10:00:00Z" }],
     project_tasks: [
@@ -258,7 +261,7 @@ describe("loading the home", () => {
     expect(h.errors).toEqual([]);
     expect(h.conversations.map((c) => [c.id, c.preview])).toEqual([
       ["c1", "Plan Here is a three-day plan for Lisbon."],
-      ["c2", null],
+      ["c2", "Start at $12 a month."],
     ]);
     // Projects needing the user first, then the most recently changed; archived missions left out.
     expect(h.projects.map((p) => p.id)).toEqual(["m1", "p1", "p2"]);

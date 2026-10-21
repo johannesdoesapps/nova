@@ -55,16 +55,20 @@ export async function loadHome(auth: Authed): Promise<HomeData & { errors: strin
         if (!rows.length) return [];
         const { data } = await db
           .from("messages")
-          .select("conversation_id,content,created_at")
+          .select("conversation_id,role,content,created_at")
           .in(
             "conversation_id",
             rows.map((r) => r.id),
           )
           .order("created_at", { ascending: false })
           .limit(60);
-        const latest = new Map<string, string>();
-        for (const m of (data ?? []) as { conversation_id: string; content: string }[]) if (!latest.has(m.conversation_id)) latest.set(m.conversation_id, m.content);
-        return rows.map((r) => ({ id: r.id, title: r.title, mode: r.mode, updatedAt: r.updated_at, preview: latest.has(r.id) ? previewOf(latest.get(r.id)!) : null }));
+        // The newest message per chat; a question and its reply can share a timestamp, so the reply wins a tie.
+        const latest = new Map<string, { content: string; created_at: string; role: string }>();
+        for (const m of (data ?? []) as { conversation_id: string; role: string; content: string; created_at: string }[]) {
+          const seen = latest.get(m.conversation_id);
+          if (!seen || (m.created_at === seen.created_at && m.role === "assistant" && seen.role !== "assistant")) latest.set(m.conversation_id, m);
+        }
+        return rows.map((r) => ({ id: r.id, title: r.title, mode: r.mode, updatedAt: r.updated_at, preview: latest.has(r.id) ? previewOf(latest.get(r.id)!.content) : null }));
       },
       errors,
     ),
