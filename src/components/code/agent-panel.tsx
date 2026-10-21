@@ -385,12 +385,14 @@ export function AgentPanel({
     };
   }, [projectId, initialRunId, open, refresh]);
 
-  // A step running from before this page loaded (or in another tab): watch it until it ends.
+  // While this page isn't stepping the run itself (a step from before it loaded, another tab, an answer given
+  // elsewhere), keep its state fresh so it shows what the run is doing now — and Continue when it's ready to go on.
+  const runEnded = !!run && ENDED_STATUSES.includes(run.status);
   useEffect(() => {
-    if (!run?.busy || driving) return;
-    const t = setInterval(() => void refresh(run.id).catch(() => {}), 3000);
+    if (!run || runEnded || driving || answering) return;
+    const t = setInterval(() => void refresh(run.id).catch(() => {}), run.busy ? 3000 : 5000);
     return () => clearInterval(t);
-  }, [run?.busy, run?.id, driving, refresh]);
+  }, [run, runEnded, driving, answering, refresh]);
 
   useEffect(() => {
     feedEnd.current?.scrollIntoView({ block: "end" });
