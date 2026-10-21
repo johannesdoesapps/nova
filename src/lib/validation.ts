@@ -58,7 +58,7 @@ export const chatRequest = z.object({
 });
 
 /** GET /api/conversations?q= — an optional title search. */
-export const conversationSearch = z.object({ q: z.string().trim().max(200).optional(), archived: z.enum(["1"]).optional() });
+export const conversationSearch = z.object({ q: z.string().trim().max(200).optional(), archived: z.enum(["1"]).optional(), project: uuid.optional() });
 
 export const compareRequest = z.object({
   prompt: z.string().trim().min(1).max(8_000),
@@ -96,6 +96,12 @@ export const projectCreate = z.object({
 });
 export const projectPatch = projectCreate.partial().refine((v) => Object.keys(v).length > 0, "Nothing to update.");
 
+/** What a project shares with its chats. */
+export const projectContextPatch = z
+  .object({ instructions: z.boolean().optional(), notes: z.boolean().optional() })
+  .strict()
+  .refine((v) => Object.keys(v).length > 0, "Nothing to update.");
+
 export const noteCreate = z.object({
   title: z.string().trim().min(1).max(200),
   content: z.string().min(1).max(100_000),
@@ -110,6 +116,8 @@ export const conversationPatch = z
     projectId: uuid.nullable().optional(),
     /** Archive (hide from the list without deleting) or bring back. */
     archived: z.boolean().optional(),
+    /** Pin to the top of the list, or unpin. */
+    pinned: z.boolean().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, "Nothing to update.");
 

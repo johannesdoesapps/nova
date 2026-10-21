@@ -3,7 +3,7 @@ import type { AuthContext } from "@/lib/auth";
 import { missingSetup } from "@/lib/connectors/oauth";
 import { getConnection, usable } from "@/lib/connectors/runtime";
 import { connector } from "@/lib/connectors/registry";
-import { listConversations } from "@/lib/db";
+import { listChats } from "@/lib/db";
 import { listMissions } from "@/lib/db/missions";
 import { reportError } from "@/lib/observability";
 import { listProjects as listCodeProjects } from "@/lib/code/server";
@@ -51,7 +51,8 @@ export async function loadHome(auth: Authed): Promise<HomeData & { errors: strin
       "conversations",
       [],
       async () => {
-        const rows = await listConversations(db, uid, 6);
+        // Most recent first; pinned chats are marked but not moved.
+        const rows = (await listChats(db, uid, { limit: 6 })).sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 6);
         if (!rows.length) return [];
         const { data } = await db
           .from("messages")
@@ -68,7 +69,15 @@ export async function loadHome(auth: Authed): Promise<HomeData & { errors: strin
           const seen = latest.get(m.conversation_id);
           if (!seen || (m.created_at === seen.created_at && m.role === "assistant" && seen.role !== "assistant")) latest.set(m.conversation_id, m);
         }
-        return rows.map((r) => ({ id: r.id, title: r.title, mode: r.mode, updatedAt: r.updated_at, preview: latest.has(r.id) ? previewOf(latest.get(r.id)!.content) : null }));
+        return rows.map((r) => ({
+          id: r.id,
+          title: r.title,
+          mode: r.mode,
+          updatedAt: r.updated_at,
+          preview: latest.has(r.id) ? previewOf(latest.get(r.id)!.content) : null,
+          pinned: r.pinned,
+          projectName: r.project_name,
+        }));
       },
       errors,
     ),

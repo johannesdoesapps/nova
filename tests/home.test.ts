@@ -60,9 +60,9 @@ vi.mock("@/lib/auth", async (orig) => ({
   },
 }));
 vi.mock("@/lib/db", () => ({
-  listConversations: async () => [
-    { id: "c1", title: "Trip to Lisbon", mode: "research", updated_at: "2026-10-21T08:00:00Z" },
-    { id: "c2", title: "Pricing ideas", mode: "critic", updated_at: "2026-10-20T08:00:00Z" },
+  listChats: async () => [
+    { id: "c2", title: "Pricing ideas", mode: "critic", updated_at: "2026-10-20T08:00:00Z", pinned: true, project_name: null },
+    { id: "c1", title: "Trip to Lisbon", mode: "research", updated_at: "2026-10-21T08:00:00Z", pinned: false, project_name: null },
   ],
 }));
 vi.mock("@/lib/db/missions", () => ({

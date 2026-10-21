@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
-import { Archive, Bookmark, ChevronDown, Code2, CreditCard, Ellipsis, Gauge, LayoutGrid, FolderPlus, LogIn, LogOut, Monitor, Moon, Pencil, Search, Settings2, SquarePen, Sun, Trash2, X } from "lucide-react";
+import { Archive, Bookmark, ChevronDown, Code2, CreditCard, Download, Ellipsis, FolderInput, Gauge, LayoutGrid, FolderPlus, LogIn, LogOut, Monitor, Moon, Pencil, Pin, PinOff, Search, Settings2, SquarePen, Sun, Trash2, X } from "lucide-react";
 import type { AppUser } from "@/components/layout/app-context";
 import { cn } from "@/lib/utils";
 import { groupByDate, type ConvSummary } from "./history";
@@ -27,6 +27,12 @@ export interface SidebarProps {
   onRequestDelete: (c: ConvSummary) => void;
   /** Signed-in history only. */
   onArchive?: (c: ConvSummary) => void;
+  /** Signed-in history only. */
+  onPin?: (c: ConvSummary) => void;
+  /** Signed-in history only: choose a project for the chat. */
+  onMove?: (c: ConvSummary) => void;
+  /** Save the chat as a Markdown file. */
+  onDownload?: (c: ConvSummary) => void;
   onOpenPrompts: () => void;
   onOpenSettings: () => void;
   user: AppUser | null;
@@ -69,9 +75,15 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = (p.conversations ?? []).filter((c) => !q || c.title.toLowerCase().includes(q));
-    if (!q || found?.q.toLowerCase() !== q) return groupByDate(list);
-    const seen = new Set(list.map((c) => c.id));
-    const merged = [...list, ...found.items.filter((c) => !seen.has(c.id))].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+    if (!q) {
+      // Pinned chats stay at the top, whatever their age.
+      const pinned = list.filter((c) => c.pinned);
+      return [...(pinned.length ? [{ label: "Pinned", items: pinned }] : []), ...groupByDate(list.filter((c) => !c.pinned))];
+    }
+    if (found?.q.toLowerCase() !== q) return groupByDate(list);
+    // The server's results also match message text, with an excerpt.
+    const seen = new Set(found.items.map((c) => c.id));
+    const merged = [...found.items, ...list.filter((c) => !seen.has(c.id))].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
     return groupByDate(merged);
   }, [p.conversations, query, found]);
   const searching = !!onSearch && !!query.trim() && found?.q.toLowerCase() !== query.trim().toLowerCase();
@@ -272,6 +284,10 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
                       onRename={p.onRename}
                       onRequestDelete={p.onRequestDelete}
                       onArchive={p.onArchive}
+                      onPin={p.onPin}
+                      onMove={p.onMove}
+                      onDownload={p.onDownload}
+                      showSnippet={!!query.trim()}
                     />
                   ))}
                 </ul>
@@ -397,6 +413,10 @@ function HistoryItem({
   onRename,
   onRequestDelete,
   onArchive,
+  onPin,
+  onMove,
+  onDownload,
+  showSnippet,
 }: {
   conv: ConvSummary;
   active: boolean;
@@ -404,6 +424,10 @@ function HistoryItem({
   onRename: (id: string, title: string) => Promise<void>;
   onRequestDelete: (c: ConvSummary) => void;
   onArchive?: (c: ConvSummary) => void;
+  onPin?: (c: ConvSummary) => void;
+  onMove?: (c: ConvSummary) => void;
+  onDownload?: (c: ConvSummary) => void;
+  showSnippet?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(conv.title);
@@ -464,17 +488,18 @@ function HistoryItem({
         href={`/chat?c=${conv.id}`}
         onClick={onNavigate}
         aria-current={active ? "page" : undefined}
-        className={cn("min-w-0 flex-1 truncate py-2 pl-3 pr-9 text-[13.5px]", active ? "text-s-ink" : "text-s-ink-2 group-hover:text-s-ink")}
-        title={conv.title}
+        className={cn("min-w-0 flex-1 py-2 pl-3 pr-9 text-[13.5px]", active ? "text-s-ink" : "text-s-ink-2 group-hover:text-s-ink")}
+        title={conv.project_name ? `${conv.title} · ${conv.project_name}` : conv.title}
       >
-        {conv.title}
+        <span className="block truncate">{conv.title}</span>
+        {showSnippet && conv.snippet && <span className="mt-0.5 line-clamp-2 block text-[12px] leading-snug text-s-ink-3">{conv.snippet}</span>}
       </Link>
       <div className="absolute right-1 top-1/2 -translate-y-1/2">
         <Menu
           label={`Actions for ${conv.title}`}
           align="start"
           side="auto"
-          width={180}
+          width={200}
           buttonLabel="Chat actions"
           buttonClassName={cn(
             iconButtonClass("sm"),
@@ -482,9 +507,24 @@ function HistoryItem({
           )}
           button={<Ellipsis />}
         >
+          {onPin && (
+            <MenuItem icon={conv.pinned ? <PinOff /> : <Pin />} onClick={() => onPin(conv)}>
+              {conv.pinned ? "Unpin" : "Pin to top"}
+            </MenuItem>
+          )}
           <MenuItem icon={<Pencil />} onClick={() => setEditing(true)}>
             Rename
           </MenuItem>
+          {onMove && (
+            <MenuItem icon={<FolderInput />} onClick={() => onMove(conv)}>
+              {conv.project_id ? "Change project…" : "Move to project…"}
+            </MenuItem>
+          )}
+          {onDownload && (
+            <MenuItem icon={<Download />} onClick={() => onDownload(conv)}>
+              Download
+            </MenuItem>
+          )}
           {onArchive && (
             <MenuItem icon={<Archive />} onClick={() => onArchive(conv)}>
               Archive

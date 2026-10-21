@@ -348,6 +348,9 @@ export interface HomeConversation {
   updatedAt: string;
   /** The start of the latest message. */
   preview: string | null;
+  pinned?: boolean;
+  /** The project the chat is in. */
+  projectName?: string | null;
 }
 
 export interface HomeProject {

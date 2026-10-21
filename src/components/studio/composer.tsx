@@ -500,6 +500,7 @@ function WhereItGoes({ models, modelId, web, files }: { models: ModelWithStatus[
               <span className="font-medium text-s-ink">Sent to {to}.</span> Your message, the earlier messages in this chat{files ? ` and the ${files} attached file${files === 1 ? "" : "s"}` : ""} go to
               them to write the reply.{auto ? " Auto picks the model for each message; the reply shows which one answered." : ""}
             </p>
+            {user && <p className="text-s-ink-3">In a project chat, the project’s instructions (and notes, if you turned them on) go too. You choose this per project; other projects are never included.</p>}
             <p className="text-s-ink-3">Under their API terms, data sent through their APIs isn’t used to train their models by default; they may keep it for a limited time to check for abuse.</p>
           </>
         )}

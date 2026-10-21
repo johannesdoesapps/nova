@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getAllModels } from "@/lib/ai";
 import { RETIRED_MODELS } from "@/lib/ai/registry";
 import { requireUser } from "@/lib/auth";
-import { deleteConversation, getConversation, updateConversation } from "@/lib/db";
+import { deleteConversation, getConversation, setPinned, updateConversation } from "@/lib/db";
 import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
 import { conversationPatch, uuid } from "@/lib/validation";
 
@@ -26,19 +26,22 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/conversations/[
   }
 }
 
-/** PATCH — rename, change mode, move to a project, or archive / unarchive. */
+/** PATCH — rename, change mode, move to a project, archive / unarchive, or pin / unpin. */
 export async function PATCH(req: Request, ctx: RouteContext<"/api/conversations/[id]">) {
   try {
     const id = await idFrom(ctx);
-    const body = await parseJsonBody(req, conversationPatch, 4_000);
+    const { pinned, ...body } = await parseJsonBody(req, conversationPatch, 4_000);
     const { supabase, user } = await requireUser();
-    const conversation = await updateConversation(supabase, user.id, id, {
+    const patch = {
       ...(body.title !== undefined && { title: body.title }),
       ...(body.mode !== undefined && { mode: body.mode }),
       ...(body.projectId !== undefined && { project_id: body.projectId }),
       ...(body.archived !== undefined && { archived_at: body.archived ? new Date().toISOString() : null }),
-    });
-    return NextResponse.json({ conversation });
+    };
+    // Pins are checked against the user's own chats before they are saved.
+    const pins = pinned !== undefined ? await setPinned(supabase, user.id, id, pinned) : null;
+    const conversation = Object.keys(patch).length ? await updateConversation(supabase, user.id, id, patch) : null;
+    return NextResponse.json({ conversation, ...(pins && { pinned: pins.includes(id) }) });
   } catch (err) {
     return errorResponse(err);
   }

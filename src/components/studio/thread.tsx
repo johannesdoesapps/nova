@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { ArrowDown, CircleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Msg } from "./history";
-import { MessageView } from "./message";
+import { MessageView, type ReplyAction } from "./message";
 import type { Feedback } from "./prefs";
 import type { LoadState } from "./use-chat";
 
@@ -24,7 +24,8 @@ export function ConversationPane({
   onEdit,
   onFeedback,
   onSavePrompt,
-  onSaveToProject,
+  onReplyAction,
+  projectActions,
   onStartOver,
   startOverLabel = "Start a new chat",
   assistantName,
@@ -43,7 +44,8 @@ export function ConversationPane({
   onEdit?: (id: string, text: string) => void;
   onFeedback: (id: string, f: Feedback) => void;
   onSavePrompt: (text: string) => boolean;
-  onSaveToProject?: (m: Msg) => void;
+  onReplyAction?: (action: ReplyAction, m: Msg) => void;
+  projectActions?: boolean;
   onStartOver: () => void;
   startOverLabel?: string;
   assistantName?: string;
@@ -123,7 +125,8 @@ export function ConversationPane({
                   onEdit={onEdit}
                   onFeedback={onFeedback}
                   onSavePrompt={onSavePrompt}
-                  onSaveToProject={onSaveToProject}
+                  onReplyAction={onReplyAction}
+                  projectActions={projectActions}
                   assistantName={assistantName}
                   assistantAvatar={assistantAvatar}
                   question={m.role === "assistant" ? questionBefore(messages, i) : undefined}

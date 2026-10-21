@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatMode } from "@/lib/ai/modes";
 import type { ReplyLength, ReplyStyle } from "@/lib/ai/reply-settings";
 import { CHAT_MODES } from "@/lib/ai/modes";
-import { streamChat, type ChatAttachment, type ChatTransport } from "./chat-client";
+import { streamChat, type ChatAttachment, type ChatTransport, type ProjectUse } from "./chat-client";
 import { titleFrom, type HistoryStore, type Msg } from "./history";
 
 export type LoadState = { status: "idle" } | { status: "loading" } | { status: "error"; message: string };
@@ -47,6 +47,9 @@ export function useStudioChat({
   const [mode, setMode] = useState<ChatMode>(defaultMode);
   const [useWeb, setUseWeb] = useState(false);
   const [load, setLoad] = useState<LoadState>({ status: "idle" });
+  // The project this chat is in (signed in): from the loaded chat, ?project= for a new one, or the server's reply.
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectUse, setProjectUse] = useState<ProjectUse | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const dirty = useRef(false);
   // Mirrors conversationId synchronously, so our own URL updates aren't mistaken for navigation.
@@ -69,15 +72,24 @@ export function useStudioChat({
     setId(null);
     setTitle(null);
     setLoad({ status: "idle" });
+    setProjectId(null);
+    setProjectUse(null);
   }, [setId]);
 
   // Open the conversation named in ?c=, or start fresh on ?new.
   const cParam = params.get("c");
   const newParam = params.has("new");
+  const projectParam = params.get("project");
   useEffect(() => {
     if (newParam) {
       reset();
       router.replace(basePath, { scroll: false });
+      return;
+    }
+    // A new chat inside a project: /chat?project=<id>.
+    if (!cParam && projectParam && store.kind === "server" && /^[0-9a-f-]{36}$/i.test(projectParam)) {
+      if (idRef.current) reset();
+      setProjectId(projectParam);
       return;
     }
     if (!cParam) {
@@ -95,6 +107,8 @@ export function useStudioChat({
         if (!alive) return;
         setId(r.conversation.id);
         setTitle(r.conversation.title);
+        setProjectId(r.conversation.project_id ?? null);
+        setProjectUse(null);
         if ((CHAT_MODES as readonly string[]).includes(r.conversation.mode)) setMode(r.conversation.mode as ChatMode);
         setMessages(r.messages);
         setLoad({ status: "idle" });
@@ -104,7 +118,7 @@ export function useStudioChat({
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cParam, newParam, store]);
+  }, [cParam, newParam, projectParam, store]);
 
   // Guests: persist the conversation locally once a turn settles.
   useEffect(() => {
@@ -165,6 +179,7 @@ export function useStudioChat({
         for await (const ev of transport(
           {
             conversationId: local ? null : convId,
+            projectId: !local && !convId ? projectId : undefined,
             message: content,
             mode: turnMode,
             modelId: opts.modelId ?? modelId,
@@ -192,6 +207,10 @@ export function useStudioChat({
           else if (ev.type === "sources") patch((m) => ({ ...m, sources: ev.sources }));
           else if (ev.type === "actions") patch((m) => ({ ...m, actions: ev.actions }));
           else if (ev.type === "notice") patch((m) => ({ ...m, notices: [...(m.notices ?? []), ev.message] }));
+          else if (ev.type === "project") {
+            setProjectId(ev.project.id);
+            setProjectUse(ev.project);
+          }
           else if (ev.type === "delta") patch((m) => ({ ...m, content: m.content + ev.text }));
           else if (ev.type === "done") {
             patch((m) => ({ ...m, content: ev.text, status: "done", simulated: ev.simulated, cost: ev.estimatedCost, id: ev.assistantMessageId ?? m.id }));
@@ -218,7 +237,7 @@ export function useStudioChat({
       }
       return true;
     },
-    [busy, mode, messages, store, conversationId, title, router, modelId, allowFallback, useWeb, onHistoryChanged, setId, basePath, transport, replyLength, replyStyle],
+    [busy, mode, messages, store, conversationId, title, router, modelId, allowFallback, useWeb, onHistoryChanged, setId, basePath, transport, replyLength, replyStyle, projectId],
   );
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
@@ -243,10 +262,21 @@ export function useStudioChat({
     [messages, send],
   );
 
-  const newChat = useCallback(() => {
-    reset();
-    router.replace(basePath, { scroll: false });
-  }, [reset, router, basePath]);
+  /** A fresh chat; `inProject` starts it in that project. */
+  const newChat = useCallback(
+    (inProject?: string | null) => {
+      reset();
+      router.replace(inProject ? `${basePath}?project=${inProject}` : basePath, { scroll: false });
+    },
+    [reset, router, basePath],
+  );
 
-  return { messages, conversationId, title, setTitle, mode, setMode, useWeb, setUseWeb, load, busy, send, stop, retry, edit, newChat };
+  // The chat was moved into (or out of) a project from the sidebar.
+  const moved = useCallback((id: string, to: string | null) => {
+    if (id !== idRef.current) return;
+    setProjectId(to);
+    setProjectUse(null);
+  }, []);
+
+  return { messages, conversationId, title, setTitle, mode, setMode, useWeb, setUseWeb, load, busy, send, stop, retry, edit, newChat, projectId, projectUse, moved };
 }

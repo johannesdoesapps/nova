@@ -309,8 +309,17 @@ export function Home({ name, composer, onAction, notice, starter }: HomeProps) {
                   <li key={c.id}>
                     <Link href={`/chat?c=${c.id}`} className="group flex items-start gap-3 rounded-xl px-1.5 py-2 transition hover:bg-s-hover">
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[14px] font-medium text-s-ink">{c.title}</span>
-                        {c.preview && <span className="mt-0.5 block truncate text-[12.5px] text-s-ink-3">{c.preview}</span>}
+                        <span className="flex items-center gap-1.5">
+                          {c.pinned && <Pin className="h-3 w-3 shrink-0 text-s-ink-3" aria-label="Pinned" />}
+                          <span className="truncate text-[14px] font-medium text-s-ink">{c.title}</span>
+                        </span>
+                        {(c.projectName || c.preview) && (
+                          <span className="mt-0.5 block truncate text-[12.5px] text-s-ink-3">
+                            {c.projectName && <span className="text-s-ink-2">{c.projectName}</span>}
+                            {c.projectName && c.preview && " · "}
+                            {c.preview}
+                          </span>
+                        )}
                       </span>
                       <time dateTime={c.updatedAt} className="mt-0.5 shrink-0 text-[12px] text-s-ink-3" suppressHydrationWarning>
                         {now === null ? "" : ago(c.updatedAt, now * 60_000)}

@@ -8,15 +8,15 @@ import { useApp } from "@/components/layout/app-context";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { cn } from "@/lib/utils";
 import { CommandPalette } from "./command-palette";
-import { ArchivedDialog, DeleteDialog, PromptsDialog, SettingsDialog } from "./dialogs";
-import { localHistory, serverHistory, type ConvSummary, type HistoryStore } from "./history";
+import { ArchivedDialog, DeleteDialog, MoveChatDialog, PromptsDialog, SettingsDialog } from "./dialogs";
+import { downloadConversation, localHistory, serverHistory, type ConvSummary, type HistoryStore } from "./history";
 import { useFeedback, useSavedPrompts, useSettings, useTheme, type Feedback, type StudioSettings } from "./prefs";
 import { forgetPlace, ModeSwitch, rememberPlace } from "./mode-switch";
 import { sectionFor } from "./nav";
 import { Sidebar } from "./sidebar";
 import { IconButton, iconButtonClass, Menu, MenuItem, MenuSeparator, OrbisMark } from "./ui";
 
-type FrameEvent = "new-chat" | "use-prompt" | "renamed";
+type FrameEvent = "new-chat" | "use-prompt" | "renamed" | "moved";
 
 interface StudioContext {
   theme: ReturnType<typeof useTheme>;
@@ -116,6 +116,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
   const [promptsOpen, setPromptsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [toDelete, setToDelete] = useState<ConvSummary | null>(null);
+  const [toMove, setToMove] = useState<ConvSummary | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [toast, setToast] = useState<{ text: string; key: number } | null>(null);
   const notify = useCallback((text: string) => setToast({ text, key: Date.now() }), []);
@@ -280,6 +281,28 @@ export function StudioFrame({ children }: { children: ReactNode }) {
                 }
               : undefined
           }
+          onPin={
+            store.pin
+              ? async (c) => {
+                  try {
+                    await store.pin!(c.id, !c.pinned);
+                  } catch (e) {
+                    notify(`Couldn’t ${c.pinned ? "unpin" : "pin"} the chat: ${(e as Error).message}`);
+                    return;
+                  }
+                  await refresh();
+                  notify(c.pinned ? "Unpinned" : "Pinned to the top");
+                }
+              : undefined
+          }
+          onMove={store.move ? (c) => setToMove(c) : undefined}
+          onDownload={async (c) => {
+            try {
+              await downloadConversation(store, c);
+            } catch (e) {
+              notify(`Couldn’t download the chat: ${(e as Error).message}`);
+            }
+          }}
           onOpenPrompts={() => {
             setMobileOpen(false);
             setPromptsOpen(true);
@@ -371,6 +394,17 @@ export function StudioFrame({ children }: { children: ReactNode }) {
             onDelete={(c) => {
               setArchivedOpen(false);
               setToDelete(c);
+            }}
+          />
+        )}
+        {store.move && (
+          <MoveChatDialog
+            conv={toMove}
+            onClose={() => setToMove(null)}
+            onMove={async (c, projectId) => {
+              await store.move!(c.id, projectId);
+              emit("moved", { id: c.id, projectId });
+              await refresh();
             }}
           />
         )}

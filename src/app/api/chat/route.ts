@@ -19,6 +19,8 @@ import { chatConnectors } from "@/lib/connectors/chat";
 import { extractAction, type ProposedAction } from "@/lib/connectors/router";
 import { enforceLimits, planLimits, recordRun, releaseUsage, shouldSaveAllowance } from "@/lib/usage";
 import { chatRequest } from "@/lib/validation";
+import { getProjectContext } from "@/lib/db/project-context";
+import { projectContextBlock } from "@/lib/projects/context";
 
 export const maxDuration = 60;
 
@@ -64,6 +66,8 @@ export async function POST(req: Request) {
 
     // Conversation + history
     let conversationId: string | null = null;
+    // The chat's own project: the only project whose saved context a reply may see.
+    let projectId: string | null = null;
     let history: ChatMessage[] = [];
     // Regenerate: the saved reply this turn replaces (its question is reused, not saved again).
     let replacing: string | null = null;
@@ -76,6 +80,7 @@ export async function POST(req: Request) {
           throw new ApiError("bad_request", "This conversation belongs to an agent. Continue it from the Agents workspace.");
         }
         conversationId = conversation.id;
+        projectId = conversation.project_id ?? null;
         const turns = messages.filter((m) => m.role !== "system");
         replacing = body.regenerate && !body.editOf ? regeneratedReply(turns, body.message) : null;
         let earlier = replacing ? turns.slice(0, -2) : turns;
@@ -97,6 +102,7 @@ export async function POST(req: Request) {
           projectId: body.projectId,
         });
         conversationId = c.id;
+        projectId = c.project_id ?? null;
       }
     } else {
       history = body.history ?? [];
@@ -115,6 +121,21 @@ export async function POST(req: Request) {
       const preferences = replyInstruction(body.replyLength, body.replyStyle);
       if (preferences) system += `\n\nThe user's reply preferences:\n${preferences}`;
       const turnTools: string[] = [];
+
+      // The project's instructions (and notes, if the user allowed them). Never another project's.
+      if (auth.mode === "authenticated" && projectId) {
+        try {
+          const pc = await getProjectContext(auth.supabase, auth.user.id, projectId);
+          if (pc) {
+            const block = projectContextBlock(pc);
+            if (block.system) system += `\n\n${block.system}`;
+            send({ type: "project", project: { id: projectId, name: pc.name, ...block.used } });
+          }
+        } catch (err) {
+          reportError(err, { where: "chat.project-context" });
+          send({ type: "notice", level: "warning", message: "This project's saved instructions couldn't be loaded, so this answer doesn't use them." });
+        }
+      }
 
       // Optional web grounding in Research mode, or always when the Smart Router's Research mode is on.
       let sources: SearchSource[] = [];

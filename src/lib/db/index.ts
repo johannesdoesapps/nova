@@ -1,6 +1,7 @@
 import "server-only";
 import { ApiError } from "../http";
 import type { ServerSupabase } from "../supabase/server";
+import { readPins, snippetAround, togglePin } from "../chats/search";
 
 /**
  * Data access layer. Every function receives the per-request Supabase client
@@ -175,6 +176,97 @@ export async function listConversations(db: ServerSupabase, userId: string, limi
   const { data, error } = await q.order("updated_at", { ascending: false }).limit(limit);
   if (error) fail(error, "Conversations");
   return data as ConversationRow[];
+}
+
+const CONV_COLS = "id,project_id,title,mode,archived_at,created_at,updated_at,project:projects(name)";
+
+export type ConversationListItem = ConversationRow & { project_name: string | null; pinned: boolean; snippet?: string; match?: "title" | "content" };
+
+function toItem(r: ConversationRow & { project?: { name: string } | { name: string }[] | null }, pins: string[]): ConversationListItem {
+  const p = Array.isArray(r.project) ? r.project[0] : r.project;
+  const { project: _drop, ...rest } = r;
+  void _drop;
+  return { ...rest, project_name: p?.name ?? null, pinned: pins.includes(r.id) };
+}
+
+/** The user's pinned chats (stored with their preferences). */
+export async function getPins(db: ServerSupabase, userId: string): Promise<string[]> {
+  const { data, error } = await db.from("profiles").select("preferences").eq("id", userId).maybeSingle();
+  if (error) fail(error, "Preferences");
+  return readPins(data?.preferences);
+}
+
+/** Pin or unpin one of the user's chats (it must be theirs). */
+export async function setPinned(db: ServerSupabase, userId: string, id: string, pinned: boolean): Promise<string[]> {
+  const { data: conv, error: cErr } = await db.from("conversations").select("id").eq("id", id).eq("user_id", userId).maybeSingle();
+  if (cErr) fail(cErr, "Conversation");
+  if (!conv) throw new ApiError("not_found", "Conversation not found.");
+  const { data, error } = await db.from("profiles").select("preferences").eq("id", userId).maybeSingle();
+  if (error) fail(error, "Preferences");
+  const all = (data?.preferences as Record<string, unknown> | null) ?? {};
+  const pins = togglePin(readPins(all), id, pinned);
+  const { error: uErr } = await db.from("profiles").update({ preferences: { ...all, pinnedChats: pins } }).eq("id", userId);
+  if (uErr) fail(uErr, "Preferences");
+  return pins;
+}
+
+/**
+ * The chat list: pinned chats first (even old ones), then the most recent;
+ * or one project's chats; or the archived ones. Agent chats live with their agents.
+ */
+export async function listChats(db: ServerSupabase, userId: string, opts: { archived?: boolean; projectId?: string; limit?: number } = {}): Promise<ConversationListItem[]> {
+  const pins = await getPins(db, userId);
+  const base = () => db.from("conversations").select(CONV_COLS).eq("user_id", userId).is("agent_id", null).is("builtin_agent", null);
+  let q = base();
+  q = opts.archived ? q.not("archived_at", "is", null) : q.is("archived_at", null);
+  if (opts.projectId) q = q.eq("project_id", opts.projectId);
+  const { data, error } = await q.order("updated_at", { ascending: false }).limit(opts.limit ?? 50);
+  if (error) fail(error, "Conversations");
+  const rows = (data ?? []) as unknown as Parameters<typeof toItem>[0][];
+  const missing = opts.archived || opts.projectId ? [] : pins.filter((id) => !rows.some((r) => r.id === id));
+  let extra: typeof rows = [];
+  if (missing.length) {
+    const r = await base().is("archived_at", null).in("id", missing);
+    if (r.error) fail(r.error, "Conversations");
+    extra = (r.data ?? []) as unknown as typeof rows;
+  }
+  return [...rows, ...extra].map((r) => toItem(r, pins));
+}
+
+/** Chats whose title or messages contain `query` (title matches first), with an excerpt of where it matched. */
+export async function searchChats(db: ServerSupabase, userId: string, query: string, archived = false, limit = 50): Promise<ConversationListItem[]> {
+  const text = query.trim();
+  const like = `%${escapeLike(text)}%`;
+  const pins = await getPins(db, userId);
+  const base = () => {
+    const b = db.from("conversations").select(CONV_COLS).eq("user_id", userId).is("agent_id", null).is("builtin_agent", null);
+    return archived ? b.not("archived_at", "is", null) : b.is("archived_at", null);
+  };
+  const [titles, hits] = await Promise.all([
+    base().ilike("title", like).order("updated_at", { ascending: false }).limit(limit),
+    // Row-level security limits messages to the user's own conversations.
+    db.from("messages").select("conversation_id,content,created_at").ilike("content", like).order("created_at", { ascending: false }).limit(300),
+  ]);
+  if (titles.error) fail(titles.error, "Conversations");
+  if (hits.error) fail(hits.error, "Messages");
+  const byTitle = (titles.data ?? []) as unknown as Parameters<typeof toItem>[0][];
+  const snippets = new Map<string, string>();
+  for (const m of (hits.data ?? []) as { conversation_id: string; content: string }[]) {
+    if (snippets.has(m.conversation_id)) continue;
+    const s = snippetAround(m.content, text);
+    if (s) snippets.set(m.conversation_id, s);
+  }
+  const contentIds = [...snippets.keys()].filter((id) => !byTitle.some((r) => r.id === id)).slice(0, limit);
+  let byContent: typeof byTitle = [];
+  if (contentIds.length) {
+    const r = await base().in("id", contentIds).order("updated_at", { ascending: false });
+    if (r.error) fail(r.error, "Conversations");
+    byContent = (r.data ?? []) as unknown as typeof byTitle;
+  }
+  return [
+    ...byTitle.map((r) => ({ ...toItem(r, pins), match: "title" as const, ...(snippets.has(r.id) ? { snippet: snippets.get(r.id)! } : {}) })),
+    ...byContent.map((r) => ({ ...toItem(r, pins), match: "content" as const, snippet: snippets.get(r.id)! })),
+  ].slice(0, limit);
 }
 
 export async function getConversation(db: ServerSupabase, userId: string, id: string) {

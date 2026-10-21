@@ -12,14 +12,18 @@ import type { HomeAction } from "@/lib/home";
 import { PENDING_START_KEY, readPendingStart, starterModelId, starterTask, type StarterTask, type StarterTaskId } from "@/lib/starter";
 import type { ChatAttachment } from "./chat-client";
 import { Composer } from "./composer";
-import { SaveToProjectDialog } from "./dialogs";
 import { StudioHeader, useStudio } from "./frame";
-import type { Msg } from "./history";
 import { Home } from "./home";
+import type { ConvSummary } from "./history";
+import { ProjectChip } from "./project-chip";
+import { useReplyActions } from "./reply-actions";
 import { ConversationPane } from "./thread";
 import { useStudioChat } from "./use-chat";
 import type { StarterEnv } from "./task-starter";
 import { Welcome } from "./welcome";
+
+/** The most recently active chat (pinned chats are listed first, so not always the first). */
+const latestOf = (list: ConvSummary[] | null) => (list ?? []).reduce<ConvSummary | null>((a, c) => (!a || c.updated_at > a.updated_at ? c : a), null);
 
 const focusInput = () => requestAnimationFrame(() => document.getElementById("studio-input")?.focus());
 
@@ -65,10 +69,9 @@ export function Studio({ home = false }: { home?: boolean }) {
 
   const [input, setInput] = useState(() => studio.takePendingPrompt() ?? "");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
-  const [toSave, setToSave] = useState<Msg | null>(null);
 
   const { on } = studio;
-  const { setTitle } = chat;
+  const { setTitle, moved } = chat;
   useEffect(() => {
     const offs = [
       on("new-chat", () => {
@@ -83,9 +86,21 @@ export function Studio({ home = false }: { home?: boolean }) {
       on<{ id: string; title: string }>("renamed", (r) => {
         if (r.id === chat.conversationId) setTitle(r.title);
       }),
+      on<{ id: string; projectId: string | null }>("moved", (r) => moved(r.id, r.projectId)),
     ];
     return () => offs.forEach((off) => off());
-  }, [on, setTitle, chat.conversationId]);
+  }, [on, setTitle, moved, chat.conversationId]);
+
+  // A reply turned into a note, task, milestone, saved prompt or follow-up (in the same project).
+  const replies = useReplyActions({
+    signedIn: !!user,
+    onFollowUp: (draft) => {
+      chat.newChat(chat.projectId);
+      setAttachments([]);
+      setInput(draft);
+      focusInput();
+    },
+  });
 
   // The starter: which task is chosen, and setting the box up for it.
   const [starterId, setStarterId] = useState<StarterTaskId | null>(null);
@@ -230,7 +245,7 @@ export function Studio({ home = false }: { home?: boolean }) {
 
   return (
     <>
-      <StudioHeader onNewChat={newChat}>
+      <StudioHeader onNewChat={newChat} actions={user && chat.projectId ? <ProjectChip projectId={chat.projectId} use={chat.projectUse} notify={studio.notify} /> : undefined}>
         {!empty && <h1 className="min-w-0 truncate text-[14px] font-medium text-s-ink-2">{chat.title ?? "New chat"}</h1>}
       </StudioHeader>
 
@@ -252,7 +267,7 @@ export function Studio({ home = false }: { home?: boolean }) {
             onAction={runAction}
             notice={notice}
             starter={{ active: starterId, onChoose: applyTask, env: starterEnv }}
-            recent={studio.conversations?.[0] ?? null}
+            recent={latestOf(studio.conversations)}
           />
         </div>
       ) : (
@@ -268,12 +283,13 @@ export function Studio({ home = false }: { home?: boolean }) {
           onEdit={chat.edit}
           onFeedback={studio.giveFeedback}
           onSavePrompt={studio.addPrompt}
-          onSaveToProject={user ? setToSave : undefined}
+          onReplyAction={replies.act}
+          projectActions={replies.projectActions}
           onStartOver={newChat}
         />
       )}
 
-      <SaveToProjectDialog message={toSave} onClose={() => setToSave(null)} />
+      {replies.dialogs}
     </>
   );
 }

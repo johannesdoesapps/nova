@@ -9,9 +9,10 @@ import { useApp } from "@/components/layout/app-context";
 import type { ChatAttachment, ChatTransport } from "@/components/studio/chat-client";
 import { streamAgentChat } from "@/components/studio/chat-client";
 import { Composer } from "@/components/studio/composer";
-import { ConfirmDialog, SaveToProjectDialog } from "@/components/studio/dialogs";
+import { ConfirmDialog } from "@/components/studio/dialogs";
 import { StudioHeader, useStudio } from "@/components/studio/frame";
-import { makeLocalHistory, makeServerHistory, type ConvSummary, type Msg } from "@/components/studio/history";
+import { makeLocalHistory, makeServerHistory, type ConvSummary } from "@/components/studio/history";
+import { useReplyActions } from "@/components/studio/reply-actions";
 import { ConversationPane } from "@/components/studio/thread";
 import { iconButtonClass, Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/studio/ui";
 import { useStudioChat } from "@/components/studio/use-chat";
@@ -154,7 +155,6 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
   const [input, setInput] = useState(() => studio.takePendingPrompt() ?? "");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
-  const [toSave, setToSave] = useState<Msg | null>(null);
   const [editor, setEditor] = useState<{ editing: AgentConfig | null; draft: AgentInput | null } | null>(null);
   const [confirm, setConfirm] = useState<"agent" | "conversation" | null>(null);
 
@@ -190,6 +190,15 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
     setAttachments([]);
     focusInput();
   };
+  const replies = useReplyActions({
+    signedIn: !!user,
+    onFollowUp: (draft) => {
+      chat.newChat();
+      setAttachments([]);
+      setInput(draft);
+      focusInput();
+    },
+  });
 
   const empty = chat.messages.length === 0 && chat.load.status === "idle";
   const composer = (variant: "hero" | "dock") => (
@@ -374,7 +383,8 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
           onRetry={chat.retry}
           onFeedback={studio.giveFeedback}
           onSavePrompt={studio.addPrompt}
-          onSaveToProject={user ? setToSave : undefined}
+          onReplyAction={replies.act}
+          projectActions={replies.projectActions}
           onStartOver={newConversation}
           startOverLabel="Start a new conversation"
           assistantName={agent.name}
@@ -382,7 +392,7 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
         />
       )}
 
-      <SaveToProjectDialog message={toSave} onClose={() => setToSave(null)} />
+      {replies.dialogs}
       <AgentEditor
         open={!!editor}
         editing={editor?.editing ?? null}

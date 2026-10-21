@@ -15,6 +15,13 @@ export interface ConvSummary {
   title: string;
   mode: string;
   updated_at: string;
+  /** Signed-in chats only. */
+  pinned?: boolean;
+  project_id?: string | null;
+  project_name?: string | null;
+  /** Search results: where the text matched, and an excerpt. */
+  match?: "title" | "content";
+  snippet?: string;
 }
 
 export interface Msg {
@@ -51,12 +58,16 @@ export interface HistoryStore {
   load(id: string): Promise<LoadedConversation>;
   rename(id: string, title: string): Promise<void>;
   remove(id: string): Promise<void>;
-  /** Server store only: every chat whose title contains `q`, beyond the recent ones `list` returns. */
+  /** Server store only: every chat whose title or messages contain `q`, beyond the recent ones `list` returns. */
   search?(q: string): Promise<ConvSummary[]>;
   /** Server store only: hide a chat from the list without deleting it, or bring it back. */
   archive?(id: string, archived: boolean): Promise<void>;
   /** Server store only: the archived chats. */
   listArchived?(): Promise<ConvSummary[]>;
+  /** Server store only: pin to the top of the list, or unpin. */
+  pin?(id: string, pinned: boolean): Promise<void>;
+  /** Server store only: move a chat into a project (null takes it out). */
+  move?(id: string, projectId: string | null): Promise<void>;
   /** Local store only: persist a guest conversation after each turn. */
   save?(conv: ConvSummary, messages: Msg[]): void;
   clear?(): void;
@@ -74,7 +85,7 @@ type ServerMessage = {
 
 /** Signed-in history. `listUrl` selects ordinary chats or one agent's conversations. */
 export function makeServerHistory(listUrl: string): HistoryStore {
-  return { ...serverHistory, search: undefined, archive: undefined, listArchived: undefined, list: async () => (await jsonFetch<{ conversations: ConvSummary[] }>(listUrl)).conversations };
+  return { ...serverHistory, search: undefined, archive: undefined, listArchived: undefined, pin: undefined, move: undefined, list: async () => (await jsonFetch<{ conversations: ConvSummary[] }>(listUrl)).conversations };
 }
 
 export const serverHistory: HistoryStore = {
@@ -117,7 +128,55 @@ export const serverHistory: HistoryStore = {
   async listArchived() {
     return (await jsonFetch<{ conversations: ConvSummary[] }>("/api/conversations?archived=1")).conversations;
   },
+  async pin(id, pinned) {
+    await jsonFetch(`/api/conversations/${id}`, { method: "PATCH", body: JSON.stringify({ pinned }) });
+  },
+  async move(id, projectId) {
+    await jsonFetch(`/api/conversations/${id}`, { method: "PATCH", body: JSON.stringify({ projectId }) });
+  },
 };
+
+/** A conversation as a Markdown document, for download. */
+export function conversationMarkdown(conv: Pick<ConvSummary, "title" | "updated_at" | "project_name">, messages: Pick<Msg, "role" | "content" | "modelName">[]): string {
+  const head = [`# ${conv.title}`, "", `Exported from Orbis on ${new Date().toLocaleString()}.${conv.project_name ? ` Project: ${conv.project_name}.` : ""}`, ""];
+  const body = messages.flatMap((m) => [`## ${m.role === "user" ? "You" : `Orbis${m.modelName ? ` (${m.modelName})` : ""}`}`, "", m.content.trim(), ""]);
+  return [...head, ...body].join("\n");
+}
+
+/** The start of a follow-up message that quotes a reply (plain text, at most `max` characters of it). */
+export function followUpDraft(reply: string, max = 600): string {
+  const flat = reply
+    .replace(/```[\s\S]*?```/g, " [code] ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const quote = flat.length > max ? `${flat.slice(0, max - 1).trimEnd()}…` : flat;
+  return `Following up on this earlier answer:\n\n> ${quote}\n\n`;
+}
+
+/** Save a conversation to the user's device as Markdown. */
+export async function downloadConversation(store: HistoryStore, conv: ConvSummary): Promise<void> {
+  const { conversation, messages } = await store.load(conv.id);
+  const text = conversationMarkdown({ ...conv, ...conversation, project_name: conv.project_name }, messages);
+  const url = URL.createObjectURL(new Blob([text], { type: "text/markdown;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = conversationFileName(conversation.title || conv.title);
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** A safe file name for a conversation download. */
+export function conversationFileName(title: string): string {
+  const base = title
+    .normalize("NFKD")
+    .replace(/[^\w\- ]+/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 60);
+  return `${base || "conversation"}.md`;
+}
 
 const MAX_CONVERSATIONS = 40;
 const MAX_STORED_CHARS = 1_500_000;

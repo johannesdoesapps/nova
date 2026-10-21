@@ -2,16 +2,17 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronDown, Pause, Play, Plus, Sparkles, Square, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, MessageSquarePlus, Pause, Play, Plus, Sparkles, Square, Trash2 } from "lucide-react";
 import { useCatalog } from "@/components/common/model-picker";
 import { Markdown } from "@/components/common/markdown";
 import { CopyButton, Dots } from "@/components/council/response-card";
 import { useApp } from "@/components/layout/app-context";
 import { StudioHeader } from "@/components/studio/frame";
+import { ProjectInstructions } from "./project-instructions";
 import { ModelSelector } from "@/components/studio/model-selector";
 import { jsonFetch, postNdjson } from "@/hooks/use-ndjson";
 import { TASK_STATUSES, type TaskStatus } from "@/lib/missions/schema";
-import { cn } from "@/lib/utils";
+import { cn, relativeTime } from "@/lib/utils";
 import { MISSION_LABEL, StatusPill, TASK_LABEL, progressOf } from "./mission-bits";
 
 interface Mission {
@@ -198,6 +199,9 @@ export function MissionView({ id }: { id: string }) {
                   {m.goal && <p className="mt-2 max-w-3xl text-[15px] text-s-ink-2">{m.goal}</p>}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <Link href={`/chat?project=${id}`} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-s-accent px-3.5 text-[13px] font-medium text-s-accent-ink transition hover:brightness-110">
+                    <MessageSquarePlus className="h-3.5 w-3.5" /> New chat in this project
+                  </Link>
                   {m.status === "paused" ? (
                     <button type="button" onClick={() => void setMissionStatus("active")} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-s-line-strong px-3.5 text-[13px] transition hover:bg-s-hover">
                       <Play className="h-3.5 w-3.5" /> Resume
@@ -305,21 +309,32 @@ export function MissionView({ id }: { id: string }) {
                 </div>
 
                 <aside className="space-y-6">
-                  <Notes missionId={id} notes={data.notes} onChanged={reload} onError={setNotice} />
-                  {data.conversations.length > 0 && (
-                    <section>
-                      <h2 className="mb-2 text-[12.5px] font-medium uppercase tracking-[0.1em] text-s-ink-3">Conversations</h2>
+                  <ProjectInstructions projectId={id} initial={m.description ?? ""} noteCount={data.notes.length} onSaved={(description) => setData((d) => d && { ...d, mission: { ...d.mission, description } })} />
+                  <section>
+                    <h2 className="mb-2 flex items-center justify-between text-[12.5px] font-medium uppercase tracking-[0.1em] text-s-ink-3">
+                      Conversations
+                      <Link href={`/chat?project=${id}`} className="inline-flex items-center gap-1 normal-case tracking-normal text-s-ink-2 hover:text-s-ink">
+                        <Plus className="h-3.5 w-3.5" /> New
+                      </Link>
+                    </h2>
+                    {data.conversations.length === 0 ? (
+                      <p className="text-[13px] text-s-ink-3">No chats yet. Start one here, or move a chat in from its ⋯ menu in the sidebar.</p>
+                    ) : (
                       <ul className="space-y-1">
                         {data.conversations.map((c) => (
                           <li key={c.id}>
-                            <Link href={`/chat?c=${c.id}`} className="block truncate rounded-lg px-2 py-1.5 text-[13.5px] text-s-ink-2 hover:bg-s-hover hover:text-s-ink">
-                              {c.title}
+                            <Link href={`/chat?c=${c.id}`} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13.5px] text-s-ink-2 hover:bg-s-hover hover:text-s-ink">
+                              <span className="min-w-0 flex-1 truncate">{c.title}</span>
+                              <time dateTime={c.updated_at} title={new Date(c.updated_at).toLocaleString()} className="shrink-0 text-[11.5px] text-s-ink-3" suppressHydrationWarning>
+                                {relativeTime(c.updated_at)}
+                              </time>
                             </Link>
                           </li>
                         ))}
                       </ul>
-                    </section>
-                  )}
+                    )}
+                  </section>
+                  <Notes missionId={id} notes={data.notes} onChanged={reload} onError={setNotice} />
                   <section>
                     <h2 className="mb-2 text-[12.5px] font-medium uppercase tracking-[0.1em] text-s-ink-3">History</h2>
                     {data.runs.length === 0 && !data.tasks.some((t) => t.completed_at) ? (

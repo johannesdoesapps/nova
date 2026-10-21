@@ -1,13 +1,16 @@
 "use client";
 import { memo, useState, type ReactNode } from "react";
-import { BookmarkPlus, ChartColumn, Check, ChevronRight, CircleAlert, Copy, Ellipsis, FileText, FolderPlus, Globe, Pencil, RefreshCw, Sparkles, ThumbsDown, ThumbsUp, Wrench } from "lucide-react";
+import { BookmarkPlus, ChartColumn, Check, ChevronRight, CircleAlert, CircleCheck, Copy, Ellipsis, FileText, Flag, FolderPlus, Globe, MessageSquarePlus, Pencil, RefreshCw, Sparkles, ThumbsDown, ThumbsUp, Wrench } from "lucide-react";
 import { Markdown } from "@/components/common/markdown";
 import { ActionCard } from "@/components/connectors/action-card";
 import { BrandIcon } from "@/components/connectors/brand-icon";
 import { cn, formatUsd } from "@/lib/utils";
 import type { Msg } from "./history";
 import type { Feedback } from "./prefs";
-import { IconButton, iconButtonClass, Menu, MenuItem, OrbisMark } from "./ui";
+import { IconButton, iconButtonClass, Menu, MenuItem, MenuSeparator, OrbisMark } from "./ui";
+
+/** What a reply can be turned into. Project ones need an account. */
+export type ReplyAction = "note" | "task" | "milestone" | "prompt" | "followup";
 import { useVerify, VerifyButton, VerifyPanel } from "./verify-panel";
 
 export const MessageView = memo(function MessageView({
@@ -20,7 +23,8 @@ export const MessageView = memo(function MessageView({
   onEdit,
   onFeedback,
   onSavePrompt,
-  onSaveToProject,
+  onReplyAction,
+  projectActions,
   assistantName,
   assistantAvatar,
   question = "",
@@ -34,7 +38,10 @@ export const MessageView = memo(function MessageView({
   onEdit?: (id: string, text: string) => void;
   onFeedback: (id: string, f: Feedback) => void;
   onSavePrompt: (text: string) => boolean;
-  onSaveToProject?: (m: Msg) => void;
+  /** Turn a reply into a note, task, milestone, saved prompt or follow-up chat. */
+  onReplyAction?: (action: ReplyAction, m: Msg) => void;
+  /** Whether the project actions (note, task, milestone) are offered. */
+  projectActions?: boolean;
   /** Agent conversations show the agent's own name and avatar. */
   assistantName?: string;
   assistantAvatar?: ReactNode;
@@ -45,7 +52,7 @@ export const MessageView = memo(function MessageView({
   if (m.role === "user") {
     return <UserMessage m={m} busy={busy} onEdit={onEdit} onSavePrompt={onSavePrompt} />;
   }
-  return <AssistantMessage {...{ m, isLast, busy, feedback, thinkingLabel, onRetry, onFeedback, onSaveToProject, assistantName, assistantAvatar, verify }} />;
+  return <AssistantMessage {...{ m, isLast, busy, feedback, thinkingLabel, onRetry, onFeedback, onReplyAction, projectActions, assistantName, assistantAvatar, verify }} />;
 });
 
 /** A question you sent, with copy, save and (in the general chat) edit. */
@@ -134,7 +141,8 @@ function AssistantMessage({
   thinkingLabel,
   onRetry,
   onFeedback,
-  onSaveToProject,
+  onReplyAction,
+  projectActions,
   assistantName,
   assistantAvatar,
   verify,
@@ -146,7 +154,8 @@ function AssistantMessage({
   thinkingLabel: string;
   onRetry: (id: string) => void;
   onFeedback: (id: string, f: Feedback) => void;
-  onSaveToProject?: (m: Msg) => void;
+  onReplyAction?: (action: ReplyAction, m: Msg) => void;
+  projectActions?: boolean;
   assistantName?: string;
   assistantAvatar?: ReactNode;
   verify: ReturnType<typeof useVerify>;
@@ -287,10 +296,27 @@ function AssistantMessage({
             <ThumbsDown className={cn(feedback === "down" && "fill-current")} />
           </IconButton>
           {!m.simulated && <VerifyButton loading={verify.state.status === "loading"} onClick={verify.run} />}
-          {onSaveToProject && (
-            <Menu label="More actions" side="auto" buttonLabel="More actions" buttonClassName={iconButtonClass("sm")} button={<Ellipsis />}>
-              <MenuItem icon={<FolderPlus />} onClick={() => onSaveToProject(m)}>
-                Save to project
+          {onReplyAction && (
+            <Menu label="Turn this reply into…" side="auto" width={240} buttonLabel="More actions" buttonTitle="Save or reuse this reply" buttonClassName={iconButtonClass("sm")} button={<Ellipsis />}>
+              {projectActions && (
+                <>
+                  <MenuItem icon={<FolderPlus />} hint="Into a project's notes" onClick={() => onReplyAction("note", m)}>
+                    Save as note
+                  </MenuItem>
+                  <MenuItem icon={<CircleCheck />} hint="A project task, with this reply as details" onClick={() => onReplyAction("task", m)}>
+                    Add as task
+                  </MenuItem>
+                  <MenuItem icon={<Flag />} hint="Start a milestone in a project" onClick={() => onReplyAction("milestone", m)}>
+                    Add as milestone
+                  </MenuItem>
+                  <MenuSeparator />
+                </>
+              )}
+              <MenuItem icon={<BookmarkPlus />} hint="Reuse it from Saved prompts" onClick={() => onReplyAction("prompt", m)}>
+                Save as prompt
+              </MenuItem>
+              <MenuItem icon={<MessageSquarePlus />} hint="A new chat that quotes this reply" onClick={() => onReplyAction("followup", m)}>
+                Follow up in new chat
               </MenuItem>
             </Menu>
           )}

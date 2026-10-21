@@ -37,6 +37,8 @@ export function attachmentBytes(files: Pick<ChatAttachment, "content">[]): numbe
 
 export interface ChatRequest {
   conversationId?: string | null;
+  /** A new conversation starts in this project (signed in). */
+  projectId?: string | null;
   message: string;
   mode: ChatMode;
   modelId?: string;
@@ -55,12 +57,16 @@ export interface ChatRequest {
 
 type ModelRef = { id: string; displayName: string; provider: string };
 
+export type ProjectUse = { id: string; name: string; instructions: boolean; notes: number };
+
 export type ChatEvent =
   | { type: "meta"; conversationId: string | null; persisted: boolean; model: ModelRef; routing?: { auto: true; mode: string; reason: string } | null }
   | { type: "model"; model: ModelRef }
   | { type: "sources"; sources: SearchSource[] }
   | { type: "actions"; actions: ProposedAction[] }
   | { type: "notice"; level?: string; message: string }
+  /** The chat's project, and what of its saved information this reply used. */
+  | { type: "project"; project: ProjectUse }
   | { type: "tool"; tool: ToolRecord }
   | { type: "delta"; text: string }
   | { type: "done"; text: string; simulated: boolean; assistantMessageId: string | null; userMessageId?: string | null; estimatedCost: number | null }
@@ -90,6 +96,8 @@ export interface TurnRequest {
   editOf?: string;
   replyLength?: ReplyLength;
   replyStyle?: ReplyStyle;
+  /** The general chat only: a new conversation starts in this project. */
+  projectId?: string | null;
 }
 export type ChatTransport = (req: TurnRequest, signal: AbortSignal) => AsyncGenerator<ChatEvent>;
 

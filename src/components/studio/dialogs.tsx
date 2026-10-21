@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Archive, ArchiveRestore, Bookmark, Check, FolderKanban, Monitor, Moon, Plus, Sun, Trash2 } from "lucide-react";
 import { saveNote } from "@/components/projects/save-to-project";
 import { jsonFetch } from "@/hooks/use-ndjson";
@@ -525,38 +525,82 @@ function ConfirmBody({ confirmLabel, onClose, onConfirm }: { confirmLabel: strin
 
 /* Save to project (signed-in users) -------------------------------------- */
 
-export function SaveToProjectDialog({ message, onClose }: { message: Msg | null; onClose: () => void }) {
+/* Projects: pick one ----------------------------------------------------- */
+
+type ProjectRef = { id: string; name: string };
+
+/**
+ * Choose one of the user's projects (or create one) and do something with it.
+ * `onPick` returns the confirmation to show; it throws to show an error.
+ */
+export function ProjectPickerDialog({
+  open,
+  title,
+  description,
+  createLabel,
+  onPick,
+  onClose,
+  current,
+  onRemove,
+  children,
+}: {
+  open: boolean;
+  title: string;
+  description: string;
+  /** The button beside the new-project box, e.g. "Create & save". */
+  createLabel: string;
+  onPick: (p: ProjectRef) => Promise<string>;
+  onClose: () => void;
+  /** The project it is already in, marked in the list. */
+  current?: string | null;
+  /** Shown when `current` is set: take it out of that project. */
+  onRemove?: () => Promise<string>;
+  /** Extra fields above the list. */
+  children?: ReactNode;
+}) {
   return (
-    <Dialog open={!!message} onClose={onClose} title="Save to project" description="Adds this reply as a note in a research project." width={440}>
-      {message && <SaveBody key={message.id} message={message} onClose={onClose} />}
+    <Dialog open={open} onClose={onClose} title={title} description={description} width={440}>
+      {open && (
+        <PickerBody createLabel={createLabel} onPick={onPick} onClose={onClose} current={current} onRemove={onRemove}>
+          {children}
+        </PickerBody>
+      )}
     </Dialog>
   );
 }
 
-function SaveBody({ message, onClose }: { message: Msg; onClose: () => void }) {
-  const [projects, setProjects] = useState<{ id: string; name: string }[] | null>(null);
+function PickerBody({
+  createLabel,
+  onPick,
+  onClose,
+  current,
+  onRemove,
+  children,
+}: {
+  createLabel: string;
+  onPick: (p: ProjectRef) => Promise<string>;
+  onClose: () => void;
+  current?: string | null;
+  onRemove?: () => Promise<string>;
+  children?: ReactNode;
+}) {
+  const [projects, setProjects] = useState<ProjectRef[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
+  const [done, setDone] = useState<{ text: string; project: ProjectRef | null } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [name, setName] = useState("");
 
   useEffect(() => {
-    jsonFetch<{ projects: { id: string; name: string }[] }>("/api/projects")
+    jsonFetch<{ projects: ProjectRef[] }>("/api/projects")
       .then((r) => setProjects(r.projects))
       .catch((e: Error) => setError(e.message));
   }, []);
 
-  const save = async (id: string, projectName: string) => {
-    setBusy(id);
+  const run = async (key: string, fn: () => Promise<string>, project: ProjectRef | null) => {
+    setBusy(key);
     setError(null);
     try {
-      await saveNote(id, {
-        title: message.content.replace(/[#*`>\n]+/g, " ").trim().slice(0, 80) || "Saved answer",
-        content: message.content,
-        sourceType: "chat",
-        sourceRef: message.id,
-      });
-      setSaved(projectName);
+      setDone({ text: await fn(), project });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -564,77 +608,185 @@ function SaveBody({ message, onClose }: { message: Msg; onClose: () => void }) {
     }
   };
 
-  return (
-    <>
-      {saved ? (
-        <div className="flex flex-col items-center py-6 text-center">
-          <span className="s-pop grid h-10 w-10 place-items-center rounded-full bg-s-accent-soft text-s-accent">
-            <Check className="h-5 w-5" />
-          </span>
-          <p className="mt-3 text-[14px]">Saved to {saved}.</p>
-          <button type="button" onClick={onClose} className={cn(btnQuiet, "mt-4")}>
+  if (done) {
+    return (
+      <div className="flex flex-col items-center py-6 text-center">
+        <span className="s-pop grid h-10 w-10 place-items-center rounded-full bg-s-accent-soft text-s-accent">
+          <Check className="h-5 w-5" />
+        </span>
+        <p className="mt-3 text-[14px]">{done.text}</p>
+        <div className="mt-4 flex gap-2">
+          {done.project && (
+            <Link href={`/missions/${done.project.id}`} onClick={onClose} className={btnQuiet}>
+              Open project
+            </Link>
+          )}
+          <button type="button" onClick={onClose} className={btnPrimary}>
             Done
           </button>
         </div>
-      ) : (
-        <>
-          {error && <p role="alert" className="mb-3 text-[13px] text-s-danger">{error}</p>}
-          {projects === null && !error ? (
-            <div className="space-y-2">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="s-skeleton h-10" />
-              ))}
-            </div>
-          ) : (
-            <ul className="s-scroll flex max-h-64 flex-col gap-1 overflow-y-auto">
-              {projects?.length === 0 && <li className="px-1 py-2 text-[13.5px] text-s-ink-3">No projects yet. Create one below.</li>}
-              {projects?.map((p) => (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    disabled={!!busy}
-                    onClick={() => void save(p.id, p.name)}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13.5px] transition hover:bg-s-hover disabled:opacity-50"
-                  >
-                    <FolderKanban className="h-4 w-4 text-s-ink-3" />
-                    <span className="truncate">{p.name}</span>
-                    {busy === p.id && <span className="ml-auto text-[12px] text-s-ink-3">Saving…</span>}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <form
-            className="mt-4 flex gap-2 border-t border-s-line pt-4"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const n = name.trim();
-              if (!n) return;
-              setBusy("new");
-              try {
-                const r = await jsonFetch<{ project: { id: string; name: string } }>("/api/projects", { method: "POST", body: JSON.stringify({ name: n }) });
-                setName("");
-                await save(r.project.id, r.project.name);
-              } catch (err) {
-                setError((err as Error).message);
-                setBusy(null);
-              }
-            }}
-          >
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="New project name"
-              aria-label="New project name"
-              maxLength={120}
-              className="h-9 min-w-0 flex-1 rounded-xl border border-s-line-strong bg-transparent px-3 text-[13.5px] text-s-ink outline-none placeholder:text-s-ink-3 focus-visible:outline-none"
-            />
-            <button type="submit" className={btnPrimary} disabled={!name.trim() || !!busy}>
-              Create & save
-            </button>
-          </form>
-        </>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {children}
+      {error && (
+        <p role="alert" className="mb-3 text-[13px] text-s-danger">
+          {error}
+        </p>
       )}
+      {projects === null && !error ? (
+        <div className="space-y-2" aria-label="Loading projects">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="s-skeleton h-10" />
+          ))}
+        </div>
+      ) : (
+        <ul className="s-scroll flex max-h-64 flex-col gap-1 overflow-y-auto">
+          {projects?.length === 0 && <li className="px-1 py-2 text-[13.5px] text-s-ink-3">No projects yet. Create one below.</li>}
+          {projects?.map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                disabled={!!busy || p.id === current}
+                onClick={() => void run(p.id, () => onPick(p), p)}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13.5px] transition hover:bg-s-hover disabled:opacity-50"
+              >
+                <FolderKanban className="h-4 w-4 text-s-ink-3" />
+                <span className="truncate">{p.name}</span>
+                {p.id === current && <span className="ml-auto text-[12px] text-s-ink-3">Current</span>}
+                {busy === p.id && <span className="ml-auto text-[12px] text-s-ink-3">Saving…</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {current && onRemove && (
+        <button type="button" disabled={!!busy} onClick={() => void run("remove", onRemove, null)} className="mt-2 px-3 text-[12.5px] text-s-ink-3 underline-offset-4 hover:text-s-ink hover:underline disabled:opacity-50">
+          Take it out of its project
+        </button>
+      )}
+      <form
+        className="mt-4 flex gap-2 border-t border-s-line pt-4"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const n = name.trim();
+          if (!n) return;
+          setBusy("new");
+          setError(null);
+          try {
+            const r = await jsonFetch<{ project: ProjectRef }>("/api/projects", { method: "POST", body: JSON.stringify({ name: n }) });
+            setName("");
+            setProjects((list) => [r.project, ...(list ?? [])]);
+            await run(r.project.id, () => onPick(r.project), r.project);
+          } catch (err) {
+            setError((err as Error).message);
+            setBusy(null);
+          }
+        }}
+      >
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="New project name"
+          aria-label="New project name"
+          maxLength={120}
+          className="h-9 min-w-0 flex-1 rounded-xl border border-s-line-strong bg-transparent px-3 text-[13.5px] text-s-ink outline-none placeholder:text-s-ink-3 focus-visible:outline-none"
+        />
+        <button type="submit" className={btnPrimary} disabled={!name.trim() || !!busy}>
+          {createLabel}
+        </button>
+      </form>
     </>
+  );
+}
+
+/** A short title from the start of a reply. */
+export function titleFromReply(content: string, max = 80): string {
+  return content.replace(/[#*`>_\n]+/g, " ").replace(/\s+/g, " ").trim().slice(0, max) || "Saved answer";
+}
+
+export function SaveToProjectDialog({ message, onClose }: { message: Msg | null; onClose: () => void }) {
+  return (
+    <ProjectPickerDialog
+      open={!!message}
+      onClose={onClose}
+      title="Save as a note"
+      description="Adds this reply to a project's notes. Notes stay in that project."
+      createLabel="Create & save"
+      onPick={async (p) => {
+        await saveNote(p.id, { title: titleFromReply(message!.content), content: message!.content, sourceType: "chat", sourceRef: message!.id });
+        return `Saved to ${p.name}.`;
+      }}
+    />
+  );
+}
+
+/** Turn a reply into a project task, or start a milestone with it. The reply becomes the task's details. */
+export function AddTaskDialog({ message, kind, onClose }: { message: Msg | null; kind: "task" | "milestone"; onClose: () => void }) {
+  const [seen, setSeen] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [milestone, setMilestone] = useState("");
+  // A new reply starts with fresh fields.
+  if (message && `${kind}:${message.id}` !== seen) {
+    setSeen(`${kind}:${message.id}`);
+    setTitle(titleFromReply(message.content));
+    setMilestone(kind === "milestone" ? titleFromReply(message.content, 120) : "");
+  }
+  const field = "mt-1 h-9 w-full rounded-xl border border-s-line-strong bg-transparent px-3 text-[13.5px] text-s-ink outline-none placeholder:text-s-ink-3 focus-visible:outline-none";
+  return (
+    <ProjectPickerDialog
+      open={!!message}
+      onClose={onClose}
+      title={kind === "task" ? "Add as a task" : "Add as a milestone"}
+      description={kind === "task" ? "Adds a task to a project, with this reply as its details." : "Starts a milestone in a project, with this reply as its first task."}
+      createLabel="Create & add"
+      onPick={async (p) => {
+        const t = title.trim();
+        const m = milestone.trim();
+        if (!t) throw new Error("Give the task a title.");
+        if (kind === "milestone" && !m) throw new Error("Give the milestone a name.");
+        const content = message!.content.trim();
+        const description = content.length > 4000 ? `${content.slice(0, 3999)}…` : content;
+        await jsonFetch(`/api/missions/${p.id}/tasks`, { method: "POST", body: JSON.stringify({ title: t.slice(0, 200), description, milestone: m ? m.slice(0, 120) : null }) });
+        return kind === "task" ? `Task added to ${p.name}.` : `Milestone added to ${p.name}.`;
+      }}
+    >
+      <div className="mb-4 grid gap-3">
+        <label className="text-[12.5px] text-s-ink-2">
+          Task
+          <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} className={field} />
+        </label>
+        <label className="text-[12.5px] text-s-ink-2">
+          {kind === "task" ? "Milestone (optional)" : "Milestone"}
+          <input value={milestone} onChange={(e) => setMilestone(e.target.value)} maxLength={120} placeholder={kind === "task" ? "e.g. Launch" : undefined} className={field} />
+        </label>
+        <p className="text-[12px] text-s-ink-3">Then choose the project:</p>
+      </div>
+    </ProjectPickerDialog>
+  );
+}
+
+/** Move a chat into a project, or take it out of one. */
+export function MoveChatDialog({ conv, onClose, onMove }: { conv: ConvSummary | null; onClose: () => void; onMove: (c: ConvSummary, projectId: string | null) => Promise<void> }) {
+  return (
+    <ProjectPickerDialog
+      open={!!conv}
+      onClose={onClose}
+      title="Move to project"
+      description="The chat will be listed in the project. Its replies can use that project's instructions, never another project's."
+      createLabel="Create & move"
+      current={conv?.project_id ?? null}
+      onPick={async (p) => {
+        await onMove(conv!, p.id);
+        return `Moved to ${p.name}.`;
+      }}
+      onRemove={async () => {
+        await onMove(conv!, null);
+        return "Taken out of its project.";
+      }}
+    />
   );
 }
