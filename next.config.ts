@@ -5,12 +5,12 @@ import type { NextConfig } from "next";
 // reliable model. Revisit once the data layer is stable.
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  // "/" is the public homepage; the app itself lives at /chat. The older
+  // "/" is the public homepage; the app itself starts at /home. The older
   // workspace pages still exist in src/app/(app); remove an entry here to bring one back.
   async redirects() {
     const legacy = [
-      "/dashboard", "/search", "/models", "/discover", "/community", "/graph",
-      "/integrations", "/radar", "/simulator", "/settings/:path*", "/projects/:path*", "/claims/:path*",
+      "/dashboard", "/search", "/models", "/community", "/graph",
+      "/integrations", "/radar", "/simulator", "/settings/:path*", "/claims/:path*",
       "/intel/:path*", "/lab/:path*", "/workspaces/:path*",
     ];
     return [
@@ -19,6 +19,8 @@ const nextConfig: NextConfig = {
       { source: "/", has: [{ type: "query" as const, key: "code" }], destination: "/auth/callback", permanent: false },
       { source: "/", has: [{ type: "query" as const, key: "error" }], destination: "/auth/callback", permanent: false },
       { source: "/battle", destination: "/arena", permanent: false },
+      // Research projects became missions (same records); /projects itself is now the projects overview.
+      { source: "/projects/:id", destination: "/missions/:id", permanent: false },
       { source: "/:path(signup|sign-up|register)", destination: "/login?mode=signup", permanent: false },
       ...legacy.map((source) => ({ source, destination: "/chat", permanent: false })),
     ];

@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import { Info } from "lucide-react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { defaultModelId, useCatalog } from "@/components/common/model-picker";
@@ -8,19 +9,29 @@ import { AUTO_MODEL_ID, isAutoId } from "@/lib/ai/platform";
 import { useModelChoice } from "./use-model-choice";
 import { useApp } from "@/components/layout/app-context";
 import type { ChatMode } from "@/lib/ai/modes";
+import type { HomeAction } from "@/lib/home";
 import type { ChatAttachment } from "./chat-client";
 import { Composer } from "./composer";
 import { SaveToProjectDialog } from "./dialogs";
 import { StudioHeader, useStudio } from "./frame";
 import type { Msg } from "./history";
+import { Home } from "./home";
 import { ConversationPane } from "./thread";
 import { useStudioChat } from "./use-chat";
 import { Welcome } from "./welcome";
 
 const focusInput = () => requestAnimationFrame(() => document.getElementById("studio-input")?.focus());
 
-/** The general chat page. The sidebar, dialogs and theme come from StudioFrame. */
-export function Studio() {
+export const HOME_PLACEHOLDER = "What would you like to explore, create, or work on today?";
+
+/**
+ * The general chat page, and the home (`home`): the same conversation surface,
+ * with the home's start screen instead of the chat welcome. A conversation
+ * started on the home continues there (/home?c=…). The sidebar, dialogs and
+ * theme come from StudioFrame.
+ */
+export function Studio({ home = false }: { home?: boolean }) {
+  const router = useRouter();
   const { user, integrations } = useApp();
   const studio = useStudio();
   const { store, refresh } = studio.history;
@@ -46,6 +57,7 @@ export function Studio() {
     modelId,
     allowFallback: !!studio.settings.allowFallback,
     onHistoryChanged: refresh,
+    basePath: home ? "/home" : "/chat",
     replyLength: studio.settings.replyLength,
     replyStyle: studio.settings.replyStyle,
   });
@@ -117,12 +129,32 @@ export function Studio() {
       onUseWeb={chat.setUseWeb}
       webAvailable={integrations.search}
       enterToSend={studio.settings.enterToSend}
+      placeholder={home && variant === "hero" ? HOME_PLACEHOLDER : undefined}
     />
+  );
+
+  // Suggestions, tools and Discover on the home: send, fill the box (optionally opening the file picker), or open a page.
+  const { send, setMode, setUseWeb } = chat;
+  const runAction = useCallback(
+    (a: HomeAction) => {
+      if (a.kind === "link") return router.push(a.href);
+      if (a.kind === "send") return void send(a.prompt, { mode: a.mode });
+      setMode(a.mode);
+      setUseWeb(!!a.web && integrations.search);
+      setInput(a.prompt);
+      requestAnimationFrame(() => {
+        const el = document.getElementById("studio-input") as HTMLTextAreaElement | null;
+        el?.focus();
+        el?.setSelectionRange(a.prompt.length, a.prompt.length);
+        if (a.attach) document.getElementById("studio-file")?.click();
+      });
+    },
+    [router, send, setMode, setUseWeb, integrations.search],
   );
 
   const notice = blockedGuest ? (
     <span>
-      <Link href="/login?next=/chat" className="text-s-accent underline-offset-4 hover:underline">
+      <Link href={home ? "/login?next=/home" : "/login?next=/chat"} className="text-s-accent underline-offset-4 hover:underline">
         Sign in
       </Link>{" "}
       to start chatting and keep your history.
@@ -137,10 +169,14 @@ export function Studio() {
   return (
     <>
       <StudioHeader onNewChat={newChat}>
-        <h1 className="min-w-0 truncate text-[14px] font-medium text-s-ink-2">{empty ? "" : (chat.title ?? "New chat")}</h1>
+        {!empty && <h1 className="min-w-0 truncate text-[14px] font-medium text-s-ink-2">{chat.title ?? "New chat"}</h1>}
       </StudioHeader>
 
-      {empty ? (
+      {empty && home ? (
+        <div className="s-scroll min-h-0 flex-1 overflow-y-auto">
+          <Home name={user?.displayName?.split(" ")[0] ?? null} composer={composer("hero")} onAction={runAction} notice={notice} />
+        </div>
+      ) : empty ? (
         <div className="s-scroll min-h-0 flex-1 overflow-y-auto">
           <Welcome
             name={user?.displayName?.split(" ")[0] ?? null}

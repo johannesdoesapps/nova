@@ -115,7 +115,7 @@ export function PricingPlans({
                       Switch to Free at renewal
                     </BillingButton>
                   ) : signedIn ? (
-                    <a href="/chat" className={secondaryBtn}>
+                    <a href="/home" className={secondaryBtn}>
                       Open Orbis
                     </a>
                   ) : (

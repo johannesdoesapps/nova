@@ -141,6 +141,7 @@ export function Composer(p: ComposerProps) {
       >
         <input
           ref={fileRef}
+          id="studio-file"
           type="file"
           multiple
           hidden

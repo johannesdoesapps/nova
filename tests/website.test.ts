@@ -50,9 +50,9 @@ describe("content", () => {
 
 describe("sign-in destination", () => {
   it("opens the chat unless a specific same-site page was requested", () => {
-    expect(afterSignIn(null)).toBe("/chat");
-    expect(afterSignIn("/")).toBe("/chat");
+    expect(afterSignIn(null)).toBe("/home");
+    expect(afterSignIn("/")).toBe("/home");
     expect(afterSignIn("/missions/1")).toBe("/missions/1");
-    expect(afterSignIn("https://evil.example")).toBe("/chat");
+    expect(afterSignIn("https://evil.example")).toBe("/home");
   });
 });

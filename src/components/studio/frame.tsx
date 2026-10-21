@@ -20,6 +20,8 @@ interface StudioContext {
   settings: StudioSettings;
   /** General chat history (agent conversations are kept separately). */
   history: { store: HistoryStore; refresh: () => Promise<void> };
+  /** The recent chats the sidebar shows (null while loading). */
+  conversations: ConvSummary[] | null;
   addPrompt: (text: string) => boolean;
   feedback: Record<string, Feedback>;
   giveFeedback: (id: string, f: Feedback) => void;
@@ -116,15 +118,17 @@ export function StudioFrame({ children }: { children: ReactNode }) {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const onChat = pathname === "/chat";
+  // The home is a chat surface too: a conversation started there continues there.
+  const onHome = pathname === "/home";
+  const onChat = pathname === "/chat" || onHome;
   const activeChat = onChat ? params.get("c") : null;
 
   const newChat = useCallback(() => {
     setMobileOpen(false);
     if (onChat) emit("new-chat");
-    router.push("/chat?new=1");
+    router.push(onHome ? "/home?new=1" : "/chat?new=1");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onChat, router]);
+  }, [onChat, onHome, router]);
 
   // Keep the layout above the on-screen keyboard on mobile browsers.
   useEffect(() => {
@@ -180,6 +184,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
     theme,
     settings,
     history: { store, refresh },
+    conversations,
     addPrompt,
     feedback,
     giveFeedback,
@@ -225,7 +230,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
                     notify(`Couldn’t archive the chat: ${(e as Error).message}`);
                     return;
                   }
-                  if (c.id === activeChat) router.replace("/chat?new=1");
+                  if (c.id === activeChat) router.replace(onHome ? "/home?new=1" : "/chat?new=1");
                   await refresh();
                   notify("Chat archived");
                 }
@@ -278,7 +283,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
           }
           onClearLocal={() => {
             localHistory.clear?.();
-            if (onChat) router.replace("/chat?new=1");
+            if (onChat) router.replace(onHome ? "/home?new=1" : "/chat?new=1");
             void refresh();
           }}
         />
@@ -329,7 +334,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
           onClose={() => setToDelete(null)}
           onConfirm={async (c) => {
             await store.remove(c.id);
-            if (c.id === activeChat) router.replace("/chat?new=1");
+            if (c.id === activeChat) router.replace(onHome ? "/home?new=1" : "/chat?new=1");
             await refresh();
             notify("Chat deleted");
           }}

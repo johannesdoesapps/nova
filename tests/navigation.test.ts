@@ -71,6 +71,16 @@ describe("the shared navigation list", () => {
     expect(sectionFor("/council")).toBe("council");
     expect(sectionFor("/settings")).toBe("chat");
     expect(sectionFor("/codex")).toBe("chat");
+    expect(sectionFor("/home")).toBe("home");
+    expect(sectionFor("/projects")).toBe("projects");
+    expect(sectionFor("/discover")).toBe("discover");
+    // The full conversation list belongs with Chat.
+    expect(sectionFor("/history")).toBe("chat");
+  });
+
+  it("starts with Home and lists Projects and Discover once", () => {
+    expect(NAV_ENTRIES[0]).toMatchObject({ id: "home", href: "/home", group: "main" });
+    for (const label of ["Home", "Projects", "Discover"]) expect(NAV_ENTRIES.filter((e) => e.label === label)).toHaveLength(1);
   });
 });
 
@@ -117,6 +127,15 @@ describe("the sidebar", () => {
 
   it("labels its loading placeholders as status regions (an aria-label needs a role)", () => {
     expect(render({ conversations: null })).toMatch(/role="status" aria-label="Loading chats"/);
+  });
+
+  it("takes the logo home and links to every conversation", () => {
+    const html = render({ conversations: [{ id: "c1", title: "Trip", mode: "research", updated_at: new Date().toISOString() }] });
+    expect(html).toMatch(/href="\/home"[^>]*aria-label="Orbis — home"/);
+    expect(links(html, "/home")).toBe(2);
+    expect(html).toContain('href="/history"');
+    // Guests' chats are only in this browser: no server-wide list.
+    expect(render({ user: null, historyKind: "local", conversations: [{ id: "c1", title: "Trip", mode: "research", updated_at: new Date().toISOString() }] })).not.toContain('href="/history"');
   });
 
   it("shows the admin group only to administrators", () => {

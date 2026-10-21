@@ -106,15 +106,15 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
       >
         {/* Brand + collapse */}
         <div className={cn("flex h-14 shrink-0 items-center gap-2 px-3", rail && "md:justify-center md:px-0")}>
-          <button
-            type="button"
-            onClick={p.onNewChat}
+          <Link
+            href="/home"
+            onClick={p.onCloseMobile}
             className={cn("flex min-w-0 items-center gap-2.5 rounded-xl px-1.5 py-1 transition hover:opacity-80", rail && "md:hidden")}
-            aria-label="Orbis — new chat"
+            aria-label="Orbis — home"
           >
             <OrbisMark className="h-7 w-7 text-s-ink" />
             <span className="text-[15px] font-semibold tracking-[0.22em]">ORBIS</span>
-          </button>
+          </Link>
           <IconButton
             label={rail ? "Expand sidebar" : "Collapse sidebar"}
             onClick={p.onToggleCollapsed}
@@ -247,6 +247,11 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
                 </ul>
               </section>
             ))
+          )}
+          {!inCode && p.historyKind === "server" && !!p.conversations?.length && !query.trim() && (
+            <Link href="/history" onClick={p.onCloseMobile} className="mt-3 flex h-8 items-center rounded-xl px-3 text-[12.5px] text-s-ink-3 transition hover:bg-s-hover hover:text-s-ink">
+              All conversations
+            </Link>
           )}
         </div>
 

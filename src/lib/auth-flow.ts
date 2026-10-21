@@ -12,10 +12,10 @@ export function safeNext(n: string | string[] | null | undefined): string {
   return v;
 }
 
-/** Where people go after signing in when no specific page was requested: the chat, Orbis's main workspace. */
-export const DEFAULT_AFTER_SIGN_IN = "/chat";
+/** Where people go after signing in when no specific page was requested: the home (recent work, the day, and a prompt box). */
+export const DEFAULT_AFTER_SIGN_IN = "/home";
 
-/** The page to open after sign-in: the requested same-site path, or the chat. */
+/** The page to open after sign-in: the requested same-site path, or the home. */
 export function afterSignIn(n: string | string[] | null | undefined): string {
   const next = safeNext(n);
   return next === "/" ? DEFAULT_AFTER_SIGN_IN : next;
