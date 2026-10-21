@@ -722,6 +722,7 @@ export function AgentPanel({
 
       <div className="shrink-0 px-3 pb-2 pt-1 sm:px-6">
         <div className="mx-auto w-full max-w-[780px]">
+          {!inProgress && <FirstTip />}
           {queued && (
             <div className="mb-2 flex items-start gap-2 rounded-xl border border-dashed border-s-line px-3 py-2 text-[12.5px] text-s-ink-2" role="status">
               <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-s-ink-3" aria-hidden />
@@ -805,6 +806,48 @@ function IdeasMenu({ web, disabled, onPick }: { web?: boolean; disabled?: boolea
         </MenuItem>
       ))}
     </Menu>
+  );
+}
+
+const TIP_KEY = "orbis.code.tip";
+const tipListeners = new Set<() => void>();
+const tipSeen = () => {
+  try {
+    return localStorage.getItem(TIP_KEY) === "1";
+  } catch {
+    return true;
+  }
+};
+
+/** Shown once, until dismissed: the two things new users miss. One quiet line, not a card. */
+function FirstTip() {
+  const seen = useSyncExternalStore(
+    (l) => {
+      tipListeners.add(l);
+      return () => tipListeners.delete(l);
+    },
+    tipSeen,
+    () => true,
+  );
+  if (seen) return null;
+  const dismiss = () => {
+    try {
+      localStorage.setItem(TIP_KEY, "1");
+    } catch {
+      /* shown again next time */
+    }
+    tipListeners.forEach((l) => l());
+  };
+  return (
+    <p className="mb-2 flex items-start gap-2 px-2 text-[12.5px] leading-snug text-s-ink-3" role="note">
+      <Lightbulb className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
+      <span className="min-w-0 flex-1">
+        Tip: press <span className="text-s-ink-2">+</span> to attach files or a screenshot of what you want. While the agent works you can keep typing — Enter queues your next message.
+      </span>
+      <button type="button" onClick={dismiss} aria-label="Dismiss tip" className="shrink-0 hover:text-s-ink">
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </p>
   );
 }
 

@@ -42,7 +42,7 @@ export const PRIVACY: LegalSection[] = [
           "We collect what's needed to run Orbis: your account, what you put into it, and records of how much you use.",
           "To answer you, your messages are sent to the AI provider of the model that replies — today Anthropic (Claude) and OpenAI (GPT). Every reply names its model.",
           "We don't use your content to train AI models, we don't sell your data, and we don't show ads.",
-          "Only strictly necessary cookies are used. There are no analytics or advertising cookies.",
+          "Only strictly necessary cookies are used. There are no analytics or advertising cookies; we count visits with Vercel Web Analytics, which doesn't use cookies.",
           "You can delete conversations and projects at any time, disconnect apps, and ask us for a copy of your data or to delete your account.",
         ],
       },
@@ -119,7 +119,7 @@ export const PRIVACY: LegalSection[] = [
       {
         list: [
           "**Supabase** — database and sign-in. Data is stored in the United States (AWS US East).",
-          "**Vercel** — website hosting, server functions, and the isolated computers that run code. United States.",
+          "**Vercel** — website hosting, server functions, the isolated computers that run code, and visit statistics (Vercel Web Analytics). United States.",
           "**Anthropic** (Claude models) and **OpenAI** (GPT models) — receive your message, the earlier messages of that conversation, the contents of files you attach, and, for coding agent runs, the parts of your project the agent reads. Under their API terms, data sent through their APIs isn't used to train their models by default; they may keep it for a limited period to monitor abuse.",
           "**Stripe** — payments, once paid plans are on sale.",
         ],
@@ -203,7 +203,8 @@ export const PRIVACY: LegalSection[] = [
           "**Temporary cookies** protect the sign-in to an app you're connecting (orbis_connect, 10 minutes) and carry your acceptance through signing up with Google or GitHub (orbis_terms_pending, 30 minutes).",
         ],
       },
-      "Your browser's local storage holds your preferences and, without an account, your conversations. There are no analytics or advertising cookies. If we ever add analytics, we'll update this policy first and ask for your consent where the law requires it.",
+      "Your browser's local storage holds your preferences and, without an account, your conversations. There are no analytics or advertising cookies.",
+      "To see how Orbis is used, we count page visits with **Vercel Web Analytics**. For each visit it records the page (with any ids and everything after a “?” removed), the site you came from, and your country, browser, operating system and type of device. It doesn't use cookies or store anything on your device. Visitors are told apart by a code worked out from the request, which Vercel discards after 24 hours, so visits aren't linked to you, your account or your IP address, or followed across days or other websites.",
     ],
   },
   {

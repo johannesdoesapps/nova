@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
+import { SiteAnalytics } from "@/components/common/site-analytics";
 import { SITE_NAME, siteUrl } from "@/lib/seo";
 import "./globals.css";
 
@@ -34,7 +35,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           }}
         />
       </head>
-      <body className="min-h-dvh">{children}</body>
+      <body className="min-h-dvh">
+        {children}
+        <SiteAnalytics />
+      </body>
     </html>
   );
 }

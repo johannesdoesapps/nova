@@ -35,12 +35,16 @@ export function RequestLog() {
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
+  const [limits, setLimits] = useState<{ requestsPerMinute: number; guestRequestsPerDay: number; errorEmails?: boolean } | null>(null);
 
   const fetchRows = useCallback(
     (filter: string) =>
-      jsonFetch<{ requests: RequestRow[] }>(`/api/admin/diagnostics?${new URLSearchParams({ limit: "100", ...(filter.trim() ? { email: filter.trim() } : {}) })}`).then(
+      jsonFetch<{ requests: RequestRow[]; limits?: { requestsPerMinute: number; guestRequestsPerDay: number; errorEmails?: boolean } }>(
+        `/api/admin/diagnostics?${new URLSearchParams({ limit: "100", ...(filter.trim() ? { email: filter.trim() } : {}) })}`,
+      ).then(
         (r) => {
           setRows(r.requests);
+          setLimits(r.limits ?? null);
           setError(null);
         },
         (e: Error) => setError(e.message),
@@ -78,6 +82,12 @@ export function RequestLog() {
       <p className="mt-1 text-[12.5px] text-s-ink-3">
         Which model answered each request, why, and the units it was charged. Prompts and replies are not shown. Failed requests with no output are charged 0 units.
       </p>
+      {limits && (
+        <p className="mt-1 text-[12.5px] text-s-ink-3">
+          Limits in force: <span className="text-s-ink-2">{limits.requestsPerMinute} requests a minute per person</span> · <span className="text-s-ink-2">{limits.guestRequestsPerDay} a day for each visitor without an account</span>. Error emails:{" "}
+          <span className="text-s-ink-2">{limits.errorEmails ? "on" : "off (add RESEND_API_KEY and ALERT_EMAIL in Vercel)"}</span>.
+        </p>
+      )}
       {error && <p className="mt-3 text-[13px] text-s-danger">{error}</p>}
       {rows && rows.length === 0 && <p className="mt-3 text-[13px] text-s-ink-3">No requests yet.</p>}
       {rows && rows.length > 0 && (
