@@ -14,7 +14,7 @@ import { CHECK_SCRIPT, CHECK_TOOLS, type PreviewCheckRaw } from "./preview-check
 
 export const PREVIEW_JOB = "orbispreview";
 /** How long a server may take to answer after starting (installs included). */
-export const PREVIEW_START_MS = 120_000;
+export const PREVIEW_START_MS = 90_000;
 const POLL_MS = 1_500;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

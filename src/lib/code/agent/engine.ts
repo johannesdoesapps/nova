@@ -92,14 +92,14 @@ import {
 
 /** How long a command may run before it's stopped. */
 export const COMMAND_LIMIT_MS = 120_000;
-const MODEL_TIMEOUT_MS = 150_000;
+const MODEL_TIMEOUT_MS = 170_000;
 /**
  * Output tokens the agent may use per step (or the plan's reply limit when
  * that's higher). A step's reply carries whole files, so it needs far more
  * room than a chat answer; spending still counts against the plan's
  * allowance like any other model call.
  */
-export const AGENT_OUTPUT_TOKENS = 12_000;
+export const AGENT_OUTPUT_TOKENS = 16_000;
 /** One request keeps taking steps while it has been working for less than this. */
 const MULTI_STEP_MS = 45_000;
 const POLL_MS = 1_500;
@@ -581,7 +581,10 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
     record([]);
     const results = reply.actions.map((a) => ({ id: a.id, tool: a.tool, ok: false, text: "Not run: your reply was cut off at the output limit." }));
     const next = assistant.calls ? appendStep(transcript, assistant, results) : [...transcript, assistant];
-    const t = appendUser(next, `Your reply was cut off at the output limit (${maxOutputTokens.toLocaleString("en-US")} tokens). Do less per step: write big files in parts.`);
+    const t = appendUser(
+      next,
+      `Your reply was cut off at the output limit (${maxOutputTokens.toLocaleString("en-US")} tokens, about ${(maxOutputTokens * 3).toLocaleString("en-US")} characters), so none of it ran. Do less per reply: one or two files at a time, styles and scripts in their own files, and a long file split up or built with edit_file over several steps.`,
+    );
     await addEvents(auth, row.id, [{ kind: "note", title: "The AI's reply was cut off at the output limit; asking it to work in smaller parts." }]);
     return finishStep(auth, row.id, { ...base, transcript: capTranscript(t) });
   }
