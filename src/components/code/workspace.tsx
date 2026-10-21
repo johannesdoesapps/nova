@@ -524,8 +524,11 @@ export function CodeWorkspace({ id }: { id: string }) {
   );
 
   const showPreview = useCallback(() => {
-    if (wide) setRight("preview");
-    else setPane("preview");
+    if (wide) {
+      setRight("preview");
+      // On a laptop-sized screen the site and the agent need the room more than the file list.
+      if (window.innerWidth < 1360) setFilesOpen(false);
+    } else setPane("preview");
     setPreviewKey((k) => k + 1);
   }, [wide]);
 
@@ -1109,13 +1112,14 @@ export function CodeWorkspace({ id }: { id: string }) {
         <div className="flex min-h-0 flex-1 border-t border-s-line">
           {filesOpen && (
             <>
-              <aside className="flex shrink-0 flex-col border-r border-s-line" style={{ width: leftW }} aria-label="Project files and sessions">
+              <aside className="flex min-w-[160px] shrink flex-col border-r border-s-line" style={{ width: leftW }} aria-label="Project files and sessions">
                 {leftPanel}
               </aside>
               <Resizer axis="x" value={leftW} onChange={setLeftW} label="Resize files panel" />
             </>
           )}
-          <main className="flex min-w-0 flex-1 flex-col" aria-label="Coding agent">
+          {/* The agent keeps room to read; the panels beside it give way first. */}
+          <main className="flex min-w-[400px] flex-1 flex-col" aria-label="Coding agent">
             <div className="min-h-0 flex-1">{agentView}</div>
             <div className="flex h-7 shrink-0 items-center gap-1 border-t border-s-line px-1.5">
               <button type="button" onClick={() => setFilesOpen(!filesOpen)} aria-pressed={filesOpen} title={filesOpen ? "Hide files and sessions" : "Show files and sessions"} className="grid h-6 w-6 place-items-center rounded text-s-ink-3 hover:bg-s-hover hover:text-s-ink">
@@ -1125,7 +1129,7 @@ export function CodeWorkspace({ id }: { id: string }) {
             </div>
           </main>
           {right && <Resizer axis="x" value={rightW} onChange={setRightW} label="Resize side panel" sign={-1} />}
-          <aside className={cn("flex shrink-0 flex-col border-l border-s-line", !right && "w-12")} style={right ? { width: rightW } : undefined} aria-label="Tools">
+          <aside className={cn("flex flex-col border-l border-s-line", right ? "min-w-[300px] shrink" : "w-12 shrink-0")} style={right ? { width: rightW } : undefined} aria-label="Tools">
             <div className={cn("flex shrink-0 items-center gap-1 border-b border-s-line p-1.5", !right && "flex-col border-b-0")} role="tablist" aria-label="Tools">
               {!right && <PanelRightOpen className="mb-1 mt-1 h-4 w-4 text-s-ink-3" aria-hidden />}
               {SIDES.map((r) => (
