@@ -143,3 +143,18 @@ describe("the sidebar", () => {
     expect(render({ user: user(false) })).not.toContain('href="/admin"');
   });
 });
+
+describe("the command palette's search", () => {
+  it("puts a matching name before a match in a description", async () => {
+    const { rankCommands } = await import("@/components/studio/command-palette");
+    const nav = NAV_ENTRIES.map((e) => ({ label: e.label, group: "Go to", hint: e.hint }));
+    const list = [{ label: "New mission", group: "Actions", keywords: "plan goal" }, ...nav, { label: "Launch newsletter", group: "Missions", keywords: "mission project" }];
+    expect(rankCommands(list, "missions")[0]!.label).toBe("Missions");
+    expect(rankCommands(list, "proj")[0]!.label).toBe("Projects");
+    expect(rankCommands(list, "chat")[0]!.label).toBe("Chat");
+    // Groups stay together.
+    const groups = rankCommands(list, "mission").map((c) => c.group);
+    expect(groups).toEqual([...groups].sort((a, b) => groups.indexOf(a) - groups.indexOf(b)));
+    expect(rankCommands(list, "zzz")).toEqual([]);
+  });
+});

@@ -137,11 +137,7 @@ function Palette({
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return commands.slice(0, 60);
-    const words = q.split(/\s+/);
-    return commands.filter((c) => {
-      const hay = `${c.label} ${c.group} ${c.keywords ?? ""} ${c.hint ?? ""}`.toLowerCase();
-      return words.every((w) => hay.includes(w));
-    });
+    return rankCommands(commands, q);
   }, [commands, query]);
 
   const index = Math.min(active, Math.max(0, results.length - 1));
@@ -157,7 +153,6 @@ function Palette({
     c.run();
   };
 
-  let lastGroup = "";
   return (
     <div className="fixed inset-0 z-[80] flex items-start justify-center bg-black/30 px-4 pt-[12vh] backdrop-blur-[2px]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div role="dialog" aria-modal="true" aria-label="Command palette" className="glass-strong glass-solid glass-edge s-pop w-full max-w-[560px] overflow-hidden rounded-[22px] text-s-ink">
@@ -199,8 +194,7 @@ function Palette({
         <ul id="palette-list" ref={listRef} role="listbox" aria-label="Results" className="s-scroll max-h-[min(60vh,440px)] overflow-y-auto p-2">
           {results.length === 0 && <li className="px-3 py-6 text-center text-[13.5px] text-s-ink-3">No matches</li>}
           {results.map((c, i) => {
-            const header = c.group !== lastGroup ? c.group : null;
-            lastGroup = c.group;
+            const header = i === 0 || results[i - 1]!.group !== c.group ? c.group : null;
             return (
               <li key={c.id} role="presentation">
                 {header && <div className="px-3 pb-1 pt-2.5 text-[11px] font-medium uppercase tracking-[0.08em] text-s-ink-3">{header}</div>}
@@ -224,4 +218,29 @@ function Palette({
       </div>
     </div>
   );
+}
+
+/**
+ * Matches for a search, best first: a name that starts with the search, then a
+ * name that contains it, then matches only in keywords or descriptions (so
+ * "missions" opens Missions, not a page whose description mentions missions).
+ * Groups stay together, ordered by their best match.
+ */
+export function rankCommands<T extends { label: string; group: string; keywords?: string; hint?: string }>(commands: T[], query: string): T[] {
+  const q = query.trim().toLowerCase();
+  const words = q.split(/\s+/);
+  const scored = commands
+    .map((c, i) => {
+      const label = c.label.toLowerCase();
+      const hay = `${label} ${c.group} ${c.keywords ?? ""} ${c.hint ?? ""}`.toLowerCase();
+      if (!words.every((w) => hay.includes(w))) return null;
+      return { c, i, score: label.startsWith(q) ? 0 : label.includes(q) ? 1 : 2 };
+    })
+    .filter((x) => x !== null);
+  const best = new Map<string, number>();
+  for (const x of scored) best.set(x.c.group, Math.min(best.get(x.c.group) ?? 9, x.score));
+  const order = [...best.keys()];
+  return scored
+    .sort((a, b) => best.get(a.c.group)! - best.get(b.c.group)! || order.indexOf(a.c.group) - order.indexOf(b.c.group) || a.score - b.score || a.i - b.i)
+    .map((x) => x.c);
 }

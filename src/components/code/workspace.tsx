@@ -1119,7 +1119,7 @@ export function CodeWorkspace({ id }: { id: string }) {
             </>
           )}
           {/* The agent keeps room to read; the panels beside it give way first. */}
-          <main className="flex min-w-[400px] flex-1 flex-col" aria-label="Coding agent">
+          <section className="flex min-w-[400px] flex-1 flex-col" aria-label="Coding agent">
             <div className="min-h-0 flex-1">{agentView}</div>
             <div className="flex h-7 shrink-0 items-center gap-1 border-t border-s-line px-1.5">
               <button type="button" onClick={() => setFilesOpen(!filesOpen)} aria-pressed={filesOpen} title={filesOpen ? "Hide files and sessions" : "Show files and sessions"} className="grid h-6 w-6 place-items-center rounded text-s-ink-3 hover:bg-s-hover hover:text-s-ink">
@@ -1127,7 +1127,7 @@ export function CodeWorkspace({ id }: { id: string }) {
               </button>
               {allowance && <span className="ml-1 truncate text-[11px] text-s-ink-3">{minutesLine(allowance)} · counted in {block}-minute blocks</span>}
             </div>
-          </main>
+          </section>
           {right && <Resizer axis="x" value={rightW} onChange={setRightW} label="Resize side panel" sign={-1} />}
           <aside className={cn("flex flex-col border-l border-s-line", right ? "min-w-[300px] shrink" : "w-12 shrink-0")} style={right ? { width: rightW } : undefined} aria-label="Tools">
             <div className={cn("flex shrink-0 items-center gap-1 border-b border-s-line p-1.5", !right && "flex-col border-b-0")} role="tablist" aria-label="Tools">
