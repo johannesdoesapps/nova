@@ -1,5 +1,21 @@
 # Orbis Code — changelog
 
+## 21 October 2026 — websites from a prompt
+
+### Fixed
+- **Website requests failed**: agent steps could only write as much as a chat reply (pages were cut off), and a large file write broke the repeat detector's database limit so the run was stuck ("That file name or size isn't allowed"). Steps now get 16,000 output tokens (or the plan's reply limit when higher), and the detector stores short hashes.
+- A build that ran after the computer started wasn't recorded as the run's build.
+- An open session didn't notice a run that could continue after an answer given elsewhere.
+- The agent column was squeezed to ~230 px with the file list and preview open on a 1200 px screen; it now keeps at least 400 px.
+
+### Added
+- `start_preview` (start the site's server on port 3000 and wait until it answers) and `check_preview` (headless Chromium in the project's computer at desktop and phone sizes: errors, failed loads, sideways scrolling, broken links and anchors, placeholder links, forms, the phone menu, screenshots the model sees).
+- Website guidance for the agent; earlier sessions' summaries in a new session; old file contents left out of later turns.
+- Run checks (`checks` column, migration `20261022040000_code_agent_checks.sql`, applied): development server, browser check and production build, each current or stale, in the report.
+- Code start screen: **Build a website** (prompt, examples, new or existing project). Workspace: the preview opens and reloads with the agent's work; Run shares the agent's preview server; **Ask for changes to the site** after each session; `GET /api/code/projects/[id]/preview`.
+
+See ORBIS_CODE_WEBSITES.md and the QA report.
+
 ## 20 October 2026 — simpler sidebar, redesigned Code, Stop fix
 
 ### Changed

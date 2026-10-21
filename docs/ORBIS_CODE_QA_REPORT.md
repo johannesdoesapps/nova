@@ -105,3 +105,80 @@ Run after deploying the Stop fix (commit c1bade0):
 ## 7. Clean-up
 
 After testing, both test accounts were locked again (banned, password replaced with a random one, sessions revoked); they have no runs left open. The test password files were deleted.
+
+---
+
+# Website generation from a prompt — 21 October 2026
+
+How it works and why it failed before: [ORBIS_CODE_WEBSITES.md](ORBIS_CODE_WEBSITES.md). Every result below was executed on https://tryorbis.app with a dedicated test account; the agent used Auto (Claude Haiku 5.5).
+
+## Before the fix (baseline, run c9f84e29)
+
+The Nova prompt on a new website project: the first reply was cut off at the output limit; after 4 steps every step failed with HTTP 400 "That file name or size isn't allowed" (the repeat detector's oversized record breaking a database check). The run could not continue; index.html held a half-written page (3,253 characters). No server was started and nothing was checked.
+
+## Automated tests
+
+`npx vitest run`: **47 files, 681 tests, all passing**; `tsc` clean; `eslint` 0 errors; `next build` succeeds. New and changed:
+
+| File | What it proves |
+|---|---|
+| `tests/code-website.test.ts` (18) | Server-command policy; judging a browser check (fails on what visitors hit, warns on the rest, never passes a check that didn't run; other sites' requests not counted); the check script parses; website detection and guidance; old file contents dropped from later turns; screenshots reach Claude (in the tool result) and GPT (as an image message); `start_preview` / `check_preview` in a step (records, screenshots, Run command, waiting for the computer, asking about unknown server commands, refused before plan approval / with commands off / read-only); `run_command` refuses servers; builds recorded. **The preview server for real** (local bash, python, curl): starts and answers HTTP 200, restarts, reports a crashing server with its output, and notices a server on the wrong port. |
+| `tests/code-agent-engine.test.ts` (+2) | A whole website run with a scripted model: write → start → check (problem) → fix → check (pass) → finish; ≥ 12,000 output tokens per step; earlier writes left out of later turns; report checks; small `recent`. A build that runs after the computer starts is recorded (fails on the previous engine). |
+| `tests/code-agent-db.test.ts` (+2) | Real migrations: the old repeat-detector entry for a big write breaks the column's check (the stuck-run bug); the new 22-character hashes fit; the `checks` column is owner-only and size-limited. |
+| `tests/code-ui.test.ts` (+4) | The "Checking the site in a browser" stage; report check lines and badge (current/stale, problems, build); project names from requests; example prompts. |
+
+The browser-check script was also run locally against a test page (Chromium from Playwright standing in): it reported the 404 image, the missing `#pricing` target, the placeholder link, the image without alt text, the missing page, 210 px of sideways scrolling at 390 px (and the element causing it), and the phone menu opening (0 → 3 links). In a Vercel Sandbox with the production network policy (npm and PyPI only), `@sparticuz/chromium` installed from npm in 7.6 s and launched in 1.3 s.
+
+## Live acceptance
+
+### New website from the start screen (run 2092844e)
+
+Typed the Nova prompt into **Build a website**, pressed **Build website**; the page did the rest (the computer was started automatically because the user asked for a build).
+
+| Check | Result |
+|---|---|
+| Project created and opened, named "Website: Nova" | PASS |
+| Run completed: 99 s, 10 steps, 15,453 output tokens, $0.0158 (Claude Haiku 5.5) | PASS |
+| Files: index.html 13,677 chars, style.css 14,072, script.js 2,268 | PASS |
+| Navigation, hero, features, pricing, testimonials, FAQ, footer; testimonials labelled "Sample content"; media queries | PASS (9 checks) |
+| The agent started the preview (`python3 -m http.server 3000`, HTTP 200) and checked it in a browser at desktop and phone sizes, with screenshots | PASS (3 checks) |
+| It noticed three `href="#"` plan buttons, pointed them at real targets and checked again; its report lists what isn't connected (no signup, checkout or sales flow) and the sample copy | PASS (observed) |
+| Report: server running; browser check passed, current | PASS (2 checks) |
+| Preview: address available; the computer says it answers HTTP 200; shown in the workspace beside the agent; shows the built page | PASS (4 checks) |
+| This test's own browser on the live site: HTTP 200 desktop and phone; no JavaScript or loading errors; no sideways scrolling at 390 px; every in-page link has a target | PASS (4 checks) |
+| Phone menu opens | First run: FAIL — the test's visibility check counted links in a hidden menu as visible. Re-checked with a corrected check after the follow-up: **PASS** (links on screen 1 → 6, `aria-expanded` false → true). The site's menu was correct throughout (button with aria-label, aria-expanded and aria-controls; Escape and link clicks close it). |
+
+### Follow-up through the page (run fb3e198b): "Make the navigation sticky, and change the accent colour to a vivid blue."
+
+8/8 PASS: completed (101 s, 10 steps, $0.0102); the agent found the navigation already sticky and changed the accent to blue across style.css (8 edits, plus a leftover teal tint it found later); only style.css changed; pricing, FAQ, footer and testimonials kept; not rebuilt from scratch; browser check passed after the change; no errors or sideways scrolling on the live site.
+
+Found along the way, both fixed and deployed:
+- The agent asked to run its own Playwright script (approved by the test harness); it failed because Playwright isn't installed. The guidance now says `check_preview` is the browser and not to install one.
+- After an answer given outside the page, the open page didn't notice the run could continue (it only refreshed while stepping). It now refreshes every few seconds and shows Continue.
+
+### Existing project (Vite + React, run 0b63d154): "Add a pricing section with three plans (sample prices) below the hero, matching the existing style. Keep everything else as it is."
+
+10/10 PASS: completed (61 s, 6 steps, $0.0058); `Counter.jsx` unchanged byte for byte; the original hero text (with a marker string) kept; still React + Vite; pricing added in App.jsx and styles.css; brand colour kept; **`npm install && npm run build` passed and is recorded as the run's production build (current)**; dev server (`npm install && npm run dev`) answered HTTP 200; browser check passed; the live site loads without errors and shows the pricing section.
+
+The first attempt (run 3d36ad8e) passed everything except the build record: the build ran and passed after the computer started, but that path didn't record builds. Fixed with a regression test, re-run above.
+
+### Test-harness issues (not product faults)
+
+- The first new-site attempt drove the run from both the script and the page; together they hit the 30-steps-a-minute limit (429). The harness now lets the page drive and answers waits like a user.
+- A selector matched two "Project" fields. Fixed.
+
+## What was verified, and what wasn't
+
+| Condition | New site | Follow-up | Existing project |
+|---|---|---|---|
+| Files built | Yes | Yes | Yes |
+| Development server running | Yes (HTTP 200) | Yes | Yes (HTTP 200) |
+| Preview verified in a browser | Yes (desktop and phone) | Yes | Yes |
+| Production build passed | Not applicable (static site, no build step) | Not applicable | **Yes** |
+| Tests passed | None exist | None exist | None exist |
+
+Not verified: web fonts or files from other sites (none were used); the agent's design quality beyond the checks (screenshots in this report's run records); models other than Claude Haiku 5.5 for website building; Free-plan users (the test account has no limit; a full site took 10 steps).
+
+## Clean-up
+
+Test projects remain in the test account; computers were stopped; the account was locked again afterwards.
