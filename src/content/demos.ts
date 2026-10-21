@@ -27,38 +27,45 @@ export interface Demo {
 
 const CAPTURED = "Captured on tryorbis.app on 20 October 2026";
 
+const CAPTURED_21 = "Captured on tryorbis.app on 21 October 2026";
+
 export const HERO_SHOT = {
   wide: {
-    src: "/product/code-agent.webp",
-    alt: "Orbis Code: a small Python shop-cart project open in the editor, with the coding agent's panel showing its finished run — reading the files, the approved plan, the one-line fix to cart.py, the test run that passed and its summary.",
+    src: "/product/code-website.webp",
+    alt: "Orbis Code after building a website from one prompt: the agent's report — what it built, the browser check that found no problems at desktop and phone sizes, the development server answering, the production build not run, the files it changed — beside the live preview of the Nova landing page it made.",
     width: 2400,
-    height: 1457,
+    height: 1458,
   },
   narrow: {
-    src: "/product/code-agent-panel.webp",
-    alt: "The coding agent's panel after a run: each step it took, the plan you approved, the one-line fix, the test run that passed, and its summary.",
+    src: "/product/code-website-panel.webp",
+    alt: "The coding agent's report on a phone: Done, checked in a browser with no problems, what it built and which checks ran.",
     width: 780,
     height: 1227,
   },
-  caption: `The coding agent after fixing a bug and running the project's tests. ${CAPTURED}.`,
+  caption: `The coding agent after building a landing page from one prompt, with the live preview beside it. ${CAPTURED_21}.`,
 };
 
 export const DEMOS: Demo[] = [
   {
     id: "code",
     label: "Code",
-    title: "An agent that checks its own work",
-    text: "Asked to fix a project's failing tests, the agent read the code, found the cause, proposed a plan, made a one-line fix and ran the tests on the project's own computer. Every step below is from that run's activity log.",
-    image: { src: "/product/code-changes.webp", alt: "The Changes panel for the agent's run: its request, its summary, and a diff of cart.py where `return price` is replaced by `return price * quantity`, with Revert buttons.", width: 2400, height: 1457 },
-    caption: `The run's change as a diff, ready to keep or revert. ${CAPTURED}.`,
+    title: "A website from one prompt, checked in a real browser",
+    text: "Asked for a SaaS landing page for an AI productivity platform called Nova, the agent wrote the site, started it on the project's own computer and opened it in a browser at desktop and phone sizes before calling it done. Every step below is from that run's activity log.",
+    image: {
+      src: "/product/website-nova.webp",
+      alt: "The Nova landing page the agent built: a dark hero reading “Turn scattered work into finished work.” with Start free trial and See how it works buttons, under a sticky navigation bar.",
+      width: 2000,
+      height: 1250,
+    },
+    caption: `The page the agent built, from its live preview. ${CAPTURED_21}.`,
     points: [],
     steps: [
-      { kind: "inspect", text: "Read cart.py and test_cart.py" },
-      { kind: "plan", text: "Proposed a plan: make line_total multiply price by quantity, then run the unit tests" },
-      { kind: "approval", text: "You approved the plan, and started the project's computer when it asked" },
-      { kind: "edit", text: "Edited cart.py (+1 −1)" },
-      { kind: "command", text: "python -m unittest -v test_cart.py", result: "pass" },
-      { kind: "summary", text: "Summary: the bug was in line_total; one line changed; all 3 tests pass" },
+      { kind: "inspect", text: "Read the starter files and inspected the project" },
+      { kind: "edit", text: "Wrote index.html, style.css and script.js (+252, +803 and +63 lines)" },
+      { kind: "command", text: "Started the preview: python3 -m http.server 3000", result: "pass" },
+      { kind: "command", text: "Checked the page in a browser at desktop and phone sizes: no problems found", result: "pass" },
+      { kind: "edit", text: "Pointed three placeholder plan buttons at real targets, and checked again" },
+      { kind: "summary", text: "Summary: what it built, the checks that passed, and what isn't connected (no signup or checkout)" },
     ],
     href: "/features/ai-coding-assistant",
     cta: "How the coding agent works",

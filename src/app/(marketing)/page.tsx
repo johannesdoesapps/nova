@@ -1,6 +1,6 @@
 import { getImageProps } from "next/image";
 import Link from "next/link";
-import { ArrowRight, Check, Eye, GitCompareArrows, Lock, ServerCog, ShieldCheck, Undo2 } from "lucide-react";
+import { ArrowRight, Check, ServerCog, ShieldCheck, Undo2 } from "lucide-react";
 import { CtaBand, PrimaryCta, SecondaryCta, SectionHeading, StatusBadge } from "@/components/marketing/parts";
 import { ProductTour } from "@/components/marketing/product-tour";
 import { DEMOS, HERO_SHOT } from "@/content/demos";
@@ -8,45 +8,30 @@ import { FAQ, PILLARS, PRICING, featuresIn } from "@/content/site";
 import { jsonLd, pageMetadata, siteUrl } from "@/lib/seo";
 
 export const metadata = pageMetadata({
-  title: "Orbis — one AI workspace for chat, code and agents",
+  title: "Orbis — an AI coding agent that checks its own work",
   description:
-    "Use Claude and GPT models in one workspace, let a coding agent make and test changes you can review, compare models side by side and turn goals into plans. Free to start.",
+    "Describe a website or a fix. Orbis's coding agent builds it on a private computer, runs the tests, checks websites in a real browser and shows you every change. Claude and GPT chat included. Free to start.",
   path: "/",
   absoluteTitle: true,
 });
 
-const PROOF = ["No credit card to start", "Claude and GPT models", "Every agent change reviewable"];
+const PROOF = ["No credit card to start", "Websites checked in a real browser", "Every change reviewable and undoable"];
 
 const TRUST = [
   {
-    icon: Eye,
-    title: "You see who answered",
-    text: "Every reply names the model that wrote it — and with Auto, why it was chosen. Your message goes to that model's provider, such as Anthropic or OpenAI.",
-  },
-  {
     icon: ShieldCheck,
-    title: "Agents ask before they act",
-    text: "The coding agent runs tests on its own but asks before other commands, and never deploys or pushes. Changes to connected apps always wait for your confirmation.",
+    title: "It asks before it acts",
+    text: "The coding agent runs tests, builds and its preview on its own but asks before other commands, and never deploys or pushes. Changes to connected apps always wait for your confirmation.",
   },
   {
     icon: Undo2,
     title: "Every change can be undone",
-    text: "Each agent run lists the files it changed as diffs. Revert a whole run or a single file from the Changes panel.",
+    text: "Each session lists the files it changed as diffs. Revert a whole session or a single file from the Changes panel.",
   },
   {
     icon: ServerCog,
     title: "Code runs in isolation",
-    text: "Commands run on a short-lived computer for your project, with internet limited to package registries and none of Orbis's keys inside.",
-  },
-  {
-    icon: Lock,
-    title: "Private to your account",
-    text: "Conversations, projects and agents are stored per account with row-level security, so other users can't read them. Connected-app tokens are encrypted on the server.",
-  },
-  {
-    icon: GitCompareArrows,
-    title: "Honest about what works",
-    text: "Each feature is labelled Available, Beta, Private preview or Coming soon. Results come from real runs: if a test didn't run, Orbis says so.",
+    text: "Commands and previews run on a short-lived computer for your project, with internet limited to package registries and none of Orbis's keys inside.",
   },
 ];
 
@@ -77,13 +62,14 @@ export default function HomePage() {
         <div className="mx-auto max-w-3xl text-center">
           <p className="mk-rise inline-flex items-center gap-2 rounded-full border border-border bg-panel-2 px-3 py-1 text-xs text-muted">
             <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
-            The AI workspace · Free to start
+            AI coding agent and workspace · Free to start
           </p>
           <h1 id="hero-title" className="text-balance mk-rise mt-6 font-serif text-[42px] leading-[1.02] tracking-[-0.015em] text-fg sm:text-[66px]">
-            One workspace. Leading models. Agents that do the work.
+            Describe it. Orbis builds it and checks its own work.
           </h1>
           <p className="mk-rise mx-auto mt-6 max-w-2xl text-[17px] leading-relaxed text-muted sm:text-[19px]">
-            Use leading AI models, build specialised agents, and turn complex tasks into actionable plans — all in one workspace, with transparent results you can review.
+            The coding agent writes the code on a private computer, runs the tests, opens websites in a real browser at desktop and phone sizes, and shows you exactly what changed — and what it
+            couldn&apos;t verify. Claude and GPT models for everything else, in the same workspace.
           </p>
           <div className="mk-rise mt-9 flex flex-wrap items-center justify-center gap-3">
             <PrimaryCta />
@@ -171,7 +157,7 @@ export default function HomePage() {
             </>
           }
         />
-        <ul className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="mt-12 grid gap-4 sm:grid-cols-3">
           {TRUST.map((t) => (
             <li key={t.title} className="rounded-2xl border border-border bg-panel p-6">
               <t.icon className="h-5 w-5 text-accent-2" aria-hidden />

@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "Orbis — AI assistant and agent workspace";
+export const alt = "Orbis — an AI coding agent that checks its own work";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -30,8 +30,8 @@ export default function OpengraphImage() {
           <div style={{ fontSize: 34, letterSpacing: 10, fontWeight: 600 }}>ORBIS</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-          <div style={{ fontSize: 76, lineHeight: 1.05, letterSpacing: -2, maxWidth: 980 }}>One AI workspace. Agents that help you get work done.</div>
-          <div style={{ fontSize: 30, color: "#a7a6ad", maxWidth: 960 }}>Claude and GPT models · custom agents · model comparison · planning · security checks</div>
+          <div style={{ fontSize: 76, lineHeight: 1.05, letterSpacing: -2, maxWidth: 980 }}>Describe it. Orbis builds it and checks its own work.</div>
+          <div style={{ fontSize: 30, color: "#a7a6ad", maxWidth: 960 }}>Websites and fixes, tested and checked in a real browser · Claude and GPT models</div>
         </div>
       </div>
     ),
