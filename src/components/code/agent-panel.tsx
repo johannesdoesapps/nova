@@ -534,10 +534,7 @@ export function AgentPanel({
   const send = async (request: string, m: ModeId = mode): Promise<boolean> => {
     if (attachments.busy) return false;
     const ok = await start(request, m, modelId, attachments.ids);
-    if (ok) {
-      attachments.reset();
-      setText("");
-    }
+    if (ok) attachments.reset();
     return ok;
   };
 
@@ -549,7 +546,9 @@ export function AgentPanel({
       setText("");
       return;
     }
-    void send(t);
+    // The box clears at once; if the task doesn't start, the text comes back.
+    setText("");
+    void send(t).then((ok) => !ok && setText((cur) => (cur.trim() ? cur : t)));
   };
 
   const fill = (task: string) => {
