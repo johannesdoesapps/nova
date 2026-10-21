@@ -65,7 +65,7 @@ export default function HomePage() {
             AI coding agent and workspace · Free to start
           </p>
           <h1 id="hero-title" className="text-balance mk-rise mt-6 font-serif text-[42px] leading-[1.02] tracking-[-0.015em] text-fg sm:text-[66px]">
-            Describe it. Orbis builds it and checks its own work.
+            One workspace. Leading models. Agents that do the work.
           </h1>
           <p className="mk-rise mx-auto mt-6 max-w-2xl text-[17px] leading-relaxed text-muted sm:text-[19px]">
             The coding agent writes the code on a private computer, runs the tests, opens websites in a real browser at desktop and phone sizes, and shows you exactly what changed — and what it
