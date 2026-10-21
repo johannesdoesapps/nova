@@ -38,6 +38,7 @@ describe("choosing notes for a task", () => {
     note({ kind: "architecture", title: "Payments module", content: "Stripe webhooks live in src/payments/webhook.ts." }),
     note({ kind: "decision", title: "Database", content: "We chose SQLite for the prototype; don't switch to Postgres." }),
     note({ kind: "decision", title: "Payments retries", content: "Webhook retries are idempotent by event id.", status: "proposed", source: "agent" }),
+    note({ kind: "workflow", title: "Webhook release", content: "Test the Stripe webhook in the payments module, then bump the version." }),
   ];
 
   it("always includes instructions and every-task notes, adds relevant ones and leaves out the rest", () => {
@@ -45,6 +46,9 @@ describe("choosing notes for a task", () => {
     expect(got.slice(0, 2).sort()).toEqual(["Styling", "Tests"]);
     expect(got).toContain("Payments module");
     expect(got).not.toContain("Database");
+    // A workflow is started by the user, never added as context, even when its words match.
+    expect(got).not.toContain("Webhook release");
+    expect(searchMemory(notes, "webhook release").map((x) => x.title)).toContain("Webhook release");
   });
 
   it("never gives the agent a suggestion the user hasn't approved", () => {
@@ -68,7 +72,7 @@ describe("choosing notes for a task", () => {
 
   it("describes what was given and what wasn't", () => {
     const used = selectMemory(notes, "Fix the Stripe webhook");
-    const block = memoryBlock(used, 4);
+    const block = memoryBlock(used, 5);
     expect(block).toContain("Project memory (written or approved by the user");
     expect(block).toContain("[Instruction] Tests: Run npm test before finishing.");
     expect(block).toContain("search_memory");

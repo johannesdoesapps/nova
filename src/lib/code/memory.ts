@@ -73,13 +73,14 @@ export function relevance(entry: Pick<MemoryEntry, "title" | "content">, taskTer
 export const MEMORY_BUDGET = 6_000;
 
 /**
- * The notes to give the agent for a task: approved ones only; instructions and
+ * The notes to give the agent for a task: approved ones only (workflows aside); instructions and
  * "always" notes first, then the rest by relevance to the request (notes that
  * share no words with it are left out — the agent can search for them). Stays
  * within a character budget so memory never crowds out the project itself.
  */
 export function selectMemory(entries: MemoryEntry[], request: string, budget = MEMORY_BUDGET): MemoryEntry[] {
-  const active = entries.filter((e) => e.status === "active");
+  // Workflows are procedures the user starts, not background knowledge: never added on their own.
+  const active = entries.filter((e) => e.status === "active" && e.kind !== "workflow");
   const q = terms(request);
   const always = active.filter((e) => e.always || e.kind === "instruction").sort((a, b) => Number(b.always) - Number(a.always) || b.updatedAt.localeCompare(a.updatedAt));
   const rest = active
