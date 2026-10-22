@@ -5,6 +5,7 @@ import { Bot, Bug, ChartColumn, Code2, FileText, Flag, Flame, Globe, GraduationC
 import { greetingFor, homeActionById, planDayPrompt, type HomeAction, type IconName } from "@/lib/home";
 import type { StarterTask, StarterTaskId } from "@/lib/starter";
 import { TaskStarter, type StarterEnv } from "./task-starter";
+import { OrbisMark } from "./ui";
 
 export const HOME_ICONS: Record<IconName, ReactNode> = {
   telescope: <Telescope />,
@@ -37,7 +38,7 @@ export interface HomeProps {
   starter: { active: StarterTaskId | null; onChoose: (task: StarterTask | null) => void; env: StarterEnv };
 }
 
-/** The start page: a greeting with today's date, one question, the prompt box and the task starter. */
+/** The start page: the logo, a greeting with today's date, one question, the prompt box and the task starter. */
 export function Home({ name, composer, onAction, notice, starter }: HomeProps) {
   const router = useRouter();
   const params = useSearchParams();
@@ -76,7 +77,8 @@ export function Home({ name, composer, onAction, notice, starter }: HomeProps) {
   return (
     <div className="mx-auto flex min-h-full w-full max-w-[1080px] flex-col justify-center px-4 pb-24 pt-6 sm:px-6 sm:pt-10 lg:pt-14">
       <div className="mx-auto flex w-full max-w-[760px] flex-col items-center text-center">
-        <p className="s-in h-5 text-[13.5px] text-s-ink-3" suppressHydrationWarning>
+        <OrbisMark className="s-in h-9 w-9" />
+        <p className="s-in mt-6 h-5 text-[13.5px] text-s-ink-3" suppressHydrationWarning>
           {greeting && date ? `${greeting} · ${date.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}` : " "}
         </p>
         <h1 className="mt-1.5 text-balance font-serif text-[clamp(32px,5.6vw,48px)] leading-[1.08] tracking-[-0.01em]">What do you want to accomplish?</h1>
