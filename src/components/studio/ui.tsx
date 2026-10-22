@@ -15,6 +15,7 @@ import {
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ChipMark } from "@/components/brand/chip";
 
 /* Icon button ------------------------------------------------------------ */
 
@@ -379,12 +380,6 @@ export function Kbd({ children }: { children: ReactNode }) {
   );
 }
 
-export function OrbisMark({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
-      <rect x="1" y="1" width="30" height="30" rx="9" fill="currentColor" />
-      <circle cx="16" cy="16" r="7" fill="none" stroke="var(--s-bg)" strokeWidth="2.4" />
-      <circle cx="20.95" cy="11.05" r="2.9" fill="var(--s-brand)" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
-  );
+export function OrbisMark({ className, simple }: { className?: string; simple?: boolean }) {
+  return <ChipMark className={className} simple={simple} />;
 }

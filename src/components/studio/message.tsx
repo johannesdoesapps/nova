@@ -14,6 +14,7 @@ import type { FeedbackRating } from "@/lib/analytics/events";
 /** What a reply can be turned into. Project ones need an account. */
 export type ReplyAction = "note" | "task" | "milestone" | "prompt" | "followup";
 import { useVerify, VerifyButton, VerifyPanel } from "./verify-panel";
+import { ChipMascot } from "@/components/brand/chip";
 
 export const MessageView = memo(function MessageView({
   m,
@@ -180,7 +181,7 @@ function AssistantMessage({
   return (
     <div className="group/msg s-in">
       <div className="mb-2.5 flex items-center gap-2 text-[12.5px] text-s-ink-3">
-        {assistantAvatar ?? <OrbisMark className="h-[18px] w-[18px] text-s-ink" />}
+        {assistantAvatar ?? <OrbisMark simple className="h-[18px] w-[18px]" />}
         <span className="font-medium text-s-ink-2">{assistantName ?? m.modelName ?? "Orbis"}</span>
         {assistantName && m.modelName && <span className="hidden sm:inline">· {m.modelName}</span>}
         {m.routing && (
@@ -218,11 +219,7 @@ function AssistantMessage({
         </div>
       ) : streaming ? (
         <div role="status" className="flex h-7 items-center gap-3">
-          <span className="flex gap-1" aria-hidden>
-            <span className="s-dot h-1.5 w-1.5 rounded-full bg-s-accent" />
-            <span className="s-dot h-1.5 w-1.5 rounded-full bg-s-accent [animation-delay:160ms]" />
-            <span className="s-dot h-1.5 w-1.5 rounded-full bg-s-accent [animation-delay:320ms]" />
-          </span>
+          <ChipMascot mood="thinking" className="h-7 w-7 shrink-0" />
           <span className="s-shimmer text-[14px]">{thinkingLabel}</span>
         </div>
       ) : null}

@@ -294,6 +294,7 @@ html.theming .studio * {
 @media (prefers-reduced-motion: reduce) {
   .s-in, .s-pop, .s-prose > *, .studio-dialog[open] > div { animation-duration: 0.01ms; }
   .s-shimmer { animation: none; color: var(--s-ink-2); background: none; }
+  .s-dot { animation: none; opacity: 1; }
   .s-caret > .s-prose > :last-child::after { animation: none; }
 }
 
