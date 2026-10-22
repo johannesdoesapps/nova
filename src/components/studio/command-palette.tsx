@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { useCatalog } from "@/components/common/model-picker";
 import { jsonFetch } from "@/hooks/use-ndjson";
-import { autoIdFor, ROUTER_MODES } from "@/lib/ai/platform";
+import { autoIdFor, ROUTER_MODES } from "@/lib/ai/router-modes";
 import { shortcut, shortcutKeys } from "@/lib/shortcuts";
 import { TEMPLATES } from "@/lib/templates/registry";
 import { CommandMenu, type Command } from "./command-menu";

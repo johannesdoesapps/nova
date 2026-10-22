@@ -4,7 +4,7 @@ import { Check } from "lucide-react";
 import type { ModelWithStatus } from "@/lib/ai/types";
 import { agentInput, type AgentInput } from "@/lib/agents/schema";
 import { AGENT_ACCENTS, AGENT_CAPABILITIES, AGENT_ICONS, CAPABILITY_INFO, HISTORY_LIMITS, RESPONSE_STYLE_INFO, RESPONSE_STYLES, type AgentConfig, type CapabilityStatus } from "@/lib/agents/types";
-import { AUTO_MODEL_ID } from "@/lib/ai/platform";
+import { AUTO_MODEL_ID } from "@/lib/ai/router-modes";
 import { cn } from "@/lib/utils";
 import { Dialog, Switch } from "@/components/studio/ui";
 import { ACCENT_COLORS, AGENT_ICON_COMPONENTS, AgentAvatar, CAPABILITY_ICONS } from "./agent-visuals";

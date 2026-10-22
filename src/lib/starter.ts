@@ -1,5 +1,5 @@
 import type { ChatMode } from "./ai/modes";
-import { AUTO_MODEL_ID, ROUTER_MODES, type RouterMode } from "./ai/platform";
+import { AUTO_MODEL_ID, ROUTER_MODES, type RouterMode } from "./ai/router-modes";
 
 /**
  * The first-run starter: "What do you want to accomplish?" Each task suggests

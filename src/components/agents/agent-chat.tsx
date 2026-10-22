@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowUpRight, ChevronLeft, Clock, Copy, Ellipsis, Pencil, SquarePen, Trash2 } from "lucide-react";
 import { defaultModelId, useCatalog } from "@/components/common/model-picker";
-import { AUTO_MODEL_ID, isAutoId } from "@/lib/ai/platform";
+import { AUTO_MODEL_ID, isAutoId } from "@/lib/ai/router-modes";
 import { useApp } from "@/components/layout/app-context";
 import type { ChatAttachment, ChatTransport } from "@/components/studio/chat-client";
 import { streamAgentChat } from "@/components/studio/chat-client";

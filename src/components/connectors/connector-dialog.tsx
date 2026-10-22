@@ -4,7 +4,6 @@ import { ArrowUpRight, Eye, Lock, PenLine, RefreshCw, Search } from "lucide-reac
 import { Dialog } from "@/components/studio/ui";
 import { oauthRedirectTo } from "@/lib/auth-flow";
 import { AI_MODES, type AiMode, type CatalogEntry, type ConnectionStatus, type ConnectorItem } from "@/lib/connectors/catalog";
-import { browserSupabase } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { BrandIcon } from "./brand-icon";
 import { api, StatusPill } from "./shared";
@@ -76,7 +75,7 @@ export function ConnectorDialog({
         const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
         const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
         if (!url || !key) throw new Error("Accounts aren't set up on this site.");
-        const { error } = await browserSupabase(url, key).auth.linkIdentity({ provider: "github", options: { redirectTo: oauthRedirectTo(location.origin, "/connectors?connector=github", "github-link"), scopes: "read:user user:email" } });
+        const { error } = await (await import("@/lib/supabase/client")).browserSupabase(url, key).auth.linkIdentity({ provider: "github", options: { redirectTo: oauthRedirectTo(location.origin, "/connectors?connector=github", "github-link"), scopes: "read:user user:email" } });
         if (error) throw new Error(/manual linking/i.test(error.message) ? "Connecting GitHub to an existing account isn't switched on for this site yet." : "GitHub couldn't be connected. Please try again.");
         return;
       }

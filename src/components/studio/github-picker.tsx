@@ -1,10 +1,9 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { Check, Lock, Search } from "lucide-react";
-import { GitHubLogo } from "@/components/common/login-form";
+import { GitHubLogo } from "@/components/common/github-logo";
 import { LOGIN_MESSAGES, loginMessage, oauthRedirectTo } from "@/lib/auth-flow";
 import { MAX_ATTACHMENT_CHARS } from "@/lib/limits";
-import { browserSupabase } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { attachmentBytes, MAX_ATTACHMENTS_BYTES, type ChatAttachment } from "./chat-client";
 import { Dialog } from "./ui";
@@ -94,7 +93,7 @@ export function GitHubPicker({
     const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (!url || !key) return setError(LOGIN_MESSAGES.github_link_failed.text);
     setBusy(true);
-    const { error } = await browserSupabase(url, key).auth.linkIdentity({
+    const { error } = await (await import("@/lib/supabase/client")).browserSupabase(url, key).auth.linkIdentity({
       provider: "github",
       options: { redirectTo: oauthRedirectTo(location.origin, location.pathname, "github-link"), scopes: "read:user user:email" },
     });

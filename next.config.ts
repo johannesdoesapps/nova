@@ -3,6 +3,41 @@ import type { NextConfig } from "next";
 // Cache Components is intentionally left off for the MVP: almost every page
 // reads the Supabase session, so standard dynamic rendering is the simplest
 // reliable model. Revisit once the data layer is stable.
+/**
+ * Content-Security-Policy: what pages may load and where they may send data.
+ * Scripts and styles come only from this site (Next.js needs its own inline
+ * scripts, so 'unsafe-inline' stays; "eval" only in development). Images may
+ * be anywhere https (avatars, images in replies). The only other site the
+ * browser talks to is Supabase, for sign-in. The Code preview is a frame on
+ * the workspace computer's own https address. Nothing may embed Orbis.
+ */
+function contentSecurityPolicy(): string {
+  const supabase = (() => {
+    try {
+      return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").origin;
+    } catch {
+      return "";
+    }
+  })();
+  const dev = process.env.NODE_ENV !== "production";
+  const rules: Record<string, string[]> = {
+    "default-src": ["'self'"],
+    "script-src": ["'self'", "'unsafe-inline'", ...(dev ? ["'unsafe-eval'"] : [])],
+    "style-src": ["'self'", "'unsafe-inline'"],
+    "img-src": ["'self'", "data:", "blob:", "https:"],
+    "font-src": ["'self'", "data:"],
+    "connect-src": ["'self'", ...(supabase ? [supabase, supabase.replace(/^https:/, "wss:")] : []), ...(dev ? ["ws:"] : [])],
+    "media-src": ["'self'", "blob:", "data:"],
+    "worker-src": ["'self'", "blob:"],
+    "frame-src": ["'self'", "https:"],
+    "object-src": ["'none'"],
+    "base-uri": ["'self'"],
+    "form-action": ["'self'"],
+    "frame-ancestors": ["'none'"],
+  };
+  return [...Object.entries(rules).map(([k, v]) => `${k} ${v.join(" ")}`), ...(dev ? [] : ["upgrade-insecure-requests"])].join("; ");
+}
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   // "/" is the public homepage; the app itself starts at /home. The older
@@ -43,6 +78,7 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
           // Voice input in the chat composer needs the microphone on ORBIS's own pages.
           { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=()" },
+          { key: "Content-Security-Policy", value: contentSecurityPolicy() },
         ],
       },
       {

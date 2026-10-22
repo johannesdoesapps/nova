@@ -1,11 +1,12 @@
 "use client";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookmarkPlus, CircleCheck, Copy, FolderPlus, Info, MessageSquarePlus, ShieldCheck } from "lucide-react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { defaultModelId, useCatalog } from "@/components/common/model-picker";
-import { AUTO_MODEL_ID, isAutoId } from "@/lib/ai/platform";
+import { AUTO_MODEL_ID, isAutoId } from "@/lib/ai/router-modes";
 import { useModelChoice } from "./use-model-choice";
 import { useApp } from "@/components/layout/app-context";
 import type { HomeAction } from "@/lib/home";
@@ -15,7 +16,6 @@ import { Composer } from "./composer";
 import { StudioHeader, usePageCommands, useStudio } from "./frame";
 import type { Command } from "./command-menu";
 import { openInVerify } from "@/lib/verify/handoff";
-import { Home } from "./home";
 import type { ConvSummary } from "./history";
 import { ProjectChip } from "./project-chip";
 import { useReplyActions } from "./reply-actions";
@@ -27,6 +27,9 @@ import { Welcome } from "./welcome";
 import { isCodeRequest } from "./generating";
 
 /** The most recently active chat (pinned chats are listed first, so not always the first). */
+// Home is its own screen: its code loads when it's opened, not with every chat.
+const Home = dynamic(() => import("./home").then((m) => m.Home));
+
 const latestOf = (list: ConvSummary[] | null) => (list ?? []).reduce<ConvSummary | null>((a, c) => (!a || c.updated_at > a.updated_at ? c : a), null);
 
 const focusInput = () => requestAnimationFrame(() => document.getElementById("studio-input")?.focus());

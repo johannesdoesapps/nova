@@ -158,6 +158,14 @@ describe("GET /api/status", () => {
     expect(j.integrations.find((i: { id: string }) => i.id === "openai").configured).toBe(true);
     delete process.env.OPENAI_API_KEY;
   });
+
+  it("shows setting names only to administrators (not to guests)", async () => {
+    vi.resetModules();
+    const { GET } = await import("@/app/api/status/route");
+    const j = await (await GET()).json();
+    expect(j.integrations.length).toBeGreaterThan(0);
+    for (const i of j.integrations) expect(i).not.toHaveProperty("envVars");
+  });
 });
 
 describe("request body limits", () => {

@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Check, ChevronDown, Search, Sparkles } from "lucide-react";
 import { MODEL_CATEGORIES, inCategory, modelTags, priceLabel, recommendedIds, type ModelCategory } from "@/lib/ai/catalog";
-import { ROUTER_MODES, autoIdFor, isAutoId, routerModeOf, type RouterMode } from "@/lib/ai/platform";
+import { ROUTER_MODES, autoIdFor, isAutoId, routerModeOf, type RouterMode } from "@/lib/ai/router-modes";
 import { routerPool } from "@/lib/ai/router";
 import { PROVIDER_INFO, providerLabel } from "@/lib/ai/provider-info";
 import type { ModelWithStatus, ProviderId } from "@/lib/ai/types";

@@ -5,7 +5,7 @@ import { ArrowRight, CodeXml, Globe, ListChecks, MessageCircle, PenLine, Plus, S
 import type { ReactNode } from "react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { MODE_LABELS } from "@/lib/ai/modes";
-import { ROUTER_MODES } from "@/lib/ai/platform";
+import { ROUTER_MODES } from "@/lib/ai/router-modes";
 import type { HomeAction } from "@/lib/home";
 import { exampleAction, STARTER_TASKS, starterTask, type StarterTask, type StarterTaskId } from "@/lib/starter";
 import { cn } from "@/lib/utils";

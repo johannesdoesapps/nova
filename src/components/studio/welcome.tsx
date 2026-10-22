@@ -32,9 +32,9 @@ export function Welcome({
   return (
     <div className="mx-auto flex min-h-full w-full max-w-[760px] flex-col items-center justify-center px-4 pb-16 pt-10 sm:px-6">
       <Greeting name={name} />
-      <h1 className="s-in mt-2 text-balance text-center font-serif text-[clamp(32px,5.6vw,48px)] leading-[1.08] tracking-[-0.01em] [animation-delay:80ms]">What do you want to accomplish?</h1>
+      <h1 className="mt-2 text-balance text-center font-serif text-[clamp(32px,5.6vw,48px)] leading-[1.08] tracking-[-0.01em]">What do you want to accomplish?</h1>
 
-      <div className="s-in mt-8 w-full [animation-delay:120ms]">{composer}</div>
+      <div className="mt-8 w-full">{composer}</div>
 
       <TaskStarter active={starter.active} onChoose={starter.onChoose} onAction={onAction} env={starter.env} />
 

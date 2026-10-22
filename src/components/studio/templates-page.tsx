@@ -25,7 +25,7 @@ import { Markdown } from "@/components/common/markdown";
 import { useCatalog } from "@/components/common/model-picker";
 import { useApp } from "@/components/layout/app-context";
 import { postNdjson } from "@/hooks/use-ndjson";
-import { autoIdFor, isAutoId, ROUTER_MODES } from "@/lib/ai/platform";
+import { autoIdFor, isAutoId, ROUTER_MODES } from "@/lib/ai/router-modes";
 import type { SearchSource } from "@/lib/search/types";
 import { templateEstimate } from "@/lib/templates/estimate";
 import { CATEGORY_LABELS, checkInputs, defaultInputs, findTemplate, handoffHref, TEMPLATES, type Template, type TemplateCategory, type TemplateInput } from "@/lib/templates/registry";
