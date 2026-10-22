@@ -53,20 +53,14 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
       monthlyUsd: p.priceUsd,
       annualUsd: chargeUsd(p, "year"),
       annualDiscountPct: p.priceUsd > 0 ? p.annualDiscountPct : 0,
+      // The cards keep to what decides a plan; every limit is in the comparison table below.
       features: [
         prev ? `About ${Math.round(p.weeklyUnits / prev.weeklyUnits)}× the ${prev.label} allowance` : null,
         cheapest ? `Up to about ${roundDown(cheapest.perMonth).toLocaleString("en-US")} messages a month with ${cheapest.name}` : null,
         advanced.length ? `About ${roundDown(advanced.at(-1)!.perMonth).toLocaleString("en-US")}–${roundDown(advanced[0]!.perMonth).toLocaleString("en-US")} messages a month with advanced models` : null,
         p.dailyMessages > 0 ? `${p.dailyMessages} messages a day` : null,
-        `${p.windowUnits.toLocaleString("en-US")} usage units per 5-hour window, ${p.weeklyUnits.toLocaleString("en-US")} per week`,
         names.length ? `Models: ${names.join(", ")}` : "Auto (the lowest-cost available model)",
-        `Replies up to about ${Math.round((p.maxOutputTokens * 0.75) / 50) * 50} words`,
-        p.webSearchesPerPeriod > 0 ? `${p.webSearchesPerPeriod} web searches per month (when search is enabled)` : null,
-        p.codeRunsPerPeriod > 0 ? `Run code in chat: ${p.codeRunsPerPeriod.toLocaleString("en-US")} runs a month (Python, JavaScript, TypeScript, Bash)` : null,
-        p.workspaceMinutesPerPeriod > 0
-          ? `Code workspace: ${p.codeProjects.toLocaleString("en-US")} project${p.codeProjects === 1 ? "" : "s"}, ${p.workspaceMinutesPerPeriod.toLocaleString("en-US")} computer minutes a month, AI file editing and live preview`
-          : null,
-        "Assistant, agents, Council, Arena and Mission Control",
+        p.workspaceMinutesPerPeriod > 0 ? `Coding agent and ${p.codeProjects.toLocaleString("en-US")} code project${p.codeProjects === 1 ? "" : "s"}` : null,
         id === "free" ? "No credit card needed" : "Cancel or change plan any time",
       ].filter((x): x is string => !!x),
     };
@@ -105,11 +99,9 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
       <section aria-labelledby="plans" className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
         <h2 id="plans" className="sr-only">Plans</h2>
         <PricingPlans plans={plans} onSale={onSale} current={current} signedIn={auth.mode === "authenticated"} highlight={highlight} initialInterval={initialInterval} />
-        <p className="mx-auto mt-6 max-w-3xl text-center text-[13px] leading-relaxed text-muted">
-          Each plan includes a monthly AI allowance, with a part reserved for advanced models. Message counts are estimates for a typical message (about{" "}
-          {Math.round((billing.scenario.inputTokens * 0.75) / 100) * 100} words of context and a {Math.round((billing.scenario.outputTokens * 0.75) / 50) * 50}-word reply); longer
-          conversations use more. When the advanced-model part is used, Auto and the fast models keep working; when the whole
-          allowance is used, Orbis pauses until your billing month renews. Upgrades are charged pro-rata right away; downgrades are credited to your next invoice.
+        <p className="mx-auto mt-6 max-w-2xl text-center text-[13px] leading-relaxed text-muted">
+          Message counts are estimates for a typical message (about {Math.round((billing.scenario.inputTokens * 0.75) / 100) * 100} words of context and a{" "}
+          {Math.round((billing.scenario.outputTokens * 0.75) / 50) * 50}-word reply); longer conversations use more. Every limit is in the table below.
         </p>
       </section>
 
@@ -190,8 +182,10 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
         <h3 className="mt-10 text-lg font-medium text-fg">When you reach a limit</h3>
         <ul className="mt-3 list-disc space-y-2 pl-5 text-[15px] leading-relaxed text-muted marker:text-muted">
           <li>Orbis tells you which limit you reached and when it resets. The 5-hour window and the weekly allowance reset on their own.</li>
-          <li>If the advanced-model part of your monthly allowance runs out, Auto and the fast models keep working.</li>
+          <li>Each plan&rsquo;s monthly AI allowance has a part reserved for advanced models. If that part runs out, Auto and the fast models keep working.</li>
+          <li>When the whole monthly allowance is used, Orbis pauses until your billing month renews.</li>
           <li>Nothing is charged automatically and your plan never changes without you. You can cancel or switch plans at any time from your account.</li>
+          <li>Upgrades are charged pro-rata right away; downgrades are credited to your next invoice.</li>
         </ul>
       </section>
       <CtaBand />

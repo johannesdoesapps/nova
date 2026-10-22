@@ -13,6 +13,7 @@ import { ProviderMark } from "@/components/studio/model-selector";
 import { Switch } from "@/components/studio/ui";
 import { FinancePanel } from "./finance-panel";
 import { ProductPanel } from "./product-panel";
+import { AnswerCheckPanel } from "./answer-check-panel";
 import { PlansEditor } from "./plans-editor";
 import { RequestLog } from "./request-log";
 
@@ -325,6 +326,7 @@ export function AdminView() {
 
               <FinancePanel />
               <ProductPanel />
+              <AnswerCheckPanel />
 
               <PlansEditor stored={draft.billing} models={snap.models} onChange={(billing) => patch({ billing: billing as unknown as Record<string, unknown> })} />
 

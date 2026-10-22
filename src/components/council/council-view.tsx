@@ -329,7 +329,10 @@ export function CouncilView() {
               ) : pool.length < 2 ? (
                 <p className="text-[13px] text-s-ink-3">Council needs at least two configured models. An administrator can add provider keys in Admin.</p>
               ) : (
-                <ModelChips pool={pool} selected={selected} onChange={setPicked} max={MAX} disabled={running} />
+                <div>
+                  <p className="mb-2 text-[12.5px] text-s-ink-3">Models · pick 2 to {MAX}</p>
+                  <ModelChips pool={pool} selected={selected} onChange={setPicked} max={MAX} disabled={running} />
+                </div>
               )}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
                 <Segmented
@@ -341,13 +344,16 @@ export function CouncilView() {
                     { value: "deep", label: "Deep" },
                   ]}
                 />
-                <label className="flex items-center gap-2 text-[13px] text-s-ink-2" title={searchReady ? "Search the web once and give every model the same sources" : "Web search isn't set up on this site"}>
-                  <Switch label="Use web sources" checked={useWeb && searchReady} disabled={!searchReady || running} onChange={setUseWeb} />
-                  <Globe className="h-3.5 w-3.5" /> Web sources
-                </label>
+                {/* Shown only once web search is set up on this site, so there's no switch that can't be used. */}
+                {searchReady && (
+                  <label className="flex items-center gap-2 text-[13px] text-s-ink-2" title="Search the web once and give every model the same sources">
+                    <Switch label="Use web sources" checked={useWeb} disabled={running} onChange={setUseWeb} />
+                    <Globe className="h-3.5 w-3.5" /> Web sources
+                  </label>
+                )}
                 {selected.length >= 2 && (
                   <label className="flex items-center gap-2 text-[13px] text-s-ink-2">
-                    Synthesis by
+                    Summary by
                     <span className="relative">
                       <select
                         value={chairId ?? ""}
