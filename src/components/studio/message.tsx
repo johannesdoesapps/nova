@@ -14,9 +14,7 @@ import type { FeedbackRating } from "@/lib/analytics/events";
 /** What a reply can be turned into. Project ones need an account. */
 export type ReplyAction = "note" | "task" | "milestone" | "prompt" | "followup";
 import { useVerify, VerifyButton, VerifyPanel } from "./verify-panel";
-import { ChipMascot } from "@/components/brand/chip";
 import { GeneratingIndicator, inOpenCodeBlock, WritingIndicator } from "./generating";
-import { useShowMascot } from "./prefs";
 
 export const MessageView = memo(function MessageView({
   m,
@@ -176,7 +174,6 @@ function AssistantMessage({
   verify: ReturnType<typeof useVerify>;
 }) {
   const [asking, setAsking] = useState(false);
-  const showMascot = useShowMascot();
   const streaming = m.status === "streaming";
   const valid = new Set((m.sources ?? []).map((s) => s.index));
   // A proposed connector action arrives as a block at the end of the reply; it becomes a review card, not text.
@@ -254,8 +251,6 @@ function AssistantMessage({
         <div role={m.stopped ? "status" : "alert"} className="s-in mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-s-line bg-s-hover px-4 py-3 text-[14px]">
           {m.stopped ? (
             <Square className="h-3.5 w-3.5 shrink-0 fill-current text-s-ink-3" aria-hidden />
-          ) : showMascot ? (
-            <ChipMascot mood="oops" className="h-7 w-7 shrink-0" />
           ) : (
             <CircleAlert className="h-4 w-4 shrink-0 text-s-danger" />
           )}

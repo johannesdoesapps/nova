@@ -75,7 +75,7 @@ export interface StudioSettings {
   /** How long and in what style replies should be. */
   replyLength?: ReplyLength;
   replyStyle?: ReplyStyle;
-  /** Show Chip, the mascot, while replies are written and on empty and error screens (on unless turned off). */
+  /** Show the moving Orbis logo while replies are on their way (on unless turned off). Named showMascot for settings saved earlier. */
   showMascot?: boolean;
 }
 
@@ -90,8 +90,8 @@ export function useSettings() {
   return [value, update] as const;
 }
 
-/** Whether to show Chip, the mascot. */
-export function useShowMascot() {
+/** Whether to show the moving Orbis logo while Orbis works. */
+export function useAnimatedLogo() {
   const [settings] = useSettings();
   return settings.showMascot !== false;
 }

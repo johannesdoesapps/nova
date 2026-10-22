@@ -1,13 +1,13 @@
 /**
- * The animated mascot shown while Orbis replies: when it says "code", what it
- * renders for each state, and that its motion is decoration that turns off.
+ * The moving logo shown while Orbis replies: when it says "code", what it
+ * renders for each state, and that its motion turns off.
  */
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { GeneratingIndicator, inOpenCodeBlock, isCodeRequest, WritingIndicator } from "@/components/studio/generating";
-import { ChipMascot } from "@/components/brand/chip";
+import { InfinityMark } from "@/components/brand/infinity";
 
 describe("code detection", () => {
   it("knows when the reply is in the middle of a code block", () => {
@@ -26,12 +26,12 @@ describe("code detection", () => {
 });
 
 describe("indicators", () => {
-  it("waiting: an animated Chip and a status announced to screen readers", () => {
+  it("waiting: the moving Orbis logo and a status announced to screen readers", () => {
     const out = renderToStaticMarkup(createElement(GeneratingIndicator, { label: "Generating code" }));
     expect(out).toContain('role="status"');
     expect(out).toContain("Generating code…");
-    expect(out).toContain("chip-float");
-    expect(out).toContain("chip-blink");
+    expect(out).toContain("loop-trace");
+    expect(out).toContain("M32 32C38 22 52 20 54 32");
     expect(out).not.toContain("Still working");
   });
 
@@ -40,21 +40,15 @@ describe("indicators", () => {
     expect(renderToStaticMarkup(createElement(WritingIndicator, { code: false }))).toContain("Writing your answer…");
   });
 
-  it("Chip wears the Orbis infinity loop", () => {
-    expect(renderToStaticMarkup(createElement(ChipMascot, { mood: "hello" }))).toContain("M32 32C38 22 52 20 54 32");
+  it("the logo only moves when asked to", () => {
+    expect(renderToStaticMarkup(createElement(InfinityMark, {}))).not.toContain("loop-trace");
+    expect(renderToStaticMarkup(createElement(InfinityMark, { animate: true }))).toContain("loop-trace");
   });
 
-  it("Chip only moves when asked to", () => {
-    const still = renderToStaticMarkup(createElement(ChipMascot, { mood: "oops" }));
-    expect(still).not.toMatch(/chip-(float|blink|wave|glow)/);
-    expect(renderToStaticMarkup(createElement(ChipMascot, { mood: "hello", animate: true }))).toContain("chip-wave");
-  });
-
-  it("all of Chip's motion stops when reduced motion is preferred", () => {
+  it("the logo's motion stops, and the loop shows whole, when reduced motion is preferred", () => {
     const css = readFileSync("src/app/globals.css", "utf8");
-    const classes = [...css.matchAll(/^\.(chip-[a-z-]+) \{ [^}]*animation:/gm)].map((m) => m[1]);
     const reduced = css.slice(css.lastIndexOf("@media (prefers-reduced-motion: reduce)"));
-    expect(classes.length).toBeGreaterThan(5);
-    for (const c of classes) if (!/-\d$/.test(c)) expect(reduced, c).toContain(`.${c}`);
+    expect(css).toMatch(/^\.loop-trace \{ animation:/m);
+    expect(reduced).toMatch(/\.loop-trace \{ animation: none; stroke-dasharray: none; \}/);
   });
 });

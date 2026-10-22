@@ -6,8 +6,6 @@ import type { HomeAction } from "@/lib/home";
 import type { StarterTask, StarterTaskId } from "@/lib/starter";
 import type { ConvSummary } from "./history";
 import { TaskStarter, type StarterEnv } from "./task-starter";
-import { ChipMascot } from "@/components/brand/chip";
-import { useShowMascot } from "./prefs";
 import { OrbisMark } from "./ui";
 
 const noSubscribe = () => () => {};
@@ -39,13 +37,12 @@ export function Welcome({
     () => new Date().getHours(),
     () => null,
   );
-  const showMascot = useShowMascot();
   const part = hour === null ? null : hour < 5 || hour >= 18 ? "Good evening" : hour < 12 ? "Good morning" : "Good afternoon";
   const greeting = part && (name ? `${part}, ${name}` : part);
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-[760px] flex-col items-center justify-center px-4 pb-16 pt-10 sm:px-6">
-      {showMascot ? <ChipMascot mood="hello" className="s-in h-14 w-14" /> : <OrbisMark className="s-in h-9 w-9" />}
+      <OrbisMark className="s-in h-9 w-9" />
       <p className="s-in mt-6 h-5 text-[14px] text-s-ink-3 [animation-delay:40ms]">{greeting}</p>
       <h1 className="s-in mt-2 text-balance text-center font-serif text-[clamp(32px,5.6vw,48px)] leading-[1.08] tracking-[-0.01em] [animation-delay:80ms]">What do you want to accomplish?</h1>
 
