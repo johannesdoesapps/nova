@@ -191,6 +191,15 @@ body {
 /* The logo while Orbis works: a bright stretch of line running around the loop. */
 @keyframes loop-trace { to { stroke-dashoffset: -100; } }
 .loop-trace { animation: loop-trace 1.6s linear infinite; }
+@keyframes loop-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.5px); } }
+.loop-float { animation: loop-float 2.8s ease-in-out infinite; }
+/* The changing status line: the new words slide up in as the old ones fade out. */
+@keyframes status-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@keyframes status-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-5px); } }
+.s-status-in { animation: status-in 0.35s ease-out both; }
+.s-status-out { animation: status-out 0.3s ease-in both; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
   .loop-trace { animation: none; stroke-dasharray: none; }
+  .loop-float, .s-status-in { animation: none; }
+  .s-status-out { animation: none; opacity: 0; }
 }

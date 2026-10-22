@@ -14,14 +14,14 @@ import type { FeedbackRating } from "@/lib/analytics/events";
 /** What a reply can be turned into. Project ones need an account. */
 export type ReplyAction = "note" | "task" | "milestone" | "prompt" | "followup";
 import { useVerify, VerifyButton, VerifyPanel } from "./verify-panel";
-import { GeneratingIndicator, inOpenCodeBlock, WritingIndicator } from "./generating";
+import { GeneratingIndicator, inOpenCodeBlock, WritingIndicator, type StatusKind } from "./generating";
 
 export const MessageView = memo(function MessageView({
   m,
   isLast,
   busy,
   feedback,
-  thinkingLabel,
+  thinkingKind,
   onRetry,
   onEdit,
   onFeedback,
@@ -38,7 +38,7 @@ export const MessageView = memo(function MessageView({
   isLast: boolean;
   busy: boolean;
   feedback?: Feedback;
-  thinkingLabel: string;
+  thinkingKind: StatusKind;
   onRetry: (id: string) => void;
   onEdit?: (id: string, text: string) => void;
   onFeedback: (id: string, f: Feedback) => void;
@@ -61,7 +61,7 @@ export const MessageView = memo(function MessageView({
   if (m.role === "user") {
     return <UserMessage m={m} busy={busy} onEdit={onEdit} onSavePrompt={onSavePrompt} />;
   }
-  return <AssistantMessage {...{ m, isLast, busy, feedback, thinkingLabel, onRetry, onFeedback, onReplyAction, projectActions, onRate, onCopied, assistantName, assistantAvatar, verify }} />;
+  return <AssistantMessage {...{ m, isLast, busy, feedback, thinkingKind, onRetry, onFeedback, onReplyAction, projectActions, onRate, onCopied, assistantName, assistantAvatar, verify }} />;
 });
 
 /** A question you sent, with copy, save and (in the general chat) edit. */
@@ -147,7 +147,7 @@ function AssistantMessage({
   isLast,
   busy,
   feedback,
-  thinkingLabel,
+  thinkingKind,
   onRetry,
   onFeedback,
   onReplyAction,
@@ -162,7 +162,7 @@ function AssistantMessage({
   isLast: boolean;
   busy: boolean;
   feedback?: Feedback;
-  thinkingLabel: string;
+  thinkingKind: StatusKind;
   onRetry: (id: string) => void;
   onFeedback: (id: string, f: Feedback) => void;
   onReplyAction?: (action: ReplyAction, m: Msg) => void;
@@ -212,7 +212,7 @@ function AssistantMessage({
           />
         </div>
       ) : streaming ? (
-        <GeneratingIndicator label={thinkingLabel} />
+        <GeneratingIndicator kind={thinkingKind} />
       ) : null}
       {streaming && shown && <WritingIndicator code={inOpenCodeBlock(shown)} />}
 

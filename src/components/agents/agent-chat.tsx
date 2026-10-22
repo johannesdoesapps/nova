@@ -382,7 +382,7 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
           conversationId={chat.conversationId}
           composer={composer("dock")}
           footnote={`${agent.name} can make mistakes. Check important information.`}
-          thinkingLabel={chat.useWeb && canWeb && capabilities.web_search.available ? "Searching the web" : analyzing ? "Analyzing data" : "Thinking"}
+          thinkingKind={chat.useWeb && canWeb && capabilities.web_search.available ? "web" : analyzing ? "data" : "general"}
           feedback={studio.feedback}
           onRetry={chat.retry}
           onFeedback={studio.giveFeedback}

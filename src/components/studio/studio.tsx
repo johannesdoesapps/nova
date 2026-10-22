@@ -328,12 +328,8 @@ export function Studio({ home = false }: { home?: boolean }) {
           busy={chat.busy}
           conversationId={chat.conversationId}
           composer={composer("dock")}
-          thinkingLabel={
-            chat.mode === "research" && chat.useWeb && integrations.search
-              ? "Searching the web"
-              : isCodeRequest(chat.mode, chat.messages.findLast((x) => x.role === "user")?.content)
-                ? "Generating code"
-                : "Thinking"
+          thinkingKind={
+            chat.mode === "research" && chat.useWeb && integrations.search ? "web" : isCodeRequest(chat.mode, chat.messages.findLast((x) => x.role === "user")?.content) ? "code" : "general"
           }
           feedback={studio.feedback}
           onRetry={chat.retry}

@@ -7,6 +7,7 @@ import { MessageView, type ReplyAction } from "./message";
 import type { FeedbackRating } from "@/lib/analytics/events";
 import type { Feedback } from "./prefs";
 import type { LoadState } from "./use-chat";
+import type { StatusKind } from "./generating";
 
 /**
  * A conversation: scrolling message list plus the floating glass composer.
@@ -19,7 +20,7 @@ export function ConversationPane({
   conversationId,
   composer,
   footnote = "Orbis can make mistakes. Check important information.",
-  thinkingLabel,
+  thinkingKind,
   feedback,
   onRetry,
   onEdit,
@@ -40,7 +41,7 @@ export function ConversationPane({
   conversationId: string | null;
   composer: ReactNode;
   footnote?: string;
-  thinkingLabel: string;
+  thinkingKind: StatusKind;
   feedback: Record<string, Feedback>;
   onRetry: (id: string) => void;
   /** Edit a question you sent (the general chat). */
@@ -125,7 +126,7 @@ export function ConversationPane({
                   isLast={m.id === lastAssistant}
                   busy={busy}
                   feedback={feedback[m.id]}
-                  thinkingLabel={thinkingLabel}
+                  thinkingKind={thinkingKind}
                   onRetry={onRetry}
                   onEdit={onEdit}
                   onFeedback={onFeedback}

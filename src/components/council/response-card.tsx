@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react";
 import { Check, Copy, RefreshCw } from "lucide-react";
 import { Markdown } from "@/components/common/markdown";
 import { ProviderMark } from "@/components/studio/model-selector";
+import { GeneratingIndicator } from "@/components/studio/generating";
 import type { ProviderId } from "@/lib/ai/types";
 import { cn, formatUsd } from "@/lib/utils";
 
@@ -130,11 +131,7 @@ export function ResponseCard({
         ) : state.status === "idle" ? (
           <p className="text-[13px] text-s-ink-3">Waiting…</p>
         ) : (
-          <div className="space-y-2 pt-1" aria-hidden>
-            <div className="s-skeleton h-3 w-[92%]" />
-            <div className="s-skeleton h-3 w-[78%]" />
-            <div className="s-skeleton h-3 w-[64%]" />
-          </div>
+          <GeneratingIndicator announce={false} />
         )}
         {state.simulated && <p className="mt-2 text-[11.5px] text-s-ink-3">Simulated reply — no AI provider is configured.</p>}
       </div>

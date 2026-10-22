@@ -43,6 +43,7 @@ import { PromptBar } from "./prompt-bar";
 import { api, CodeApiError, post } from "./api";
 import { FileDiff } from "./diff-view";
 import { InfinityMark } from "@/components/brand/infinity";
+import { WorkingStatus } from "@/components/studio/generating";
 import { useAnimatedLogo } from "@/components/studio/prefs";
 
 /**
@@ -592,9 +593,7 @@ export function AgentPanel({
 
           {loaded && !run && !(autoStart && !error) && <StartScreen web={web} />}
           {loaded && !run && autoStart && !error && (
-            <p role="status" className="flex items-center gap-3 px-1 pt-10 text-[14px] text-s-ink-2">
-              {animated ? <InfinityMark wide animate weight={6.5} className="h-[14px] w-6 shrink-0" /> : <Loader2 className="h-4 w-4 animate-spin" aria-hidden />} <span className="s-shimmer">Starting the build…</span>
-            </p>
+            <WorkingStatus kind="build" fallback={<Loader2 className="h-4 w-4 animate-spin" aria-hidden />} className="flex items-center gap-3 px-1 pt-10 text-[14px] text-s-ink-2" />
           )}
 
           {run && (
@@ -652,9 +651,13 @@ export function AgentPanel({
               </ol>
 
               {(driving || run.busy) && !ended && (
-                <p role="status" className="flex items-center gap-2.5 px-1 text-[13px] text-s-ink-3">
-                  {animated ? <InfinityMark wide animate weight={7} className="h-3 w-5 shrink-0" /> : <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />} {run.pending?.kind === "job" ? `Running ${run.pending.command}…` : "Working…"}
-                </p>
+                run.pending?.kind === "job" ? (
+                  <p role="status" className="flex items-center gap-2.5 px-1 text-[13px] text-s-ink-3">
+                    {animated ? <InfinityMark wide animate weight={7} className="h-3 w-5 shrink-0" /> : <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />} Running {run.pending.command}…
+                  </p>
+                ) : (
+                  <WorkingStatus kind="agent" fallback={<Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />} className="flex items-center gap-2.5 px-1 text-[13px] text-s-ink-3" />
+                )
               )}
 
               {run.pending && !busy && <PendingCard run={run} computerOn={computerOn} onRespond={respond} onStartComputer={startAndContinue} />}
