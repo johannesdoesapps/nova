@@ -53,11 +53,15 @@ export function ConsentForm({ next, version }: { next: string; version: string }
         <label className="flex items-start gap-2.5">
           <input type="checkbox" required checked={privacy} onChange={(e) => setPrivacy(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]" />
           <span>
-            I have read and agree to the{" "}
+            I have read the{" "}
             <Link href="/privacy" target="_blank" className="text-fg underline underline-offset-2 hover:text-accent">
               Privacy Policy
+            </Link>{" "}
+            and{" "}
+            <Link href="/cookies" target="_blank" className="text-fg underline underline-offset-2 hover:text-accent">
+              Cookie Policy
             </Link>
-            .
+            , which explain how Orbis uses my data.
           </span>
         </label>
         <p className="text-xs text-muted">You must be 13 or older. If you&apos;re under 18, you need a parent&apos;s or guardian&apos;s permission.</p>

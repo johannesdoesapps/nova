@@ -18,7 +18,7 @@ export const PENDING_COOKIE = "orbis_terms_pending";
  * Pages anyone may see without having accepted: the public site, the legal
  * pages themselves, sign-in, and the page that asks for acceptance.
  */
-const OPEN_PREFIXES = ["/features", "/pricing", "/docs", "/security", "/privacy", "/terms", "/login", "/auth", "/reset-password", "/consent", "/share"];
+const OPEN_PREFIXES = ["/features", "/pricing", "/docs", "/security", "/privacy", "/terms", "/cookies", "/login", "/auth", "/reset-password", "/consent", "/share"];
 
 export function needsAcceptance(path: string): boolean {
   if (path === "/") return false;

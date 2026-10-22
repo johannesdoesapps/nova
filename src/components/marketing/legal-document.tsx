@@ -40,12 +40,13 @@ function BlockView({ block }: { block: Block }) {
 }
 
 /** A legal page: title, last-updated date, contents and numbered sections. */
-export function LegalDocument({ title, intro, sections }: { title: string; intro: string; sections: LegalSection[] }) {
+export function LegalDocument({ title, intro, sections, aside }: { title: string; intro: string; sections: LegalSection[]; aside?: ReactNode }) {
   return (
     <article className="mx-auto max-w-3xl px-5 pt-16 pb-20 sm:px-8 sm:pt-20">
       <h1 className="text-balance font-serif text-[44px] leading-[1.05] tracking-[-0.01em] text-fg sm:text-[56px]">{title}</h1>
       <p className="mt-4 text-sm text-muted">Last updated {LEGAL.updated}</p>
       <p className="mt-5 text-[17px] leading-relaxed text-muted">{intro}</p>
+      {aside}
       <nav aria-label="Contents" className="mt-8 rounded-2xl border border-border bg-panel p-5">
         <h2 className="text-sm font-medium text-fg">Contents</h2>
         <ol className="mt-3 grid list-decimal gap-x-6 gap-y-2 pl-5 text-sm text-muted sm:grid-cols-2">

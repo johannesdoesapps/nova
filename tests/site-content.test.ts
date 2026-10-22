@@ -73,14 +73,22 @@ describe("site content", () => {
 
 describe("legal pages", () => {
   it("link only to real pages and name the contact address", async () => {
-    const { PRIVACY, TERMS, LEGAL } = await import("@/content/legal");
-    const known = new Set([...pages, "/privacy", "/terms"]);
-    for (const doc of [PRIVACY, TERMS]) {
+    const { PRIVACY, TERMS, COOKIES, LEGAL } = await import("@/content/legal");
+    const known = new Set([...pages, "/privacy", "/terms", "/cookies"]);
+    for (const doc of [PRIVACY, TERMS, COOKIES]) {
       const text = JSON.stringify(doc);
       for (const m of text.matchAll(/\]\((\/[^)]*)\)/g)) expect(known.has(m[1]!), m[1]).toBe(true);
       expect(text).toContain(LEGAL.email);
       expect(new Set(doc.map((s) => s.id)).size).toBe(doc.length);
     }
+  });
+
+  it("list every cookie Orbis sets in the Cookie Policy", async () => {
+    const { COOKIES } = await import("@/content/legal");
+    const { ACCEPTED_COOKIE, PENDING_COOKIE } = await import("@/lib/legal");
+    const { GUEST_COOKIE } = await import("@/lib/engine");
+    const policy = JSON.stringify(COOKIES);
+    for (const name of [ACCEPTED_COOKIE, PENDING_COOKIE, GUEST_COOKIE, "orbis_connect", "sb-"]) expect(policy, name).toContain(name);
   });
 
   it("state the minimum age and disclose the AI providers and where data is stored", async () => {

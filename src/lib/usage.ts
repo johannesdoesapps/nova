@@ -367,8 +367,9 @@ async function recordRunUnsafe(auth: AuthContext & { mode: "authenticated" }, ru
     user_id: auth.user.id,
     conversation_id: run.conversationId ?? null,
     model_id: run.model.id,
-    prompt: run.prompt.slice(0, 4000),
-    response: run.response.slice(0, 8000),
+    // Only what limits, billing and diagnostics need: never the prompt or reply text (the conversation itself is where that lives).
+    prompt: null,
+    response: null,
     latency_ms: Math.round(run.latencyMs),
     input_tokens: run.usage.inputTokens,
     output_tokens: run.usage.outputTokens,

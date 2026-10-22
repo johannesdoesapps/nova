@@ -12,6 +12,7 @@ import type { PromptPatch, SavedPrompt, StudioSettings, ThemePref } from "./pref
 import { Dialog, IconButton, Kbd, Segmented, Switch } from "./ui";
 import { UsageMeters, useUsage } from "./usage";
 import { useApp } from "@/components/layout/app-context";
+import { useAnalyticsChoice } from "@/components/common/analytics-choice";
 import { LEGAL } from "@/content/legal-meta";
 import { SHORTCUTS, shortcutKeys } from "@/lib/shortcuts";
 
@@ -239,6 +240,14 @@ function PrivacyAndData({ signedIn, onOpenArchived }: { signedIn: boolean; onOpe
     },
     { title: "On this device", text: "Saved prompts, your own template versions and display settings are kept in this browser only." },
     {
+      title: "Visit counts",
+      text: (
+        <>
+          Orbis counts page visits anonymously, without cookies, to see which pages are used. <VisitCountSwitch />
+        </>
+      ),
+    },
+    {
       title: "Feedback and usage events",
       text: signedIn ? (
         <>
@@ -257,9 +266,13 @@ function PrivacyAndData({ signedIn, onOpenArchived }: { signedIn: boolean; onOpe
           <a href={`mailto:${LEGAL.email}`} className={link}>
             {LEGAL.email}
           </a>
-          . Visit counts use no cookies and never include what you type. Details are in the{" "}
+          . Details are in the{" "}
           <a href="/privacy" className={link}>
             Privacy Policy
+          </a>{" "}
+          and{" "}
+          <a href="/cookies" className={link}>
+            Cookie Policy
           </a>
           .
         </>
@@ -278,6 +291,18 @@ function PrivacyAndData({ signedIn, onOpenArchived }: { signedIn: boolean; onOpe
         ))}
       </dl>
     </div>
+  );
+}
+
+/** Anonymous visit counts on or off, for this browser. */
+function VisitCountSwitch() {
+  const { counted, browserSignal, setCounted } = useAnalyticsChoice();
+  if (browserSignal) return <span className="mt-1.5 block">Your browser asks sites not to track it, so this browser&rsquo;s visits aren&rsquo;t counted.</span>;
+  return (
+    <span className="mt-1.5 flex items-center gap-2">
+      <Switch checked={counted} label="Count my visits" onChange={setCounted} />
+      <span>{counted ? "Visits from this browser are counted" : "Visits from this browser aren't counted"}</span>
+    </span>
   );
 }
 

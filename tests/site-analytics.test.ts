@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { cleanAnalyticsUrl } from "@/components/common/site-analytics";
+import { afterEach, vi } from "vitest";
+import { ANALYTICS_OFF_KEY, analyticsDeclined, cleanAnalyticsUrl } from "@/components/common/site-analytics";
 
 describe("analytics page addresses", () => {
   it("drop query strings and fragments (sign-in codes, chat ids, searches)", () => {
@@ -13,7 +14,40 @@ describe("analytics page addresses", () => {
     expect(cleanAnalyticsUrl("https://tryorbis.app/missions/0B7C3A52-5A1E-4F2E-9D55-2F6A8F1C9E10/tasks")).toBe("https://tryorbis.app/missions/[id]/tasks");
   });
 
+  it("never count a shared link's secret code", () => {
+    expect(cleanAnalyticsUrl("https://tryorbis.app/share/chat/Ab3_xYz-0123456789abcdefghijklmnop")).toBe("https://tryorbis.app/share/chat/[link]");
+    expect(cleanAnalyticsUrl("https://tryorbis.app/share/secret-workspace-token")).toBe("https://tryorbis.app/share/[link]");
+  });
+
   it("leave ordinary pages alone", () => {
     expect(cleanAnalyticsUrl("https://tryorbis.app/pricing")).toBe("https://tryorbis.app/pricing");
+  });
+});
+
+describe("visit-count opt-out", () => {
+  const store = new Map<string, string>();
+  const stub = (nav: Record<string, unknown>) => {
+    vi.stubGlobal("localStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) });
+    vi.stubGlobal("navigator", nav);
+  };
+  afterEach(() => {
+    store.clear();
+    vi.unstubAllGlobals();
+  });
+
+  it("counts by default", () => {
+    stub({});
+    expect(analyticsDeclined()).toBe(false);
+  });
+  it("stops when this browser turned counts off", () => {
+    stub({});
+    store.set(ANALYTICS_OFF_KEY, "1");
+    expect(analyticsDeclined()).toBe(true);
+  });
+  it("respects Global Privacy Control and Do Not Track", () => {
+    stub({ globalPrivacyControl: true });
+    expect(analyticsDeclined()).toBe(true);
+    stub({ doNotTrack: "1" });
+    expect(analyticsDeclined()).toBe(true);
   });
 });

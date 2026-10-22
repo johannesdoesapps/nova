@@ -112,12 +112,15 @@ export function SiteFooter() {
       <div className="border-t border-border">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-6 text-xs text-muted sm:px-8">
           <p>© {year} Orbis. AI can make mistakes — check important information.</p>
-          <nav aria-label="Legal" className="flex gap-5">
+          <nav aria-label="Legal" className="flex flex-wrap gap-x-5 gap-y-1">
             <Link href="/privacy" className="inline-block py-1 transition-colors hover:text-fg">
               Privacy Policy
             </Link>
             <Link href="/terms" className="inline-block py-1 transition-colors hover:text-fg">
               Terms of Service
+            </Link>
+            <Link href="/cookies" className="inline-block py-1 transition-colors hover:text-fg">
+              Cookie Policy
             </Link>
           </nav>
         </div>
