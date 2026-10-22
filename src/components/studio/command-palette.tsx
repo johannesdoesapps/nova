@@ -29,6 +29,7 @@ import { autoIdFor, ROUTER_MODES } from "@/lib/ai/platform";
 import { shortcut, shortcutKeys } from "@/lib/shortcuts";
 import { TEMPLATES } from "@/lib/templates/registry";
 import { CommandMenu, type Command } from "./command-menu";
+import { reportEvent } from "./feedback";
 import type { ConvSummary } from "./history";
 import { navFor, type Section } from "./nav";
 import type { ThemePref } from "./prefs";
@@ -224,8 +225,15 @@ function Palette({ onClose, conversations, isAdmin, signedIn, mac, actions, page
         run: go(`/chat?c=${c.id}`),
       });
     }
-    return list;
-  }, [router, setModel, actions, pageCommands, isAdmin, catalog, missions, codeProjects, agents, conversations, found, mac]);
+    // Which kinds of command get used (the group only, never what was searched).
+    return list.map((c) => ({
+      ...c,
+      run: () => {
+        if (signedIn) reportEvent("palette_command", { group: c.group });
+        c.run();
+      },
+    }));
+  }, [router, setModel, actions, pageCommands, isAdmin, catalog, missions, codeProjects, agents, conversations, found, mac, signedIn]);
 
   return (
     <CommandMenu

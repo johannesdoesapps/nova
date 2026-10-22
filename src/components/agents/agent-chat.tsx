@@ -13,6 +13,7 @@ import { ConfirmDialog } from "@/components/studio/dialogs";
 import { StudioHeader, useStudio } from "@/components/studio/frame";
 import { makeLocalHistory, makeServerHistory, type ConvSummary } from "@/components/studio/history";
 import { useReplyActions } from "@/components/studio/reply-actions";
+import { rateReply, reportEvent } from "@/components/studio/feedback";
 import { ConversationPane } from "@/components/studio/thread";
 import { iconButtonClass, Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/studio/ui";
 import { useStudioChat } from "@/components/studio/use-chat";
@@ -190,7 +191,10 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
     setAttachments([]);
     focusInput();
   };
+  const rateAgentReply = useMemo(() => rateReply("agent"), []);
+  const copiedReply = useCallback(() => reportEvent("useful_result", { how: "copy", feature: "agent" }), []);
   const replies = useReplyActions({
+    feature: "agent",
     signedIn: !!user,
     onFollowUp: (draft) => {
       chat.newChat();
@@ -385,6 +389,8 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
           onSavePrompt={studio.addPrompt}
           onReplyAction={replies.act}
           projectActions={replies.projectActions}
+          onRate={user ? rateAgentReply : undefined}
+          onCopied={user ? copiedReply : undefined}
           onStartOver={newConversation}
           startOverLabel="Start a new conversation"
           assistantName={agent.name}

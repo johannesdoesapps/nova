@@ -12,6 +12,7 @@ import { webSearch } from "@/lib/search/web";
 import { checkInputs, findTemplate, renderPrompt } from "@/lib/templates/registry";
 import { templateStepRequest } from "@/lib/templates/schema";
 import { enforceLimits, planLimits, recordRunLater, shouldSaveAllowance } from "@/lib/usage";
+import { trackEvent } from "@/lib/analytics/server";
 
 export const maxDuration = 60;
 
@@ -49,6 +50,10 @@ export async function POST(req: Request) {
     if (model.provider === "demo") throw new ApiError("not_configured", "Templates need a real AI model. An administrator can add one in Admin.");
     const maxOutputTokens = Math.min(step.maxOutputTokens, limits.maxOutputTokens);
     await enforceLimits(req, auth, 1, [model], { requestId: body.requestId, purpose: "template", inputTokens: Math.ceil(instructions.length / 4) + 1500, maxOutputTokens });
+
+    const stepIndex = template.steps!.indexOf(step);
+    const isLast = stepIndex === template.steps!.length - 1;
+    if (stepIndex === 0) trackEvent(auth, "workflow_started", { template: template.id });
 
     return ndjsonStream(async (send, signal) => {
       send({ type: "meta", model: { id: model.id, displayName: model.displayName, provider: model.provider }, routing });
@@ -109,11 +114,13 @@ export async function POST(req: Request) {
           status: "error",
           error: signal.aborted ? "cancelled" : err instanceof Error ? err.message : "failed",
         });
+        if (!signal.aborted) trackEvent(auth, "workflow_failed", { template: template.id, step: step.id });
         throw err;
       }
       if (!text.trim()) throw new ApiError("upstream_error", "The model returned an empty reply. Try the step again or choose another model.");
       usage ??= { inputTokens: estimateTokens(messages), outputTokens: estimateTokens(text), estimated: true };
       recordRunLater(auth, { ...run, response: text, latencyMs: performance.now() - started, usage, status: "success" });
+      if (isLast) trackEvent(auth, "workflow_completed", { template: template.id, steps: template.steps!.length });
       send({ type: "done", text, usage, estimatedCost: estimateCost(model, usage), sources });
     }, req.signal);
   } catch (err) {

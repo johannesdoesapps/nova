@@ -12,6 +12,7 @@ import { ApiError, clientIp } from "./http";
 import { LARGE_MODEL_UNITS, PLANS, WEEK_MS, WINDOW_MS, modelTier, modelUnits, planEconomics, unitsLeft, type BillingSettings, type PlanId, type UsageState } from "./plans";
 import { limiter } from "./rate-limit";
 import { reportError } from "./observability";
+import { trackEvent } from "./analytics/server";
 
 /**
  * Usage accounting. Policy (see docs/USAGE.md):
@@ -62,7 +63,17 @@ function nextPlan(plan: PlanId): PlanId | null {
  * weighted by its model. `requestId` (from the browser) makes resubmissions
  * idempotent. `inputTokens` and `maxOutputTokens` refine the cost estimate.
  */
-export async function enforceLimits(
+export async function enforceLimits(...args: Parameters<typeof enforceLimitsInner>): Promise<UsageTicket> {
+  try {
+    return await enforceLimitsInner(...args);
+  } catch (err) {
+    // Usage-limit friction, for the product metrics (which limit, never what was asked).
+    if (err instanceof ApiError && err.code === "quota_exceeded") trackEvent(args[1], "usage_limit_reached", { scope: (err.details as { scope?: string } | undefined)?.scope ?? "other" });
+    throw err;
+  }
+}
+
+async function enforceLimitsInner(
   req: Request,
   auth: AuthContext,
   cost = 1,

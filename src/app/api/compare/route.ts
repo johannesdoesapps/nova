@@ -9,6 +9,7 @@ import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
 import { enforceLimits, recordRunLater } from "@/lib/usage";
 import { compareRequest } from "@/lib/validation";
 import { withTimeContext } from "@/lib/ai/turn-context";
+import { trackEvent } from "@/lib/analytics/server";
 
 export const maxDuration = 60;
 
@@ -45,6 +46,7 @@ export async function POST(req: Request) {
     // Plan access and cost are checked for the models that will actually run.
     const resolved = ids.map((id) => registry.find((m) => m.id === (registry.some((x) => x.id === id) ? id : (RETIRED_MODELS[id]?.replacement ?? id)))).filter((m): m is ModelWithStatus => !!m);
     await enforceLimits(req, auth, ids.length, resolved.length ? resolved : undefined, { purpose: "compare", inputTokens: estimateTokens((body.systemPrompt ?? "") + body.prompt) + 200 });
+    trackEvent(auth, "comparison_started", { kind: "arena", models: ids.length });
 
     const messages: ChatMessage[] = withTimeContext([
       {
@@ -108,6 +110,7 @@ export async function POST(req: Request) {
       }),
     );
 
+    trackEvent(auth, "comparison_completed", { kind: "arena", models: results.filter((r) => !r.error).length });
     return NextResponse.json({ prompt: body.prompt, results, maxModels: max });
   } catch (err) {
     return errorResponse(err);

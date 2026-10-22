@@ -4,6 +4,7 @@ import { ArrowDown, CircleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Msg } from "./history";
 import { MessageView, type ReplyAction } from "./message";
+import type { FeedbackRating } from "@/lib/analytics/events";
 import type { Feedback } from "./prefs";
 import type { LoadState } from "./use-chat";
 
@@ -26,6 +27,8 @@ export function ConversationPane({
   onSavePrompt,
   onReplyAction,
   projectActions,
+  onRate,
+  onCopied,
   onStartOver,
   startOverLabel = "Start a new chat",
   assistantName,
@@ -46,6 +49,8 @@ export function ConversationPane({
   onSavePrompt: (text: string) => boolean;
   onReplyAction?: (action: ReplyAction, m: Msg) => void;
   projectActions?: boolean;
+  onRate?: (m: Msg, rating: FeedbackRating | null, comment?: string) => Promise<void>;
+  onCopied?: (m: Msg) => void;
   onStartOver: () => void;
   startOverLabel?: string;
   assistantName?: string;
@@ -127,6 +132,8 @@ export function ConversationPane({
                   onSavePrompt={onSavePrompt}
                   onReplyAction={onReplyAction}
                   projectActions={projectActions}
+                  onRate={onRate}
+                  onCopied={onCopied}
                   assistantName={assistantName}
                   assistantAvatar={assistantAvatar}
                   question={m.role === "assistant" ? questionBefore(messages, i) : undefined}

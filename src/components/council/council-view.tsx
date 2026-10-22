@@ -1,4 +1,5 @@
 "use client";
+import { reportEvent } from "@/components/studio/feedback";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, ChevronDown, ExternalLink, Globe, RotateCcw, Square, Trash2, Users } from "lucide-react";
 import { useCatalog } from "@/components/common/model-picker";
@@ -165,6 +166,7 @@ export function CouncilView() {
     const m = mode;
     setAsked(q);
     setOrder(ids);
+    reportEvent("comparison_started", { kind: "council", models: ids.length });
     setAnswers(Object.fromEntries(ids.map((id) => [id, { status: "idle", text: "" }])));
     setCritiques({});
     setSynthesis(idle);

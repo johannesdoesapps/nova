@@ -12,6 +12,7 @@ import { webSearch } from "@/lib/search/web";
 import { enforceLimits, planLimits, recordRun } from "@/lib/usage";
 import { runCheck, textToCheck, type CheckDeps } from "@/lib/verify/check";
 import { verifyRequest } from "@/lib/verify/schema";
+import { trackEvent } from "@/lib/analytics/server";
 
 export const maxDuration = 60;
 
@@ -67,6 +68,7 @@ export async function POST(req: Request) {
         : null,
     };
     const result = await runCheck(body, deps);
+    if (result.claims.length) trackEvent(auth, "verify_completed", { scope: body.scope, searched: result.searched ? "yes" : "no", claims: result.claims.length });
     // A web search that wasn't followed by a model call is still counted against the plan's searches.
     if (result.searched && !modelUsed && realJudge) {
       await recordRun(auth, { model: realJudge, prompt: body.question.slice(0, 400) || "(verification)", response: "(web search only)", latencyMs: 0, usage: { inputTokens: 0, outputTokens: 0, estimated: false }, status: "success", purpose: "verify", requestedModel: body.modelId ?? null, routingReason: "Verification web search", tools: ["web_search"] });

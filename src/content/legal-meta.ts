@@ -10,7 +10,7 @@ export const LEGAL = {
   country: "United Kingdom",
   email: "support@tryorbis.app",
   minimumAge: 13,
-  updated: "21 October 2026",
+  updated: "22 October 2026",
   /**
    * The version users accept. Change it (to the new date) when either document
    * changes in a way users must agree to again: everyone is asked once more.

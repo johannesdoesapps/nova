@@ -7,6 +7,7 @@ import { requireUserIfConfigured } from "../auth";
 import { withTimeContext } from "../ai/turn-context";
 import { ApiError, ndjsonStream } from "../http";
 import { enforceLimits, recordRunLater } from "../usage";
+import { trackEvent } from "../analytics/server";
 
 /**
  * One model call for Council or Arena, streamed as NDJSON:
@@ -60,6 +61,7 @@ export async function streamStep(
         servedModel,
       });
     }
+    if (opts.purpose === "council-synthesis") trackEvent(auth, "comparison_completed", { kind: "council" });
     send({
       type: "done",
       text,

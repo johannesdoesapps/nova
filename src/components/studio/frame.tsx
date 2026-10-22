@@ -214,7 +214,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
       if (e.defaultPrevented || e.isComposing) return;
       const id = shortcutFor(e, mac, isTypingTarget(document.activeElement));
       if (!id) return;
-      const dialogOpen = !!document.querySelector('[role="dialog"][aria-modal="true"]');
+      const dialogOpen = !!document.querySelector('[role="dialog"][aria-modal="true"], dialog[open]');
       if (id === "palette") {
         e.preventDefault();
         setShortcutsOpen(false);

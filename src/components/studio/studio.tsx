@@ -19,6 +19,7 @@ import { Home } from "./home";
 import type { ConvSummary } from "./history";
 import { ProjectChip } from "./project-chip";
 import { useReplyActions } from "./reply-actions";
+import { rateReply, reportEvent } from "./feedback";
 import { ConversationPane } from "./thread";
 import { useStudioChat } from "./use-chat";
 import type { StarterEnv } from "./task-starter";
@@ -94,6 +95,8 @@ export function Studio({ home = false }: { home?: boolean }) {
   }, [on, setTitle, moved, chat.conversationId]);
 
   // A reply turned into a note, task, milestone, saved prompt or follow-up (in the same project).
+  const rateChatReply = useMemo(() => rateReply("chat"), []);
+  const copiedReply = useCallback(() => reportEvent("useful_result", { how: "copy", feature: "chat" }), []);
   const replies = useReplyActions({
     signedIn: !!user,
     onFollowUp: (draft) => {
@@ -332,6 +335,8 @@ export function Studio({ home = false }: { home?: boolean }) {
           onSavePrompt={studio.addPrompt}
           onReplyAction={replies.act}
           projectActions={replies.projectActions}
+          onRate={user ? rateChatReply : undefined}
+          onCopied={user ? copiedReply : undefined}
           onStartOver={newChat}
         />
       )}

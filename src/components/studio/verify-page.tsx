@@ -11,6 +11,7 @@ import { VERIFY_PREFILL_KEY } from "@/lib/verify/handoff";
 import { MAX_CHECKED_CLAIMS, type VerifiedClaim, type VerifyResult, type VerifyScope } from "@/lib/verify/schema";
 import { StudioHeader, useStudio } from "./frame";
 import { Segmented, Switch } from "./ui";
+import { reportEvent, WasThisUseful } from "./feedback";
 
 const SCOPES: { value: VerifyScope; label: string }[] = [
   { value: "answer", label: "Whole answer" },
@@ -31,7 +32,11 @@ const field = "w-full rounded-xl border border-s-line bg-transparent px-3 py-2 t
 const btn = "inline-flex h-9 items-center justify-center gap-1.5 rounded-xl px-3.5 text-[13.5px] font-medium transition disabled:opacity-40 [&_svg]:h-4 [&_svg]:w-4";
 
 type Doc = { name: string; content: string };
-type Run = { status: "idle" } | { status: "running" } | { status: "error"; message: string } | { status: "done"; result: VerifyResult; scope: VerifyScope; answer: string; question: string };
+type Run =
+  | { status: "idle" }
+  | { status: "running" }
+  | { status: "error"; message: string }
+  | { status: "done"; result: VerifyResult; scope: VerifyScope; answer: string; question: string; at: string };
 
 /**
  * Verify: an explicit workflow for checking the important claims in an
@@ -39,7 +44,7 @@ type Run = { status: "idle" } | { status: "running" } | { status: "error"; messa
  * showing what was checked, what wasn't, and why.
  */
 export function VerifyPage() {
-  const { integrations } = useApp();
+  const { integrations, user } = useApp();
   const { notify } = useStudio();
   const [scope, setScope] = useState<VerifyScope>("answer");
   const [question, setQuestion] = useState("");
@@ -96,7 +101,7 @@ export function VerifyPage() {
     };
     try {
       const result = await jsonFetch<VerifyResult>("/api/verify", { method: "POST", body: JSON.stringify(body) });
-      setRun({ status: "done", result, scope, answer: body.answer, question: body.question });
+      setRun({ status: "done", result, scope, answer: body.answer, question: body.question, at: new Date().toISOString() });
     } catch (e) {
       setRun({ status: "error", message: (e as Error).message || "The check failed." });
     }
@@ -185,7 +190,7 @@ export function VerifyPage() {
             </Step>
           </ol>
 
-          {run.status === "done" && <Results run={run} notify={notify} />}
+          {run.status === "done" && <Results run={run} notify={notify} signedIn={!!user} />}
         </div>
       </div>
     </>
@@ -372,7 +377,7 @@ function Documents({ value, onChange }: { value: Doc[]; onChange: (v: Doc[]) => 
   );
 }
 
-function Results({ run, notify }: { run: Extract<Run, { status: "done" }>; notify: (t: string) => void }) {
+function Results({ run, notify, signedIn }: { run: Extract<Run, { status: "done" }>; notify: (t: string) => void; signedIn: boolean }) {
   const { result } = run;
   const [filter, setFilter] = useState<Category | null>(null);
   const counts = useMemo(() => {
@@ -469,6 +474,7 @@ function Results({ run, notify }: { run: Extract<Run, { status: "done" }>; notif
       ))}
 
       {canRevise && <Revise run={run} notify={notify} />}
+      {signedIn && result.claims.length > 0 && <WasThisUseful className="mt-6" feature="verify" subjectId={`verify:${result.retrievedAt ?? run.at}`} />}
     </section>
   );
 }
@@ -574,7 +580,10 @@ function Revise({ run, notify }: { run: Extract<Run, { status: "done" }>; notify
             <button
               type="button"
               onClick={() => {
-                void navigator.clipboard.writeText(state.text).then(() => notify("Copied"));
+                void navigator.clipboard.writeText(state.text).then(() => {
+                  notify("Copied");
+                  reportEvent("useful_result", { how: "copy", feature: "verify" });
+                });
               }}
               className="inline-flex items-center gap-1 text-s-ink-2 hover:text-s-ink"
             >

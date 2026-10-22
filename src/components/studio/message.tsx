@@ -8,6 +8,8 @@ import { cn, formatUsd } from "@/lib/utils";
 import type { Msg } from "./history";
 import type { Feedback } from "./prefs";
 import { IconButton, iconButtonClass, Menu, MenuItem, MenuSeparator, OrbisMark } from "./ui";
+import { FeedbackReasons } from "./feedback";
+import type { FeedbackRating } from "@/lib/analytics/events";
 
 /** What a reply can be turned into. Project ones need an account. */
 export type ReplyAction = "note" | "task" | "milestone" | "prompt" | "followup";
@@ -25,6 +27,8 @@ export const MessageView = memo(function MessageView({
   onSavePrompt,
   onReplyAction,
   projectActions,
+  onRate,
+  onCopied,
   assistantName,
   assistantAvatar,
   question = "",
@@ -42,6 +46,10 @@ export const MessageView = memo(function MessageView({
   onReplyAction?: (action: ReplyAction, m: Msg) => void;
   /** Whether the project actions (note, task, milestone) are offered. */
   projectActions?: boolean;
+  /** Signed in: save a rating for a reply (null takes it back). Thumbs down asks why. */
+  onRate?: (m: Msg, rating: FeedbackRating | null, comment?: string) => Promise<void>;
+  /** A reply was copied (counts as a used result). */
+  onCopied?: (m: Msg) => void;
   /** Agent conversations show the agent's own name and avatar. */
   assistantName?: string;
   assistantAvatar?: ReactNode;
@@ -52,7 +60,7 @@ export const MessageView = memo(function MessageView({
   if (m.role === "user") {
     return <UserMessage m={m} busy={busy} onEdit={onEdit} onSavePrompt={onSavePrompt} />;
   }
-  return <AssistantMessage {...{ m, isLast, busy, feedback, thinkingLabel, onRetry, onFeedback, onReplyAction, projectActions, assistantName, assistantAvatar, verify }} />;
+  return <AssistantMessage {...{ m, isLast, busy, feedback, thinkingLabel, onRetry, onFeedback, onReplyAction, projectActions, onRate, onCopied, assistantName, assistantAvatar, verify }} />;
 });
 
 /** A question you sent, with copy, save and (in the general chat) edit. */
@@ -143,6 +151,8 @@ function AssistantMessage({
   onFeedback,
   onReplyAction,
   projectActions,
+  onRate,
+  onCopied,
   assistantName,
   assistantAvatar,
   verify,
@@ -156,10 +166,13 @@ function AssistantMessage({
   onFeedback: (id: string, f: Feedback) => void;
   onReplyAction?: (action: ReplyAction, m: Msg) => void;
   projectActions?: boolean;
+  onRate?: (m: Msg, rating: FeedbackRating | null, comment?: string) => Promise<void>;
+  onCopied?: (m: Msg) => void;
   assistantName?: string;
   assistantAvatar?: ReactNode;
   verify: ReturnType<typeof useVerify>;
 }) {
+  const [asking, setAsking] = useState(false);
   const streaming = m.status === "streaming";
   const valid = new Set((m.sources ?? []).map((s) => s.index));
   // A proposed connector action arrives as a block at the end of the reply; it becomes a review card, not text.
@@ -270,7 +283,7 @@ function AssistantMessage({
 
       {m.status === "done" && m.content && (
         <div className="s-actions mt-3 flex items-center gap-0.5" data-pinned={isLast}>
-          <CopyAction text={m.content} />
+          <CopyAction text={m.content} onCopied={() => onCopied?.(m)} />
           {/* Only the latest reply can be regenerated in place. */}
           {isLast && (
             <IconButton size="sm" label="Regenerate" onClick={() => onRetry(m.id)} disabled={busy}>
@@ -281,7 +294,11 @@ function AssistantMessage({
             size="sm"
             label="Good response"
             aria-pressed={feedback === "up"}
-            onClick={() => onFeedback(m.id, "up")}
+            onClick={() => {
+              onFeedback(m.id, "up");
+              setAsking(false);
+              void onRate?.(m, feedback === "up" ? null : "helpful").catch(() => {});
+            }}
             className={cn(feedback === "up" && "text-s-accent hover:text-s-accent")}
           >
             <ThumbsUp className={cn(feedback === "up" && "fill-current")} />
@@ -290,7 +307,13 @@ function AssistantMessage({
             size="sm"
             label="Bad response"
             aria-pressed={feedback === "down"}
-            onClick={() => onFeedback(m.id, "down")}
+            onClick={() => {
+              onFeedback(m.id, "down");
+              if (feedback === "down") {
+                setAsking(false);
+                void onRate?.(m, null).catch(() => {});
+              } else setAsking(!!onRate);
+            }}
             className={cn(feedback === "down" && "text-s-accent hover:text-s-accent")}
           >
             <ThumbsDown className={cn(feedback === "down" && "fill-current")} />
@@ -323,6 +346,7 @@ function AssistantMessage({
           {typeof m.cost === "number" && m.cost > 0 && <span className="ml-2 text-[11.5px] text-s-ink-3">≈ {formatUsd(m.cost)}</span>}
         </div>
       )}
+      {asking && onRate && <FeedbackReasons className="mt-2 max-w-[520px]" onCancel={() => setAsking(false)} onSend={(rating, comment) => onRate(m, rating, comment)} />}
       {m.status === "done" && <VerifyPanel state={verify.state} onClose={verify.close} onRetry={verify.run} onOpenFull={verify.openFull} />}
     </div>
   );
@@ -359,7 +383,7 @@ function ToolRow({ tool }: { tool: NonNullable<Msg["tools"]>[number] }) {
   );
 }
 
-function CopyAction({ text }: { text: string }) {
+function CopyAction({ text, onCopied }: { text: string; onCopied?: () => void }) {
   const [done, setDone] = useState(false);
   return (
     <IconButton
@@ -368,6 +392,7 @@ function CopyAction({ text }: { text: string }) {
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(text);
+          onCopied?.();
           setDone(true);
           setTimeout(() => setDone(false), 1400);
         } catch {

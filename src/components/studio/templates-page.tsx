@@ -32,6 +32,7 @@ import { CATEGORY_LABELS, checkInputs, defaultInputs, findTemplate, handoffHref,
 import { openInVerify } from "@/lib/verify/handoff";
 import { cn } from "@/lib/utils";
 import { SaveToProjectDialog } from "./dialogs";
+import { reportEvent, WasThisUseful } from "./feedback";
 import { StudioHeader, useStudio } from "./frame";
 import { conversationFileName, type Msg } from "./history";
 import { ModelSelector } from "./model-selector";
@@ -460,7 +461,12 @@ function TemplateView({ template: t, own, mine, setMine }: { template: Template;
                 <div className="mt-6 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => void navigator.clipboard.writeText(result).then(() => studio.notify("Copied"))}
+                    onClick={() =>
+                      void navigator.clipboard.writeText(result).then(() => {
+                        studio.notify("Copied");
+                        reportEvent("useful_result", { how: "copy", feature: "template" });
+                      })
+                    }
                     className={cn(btn, "border border-s-line-strong hover:bg-s-hover")}
                   >
                     <Copy /> Copy result
@@ -470,7 +476,10 @@ function TemplateView({ template: t, own, mine, setMine }: { template: Template;
                   </button>
                   <button
                     type="button"
-                    onClick={() => studio.startChatWith(`Following up on the result of the "${t.name}" template:\n\n${result.slice(0, 6000)}\n\n`)}
+                    onClick={() => {
+                      reportEvent("useful_result", { how: "followup", feature: "template" });
+                      studio.startChatWith(`Following up on the result of the "${t.name}" template:\n\n${result.slice(0, 6000)}\n\n`);
+                    }}
                     className={cn(btn, "border border-s-line-strong hover:bg-s-hover")}
                   >
                     <MessageSquarePlus /> Continue in chat
@@ -478,7 +487,10 @@ function TemplateView({ template: t, own, mine, setMine }: { template: Template;
                   {user && (
                     <button
                       type="button"
-                      onClick={() => setToSave({ id: crypto.randomUUID(), role: "assistant", content: allText, status: "done" })}
+                      onClick={() => {
+                        reportEvent("useful_result", { how: "note", feature: "template" });
+                        setToSave({ id: crypto.randomUUID(), role: "assistant", content: allText, status: "done" });
+                      }}
                       className={cn(btn, "border border-s-line-strong hover:bg-s-hover")}
                     >
                       <FolderPlus /> Save to a project
@@ -486,6 +498,7 @@ function TemplateView({ template: t, own, mine, setMine }: { template: Template;
                   )}
                 </div>
               )}
+              {finished && user && <WasThisUseful className="mt-4" feature="template" subjectId={`${t.id}:${run.at}`.slice(0, 100)} />}
             </section>
           )}
         </div>

@@ -67,7 +67,8 @@ export const PRIVACY: LegalSection[] = [
         list: [
           "**Usage records:** for each AI request, the model, number of tokens, estimated cost, time taken, what it was for, and the first part of the prompt and reply (up to 4,000 and 8,000 characters). For code you run from a chat reply, only the language and exit code. For workspace computers, the minutes used.",
           "**Technical data:** your IP address, browser and device details, processed by our hosting and sign-in providers in their logs to deliver the service and keep it secure. If you use Orbis without an account, your IP address is used briefly in memory to apply rate limits; it isn't stored in our database.",
-          "**On your device:** without an account, your conversations are kept only in your browser's local storage. Preferences (theme, sidebar, last model, saved prompts and the thumbs-up/down you give replies) are kept in your browser only.",
+          "**Feedback and usage events:** with an account, the ratings you choose to give a result (such as helpful, incorrect or incomplete) and any note you write with one; and a few events about how Orbis is used, such as a template started or finished, a check or comparison completed, a usage limit reached, or which kind of command palette command you used. Events carry short labels from a fixed list (such as the template's name), never what you type. You can turn usage events off in Settings → Privacy and data.",
+          "**On your device:** without an account, your conversations are kept only in your browser's local storage. Preferences (theme, sidebar, last model, saved prompts, your own template versions and, without an account, the thumbs-up/down you give replies) are kept in your browser only.",
         ],
       },
       "**Data from others**",
@@ -91,6 +92,7 @@ export const PRIVACY: LegalSection[] = [
           "To keep Orbis secure: rate limits, usage caps, preventing fraud and abuse, and investigating misuse.",
           "To support you and send service messages, such as confirming your email or resetting your password. We don't send marketing emails.",
           "To understand overall usage — for example, which models are used and what they cost — from aggregated usage records.",
+          "To find where Orbis falls short and improve it, from feedback and usage events — for example, how often templates are finished, which answers people mark as incorrect, and how often limits get in the way.",
           "To comply with the law and respond to lawful requests.",
         ],
       },
@@ -147,6 +149,7 @@ export const PRIVACY: LegalSection[] = [
         list: [
           "**Your account and your content** — while your account exists. When you delete a conversation, project or agent, it's removed from our database straight away; copies may remain in our providers' backups for a limited time before they're overwritten.",
           "**Usage records** — while your account exists, because they underpin your limits and billing history.",
+          "**Feedback and usage events** — while your account exists. Turning usage events off stops new ones being recorded; email us to have past ones deleted.",
           "**Billing records** — as long as tax law requires (usually six years in the UK).",
           "**Connected-app tokens** — until you disconnect the app or delete your account.",
           "**Records of your acceptances** — while your account exists.",
@@ -166,6 +169,7 @@ export const PRIVACY: LegalSection[] = [
           "Turn each connected app to Auto, “only when I mention it” or Off, or disconnect it entirely.",
           "Use Orbis without an account: your conversations then stay in your browser only.",
           "Clear the preferences Orbis keeps in your browser through your browser's settings.",
+          "Turn usage events off in Settings → Privacy and data. Rating a result is always optional.",
           "There's nothing to opt out of for AI training or marketing, because we do neither with your data.",
         ],
       },

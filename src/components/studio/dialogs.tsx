@@ -234,7 +234,18 @@ function PrivacyAndData({ signedIn, onOpenArchived }: { signedIn: boolean; onOpe
         </>
       ),
     },
-    { title: "On this device", text: "Saved prompts and display settings are kept in this browser only." },
+    { title: "On this device", text: "Saved prompts, your own template versions and display settings are kept in this browser only." },
+    {
+      title: "Feedback and usage events",
+      text: signedIn ? (
+        <>
+          Ratings you give (and any note you write) are saved with your account. Orbis also records a few events, such as a template finished or a usage limit reached,
+          to see where things go wrong; never what you type. <UsageEventsSwitch />
+        </>
+      ) : (
+        "Without an account, no feedback or usage events are recorded."
+      ),
+    },
     {
       title: "Your account",
       text: (
@@ -264,6 +275,37 @@ function PrivacyAndData({ signedIn, onOpenArchived }: { signedIn: boolean; onOpe
         ))}
       </dl>
     </div>
+  );
+}
+
+/** Turn product usage events on or off (saved with the account). */
+function UsageEventsSwitch() {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    jsonFetch<{ productEvents: boolean }>("/api/events/settings")
+      .then((r) => setOn(r.productEvents))
+      .catch((e: Error) => setError(e.message));
+  }, []);
+  if (error) return <span className="text-s-danger">{error}</span>;
+  if (on === null) return null;
+  return (
+    <span className="mt-1.5 flex items-center gap-2">
+      <Switch
+        checked={on}
+        label="Record usage events"
+        onChange={async (v) => {
+          setOn(v);
+          try {
+            await jsonFetch("/api/events/settings", { method: "PATCH", body: JSON.stringify({ productEvents: v }) });
+          } catch (e) {
+            setOn(!v);
+            setError((e as Error).message);
+          }
+        }}
+      />
+      <span>{on ? "Usage events are on" : "Usage events are off (ratings you choose to give are still saved)"}</span>
+    </span>
   );
 }
 

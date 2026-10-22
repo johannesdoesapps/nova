@@ -17,7 +17,10 @@ const env = vi.hoisted(() => ({
   searchFails: false,
   webLeft: 5 as number | null,
   recorded: [] as Record<string, unknown>[],
+  tracked: [] as [string, Record<string, unknown>][],
+  streamFails: false,
 }));
+vi.mock("@/lib/analytics/server", () => ({ trackEvent: (_a: unknown, event: string, props: Record<string, unknown>) => env.tracked.push([event, props]) }));
 
 vi.mock("@/lib/auth", () => ({ requireUserIfConfigured: async () => ({ mode: "authenticated", user: { id: "u1" }, supabase: {} }) }));
 vi.mock("@/lib/usage", () => ({
@@ -43,6 +46,7 @@ vi.mock("@/lib/ai", () => ({
     async *stream(req: { messages: { role: string; content: string }[] }) {
       env.streamed.push(req);
       yield { type: "delta", text: "Hello " };
+      if (env.streamFails) throw new Error("provider down");
       yield { type: "delta", text: "world" };
       yield { type: "usage", usage: { inputTokens: 100, outputTokens: 20, estimated: false } };
     },
@@ -153,6 +157,8 @@ describe("the step runner", () => {
     env.searchFails = false;
     env.webLeft = 5;
     env.recorded = [];
+    env.tracked = [];
+    env.streamFails = false;
   });
   const call = async (body: Record<string, unknown>) => {
     const { POST } = await import("@/app/api/templates/step/route");
@@ -201,6 +207,18 @@ describe("the step runner", () => {
     const ok = await call({ ...research, stepId: "check", prior: { brief: "THE BRIEFING" } });
     expect(ok.status).toBe(200);
     expect((env.streamed[0] as { messages: { content: string }[] }).messages.at(-1)!.content).toContain("THE BRIEFING");
+  });
+
+  it("records the workflow starting, finishing and failing (template id only)", async () => {
+    await call({ ...research, stepId: "brief" });
+    expect(env.tracked).toEqual([["workflow_started", { template: "research-topic" }]]);
+    env.tracked = [];
+    await call({ ...research, stepId: "check", prior: { brief: "B" } });
+    expect(env.tracked).toEqual([["workflow_completed", { template: "research-topic", steps: 2 }]]);
+    env.tracked = [];
+    env.streamFails = true;
+    await call({ ...research, stepId: "check", prior: { brief: "B" } });
+    expect(env.tracked).toEqual([["workflow_failed", { template: "research-topic", step: "check" }]]);
   });
 
   it("uses the user's own instructions for a step", async () => {
