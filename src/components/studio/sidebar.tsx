@@ -8,7 +8,9 @@ import { cn } from "@/lib/utils";
 import { groupByDate, type ConvSummary } from "./history";
 import { activeEntryFor, sidebarFor, type NavEntry, type Section } from "./nav";
 import type { ThemePref } from "./prefs";
-import { IconButton, iconButtonClass, Kbd, Menu, MenuItem, MenuSeparator, OrbisMark, Segmented } from "./ui";
+import { IconButton, iconButtonClass, Kbd, Menu, MenuItem, MenuSeparator, Segmented } from "./ui";
+import { InfinityMark } from "@/components/brand/infinity";
+import { wordmarkFont } from "@/components/brand/fonts";
 
 export interface SidebarProps {
   collapsed: boolean;
@@ -166,8 +168,8 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
         {/* On phones the sidebar is a drawer over the top bar: it has its own heading and close button. (On larger screens, the top bar holds Orbis and the collapse button.) */}
         <div className="flex h-12 shrink-0 items-center gap-2 px-3 md:hidden">
           <Link href="/home" onClick={p.onCloseMobile} className="flex min-w-0 items-center gap-2.5 rounded-xl px-1.5 py-1 transition hover:opacity-80" aria-label="Orbis — home">
-            <OrbisMark className="h-7 w-7 text-s-ink" />
-            <span className="text-[15px] font-semibold tracking-[0.22em]">ORBIS</span>
+            <InfinityMark wide weight={6.5} className="h-[22px] w-[38px]" />
+            <span className={cn(wordmarkFont.className, "text-[20px] font-semibold leading-none tracking-[-0.01em]")}>orbis</span>
           </Link>
           <IconButton label="Close sidebar" onClick={p.onCloseMobile} className="ml-auto" data-drawer-close="">
             <X />

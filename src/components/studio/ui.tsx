@@ -15,7 +15,7 @@ import {
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ChipMark } from "@/components/brand/chip";
+import { InfinityMark } from "@/components/brand/infinity";
 
 /* Icon button ------------------------------------------------------------ */
 
@@ -380,6 +380,7 @@ export function Kbd({ children }: { children: ReactNode }) {
   );
 }
 
+/** The Orbis logo mark (the infinity loop). `simple` draws a heavier line for tiny sizes. */
 export function OrbisMark({ className, simple }: { className?: string; simple?: boolean }) {
-  return <ChipMark className={className} simple={simple} />;
+  return <InfinityMark className={className} weight={simple ? 8 : 6.5} />;
 }

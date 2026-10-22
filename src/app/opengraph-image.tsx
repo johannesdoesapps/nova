@@ -22,20 +22,17 @@ export default function OpengraphImage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          <svg width="72" height="72" viewBox="0 0 64 64">
+          <svg width="104" height="60" viewBox="6 17 52 30">
             <defs>
-              <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="16" y1="48" x2="48" y2="16">
-                <stop offset="0" stopColor="#22d3ee" />
-                <stop offset="0.5" stopColor="#3b82f6" />
-                <stop offset="1" stopColor="#8b5cf6" />
+              <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="8" y1="32" x2="56" y2="32">
+                <stop offset="0" stopColor="#8b5cf6" />
+                <stop offset="0.5" stopColor="#e879f9" />
+                <stop offset="1" stopColor="#fb7185" />
               </linearGradient>
             </defs>
-            <path d="M24 16V9M32 16V9M40 16V9M24 48V55M32 48V55M40 48V55M16 24H9M16 32H9M16 40H9M48 24H55M48 32H55M48 40H55" stroke="#60a5fa" strokeWidth="4" strokeLinecap="round" fill="none" />
-            <rect x="16" y="16" width="32" height="32" rx="7" fill="url(#g)" />
-            <circle cx="32" cy="32" r="7.5" fill="none" stroke="#ffffff" strokeWidth="4.2" />
-            <circle cx="40.5" cy="23.5" r="2.2" fill="#ffffff" />
+            <path d="M32 32C38 22 52 20 54 32C56 44 40 42 32 32C24 22 8 20 10 32C12 44 26 42 32 32Z" fill="none" stroke="url(#g)" strokeWidth="6.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          <div style={{ fontSize: 34, letterSpacing: 10, fontWeight: 600 }}>ORBIS</div>
+          <div style={{ fontSize: 44, letterSpacing: -0.5, fontWeight: 600 }}>orbis</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
           <div style={{ fontSize: 76, lineHeight: 1.05, letterSpacing: -2, maxWidth: 980 }}>Describe it. Orbis builds it and checks its own work.</div>

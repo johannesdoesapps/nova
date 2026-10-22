@@ -15,7 +15,9 @@ import { useFeedback, useSavedPrompts, useSettings, useTheme, type Feedback, typ
 import { forgetPlace, ModeSwitch, rememberPlace } from "./mode-switch";
 import { sectionFor } from "./nav";
 import { Sidebar } from "./sidebar";
-import { IconButton, iconButtonClass, Menu, MenuItem, MenuSeparator, OrbisMark } from "./ui";
+import { IconButton, iconButtonClass, Menu, MenuItem, MenuSeparator } from "./ui";
+import { InfinityMark } from "@/components/brand/infinity";
+import { wordmarkFont } from "@/components/brand/fonts";
 
 type FrameEvent = "new-chat" | "use-prompt" | "renamed" | "moved";
 
@@ -294,8 +296,8 @@ export function StudioFrame({ children }: { children: ReactNode }) {
               {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
             </IconButton>
             <Link href="/home" aria-label="Orbis — home" className="flex shrink-0 items-center gap-2 rounded-lg px-1.5 py-1 transition hover:opacity-80">
-              <OrbisMark className="h-6 w-6 text-s-ink" />
-              <span className="hidden text-[13.5px] font-semibold tracking-[0.22em] lg:inline">ORBIS</span>
+              <InfinityMark wide weight={6.5} className="h-5 w-[34px]" />
+              <span className={cn(wordmarkFont.className, "hidden text-[18px] font-semibold leading-none tracking-[-0.01em] lg:inline")}>orbis</span>
             </Link>
             <ModeSwitch className="ml-1" />
           </div>
