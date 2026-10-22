@@ -75,6 +75,8 @@ export interface StudioSettings {
   /** How long and in what style replies should be. */
   replyLength?: ReplyLength;
   replyStyle?: ReplyStyle;
+  /** Show Chip, the mascot, while replies are written and on empty and error screens (on unless turned off). */
+  showMascot?: boolean;
 }
 
 const DEFAULT_SETTINGS: StudioSettings = { enterToSend: true, defaultMode: "research", allowFallback: false };
@@ -86,6 +88,12 @@ export function useSettings() {
   });
   const update = useCallback((patch: Partial<StudioSettings>) => set({ ...value, ...patch }), [set, value]);
   return [value, update] as const;
+}
+
+/** Whether to show Chip, the mascot. */
+export function useShowMascot() {
+  const [settings] = useSettings();
+  return settings.showMascot !== false;
 }
 
 /* Saved prompts ---------------------------------------------------------- */

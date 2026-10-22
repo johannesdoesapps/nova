@@ -17,6 +17,9 @@ const STOPS = (
   </>
 );
 
+/** The logo's infinity loop (same path as InfinityMark), drawn small on Chip. */
+const LOOP = "M32 32C38 22 52 20 54 32C56 44 40 42 32 32C24 22 8 20 10 32C12 44 26 42 32 32Z";
+
 const PINS = "M24 16V9M32 16V9M40 16V9M24 48V55M32 48V55M40 48V55M16 24H9M16 32H9M16 40H9M48 24H55M48 32H55M48 40H55";
 /** Fewer, thicker pins for small sizes (favicons, avatars). */
 const PINS_SIMPLE = "M24 14V7M40 14V7M24 50V57M40 50V57M14 24H7M14 40H7M50 24H57M50 40H57";
@@ -75,6 +78,8 @@ export function ChipMascot({ mood = "hello", animate = false, className, title }
         <rect x="14" y="14" width="36" height="36" rx="9" fill={`url(#${id})`} />
         <rect x="19" y="21" width="26" height="20" rx="6" fill="#141217" />
         <circle className={a("chip-led")} cx="45.5" cy="18" r="1.8" fill="#ffffff" />
+        {/* The Orbis infinity loop on Chip's front, so mascot and logo read as one brand. */}
+        <path d={LOOP} transform="translate(32 45.6) scale(0.2) translate(-32 -32)" fill="none" stroke="#ffffff" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
         {(mood === "hello" || mood === "working") && (
           <g className={a("chip-look")}>
             <g className={a("chip-blink")}>

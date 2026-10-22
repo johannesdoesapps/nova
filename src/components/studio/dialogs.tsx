@@ -122,6 +122,9 @@ function SettingsBody({
         <Row title="Send with Enter" hint={settings.enterToSend ? "Shift + Enter adds a new line." : "Ctrl/⌘ + Enter sends; Enter adds a new line."}>
           <Switch label="Send with Enter" checked={settings.enterToSend} onChange={(v) => onSettings({ enterToSend: v })} />
         </Row>
+        <Row title="Show Chip" hint="Orbis's mascot, while replies are being written and on empty and error screens. Off shows plain progress dots.">
+          <Switch label="Show Chip" checked={settings.showMascot !== false} onChange={(v) => onSettings({ showMascot: v })} />
+        </Row>
         <Row
           title="Backup model"
           hint="If your model is down, a compatible one may answer, possibly from another provider. You'll always be told."

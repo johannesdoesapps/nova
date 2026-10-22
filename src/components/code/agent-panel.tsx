@@ -43,6 +43,7 @@ import { PromptBar } from "./prompt-bar";
 import { api, CodeApiError, post } from "./api";
 import { FileDiff } from "./diff-view";
 import { ChipMascot } from "@/components/brand/chip";
+import { useShowMascot } from "@/components/studio/prefs";
 
 /**
  * The coding agent, the main view of a Code project: describe a task, follow
@@ -297,6 +298,7 @@ export function AgentPanel({
   autoAttachments,
   autoComputer,
 }: AgentPanelProps) {
+  const showMascot = useShowMascot();
   const [run, setRun] = useState<RunView | null>(null);
   const [runAttachments, setRunAttachments] = useState<AttachmentMeta[]>([]);
   const [events, setEvents] = useState<AgentEvent[]>([]);
@@ -591,7 +593,7 @@ export function AgentPanel({
           {loaded && !run && !(autoStart && !error) && <StartScreen web={web} />}
           {loaded && !run && autoStart && !error && (
             <p role="status" className="flex items-center gap-3 px-1 pt-10 text-[14px] text-s-ink-2">
-              <ChipMascot mood="working" animate className="h-11 w-11 shrink-0" /> <span className="s-shimmer">Starting the build…</span>
+              {showMascot ? <ChipMascot mood="working" animate className="h-8 w-8 shrink-0" /> : <Loader2 className="h-4 w-4 animate-spin" aria-hidden />} <span className="s-shimmer">Starting the build…</span>
             </p>
           )}
 
@@ -651,7 +653,7 @@ export function AgentPanel({
 
               {(driving || run.busy) && !ended && (
                 <p role="status" className="flex items-center gap-2.5 px-1 text-[13px] text-s-ink-3">
-                  <ChipMascot mood="working" animate className="h-8 w-8 shrink-0" /> {run.pending?.kind === "job" ? `Running ${run.pending.command}…` : "Working…"}
+                  {showMascot ? <ChipMascot mood="working" animate className="h-6 w-6 shrink-0" /> : <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />} {run.pending?.kind === "job" ? `Running ${run.pending.command}…` : "Working…"}
                 </p>
               )}
 

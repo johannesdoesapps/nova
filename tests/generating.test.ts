@@ -40,6 +40,10 @@ describe("indicators", () => {
     expect(renderToStaticMarkup(createElement(WritingIndicator, { code: false }))).toContain("Writing your answer…");
   });
 
+  it("Chip wears the Orbis infinity loop", () => {
+    expect(renderToStaticMarkup(createElement(ChipMascot, { mood: "hello" }))).toContain("M32 32C38 22 52 20 54 32");
+  });
+
   it("Chip only moves when asked to", () => {
     const still = renderToStaticMarkup(createElement(ChipMascot, { mood: "oops" }));
     expect(still).not.toMatch(/chip-(float|blink|wave|glow)/);
