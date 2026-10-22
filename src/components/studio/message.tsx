@@ -1,6 +1,6 @@
 "use client";
 import { memo, useState, type ReactNode } from "react";
-import { BookmarkPlus, ChartColumn, Check, ChevronRight, CircleAlert, CircleCheck, Copy, Ellipsis, FileText, Flag, FolderPlus, Globe, MessageSquarePlus, Pencil, RefreshCw, Sparkles, ThumbsDown, ThumbsUp, Wrench } from "lucide-react";
+import { BookmarkPlus, ChartColumn, Check, ChevronRight, CircleAlert, CircleCheck, Copy, Ellipsis, FileText, Flag, FolderPlus, Globe, MessageSquarePlus, Pencil, RefreshCw, Sparkles, Square, ThumbsDown, ThumbsUp, Wrench } from "lucide-react";
 import { Markdown } from "@/components/common/markdown";
 import { ActionCard } from "@/components/connectors/action-card";
 import { BrandIcon } from "@/components/connectors/brand-icon";
@@ -15,6 +15,7 @@ import type { FeedbackRating } from "@/lib/analytics/events";
 export type ReplyAction = "note" | "task" | "milestone" | "prompt" | "followup";
 import { useVerify, VerifyButton, VerifyPanel } from "./verify-panel";
 import { ChipMascot } from "@/components/brand/chip";
+import { GeneratingIndicator, inOpenCodeBlock, WritingIndicator } from "./generating";
 
 export const MessageView = memo(function MessageView({
   m,
@@ -218,11 +219,9 @@ function AssistantMessage({
           />
         </div>
       ) : streaming ? (
-        <div role="status" className="flex h-7 items-center gap-3">
-          <ChipMascot mood="thinking" className="h-7 w-7 shrink-0" />
-          <span className="s-shimmer text-[14px]">{thinkingLabel}</span>
-        </div>
+        <GeneratingIndicator label={thinkingLabel} />
       ) : null}
+      {streaming && shown && <WritingIndicator code={inOpenCodeBlock(shown)} />}
 
       {m.sources && m.sources.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-1.5">
@@ -250,9 +249,12 @@ function AssistantMessage({
       {!streaming && m.actions?.map((a) => <ActionCard key={a.id} action={a} messageId={m.id} />)}
 
       {m.status === "error" && (
-        <div role="alert" className="s-in mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-s-line bg-s-hover px-4 py-3 text-[14px]">
-          <CircleAlert className="h-4 w-4 shrink-0 text-s-danger" />
-          <span className="min-w-0 flex-1 text-s-ink-2">{m.error ?? "Something went wrong."}</span>
+        <div role={m.stopped ? "status" : "alert"} className="s-in mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-s-line bg-s-hover px-4 py-3 text-[14px]">
+          {m.stopped ? <Square className="h-3.5 w-3.5 shrink-0 fill-current text-s-ink-3" aria-hidden /> : <ChipMascot mood="oops" className="h-9 w-9 shrink-0" />}
+          <span className="min-w-0 flex-1 text-s-ink-2">
+            {m.stopped ? "You stopped this reply before it started." : (m.error ?? "Something went wrong.")}
+            {!m.stopped && <span className="sr-only"> (error)</span>}
+          </span>
           {m.needsSignIn ? (
             // Retrying can't help a visitor: offer the way in instead, coming back to this chat.
             <span className="flex gap-2">

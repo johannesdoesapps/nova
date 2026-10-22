@@ -187,3 +187,31 @@ body {
 .orbis-run-ok { color: var(--success); }
 .orbis-run-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4em; color: var(--fg-faint); font-family: var(--font-sans, inherit); }
 .orbis-run-link { text-decoration: underline; text-underline-offset: 2px; color: inherit; font-weight: 500; }
+
+/* Chip, the mascot: gentle idle motion while Orbis works. Transforms and opacity only. */
+@keyframes chip-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.5px); } }
+@keyframes chip-blink { 0%, 90%, 100% { transform: scaleY(1); } 94% { transform: scaleY(0.12); } }
+@keyframes chip-look { 0%, 30% { transform: translateX(0); } 40%, 55% { transform: translateX(1.8px); } 65%, 80% { transform: translateX(-1.8px); } 90%, 100% { transform: translateX(0); } }
+@keyframes chip-wave { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-22deg); } }
+@keyframes chip-tap { 0%, 70%, 100% { transform: rotate(0deg); } 80% { transform: rotate(-28deg); } 90% { transform: rotate(-10deg); } }
+@keyframes chip-tap-l { 0%, 70%, 100% { transform: rotate(0deg); } 80% { transform: rotate(28deg); } 90% { transform: rotate(10deg); } }
+@keyframes chip-type { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(14deg); } }
+@keyframes chip-glow { 0%, 100% { opacity: 0.45; transform: scale(0.94); } 50% { opacity: 0.85; transform: scale(1.04); } }
+@keyframes chip-dot { 0%, 80%, 100% { opacity: 0.3; } 40% { opacity: 1; } }
+@keyframes chip-led { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.chip-float { animation: chip-float 2.8s ease-in-out infinite; }
+.chip-blink { transform-box: fill-box; transform-origin: center; animation: chip-blink 4.2s ease-in-out infinite; }
+.chip-look { animation: chip-look 6s ease-in-out infinite; }
+.chip-wave { transform-box: view-box; transform-origin: 50px 30px; animation: chip-wave 1.4s ease-in-out infinite; }
+.chip-tap { transform-box: view-box; transform-origin: 50px 30px; animation: chip-tap 3.2s ease-in-out infinite; }
+.chip-tap-l { transform-box: view-box; transform-origin: 14px 30px; animation: chip-tap-l 3.2s ease-in-out 1.6s infinite; }
+.chip-type { transform-box: view-box; transform-origin: 14px 30px; animation: chip-type 0.5s ease-in-out infinite; }
+.chip-type-2 { transform-origin: 50px 30px; animation-direction: reverse; animation-delay: 0.25s; }
+.chip-glow { transform-box: fill-box; transform-origin: center; animation: chip-glow 2.8s ease-in-out infinite; }
+.chip-dot { animation: chip-dot 1.2s ease-in-out infinite; }
+.chip-dot-2 { animation-delay: 0.16s; }
+.chip-dot-3 { animation-delay: 0.32s; }
+.chip-led { animation: chip-led 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .chip-float, .chip-blink, .chip-look, .chip-wave, .chip-tap, .chip-tap-l, .chip-type, .chip-glow, .chip-dot, .chip-led { animation: none; }
+}

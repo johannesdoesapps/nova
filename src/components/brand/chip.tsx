@@ -39,52 +39,88 @@ export function ChipMark({ className, simple = false, title }: { className?: str
   );
 }
 
-export type ChipMood = "hello" | "thinking" | "happy" | "oops";
+export type ChipMood = "hello" | "thinking" | "working" | "writing" | "happy" | "oops";
 
-/** Chip, the mascot: the logo with a screen face, pin arms and little legs. */
-export function ChipMascot({ mood = "hello", className, title }: { mood?: ChipMood; className?: string; title?: string }) {
+/**
+ * Chip, the mascot: the logo with a screen face, pin arms and little legs.
+ * With `animate`, Chip floats, blinks, looks around and moves its arms (CSS
+ * transforms only; all motion stops when reduced motion is preferred). The
+ * movement is decoration, not a picture of what the AI is doing.
+ */
+export function ChipMascot({ mood = "hello", animate = false, className, title }: { mood?: ChipMood; animate?: boolean; className?: string; title?: string }) {
   const id = useGradientId();
-  // Arms follow the mood: one waving for hello, both up when happy.
+  const a = (cls: string) => (animate ? cls : undefined);
+  // Arms follow the mood: one waving for hello, both up when happy, typing while writing.
   const leftArm = mood === "happy" ? "M14 30L8 23" : "M14 30H8";
   const rightArm = mood === "hello" || mood === "happy" ? "M50 30L56 23" : "M50 30H56";
+  const pin = { stroke: "#c084fc", strokeWidth: 3, strokeLinecap: "round" as const, fill: "none" };
   return (
     <svg viewBox="0 0 64 64" className={className} role={title ? "img" : undefined} aria-label={title} aria-hidden={title ? undefined : true}>
       <defs>
         <linearGradient id={id} gradientUnits="userSpaceOnUse" x1="14" y1="50" x2="50" y2="14">
           {STOPS}
         </linearGradient>
+        {animate && (
+          <radialGradient id={`${id}g`}>
+            <stop offset="0" stopColor="#d946ef" stopOpacity="0.45" />
+            <stop offset="1" stopColor="#d946ef" stopOpacity="0" />
+          </radialGradient>
+        )}
       </defs>
-      <path d={`M24 14V8M32 14V8M40 14V8${leftArm}M14 38H8${rightArm}M50 38H56M26 50V57M38 50V57M23 57H28M35 57H41`} stroke="#c084fc" strokeWidth="3" strokeLinecap="round" fill="none" />
-      <rect x="14" y="14" width="36" height="36" rx="9" fill={`url(#${id})`} />
-      <rect x="19" y="21" width="26" height="20" rx="6" fill="#141217" />
-      <circle cx="45.5" cy="18" r="1.8" fill="#ffffff" />
-      {mood === "hello" && (
-        <>
-          <rect x="24.5" y="25.5" width="4.5" height="7" rx="2.25" fill="#ffffff" />
-          <rect x="35" y="25.5" width="4.5" height="7" rx="2.25" fill="#ffffff" />
-          <path d="M28 36.5Q32 39.5 36 36.5" fill="none" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" />
-        </>
-      )}
-      {mood === "thinking" && (
-        <>
-          <circle className="s-dot [transform-box:fill-box]" cx="26" cy="31" r="2.2" fill="#f0abfc" />
-          <circle className="s-dot [animation-delay:160ms] [transform-box:fill-box]" cx="32" cy="31" r="2.2" fill="#f0abfc" />
-          <circle className="s-dot [animation-delay:320ms] [transform-box:fill-box]" cx="38" cy="31" r="2.2" fill="#f0abfc" />
-        </>
-      )}
-      {mood === "happy" && (
-        <>
-          <path d="M24 31Q26.75 27 29.5 31M34.5 31Q37.25 27 40 31" fill="none" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" />
-          <path d="M27 35Q32 40 37 35" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
-        </>
-      )}
-      {mood === "oops" && (
-        <>
-          <circle cx="27" cy="29.5" r="2" fill="#ffffff" />
-          <circle cx="37" cy="29.5" r="2" fill="#ffffff" />
-          <path d="M27 36.5Q29.5 34.5 32 36.5Q34.5 38.5 37 36.5" fill="none" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" />
-        </>
-      )}
+      {animate && <circle className="chip-glow" cx="32" cy="32" r="30" fill={`url(#${id}g)`} />}
+      <g className={a("chip-float")}>
+        <path d="M24 14V8M32 14V8M40 14V8M14 38H8M50 38H56M26 50V57M38 50V57M23 57H28M35 57H41" {...pin} />
+        <path className={a(mood === "writing" ? "chip-type" : mood === "working" ? "chip-tap-l" : "")} d={leftArm} {...pin} />
+        <path className={a(mood === "writing" ? "chip-type chip-type-2" : mood === "hello" ? "chip-wave" : mood === "working" ? "chip-tap" : "")} d={rightArm} {...pin} />
+        <rect x="14" y="14" width="36" height="36" rx="9" fill={`url(#${id})`} />
+        <rect x="19" y="21" width="26" height="20" rx="6" fill="#141217" />
+        <circle className={a("chip-led")} cx="45.5" cy="18" r="1.8" fill="#ffffff" />
+        {(mood === "hello" || mood === "working") && (
+          <g className={a("chip-look")}>
+            <g className={a("chip-blink")}>
+              <rect x="24.5" y="25.5" width="4.5" height="7" rx="2.25" fill="#ffffff" />
+              <rect x="35" y="25.5" width="4.5" height="7" rx="2.25" fill="#ffffff" />
+            </g>
+          </g>
+        )}
+        {mood === "hello" && <path d="M28 36.5Q32 39.5 36 36.5" fill="none" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" />}
+        {mood === "working" && (
+          <>
+            <circle className={a("chip-dot")} cx="28.5" cy="37" r="1.3" fill="#f0abfc" />
+            <circle className={a("chip-dot chip-dot-2")} cx="32" cy="37" r="1.3" fill="#f0abfc" />
+            <circle className={a("chip-dot chip-dot-3")} cx="35.5" cy="37" r="1.3" fill="#f0abfc" />
+          </>
+        )}
+        {mood === "writing" && (
+          <>
+            <g className={a("chip-blink")}>
+              <rect x="24.5" y="28" width="4.5" height="4.5" rx="2.25" fill="#ffffff" />
+              <rect x="35" y="28" width="4.5" height="4.5" rx="2.25" fill="#ffffff" />
+            </g>
+            <path d="M29 36.5Q32 38.5 35 36.5" fill="none" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" />
+          </>
+        )}
+        {mood === "thinking" && (
+          <>
+            <circle className="s-dot [transform-box:fill-box]" cx="26" cy="31" r="2.2" fill="#f0abfc" />
+            <circle className="s-dot [animation-delay:160ms] [transform-box:fill-box]" cx="32" cy="31" r="2.2" fill="#f0abfc" />
+            <circle className="s-dot [animation-delay:320ms] [transform-box:fill-box]" cx="38" cy="31" r="2.2" fill="#f0abfc" />
+          </>
+        )}
+        {mood === "happy" && (
+          <>
+            <path d="M24 31Q26.75 27 29.5 31M34.5 31Q37.25 27 40 31" fill="none" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" />
+            <path d="M27 35Q32 40 37 35" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
+          </>
+        )}
+        {mood === "oops" && (
+          <>
+            <circle cx="27" cy="29.5" r="2" fill="#ffffff" />
+            <circle cx="37" cy="29.5" r="2" fill="#ffffff" />
+            <path d="M27 36.5Q29.5 34.5 32 36.5Q34.5 38.5 37 36.5" fill="none" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" />
+          </>
+        )}
+      </g>
     </svg>
   );
 }

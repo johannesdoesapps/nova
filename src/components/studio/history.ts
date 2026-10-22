@@ -33,6 +33,8 @@ export interface Msg {
   /** Why Auto chose the model, when Auto answered. */
   routing?: string;
   error?: string;
+  /** The user stopped the reply before any text arrived (shown calmly, not as an error). */
+  stopped?: boolean;
   /** The reply failed because the visitor isn't signed in. */
   needsSignIn?: boolean;
   simulated?: boolean;

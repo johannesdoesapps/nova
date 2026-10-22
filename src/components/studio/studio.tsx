@@ -24,6 +24,7 @@ import { ConversationPane } from "./thread";
 import { useStudioChat } from "./use-chat";
 import type { StarterEnv } from "./task-starter";
 import { Welcome } from "./welcome";
+import { isCodeRequest } from "./generating";
 
 /** The most recently active chat (pinned chats are listed first, so not always the first). */
 const latestOf = (list: ConvSummary[] | null) => (list ?? []).reduce<ConvSummary | null>((a, c) => (!a || c.updated_at > a.updated_at ? c : a), null);
@@ -327,7 +328,13 @@ export function Studio({ home = false }: { home?: boolean }) {
           busy={chat.busy}
           conversationId={chat.conversationId}
           composer={composer("dock")}
-          thinkingLabel={chat.mode === "research" && chat.useWeb && integrations.search ? "Searching the web" : "Thinking"}
+          thinkingLabel={
+            chat.mode === "research" && chat.useWeb && integrations.search
+              ? "Searching the web"
+              : isCodeRequest(chat.mode, chat.messages.findLast((x) => x.role === "user")?.content)
+                ? "Generating code"
+                : "Thinking"
+          }
           feedback={studio.feedback}
           onRetry={chat.retry}
           onEdit={chat.edit}

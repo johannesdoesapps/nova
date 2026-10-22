@@ -228,7 +228,7 @@ export function useStudioChat({
           m.status !== "streaming"
             ? m
             : aborted
-              ? { ...m, status: m.content ? "done" : "error", error: m.content ? undefined : "Stopped before a reply arrived." }
+              ? { ...m, status: m.content ? "done" : "error", error: m.content ? undefined : "Stopped before a reply arrived.", stopped: !m.content }
               : { ...m, status: "error", error: (e as Error).message || "Something went wrong.", needsSignIn: (e as { status?: number }).status === 401 },
         );
       } finally {
