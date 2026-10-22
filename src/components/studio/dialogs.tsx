@@ -13,6 +13,7 @@ import { Dialog, IconButton, Kbd, Segmented, Switch } from "./ui";
 import { UsageMeters, useUsage } from "./usage";
 import { useApp } from "@/components/layout/app-context";
 import { LEGAL } from "@/content/legal-meta";
+import { SHORTCUTS, shortcutKeys } from "@/lib/shortcuts";
 
 const btn =
   "inline-flex h-9 items-center justify-center gap-1.5 rounded-xl px-3.5 text-[13.5px] font-medium transition active:scale-[0.98] disabled:opacity-40 [&_svg]:h-4 [&_svg]:w-4";
@@ -863,5 +864,35 @@ export function MoveChatDialog({ conv, onClose, onMove }: { conv: ConvSummary | 
         return "Taken out of its project.";
       }}
     />
+  );
+}
+
+/* Keyboard shortcuts ----------------------------------------------------- */
+
+export function ShortcutsDialog({ open, onClose, mac }: { open: boolean; onClose: () => void; mac: boolean }) {
+  const groups = [...new Set(SHORTCUTS.map((s) => s.group))];
+  return (
+    <Dialog open={open} onClose={onClose} title="Keyboard shortcuts" description="Single keys like / and ? work when you're not typing in a box." width={480}>
+      <div className="space-y-5">
+        {groups.map((g) => (
+          <section key={g}>
+            <h3 className="mb-1.5 text-[11.5px] font-medium uppercase tracking-[0.08em] text-s-ink-3">{g}</h3>
+            <dl className="divide-y divide-s-line rounded-2xl border border-s-line">
+              {SHORTCUTS.filter((s) => s.group === g).map((s) => (
+                <div key={s.id} className="flex items-center justify-between gap-3 px-3 py-2 text-[13.5px]">
+                  <dt>{s.label}</dt>
+                  <dd className="flex shrink-0 gap-1">
+                    {shortcutKeys(s, mac).map((k) => (
+                      <Kbd key={k}>{k}</Kbd>
+                    ))}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        ))}
+        <p className="text-[12.5px] text-s-ink-3">On a phone or tablet, use the search button at the top of the screen for the same commands.</p>
+      </div>
+    </Dialog>
   );
 }

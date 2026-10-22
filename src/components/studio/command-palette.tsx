@@ -1,15 +1,41 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bookmark, Code2, Cpu, Flag, ListPlus, MessageSquare, Search, Settings2, ShieldCheck, Sparkles, SquarePen } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Bookmark,
+  Bot,
+  Code2,
+  Cpu,
+  Flag,
+  Keyboard,
+  LayoutTemplate,
+  ListPlus,
+  MessageSquare,
+  Monitor,
+  Moon,
+  PanelLeft,
+  Search,
+  Settings2,
+  ShieldCheck,
+  Sparkles,
+  SquarePen,
+  Sun,
+  TextCursorInput,
+} from "lucide-react";
 import { useCatalog } from "@/components/common/model-picker";
-import { useModelChoice } from "./use-model-choice";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import { autoIdFor, ROUTER_MODES } from "@/lib/ai/platform";
-import { cn } from "@/lib/utils";
+import { shortcut, shortcutKeys } from "@/lib/shortcuts";
+import { TEMPLATES } from "@/lib/templates/registry";
+import { CommandMenu, type Command } from "./command-menu";
 import type { ConvSummary } from "./history";
 import { navFor, type Section } from "./nav";
+import type { ThemePref } from "./prefs";
+import { useModelChoice } from "./use-model-choice";
+
+export { rankCommands } from "./command-menu";
+export type { Command } from "./command-menu";
 
 /** Extra search words for the "Go to" entries. */
 const GO_KEYWORDS: Partial<Record<Section, string>> = {
@@ -18,24 +44,30 @@ const GO_KEYWORDS: Partial<Record<Section, string>> = {
   missions: "mission control project plan",
   council: "compare models several",
   arena: "blind battle compare vote",
+  templates: "workflow template recipe",
+  verify: "fact check claims evidence sources",
+  usage: "allowance limit quota billing units",
   connectors: "integrations apps gmail drive google calendar slack notion github outlook onedrive hubspot figma wikipedia connect",
   admin: "models providers keys",
   workforce: "commander tasks agents builder developer",
 };
 
-interface Command {
-  id: string;
-  group: string;
-  label: string;
-  hint?: string;
-  icon: ReactNode;
-  keywords?: string;
-  run: () => void;
+export interface PaletteActions {
+  onNewChat: () => void;
+  onOpenSettings: () => void;
+  onOpenPrompts: () => void;
+  onOpenShortcuts: () => void;
+  onToggleSidebar: () => void;
+  onFocusComposer: (() => void) | null;
+  onSearchChats: (q: string) => Promise<ConvSummary[]>;
+  setTheme: (t: ThemePref) => void;
 }
 
 /**
- * Ctrl+K / ⌘K command palette: navigate, open chats and missions, switch the
- * chat model, and open settings — all from the keyboard.
+ * The command palette (⌘K / Ctrl+K, or the search button in the top bar):
+ * actions, pages, chats, projects, agents, templates, models and settings.
+ * Every entry runs the same action as its button elsewhere in Orbis; pages add
+ * their own (e.g. the chat adds "Copy the last reply").
  */
 export function CommandPalette({
   open,
@@ -43,204 +75,179 @@ export function CommandPalette({
   conversations,
   isAdmin,
   signedIn,
-  onNewChat,
-  onOpenSettings,
-  onOpenPrompts,
+  mac,
+  actions,
+  pageCommands,
 }: {
   open: boolean;
   onClose: () => void;
   conversations: ConvSummary[] | null;
   isAdmin: boolean;
   signedIn: boolean;
-  onNewChat: () => void;
-  onOpenSettings: () => void;
-  onOpenPrompts: () => void;
+  mac: boolean;
+  actions: PaletteActions;
+  /** Commands the current page adds. */
+  pageCommands: Command[];
 }) {
   if (!open) return null;
-  return (
-    <Palette
-      onClose={onClose}
-      conversations={conversations}
-      isAdmin={isAdmin}
-      signedIn={signedIn}
-      onNewChat={onNewChat}
-      onOpenSettings={onOpenSettings}
-      onOpenPrompts={onOpenPrompts}
-    />
-  );
+  return <Palette onClose={onClose} conversations={conversations} isAdmin={isAdmin} signedIn={signedIn} mac={mac} actions={actions} pageCommands={pageCommands} />;
 }
 
-function Palette({
-  onClose,
-  conversations,
-  isAdmin,
-  signedIn,
-  onNewChat,
-  onOpenSettings,
-  onOpenPrompts,
-}: Omit<Parameters<typeof CommandPalette>[0], "open">) {
+type Named = { id: string; name: string };
+
+function Palette({ onClose, conversations, isAdmin, signedIn, mac, actions, pageCommands }: Omit<Parameters<typeof CommandPalette>[0], "open">) {
   const router = useRouter();
   const catalog = useCatalog();
   const [, setModel] = useModelChoice();
-  const [query, setQuery] = useState("");
-  const [active, setActive] = useState(0);
-  const [missions, setMissions] = useState<{ id: string; name: string }[]>([]);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
+  const [missions, setMissions] = useState<Named[]>([]);
+  const [codeProjects, setCodeProjects] = useState<Named[]>([]);
+  const [agents, setAgents] = useState<{ id: string; name: string; description: string; kind: string }[]>([]);
+  const [found, setFound] = useState<{ q: string; items: ConvSummary[] } | null>(null);
+  const [searching, setSearching] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // What to list: the user's projects and agents (fetched when the palette opens).
   useEffect(() => {
-    inputRef.current?.focus();
-    if (!signedIn) return;
     let alive = true;
-    jsonFetch<{ missions: { id: string; name: string }[] }>("/api/missions")
-      .then((r) => alive && setMissions(r.missions))
+    jsonFetch<{ builtins: { id: string; name: string; description: string; kind: string }[]; agents: { id: string; name: string; description: string; kind: string }[] }>("/api/agents")
+      .then((r) => alive && setAgents([...r.builtins, ...r.agents]))
       .catch(() => {});
+    if (signedIn) {
+      jsonFetch<{ missions: Named[] }>("/api/missions")
+        .then((r) => alive && setMissions(r.missions))
+        .catch(() => {});
+      jsonFetch<{ projects: Named[] }>("/api/code/projects")
+        .then((r) => alive && setCodeProjects(r.projects))
+        .catch(() => {});
+    }
     return () => {
       alive = false;
+      if (timer.current) clearTimeout(timer.current);
     };
   }, [signedIn]);
 
+  // Signed in: also search every chat's title and messages on the server.
+  const onQuery = (q: string) => {
+    if (timer.current) clearTimeout(timer.current);
+    const t = q.trim();
+    if (!signedIn || t.length < 2) {
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    timer.current = setTimeout(() => {
+      actions
+        .onSearchChats(t)
+        .then((items) => setFound({ q: t, items }))
+        .catch(() => setFound({ q: t, items: [] }))
+        .finally(() => setSearching(false));
+    }, 250);
+  };
+
   const commands = useMemo<Command[]>(() => {
     const go = (href: string) => () => router.push(href);
+    const keys = (id: Parameters<typeof shortcut>[0]) => shortcutKeys(shortcut(id), mac);
     const pickModel = (id: string) => () => {
       setModel(id);
-      if (!location.pathname.startsWith("/chat")) router.push("/chat");
+      if (!location.pathname.startsWith("/chat") && !location.pathname.startsWith("/home")) router.push("/chat");
     };
     const list: Command[] = [
-      { id: "new", group: "Actions", label: "New chat", hint: "Ctrl Shift O", icon: <SquarePen />, run: onNewChat },
+      ...pageCommands,
+      { id: "new", group: "Actions", label: "New chat", icon: <SquarePen />, keys: keys("new-chat"), keywords: "start conversation", run: actions.onNewChat },
+      ...(actions.onFocusComposer
+        ? [
+            {
+              id: "focus",
+              group: "Actions",
+              label: "Go to the message box",
+              icon: <TextCursorInput />,
+              keys: keys("focus-composer"),
+              keywords: "type write composer input",
+              run: actions.onFocusComposer,
+            },
+          ]
+        : []),
+      { id: "search-chats", group: "Actions", label: "Search conversations", hint: "Titles and messages", icon: <Search />, keywords: "find history chats", run: go("/history") },
+      { id: "template", group: "Actions", label: "Start a workflow template", icon: <LayoutTemplate />, keywords: "workflow template recipe", run: go("/templates") },
       { id: "code-new", group: "Actions", label: "New coding project", icon: <Code2 />, keywords: "code project build fix bug agent", run: go("/code?new=1") },
       { id: "mission-new", group: "Actions", label: "New mission", icon: <Flag />, keywords: "project plan goal mission control", run: go("/missions") },
       { id: "task", group: "Actions", label: "Create a task in a mission", icon: <ListPlus />, keywords: "todo task", run: go("/missions") },
-      { id: "security", group: "Actions", label: "Security Team: scan, investigate or audit", icon: <ShieldCheck />, keywords: "security sentinel threat hunter code guardian vulnerability scan audit logs", run: go("/agents/security") },
+      { id: "verify", group: "Actions", label: "Check claims against sources", icon: <ShieldCheck />, keywords: "verify fact check evidence", run: go("/verify") },
       // The same destinations, labels and icons as the sidebar.
       ...navFor(isAdmin).map((e) => {
         const Icon = e.icon;
         return { id: `go-${e.id}`, group: "Go to", label: e.label, hint: e.hint, icon: <Icon />, keywords: GO_KEYWORDS[e.id] ?? "", run: go(e.href) };
       }),
-      { id: "prompts", group: "Go to", label: "Saved prompts", icon: <Bookmark />, run: onOpenPrompts },
-      { id: "settings", group: "Go to", label: "Settings", icon: <Settings2 />, keywords: "preferences theme", run: onOpenSettings },
+      { id: "history", group: "Go to", label: "All conversations", icon: <MessageSquare />, keywords: "history chats", run: go("/history") },
+      { id: "prompts", group: "Go to", label: "Saved prompts", icon: <Bookmark />, keywords: "reuse prompt library", run: actions.onOpenPrompts },
+      { id: "settings", group: "Settings", label: "Settings", icon: <Settings2 />, keywords: "preferences privacy data reply length style", run: actions.onOpenSettings },
+      { id: "sidebar", group: "Settings", label: "Show or hide the sidebar", icon: <PanelLeft />, keys: keys("sidebar"), run: actions.onToggleSidebar },
+      { id: "theme-dark", group: "Settings", label: "Theme: dark", icon: <Moon />, keywords: "appearance colour mode", run: () => actions.setTheme("dark") },
+      { id: "theme-light", group: "Settings", label: "Theme: light", icon: <Sun />, keywords: "appearance colour mode", run: () => actions.setTheme("light") },
+      { id: "theme-system", group: "Settings", label: "Theme: match my device", icon: <Monitor />, keywords: "appearance colour mode system", run: () => actions.setTheme("system") },
+      { id: "shortcuts", group: "Settings", label: "Keyboard shortcuts", icon: <Keyboard />, keys: keys("shortcuts"), keywords: "keys hotkeys help", run: actions.onOpenShortcuts },
     ];
     if (catalog?.auto.enabled) {
       for (const m of ROUTER_MODES) {
-        list.push({ id: `auto-${m.id}`, group: "Switch model", label: m.id === "balanced" ? "Auto" : `Auto · ${m.label}`, hint: m.blurb, icon: <Sparkles />, keywords: "smart router model", run: pickModel(autoIdFor(m.id)) });
+        list.push({
+          id: `auto-${m.id}`,
+          group: "Switch model",
+          label: m.id === "balanced" ? "Auto" : `Auto · ${m.label}`,
+          hint: m.blurb,
+          icon: <Sparkles />,
+          keywords: "smart router model",
+          run: pickModel(autoIdFor(m.id)),
+        });
       }
     }
     for (const m of catalog?.models ?? []) {
-      if (!m.available || m.provider === "demo") continue;
+      if (!m.available || m.locked || m.provider === "demo") continue;
       list.push({ id: `model-${m.id}`, group: "Switch model", label: m.displayName, hint: m.provider, icon: <Cpu />, keywords: "model", run: pickModel(m.id) });
     }
-    for (const mi of missions) list.push({ id: `mission-${mi.id}`, group: "Missions", label: mi.name, icon: <Flag />, keywords: "mission project", run: go(`/missions/${mi.id}`) });
-    for (const c of conversations ?? []) list.push({ id: `chat-${c.id}`, group: "Conversations", label: c.title || "Untitled chat", icon: <MessageSquare />, keywords: "chat conversation", run: go(`/chat?c=${c.id}`) });
+    for (const t of TEMPLATES)
+      list.push({ id: `tpl-${t.id}`, group: "Templates", label: t.name, hint: t.description, icon: <LayoutTemplate />, keywords: "template workflow", run: go(`/templates?t=${t.id}`) });
+    for (const a of agents) list.push({ id: `agent-${a.id}`, group: "Agents", label: a.name, hint: a.description, icon: <Bot />, keywords: "agent assistant", run: go(`/agents/${a.id}`) });
+    for (const p of missions) list.push({ id: `mission-${p.id}`, group: "Projects", label: p.name, hint: "Mission", icon: <Flag />, keywords: "mission project", run: go(`/missions/${p.id}`) });
+    for (const p of codeProjects) list.push({ id: `code-${p.id}`, group: "Projects", label: p.name, hint: "Code project", icon: <Code2 />, keywords: "code project", run: go(`/code/${p.id}`) });
+    const seen = new Set<string>();
+    for (const c of [...(found?.items ?? []), ...(conversations ?? [])]) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      // A match in the message text carries its excerpt, so it ranks for the words searched.
+      list.push({
+        id: `chat-${c.id}`,
+        group: "Conversations",
+        label: c.title || "Untitled chat",
+        hint: c.snippet ?? c.project_name ?? undefined,
+        icon: <MessageSquare />,
+        keywords: `chat conversation ${c.snippet ?? ""}`,
+        run: go(`/chat?c=${c.id}`),
+      });
+    }
     return list;
-  }, [router, setModel, onNewChat, onOpenPrompts, onOpenSettings, isAdmin, catalog, missions, conversations]);
-
-  const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return commands.slice(0, 60);
-    return rankCommands(commands, q);
-  }, [commands, query]);
-
-  const index = Math.min(active, Math.max(0, results.length - 1));
-
-  useEffect(() => {
-    listRef.current?.querySelector<HTMLElement>(`[data-index="${index}"]`)?.scrollIntoView({ block: "nearest" });
-  }, [index]);
-
-  const runAt = (i: number) => {
-    const c = results[i];
-    if (!c) return;
-    onClose();
-    c.run();
-  };
+  }, [router, setModel, actions, pageCommands, isAdmin, catalog, missions, codeProjects, agents, conversations, found, mac]);
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-start justify-center bg-black/30 px-4 pt-[12vh] backdrop-blur-[2px]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label="Command palette" className="glass-strong glass-solid glass-edge s-pop w-full max-w-[560px] overflow-hidden rounded-[22px] text-s-ink">
-        <div className="flex items-center gap-2.5 border-b border-s-line px-4">
-          <Search className="h-4 w-4 shrink-0 text-s-ink-3" />
-          <input
-            ref={inputRef}
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setActive(0);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setActive((index + 1) % Math.max(1, results.length));
-              } else if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setActive((index - 1 + results.length) % Math.max(1, results.length));
-              } else if (e.key === "Enter") {
-                e.preventDefault();
-                runAt(index);
-              } else if (e.key === "Escape") {
-                e.preventDefault();
-                onClose();
-              }
-            }}
-            role="combobox"
-            aria-label="Search commands, chats, missions and models"
-            aria-autocomplete="list"
-            aria-expanded="true"
-            aria-controls="palette-list"
-            aria-activedescendant={results[index] ? `palette-${results[index].id}` : undefined}
-            placeholder="Search commands, chats, missions, models…"
-            className="h-14 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-s-ink-3"
-          />
-          <kbd className="rounded-md border border-s-line px-1.5 py-0.5 text-[11px] text-s-ink-3">Esc</kbd>
-        </div>
-        <ul id="palette-list" ref={listRef} role="listbox" aria-label="Results" className="s-scroll max-h-[min(60vh,440px)] overflow-y-auto p-2">
-          {results.length === 0 && <li className="px-3 py-6 text-center text-[13.5px] text-s-ink-3">No matches</li>}
-          {results.map((c, i) => {
-            const header = i === 0 || results[i - 1]!.group !== c.group ? c.group : null;
-            return (
-              <li key={c.id} role="presentation">
-                {header && <div className="px-3 pb-1 pt-2.5 text-[11px] font-medium uppercase tracking-[0.08em] text-s-ink-3">{header}</div>}
-                <div
-                  id={`palette-${c.id}`}
-                  role="option"
-                  aria-selected={i === index}
-                  data-index={i}
-                  onMouseMove={() => i !== index && setActive(i)}
-                  onClick={() => runAt(i)}
-                  className={cn("flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-[14px] [&_svg]:h-4 [&_svg]:w-4", i === index ? "bg-s-hover" : "")}
-                >
-                  <span className="text-s-ink-2">{c.icon}</span>
-                  <span className="min-w-0 flex-1 truncate">{c.label}</span>
-                  {c.hint && <span className="hidden max-w-[45%] truncate text-[12px] text-s-ink-3 sm:inline">{c.hint}</span>}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-    </div>
+    <CommandMenu
+      label="Command palette"
+      placeholder="Search commands, chats, projects, agents, templates, models…"
+      commands={commands}
+      onClose={onClose}
+      onQuery={onQuery}
+      loading={searching}
+      empty={(q) => (
+        <>
+          <span className="block text-s-ink-2">Nothing matches “{q}”.</span>
+          <span className="mt-1 block">{signedIn ? "Chats were searched by title and message too." : "Sign in to search your chats’ messages too."} Try a page name, a template, or “new chat”.</span>
+        </>
+      )}
+      footer={
+        <span className="flex flex-wrap gap-x-3 gap-y-0.5">
+          <span>↑ ↓ to move</span>
+          <span>Enter to open</span>
+          <span>Esc to close</span>
+        </span>
+      }
+    />
   );
-}
-
-/**
- * Matches for a search, best first: a name that starts with the search, then a
- * name that contains it, then matches only in keywords or descriptions (so
- * "missions" opens Missions, not a page whose description mentions missions).
- * Groups stay together, ordered by their best match.
- */
-export function rankCommands<T extends { label: string; group: string; keywords?: string; hint?: string }>(commands: T[], query: string): T[] {
-  const q = query.trim().toLowerCase();
-  const words = q.split(/\s+/);
-  const scored = commands
-    .map((c, i) => {
-      const label = c.label.toLowerCase();
-      const hay = `${label} ${c.group} ${c.keywords ?? ""} ${c.hint ?? ""}`.toLowerCase();
-      if (!words.every((w) => hay.includes(w))) return null;
-      return { c, i, score: label.startsWith(q) ? 0 : label.includes(q) ? 1 : 2 };
-    })
-    .filter((x) => x !== null);
-  const best = new Map<string, number>();
-  for (const x of scored) best.set(x.c.group, Math.min(best.get(x.c.group) ?? 9, x.score));
-  const order = [...best.keys()];
-  return scored
-    .sort((a, b) => best.get(a.c.group)! - best.get(b.c.group)! || order.indexOf(a.c.group) - order.indexOf(b.c.group) || a.score - b.score || a.i - b.i)
-    .map((x) => x.c);
 }

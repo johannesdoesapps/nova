@@ -1,14 +1,15 @@
 "use client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { Bookmark, Ellipsis, Menu as MenuIcon, Moon, PanelLeftClose, PanelLeftOpen, Settings2, SquarePen, Sun } from "lucide-react";
+import { Bookmark, Ellipsis, Keyboard, Menu as MenuIcon, Moon, PanelLeftClose, PanelLeftOpen, Search, Settings2, SquarePen, Sun } from "lucide-react";
 import { useApp } from "@/components/layout/app-context";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { cn } from "@/lib/utils";
-import { CommandPalette } from "./command-palette";
-import { ArchivedDialog, DeleteDialog, MoveChatDialog, PromptsDialog, SettingsDialog } from "./dialogs";
+import { CommandPalette, type Command } from "./command-palette";
+import { isMacPlatform, isTypingTarget, shortcut, shortcutFor, shortcutKeys } from "@/lib/shortcuts";
+import { ArchivedDialog, DeleteDialog, MoveChatDialog, PromptsDialog, SettingsDialog, ShortcutsDialog } from "./dialogs";
 import { downloadConversation, localHistory, serverHistory, type ConvSummary, type HistoryStore } from "./history";
 import { useFeedback, useSavedPrompts, useSettings, useTheme, type Feedback, type StudioSettings } from "./prefs";
 import { forgetPlace, ModeSwitch, rememberPlace } from "./mode-switch";
@@ -40,6 +41,28 @@ interface StudioContext {
   takePendingPrompt: () => string | null;
   /** Open a new chat with `text` in the box (not sent). */
   startChatWith: (text: string) => void;
+  /** Add commands to the palette while the page is open; returns a function that removes them. */
+  addCommands: (key: string, commands: Command[]) => () => void;
+  openPalette: () => void;
+  openShortcuts: () => void;
+}
+
+/** Where typed text goes on this page (the chat's or Code's message box), if anywhere. */
+const COMPOSER = "#studio-input, textarea[data-composer]";
+function focusComposer(): boolean {
+  const el = document.querySelector<HTMLTextAreaElement>(COMPOSER);
+  if (!el || el.disabled) return false;
+  el.focus();
+  el.setSelectionRange(el.value.length, el.value.length);
+  return true;
+}
+
+const noSubscribe = () => () => {};
+
+/** A page's own palette commands, while it's open (e.g. the chat's "Copy the last reply"). */
+export function usePageCommands(key: string, commands: Command[]) {
+  const { addCommands } = useStudio();
+  useEffect(() => addCommands(key, commands), [addCommands, key, commands]);
 }
 
 const Ctx = createContext<StudioContext | null>(null);
@@ -117,6 +140,23 @@ export function StudioFrame({ children }: { children: ReactNode }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [promptsOpen, setPromptsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const mac = useSyncExternalStore(
+    noSubscribe,
+    () => isMacPlatform(navigator.platform),
+    () => false,
+  );
+  const [pageCommands, setPageCommands] = useState<Record<string, Command[]>>({});
+  const addCommands = useCallback((key: string, commands: Command[]) => {
+    setPageCommands((m) => ({ ...m, [key]: commands }));
+    return () =>
+      setPageCommands((m) => {
+        if (m[key] !== commands) return m;
+        const next = { ...m };
+        delete next[key];
+        return next;
+      });
+  }, []);
   const [toDelete, setToDelete] = useState<ConvSummary | null>(null);
   const [toMove, setToMove] = useState<ConvSummary | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
@@ -163,28 +203,40 @@ export function StudioFrame({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Global shortcuts
+  const toggleSidebar = useCallback(() => {
+    if (window.matchMedia("(min-width: 768px)").matches) setRailStored(collapsed ? "0" : "1");
+    else setMobileOpen((o) => !o);
+  }, [collapsed, setRailStored]);
+
+  // Global shortcuts (see lib/shortcuts): single keys only when not typing, and never while another dialog is open.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
-      const k = e.key.toLowerCase();
-      const desktop = window.matchMedia("(min-width: 768px)").matches;
-      if (k === "k" && !e.shiftKey) {
+      if (e.defaultPrevented || e.isComposing) return;
+      const id = shortcutFor(e, mac, isTypingTarget(document.activeElement));
+      if (!id) return;
+      const dialogOpen = !!document.querySelector('[role="dialog"][aria-modal="true"]');
+      if (id === "palette") {
         e.preventDefault();
+        setShortcutsOpen(false);
         setPaletteOpen((o) => !o);
-      } else if (k === "o" && e.shiftKey) {
+      } else if (dialogOpen) {
+        return;
+      } else if (id === "new-chat") {
         e.preventDefault();
         newChat();
-      } else if (k === "b" && !e.shiftKey) {
+      } else if (id === "sidebar") {
         e.preventDefault();
-        if (desktop) setRailStored(collapsed ? "0" : "1");
-        else setMobileOpen((o) => !o);
+        toggleSidebar();
+      } else if (id === "focus-composer") {
+        if (focusComposer()) e.preventDefault();
+      } else if (id === "shortcuts") {
+        e.preventDefault();
+        setShortcutsOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [collapsed, newChat, setRailStored]);
+  }, [mac, newChat, toggleSidebar]);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)");
@@ -222,6 +274,9 @@ export function StudioFrame({ children }: { children: ReactNode }) {
       pendingPrompt.current = text;
       router.push("/chat?new=1");
     },
+    addCommands,
+    openPalette: () => setPaletteOpen(true),
+    openShortcuts: () => setShortcutsOpen(true),
   };
 
   return (
@@ -245,7 +300,19 @@ export function StudioFrame({ children }: { children: ReactNode }) {
             <ModeSwitch className="ml-1" />
           </div>
           <div ref={setCenter} className="flex min-w-0 max-w-[50%] shrink items-center justify-center gap-2" />
-          <div ref={setRight} className="flex flex-1 basis-0 items-center justify-end gap-0.5" />
+          <div className="flex flex-1 basis-0 items-center justify-end gap-0.5">
+            <div ref={setRight} className="flex items-center justify-end gap-0.5" />
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              aria-label="Search and commands"
+              aria-keyshortcuts={mac ? "Meta+K" : "Control+K"}
+              title={`Search and commands (${shortcutKeys(shortcut("palette"), mac).join(mac ? "" : "+")})`}
+              className={cn(iconButtonClass(), "order-first")}
+            >
+              <Search />
+            </button>
+          </div>
         </header>
 
         <div className="relative flex min-h-0 flex-1">
@@ -385,10 +452,20 @@ export function StudioFrame({ children }: { children: ReactNode }) {
           conversations={conversations}
           isAdmin={Boolean(user?.isAdmin)}
           signedIn={Boolean(user)}
-          onNewChat={newChat}
-          onOpenSettings={() => setSettingsOpen(true)}
-          onOpenPrompts={() => setPromptsOpen(true)}
+          mac={mac}
+          pageCommands={Object.values(pageCommands).flat()}
+          actions={{
+            onNewChat: newChat,
+            onOpenSettings: () => setSettingsOpen(true),
+            onOpenPrompts: () => setPromptsOpen(true),
+            onOpenShortcuts: () => setShortcutsOpen(true),
+            onToggleSidebar: toggleSidebar,
+            onFocusComposer: paletteOpen && typeof document !== "undefined" && document.querySelector(COMPOSER) ? () => requestAnimationFrame(() => focusComposer()) : null,
+            onSearchChats: store.search ?? (async () => []),
+            setTheme: theme.setTheme,
+          }}
         />
+        <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} mac={mac} />
         {store.listArchived && (
           <ArchivedDialog
             open={archivedOpen}
@@ -438,7 +515,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
  * actions and the app's own). Rendered into the frame's top bar.
  */
 export function StudioHeader({ children, actions, menu, onNewChat }: { children?: ReactNode; actions?: ReactNode; menu?: ReactNode; onNewChat?: () => void }) {
-  const { slots, theme, openSettings, openPrompts } = useStudio();
+  const { slots, theme, openSettings, openPrompts, openShortcuts } = useStudio();
   return (
     <>
       {slots.center && createPortal(<div className="flex min-w-0 items-center gap-2 text-[14px]">{children}</div>, slots.center)}
@@ -462,6 +539,9 @@ export function StudioHeader({ children, actions, menu, onNewChat }: { children?
               </MenuItem>
               <MenuItem icon={<Settings2 />} onClick={openSettings}>
                 Settings
+              </MenuItem>
+              <MenuItem icon={<Keyboard />} onClick={openShortcuts} className="max-md:hidden">
+                Keyboard shortcuts
               </MenuItem>
             </Menu>
           </>,

@@ -1,8 +1,8 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import { Info } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BookmarkPlus, CircleCheck, Copy, FolderPlus, Info, MessageSquarePlus, ShieldCheck } from "lucide-react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { defaultModelId, useCatalog } from "@/components/common/model-picker";
 import { AUTO_MODEL_ID, isAutoId } from "@/lib/ai/platform";
@@ -12,7 +12,9 @@ import type { HomeAction } from "@/lib/home";
 import { PENDING_START_KEY, readPendingStart, starterModelId, starterTask, type StarterTask, type StarterTaskId } from "@/lib/starter";
 import type { ChatAttachment } from "./chat-client";
 import { Composer } from "./composer";
-import { StudioHeader, useStudio } from "./frame";
+import { StudioHeader, usePageCommands, useStudio } from "./frame";
+import type { Command } from "./command-menu";
+import { openInVerify } from "@/lib/verify/handoff";
 import { Home } from "./home";
 import type { ConvSummary } from "./history";
 import { ProjectChip } from "./project-chip";
@@ -101,6 +103,51 @@ export function Studio({ home = false }: { home?: boolean }) {
       focusInput();
     },
   });
+
+  // The palette's "This chat" commands act on the latest finished reply.
+  const lastIdx = chat.messages.findLastIndex((m) => m.role === "assistant" && m.status === "done" && !!m.content);
+  const lastReply = lastIdx >= 0 ? chat.messages[lastIdx]! : null;
+  const lastQuestion = lastIdx > 0 ? (chat.messages.slice(0, lastIdx).findLast((m) => m.role === "user")?.content ?? "") : "";
+  const act = useRef(replies.act);
+  useEffect(() => {
+    act.current = replies.act;
+  });
+  const { notify } = studio;
+  const signedIn = !!user;
+  const replyCommands = useMemo<Command[]>(() => {
+    if (!lastReply) return [];
+    const group = "This chat";
+    return [
+      {
+        id: "reply-copy",
+        group,
+        label: "Copy the last reply",
+        icon: <Copy />,
+        keywords: "clipboard answer response",
+        run: () => void navigator.clipboard.writeText(lastReply.content).then(() => notify("Copied")),
+      },
+      ...(signedIn
+        ? [
+            { id: "reply-note", group, label: "Save the last reply as a project note", icon: <FolderPlus />, keywords: "save answer response project", run: () => act.current("note", lastReply) },
+            { id: "reply-task", group, label: "Add the last reply as a task", icon: <CircleCheck />, keywords: "todo project mission", run: () => act.current("task", lastReply) },
+          ]
+        : []),
+      { id: "reply-prompt", group, label: "Save the last reply as a prompt", icon: <BookmarkPlus />, keywords: "reuse", run: () => act.current("prompt", lastReply) },
+      { id: "reply-followup", group, label: "Follow up on the last reply in a new chat", icon: <MessageSquarePlus />, keywords: "continue quote", run: () => act.current("followup", lastReply) },
+      {
+        id: "reply-verify",
+        group,
+        label: "Check the last reply’s claims",
+        icon: <ShieldCheck />,
+        keywords: "verify fact check evidence sources",
+        run: () => {
+          openInVerify(lastQuestion, lastReply.content);
+          router.push("/verify");
+        },
+      },
+    ];
+  }, [lastReply, lastQuestion, signedIn, notify, router]);
+  usePageCommands("chat-replies", replyCommands);
 
   // The starter: which task is chosen, and setting the box up for it.
   const [starterId, setStarterId] = useState<StarterTaskId | null>(null);

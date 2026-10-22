@@ -92,6 +92,7 @@ export function PromptBar({
           </label>
           <textarea
             id={id}
+            data-composer
             ref={box}
             value={value}
             onChange={(e) => onChange(e.target.value)}
