@@ -67,7 +67,7 @@ export const OUTCOMES: Outcome[] = [
     eyebrow: "Ongoing work",
     title: "Keep ongoing work together in projects",
     text: "Turn a goal into milestones and tasks, keep a project's chats and notes in one place, and give it instructions its chats follow. You choose what a project shares with its chats; nothing crosses over to other projects.",
-    points: ["Plans you edit before anything is saved", "Turn a reply into a note, task or milestone", "Pick up where you left off from Home"],
+    points: ["Plans you edit before anything is saved", "Turn a reply into a note, task or milestone", "Pick up where you left off from your chat history"],
     image: demo("plan").image,
     caption: demo("plan").caption,
     links: [{ href: "/features/mission-control", label: "Mission Control" }],
