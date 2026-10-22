@@ -12,6 +12,9 @@ import { cn } from "@/lib/utils";
 import { api, CodeApiError, post, putBuildRequest, type Allowance } from "./api";
 import { useAttachments } from "./attachments";
 import { PromptBar } from "./prompt-bar";
+import { useCodeModel } from "./use-code-model";
+import { useCatalog } from "@/components/common/model-picker";
+import { ModelSelector } from "@/components/studio/model-selector";
 import { Greeting } from "@/components/studio/greeting";
 
 /**
@@ -100,6 +103,8 @@ export function CodeProjectsView() {
   const [repo, setRepo] = useState("");
   const newRef = useRef<HTMLElement>(null);
   const [site, setSite] = useState("");
+  const catalog = useCatalog();
+  const [modelId, setModelId] = useCodeModel(catalog);
   const [siteTarget, setSiteTarget] = useState<string>("new");
   const siteBox = useRef<HTMLTextAreaElement>(null);
   const [showAll, setShowAll] = useState(false);
@@ -155,7 +160,7 @@ export function CodeProjectsView() {
       let pid = siteTarget;
       if (pid === "new") pid = created.current ??= (await post<{ project: ProjectSummary }>("/api/code/projects", { name: siteName(text), template: "website" })).project.id;
       const ids = await attachments.uploadTo(pid);
-      putBuildRequest(pid, text, ids);
+      putBuildRequest(pid, text, ids, modelId);
       router.push(`/code/${pid}?build=1`);
     } catch (e) {
       setError(e instanceof CodeApiError ? e : new CodeApiError((e as Error).message, 0, null, null));
@@ -316,7 +321,7 @@ export function CodeProjectsView() {
                       value={siteTarget}
                       onChange={(e) => setSiteTarget(e.target.value)}
                       title="Where the agent works: a new website project, or one of yours. It writes the files, runs the site on the project's private computer (this uses workspace minutes), checks it in a real browser and fixes what it finds. Every change can be undone."
-                      className="h-8 max-w-[230px] truncate rounded-full bg-transparent px-2 text-[12.5px] text-s-ink-2 hover:bg-s-hover hover:text-s-ink"
+                      className="h-8 min-w-0 max-w-[230px] truncate rounded-full bg-transparent px-2 text-[12.5px] text-s-ink-2 hover:bg-s-hover hover:text-s-ink"
                     >
                       <option value="new">New website project</option>
                       {(data?.projects ?? []).map((p) => (
@@ -329,7 +334,7 @@ export function CodeProjectsView() {
                 }
                 footerRight={
                   <>
-                    {siteTarget === "new" && full && <span className="text-s-danger">Project limit reached</span>}
+                    {siteTarget === "new" && full && <span className="text-[12.5px] text-s-danger">Project limit reached</span>}
                     <Menu
                       label="Ideas"
                       align="end"
@@ -352,6 +357,7 @@ export function CodeProjectsView() {
                         </MenuItem>
                       ))}
                     </Menu>
+                    <ModelSelector models={catalog?.models ?? null} value={modelId} onChange={setModelId} auto={catalog?.auto ?? null} className="min-w-0 !shrink" />
                   </>
                 }
               />

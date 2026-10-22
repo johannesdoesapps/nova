@@ -498,3 +498,38 @@ export async function removeFavorite(db: ServerSupabase, userId: string, modelId
   const { error } = await db.from("favorite_models").delete().eq("user_id", userId).eq("model_id", modelId);
   if (error) fail(error, "Favorite");
 }
+
+// ─── chat share links ────────────────────────────────────────────────────────
+export interface ChatShare {
+  token: string | null;
+  sharedAt: string | null;
+}
+
+export async function getChatShare(db: ServerSupabase, userId: string, id: string): Promise<ChatShare> {
+  const { data, error } = await db.from("conversations").select("share_token,shared_until").eq("id", id).eq("user_id", userId).maybeSingle();
+  if (error) fail(error, "Conversation");
+  if (!data) throw new ApiError("not_found", "Conversation not found.");
+  return { token: data.share_token, sharedAt: data.shared_until };
+}
+
+/** Turn the link on, or move it to include everything up to now. Keeps an existing token so links already sent keep working. */
+export async function shareChat(db: ServerSupabase, userId: string, id: string, newToken: string): Promise<ChatShare> {
+  const current = await getChatShare(db, userId, id);
+  const { data, error } = await db
+    .from("conversations")
+    .update({ share_token: current.token ?? newToken, shared_until: new Date().toISOString() })
+    .eq("id", id)
+    .eq("user_id", userId)
+    .select("share_token,shared_until")
+    .maybeSingle();
+  if (error) fail(error, "Conversation");
+  if (!data) throw new ApiError("not_found", "Conversation not found.");
+  return { token: data.share_token, sharedAt: data.shared_until };
+}
+
+/** Turn the link off. The old link stops working for good; sharing again makes a new one. */
+export async function unshareChat(db: ServerSupabase, userId: string, id: string): Promise<void> {
+  const { data, error } = await db.from("conversations").update({ share_token: null, shared_until: null }).eq("id", id).eq("user_id", userId).select("id").maybeSingle();
+  if (error) fail(error, "Conversation");
+  if (!data) throw new ApiError("not_found", "Conversation not found.");
+}

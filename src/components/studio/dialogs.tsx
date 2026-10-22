@@ -941,3 +941,131 @@ export function ShortcutsDialog({ open, onClose, mac }: { open: boolean; onClose
     </Dialog>
   );
 }
+
+/* Share a chat ----------------------------------------------------------- */
+
+type ShareState = { token: string | null; sharedAt: string | null };
+
+/**
+ * Turn a read-only link to a chat on or off. The link shows the chat as it is
+ * when shared; new messages stay private until the link is updated.
+ */
+export function ShareChatDialog({ conv, onClose }: { conv: ConvSummary | null; onClose: () => void }) {
+  return (
+    <Dialog
+      open={!!conv}
+      onClose={onClose}
+      title="Share chat"
+      description="Anyone with the link can read this chat. They can't see your name, your other chats or your projects, and they can't reply."
+      width={480}
+    >
+      {conv && <ShareBody key={conv.id} conv={conv} />}
+    </Dialog>
+  );
+}
+
+function ShareBody({ conv }: { conv: ConvSummary }) {
+  const [state, setState] = useState<ShareState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const base = `/api/conversations/${conv.id}/share`;
+
+  useEffect(() => {
+    let alive = true;
+    jsonFetch<ShareState>(base)
+      .then((s) => alive && setState(s))
+      .catch((e: Error) => alive && setError(e.message));
+    return () => {
+      alive = false;
+    };
+  }, [base]);
+
+  const url = state?.token ? `${window.location.origin}/share/chat/${state.token}` : null;
+  const act = async (method: "POST" | "DELETE") => {
+    setBusy(true);
+    setError(null);
+    try {
+      if (method === "POST") setState(await jsonFetch<ShareState>(base, { method }));
+      else {
+        await jsonFetch(base, { method });
+        setState({ token: null, sharedAt: null });
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const copy = async () => {
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setError("Couldn't copy. Select the link and copy it yourself.");
+    }
+  };
+
+  if (!state)
+    return error ? (
+      <p role="alert" className="text-[13px] text-s-danger">
+        {error}
+      </p>
+    ) : (
+      <div className="s-skeleton h-10 w-full" aria-label="Loading" />
+    );
+
+  return (
+    <div className="space-y-4">
+      {url ? (
+        <>
+          <div className="flex items-center gap-2">
+            <label htmlFor="share-url" className="sr-only">
+              Link to this chat
+            </label>
+            <input
+              id="share-url"
+              readOnly
+              value={url}
+              onFocus={(e) => e.target.select()}
+              className="h-10 min-w-0 flex-1 rounded-xl border border-s-line-strong bg-s-glass px-3 text-[13px] text-s-ink outline-none"
+            />
+            <button type="button" className={btnPrimary} onClick={() => void copy()}>
+              {copied ? <Check /> : <Copy />} {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <p className="text-[13px] leading-relaxed text-s-ink-2">
+            The link shows this chat up to {state.sharedAt ? new Date(state.sharedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "now"}. Messages you send later stay private
+            until you update the link.
+          </p>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" className={cn(btnQuiet, "text-s-danger")} disabled={busy} onClick={() => void act("DELETE")}>
+              Stop sharing
+            </button>
+            <button type="button" className={btnQuiet} disabled={busy} onClick={() => void act("POST")}>
+              Update link
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="text-[13px] leading-relaxed text-s-ink-2">
+            This chat is not shared yet. The link will show the chat as it is now. You can stop sharing at any time, and the link then stops working.
+          </p>
+          <div className="flex justify-end">
+            <button type="button" className={btnPrimary} disabled={busy} onClick={() => void act("POST")}>
+              {busy ? "Creating…" : "Create link"}
+            </button>
+          </div>
+        </>
+      )}
+      {error && (
+        <p role="alert" className="text-[13px] text-s-danger">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}

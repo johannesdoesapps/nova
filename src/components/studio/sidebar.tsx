@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import { Archive, Bookmark, ChevronDown, Code2, CreditCard, Download, Ellipsis, FolderInput, Gauge, LayoutGrid, FolderPlus, LogIn, LogOut, Monitor, Moon, Pencil, Pin, PinOff, Search, Settings2, SquarePen, Sun, Trash2, X } from "lucide-react";
+import { Archive, Bookmark, Link2, ChevronDown, Code2, CreditCard, Download, Ellipsis, FolderInput, Gauge, LayoutGrid, FolderPlus, LogIn, LogOut, Monitor, Moon, Pencil, Pin, PinOff, Search, Settings2, SquarePen, Sun, Trash2, X } from "lucide-react";
 import type { AppUser } from "@/components/layout/app-context";
 import { cn } from "@/lib/utils";
 import { groupByDate, type ConvSummary } from "./history";
@@ -35,6 +35,8 @@ export interface SidebarProps {
   onMove?: (c: ConvSummary) => void;
   /** Save the chat as a Markdown file. */
   onDownload?: (c: ConvSummary) => void;
+  /** Signed-in chats only: a read-only link. */
+  onShare?: (c: ConvSummary) => void;
   onOpenPrompts: () => void;
   onOpenSettings: () => void;
   user: AppUser | null;
@@ -320,6 +322,7 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
                       onPin={p.onPin}
                       onMove={p.onMove}
                       onDownload={p.onDownload}
+                      onShare={p.onShare}
                       showSnippet={!!query.trim()}
                     />
                   ))}
@@ -473,6 +476,7 @@ function HistoryItem({
   onPin,
   onMove,
   onDownload,
+  onShare,
   showSnippet,
 }: {
   conv: ConvSummary;
@@ -484,6 +488,7 @@ function HistoryItem({
   onPin?: (c: ConvSummary) => void;
   onMove?: (c: ConvSummary) => void;
   onDownload?: (c: ConvSummary) => void;
+  onShare?: (c: ConvSummary) => void;
   showSnippet?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
@@ -575,6 +580,11 @@ function HistoryItem({
           {onMove && (
             <MenuItem icon={<FolderInput />} onClick={() => onMove(conv)}>
               {conv.project_id ? "Change project…" : "Move to project…"}
+            </MenuItem>
+          )}
+          {onShare && (
+            <MenuItem icon={<Link2 />} onClick={() => onShare(conv)}>
+              Share…
             </MenuItem>
           )}
           {onDownload && (

@@ -12,11 +12,36 @@ export interface ModelCatalog {
 
 const EMPTY_CATALOG: ModelCatalog = { models: [], auto: { enabled: false, reason: "Models could not be loaded." } };
 let cache: Promise<ModelCatalog> | null = null;
+// The last list this tab loaded, so pages opened later show it at once.
+let latest: ModelCatalog | null = null;
+// The last good list is kept in this browser too, so the model picker has a name to show on the
+// first paint of the next visit; the fresh list from the server replaces it a moment later.
+const STORED_KEY = "orbis:catalog:v1";
+
+function readStored(): ModelCatalog | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(STORED_KEY) ?? "null") as Partial<ModelCatalog> | null;
+    return v && Array.isArray(v.models) && v.models.length && v.auto ? { models: v.models, auto: v.auto } : null;
+  } catch {
+    return null;
+  }
+}
 
 export function fetchCatalog(): Promise<ModelCatalog> {
   cache ??= fetch("/api/models")
     .then((r) => (r.ok ? r.json() : EMPTY_CATALOG))
-    .then((j: Partial<ModelCatalog>) => ({ models: j.models ?? [], auto: j.auto ?? EMPTY_CATALOG.auto }))
+    .then((j: Partial<ModelCatalog>) => {
+      const c = { models: j.models ?? [], auto: j.auto ?? EMPTY_CATALOG.auto };
+      if (c.models.length) {
+        latest = c;
+        try {
+          localStorage.setItem(STORED_KEY, JSON.stringify(c));
+        } catch {
+          /* storage full or blocked: only the first paint is slower */
+        }
+      }
+      return c;
+    })
     .catch(() => {
       cache = null;
       return EMPTY_CATALOG;
@@ -29,9 +54,11 @@ export function fetchModels(): Promise<ModelWithStatus[]> {
 }
 
 export function useCatalog(): ModelCatalog | null {
-  const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
+  const [catalog, setCatalog] = useState<ModelCatalog | null>(latest);
   useEffect(() => {
     let alive = true;
+    // The stored list, if any, until the fresh one arrives (read after mount: the server has no storage).
+    if (!latest) void Promise.resolve().then(() => alive && setCatalog((c) => c ?? readStored()));
     void fetchCatalog().then((c) => alive && setCatalog(c));
     return () => {
       alive = false;

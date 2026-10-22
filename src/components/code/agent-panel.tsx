@@ -40,6 +40,7 @@ import { formatBytes, type AttachmentMeta } from "@/lib/code/attachments";
 import { cn } from "@/lib/utils";
 import { useAttachments } from "./attachments";
 import { PromptBar } from "./prompt-bar";
+import { useCodeModel } from "./use-code-model";
 import { api, CodeApiError, post } from "./api";
 import { FileDiff } from "./diff-view";
 import { InfinityMark } from "@/components/brand/infinity";
@@ -276,6 +277,8 @@ export interface AgentPanelProps {
   autoStart?: string;
   /** Attachments already uploaded for `autoStart`. */
   autoAttachments?: string[];
+  /** The model picked on the start screen for `autoStart`. */
+  autoModel?: string;
   /** Start the project's computer without asking when the run needs it (the user asked for a build). */
   autoComputer?: boolean;
 }
@@ -297,6 +300,7 @@ export function AgentPanel({
   onOpenPreview,
   autoStart,
   autoAttachments,
+  autoModel,
   autoComputer,
 }: AgentPanelProps) {
   const animated = useAnimatedLogo();
@@ -316,7 +320,7 @@ export function AgentPanel({
   const savedMode = useSyncExternalStore(noSubscribe, readMode, () => "plan" as ModeId);
   const [chosenMode, setModeState] = useState<ModeId | null>(null);
   const mode = chosenMode ?? savedMode;
-  const [modelId, setModelId] = useState("auto:coding");
+  const [modelId, setModelId] = useCodeModel(catalog);
   const box = useRef<HTMLTextAreaElement>(null);
   /** A message typed while the agent works, sent when it finishes (and the run it was typed for). */
   const [queued, setQueued] = useState<string | null>(null);
@@ -493,7 +497,7 @@ export function AgentPanel({
   useEffect(() => {
     if (!loaded || run || !autoStart || autoStarted.current) return;
     autoStarted.current = true;
-    void start(autoStart, "auto", "auto:coding", autoAttachments ?? []);
+    void start(autoStart, "auto", autoModel ?? "auto:coding", autoAttachments ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once when the panel is ready
   }, [loaded, run, autoStart]);
 
@@ -770,7 +774,7 @@ export function AgentPanel({
                 {!inProgress && <IdeasMenu web={web} disabled={starting || !loaded} onPick={(e) => (e.start ? void send(e.task, e.mode ?? mode) : fill(e.task))} />}
               </>
             }
-            footerRight={<ModelSelector models={catalog?.models ?? null} value={modelId} onChange={setModelId} auto={catalog?.auto ?? null} className="h-8 px-2 text-[12.5px]" />}
+            footerRight={<ModelSelector models={catalog?.models ?? null} value={modelId} onChange={setModelId} auto={catalog?.auto ?? null} className="min-w-0 !shrink" />}
           />
           {!inProgress && <StepEstimate models={catalog?.models ?? null} modelId={modelId} readOnly={mode === "read"} />}
         </div>

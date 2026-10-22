@@ -1003,6 +1003,7 @@ export function CodeWorkspace({ id }: { id: string }) {
       }}
       autoStart={buildRequest?.request}
       autoAttachments={buildRequest?.attachments}
+      autoModel={buildRequest?.modelId}
       autoComputer={!!buildRequest}
     />
   );

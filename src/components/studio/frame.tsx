@@ -9,7 +9,7 @@ import { useLocalStorage } from "@/hooks/use-local-storage";
 import { cn } from "@/lib/utils";
 import { CommandPalette, type Command } from "./command-palette";
 import { isMacPlatform, isTypingTarget, shortcut, shortcutFor, shortcutKeys } from "@/lib/shortcuts";
-import { ArchivedDialog, DeleteDialog, MoveChatDialog, PromptsDialog, SettingsDialog, ShortcutsDialog } from "./dialogs";
+import { ArchivedDialog, DeleteDialog, MoveChatDialog, PromptsDialog, SettingsDialog, ShareChatDialog, ShortcutsDialog } from "./dialogs";
 import { downloadConversation, localHistory, serverHistory, type ConvSummary, type HistoryStore } from "./history";
 import { useFeedback, useSavedPrompts, useSettings, useTheme, type Feedback, type StudioSettings } from "./prefs";
 import { forgetPlace, ModeSwitch, rememberPlace } from "./mode-switch";
@@ -161,6 +161,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
   }, []);
   const [toDelete, setToDelete] = useState<ConvSummary | null>(null);
   const [toMove, setToMove] = useState<ConvSummary | null>(null);
+  const [toShare, setToShare] = useState<ConvSummary | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [toast, setToast] = useState<{ text: string; key: number } | null>(null);
   const notify = useCallback((text: string) => setToast({ text, key: Date.now() }), []);
@@ -371,6 +372,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
               : undefined
           }
           onMove={store.move ? (c) => setToMove(c) : undefined}
+          onShare={store.kind === "server" ? (c) => setToShare(c) : undefined}
           onDownload={async (c) => {
             try {
               await downloadConversation(store, c);
@@ -495,6 +497,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
             }}
           />
         )}
+        <ShareChatDialog conv={toShare} onClose={() => setToShare(null)} />
         <DeleteDialog
           conv={toDelete}
           onClose={() => setToDelete(null)}

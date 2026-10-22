@@ -98,12 +98,14 @@ const BUILD_KEY = (projectId: string) => `orbis.code.build.${projectId}`;
 export interface BuildRequest {
   request: string;
   attachments: string[];
+  /** The model picked on the start screen ("auto:coding" when none was picked). */
+  modelId?: string;
 }
 
 /** Hand a "Build website" request from the start screen to the project's page (kept out of the URL: it can be long). */
-export function putBuildRequest(projectId: string, request: string, attachments: string[] = []): void {
+export function putBuildRequest(projectId: string, request: string, attachments: string[] = [], modelId?: string): void {
   try {
-    sessionStorage.setItem(BUILD_KEY(projectId), JSON.stringify({ request, attachments } satisfies BuildRequest));
+    sessionStorage.setItem(BUILD_KEY(projectId), JSON.stringify({ request, attachments, modelId } satisfies BuildRequest));
   } catch {
     /* the page then shows the box with nothing filled in */
   }
@@ -118,7 +120,9 @@ export function takeBuildRequest(projectId: string): BuildRequest | undefined {
     const parsed = JSON.parse(v) as Partial<BuildRequest>;
     const request = typeof parsed.request === "string" ? parsed.request.trim() : "";
     const attachments = Array.isArray(parsed.attachments) ? parsed.attachments.filter((a): a is string => typeof a === "string").slice(0, 20) : [];
-    return request ? { request, attachments } : undefined;
+    // The server checks the model again; this only keeps out anything that isn't a model id.
+    const modelId = typeof parsed.modelId === "string" && /^[\w.:/-]{1,120}$/.test(parsed.modelId) ? parsed.modelId : undefined;
+    return request ? { request, attachments, ...(modelId && { modelId }) } : undefined;
   } catch {
     return undefined;
   }
