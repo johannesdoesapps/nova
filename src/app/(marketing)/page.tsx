@@ -1,39 +1,35 @@
-import { getImageProps } from "next/image";
+import Image, { getImageProps } from "next/image";
 import Link from "next/link";
-import { ArrowRight, Check, ServerCog, ShieldCheck, Undo2 } from "lucide-react";
-import { CtaBand, PrimaryCta, SecondaryCta, SectionHeading, StatusBadge } from "@/components/marketing/parts";
-import { ProductTour } from "@/components/marketing/product-tour";
+import { ArrowRight, Check, CircleCheck, Terminal, FilePen, Search, ListChecks, ClipboardCheck } from "lucide-react";
+import { CtaBand, PrimaryCta, SecondaryCta, SectionHeading } from "@/components/marketing/parts";
+import { RoutingDemo } from "@/components/marketing/routing-demo";
 import { DEMOS, HERO_SHOT } from "@/content/demos";
-import { FAQ, PILLARS, PRICING, featuresIn } from "@/content/site";
+import { OUTCOMES, PLAN_LIMITS, TRUST_POINTS, UNIT_EXAMPLES } from "@/content/landing";
+import { FAQ } from "@/content/site";
+import { billingConfigured } from "@/lib/billing/stripe";
 import { jsonLd, pageMetadata, siteUrl } from "@/lib/seo";
 
+// Regenerated hourly, so the pricing note follows whether payments are switched on.
+export const revalidate = 3600;
+
 export const metadata = pageMetadata({
-  title: "Orbis — an AI coding agent that checks its own work",
+  title: "Orbis — the right AI for each task, with work you can check",
   description:
-    "Describe a website or a fix. Orbis's coding agent builds it on a private computer, runs the tests, checks websites in a real browser and shows you every change. Claude and GPT chat included. Free to start.",
+    "Orbis picks the right Claude or GPT model for each request, lets you compare answers when it matters, and runs agents that build, test and plan — showing which model answered and every change. Free to start.",
   path: "/",
   absoluteTitle: true,
 });
 
-const PROOF = ["No credit card to start", "Websites checked in a real browser", "Every change reviewable and undoable"];
+const PROOF = ["No credit card to start", "Every reply names its model", "Every agent change reviewable and undoable"];
 
-const TRUST = [
-  {
-    icon: ShieldCheck,
-    title: "It asks before it acts",
-    text: "The coding agent runs tests, builds and its preview on its own but asks before other commands, and never deploys or pushes. Changes to connected apps always wait for your confirmation.",
-  },
-  {
-    icon: Undo2,
-    title: "Every change can be undone",
-    text: "Each session lists the files it changed as diffs. Revert a whole session or a single file from the Changes panel.",
-  },
-  {
-    icon: ServerCog,
-    title: "Code runs in isolation",
-    text: "Commands and previews run on a short-lived computer for your project, with internet limited to package registries and none of Orbis's keys inside.",
-  },
+const STEPS = [
+  { icon: FilePen, title: "Enter a task", text: "Ask a question, paste a document or code, or pick a ready-made template." },
+  { icon: Search, title: "Orbis picks a model or workflow", text: "Auto sends everyday requests to a fast, low-cost model and harder ones to a stronger model, within your plan. The reply says which and why." },
+  { icon: ListChecks, title: "Compare or review when it matters", text: "Ask several models in Council or Arena, or check an answer's claims against sources in Verify." },
+  { icon: ClipboardCheck, title: "Get a result you can use", text: "Copy it, save it to a project, turn it into a task, or download it. The coding agent finishes with a report of what it built and what it checked." },
 ];
+
+const STEP_ICON = { inspect: Search, plan: ListChecks, approval: CircleCheck, command: Terminal, edit: FilePen, summary: ClipboardCheck } as const;
 
 export default function HomePage() {
   const url = siteUrl();
@@ -53,27 +49,32 @@ export default function HomePage() {
     },
   ];
 
+  const onSale = billingConfigured();
+  const codeSteps = DEMOS.find((d) => d.id === "code")?.steps ?? [];
+
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(structured) }} />
 
       {/* Hero */}
-      <section aria-labelledby="hero-title" className="mx-auto max-w-6xl px-5 pt-14 pb-12 sm:px-8 sm:pt-20">
+      <section aria-labelledby="hero-title" className="mx-auto max-w-6xl px-5 pt-12 pb-12 sm:px-8 sm:pt-20">
         <div className="mx-auto max-w-3xl text-center">
           <p className="mk-rise inline-flex items-center gap-2 rounded-full border border-border bg-panel-2 px-3 py-1 text-xs text-muted">
             <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
-            AI coding agent and workspace · Free to start
+            AI workspace with Claude and GPT · Free to start
           </p>
-          <h1 id="hero-title" className="text-balance mk-rise mt-6 font-serif text-[42px] leading-[1.02] tracking-[-0.015em] text-fg sm:text-[66px]">
-            One workspace. Leading models. Agents that do the work.
+          <h1 id="hero-title" className="text-balance mk-rise mt-6 font-serif text-[40px] leading-[1.04] tracking-[-0.015em] text-fg sm:text-[64px]">
+            The right AI for each task, with work you can check.
           </h1>
           <p className="mk-rise mx-auto mt-6 max-w-2xl text-[17px] leading-relaxed text-muted sm:text-[19px]">
-            The coding agent writes the code on a private computer, runs the tests, opens websites in a real browser at desktop and phone sizes, and shows you exactly what changed — and what it
-            couldn&apos;t verify. Claude and GPT models for everything else, in the same workspace.
+            Orbis picks a suitable model for every request, lets you compare answers when it matters, and runs agents that build, test and plan — telling you which model answered, what changed
+            and what it couldn&apos;t verify.
           </p>
-          <div className="mk-rise mt-9 flex flex-wrap items-center justify-center gap-3">
-            <PrimaryCta />
-            <SecondaryCta href="#see-it-work">Explore Orbis</SecondaryCta>
+          <div className="mk-rise mt-9 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
+            <PrimaryCta where="hero" className="justify-center" />
+            <SecondaryCta href="#how-it-works" className="justify-center">
+              See how it works
+            </SecondaryCta>
           </div>
           <ul className="mk-rise mt-7 flex flex-wrap justify-center gap-x-6 gap-y-2 text-[13.5px] text-muted" aria-label="At a glance">
             {PROOF.map((p) => (
@@ -97,47 +98,144 @@ export default function HomePage() {
         </figure>
       </section>
 
-      {/* See it work */}
-      <section id="see-it-work" aria-labelledby="tour-title" className="mx-auto max-w-6xl scroll-mt-20 px-5 py-20 sm:px-8">
-        <SectionHeading
-          id="tour-title"
-          eyebrow="See it work"
-          title="Real runs, not mock-ups"
-          intro="Captured from Orbis itself. Pick a workflow to see what you'd do and what you'd get back."
-          center
-        />
-        <div className="mt-10">
-          <ProductTour demos={DEMOS} />
+      {/* How it works: the steps, and the routing step working for real */}
+      <section id="how-it-works" aria-labelledby="how-title" className="mx-auto max-w-6xl scroll-mt-20 px-5 py-20 sm:px-8">
+        <SectionHeading id="how-title" eyebrow="How it works" title="From a task to a result you can rely on" intro="Four steps, whatever the job. Try the second one below: it's Orbis's actual model routing, running in your browser." />
+        <div className="mt-12 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-12">
+          <ol className="space-y-6">
+            {STEPS.map((st, i) => (
+              <li key={st.title} className="flex gap-4">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border-strong bg-panel-2 text-[15px] font-medium text-fg" aria-hidden>
+                  {i + 1}
+                </span>
+                <div>
+                  <h3 className="flex items-center gap-2 text-[17px] font-medium text-fg">
+                    <st.icon className="h-4 w-4 text-accent-2" aria-hidden />
+                    <span>
+                      <span className="sr-only">Step {i + 1}: </span>
+                      {st.title}
+                    </span>
+                  </h3>
+                  <p className="mt-1 text-[15px] leading-relaxed text-muted">{st.text}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+          <RoutingDemo />
         </div>
       </section>
 
-      {/* Three pillars */}
-      <section aria-labelledby="pillars-title" className="mx-auto max-w-6xl px-5 py-20 sm:px-8">
-        <SectionHeading id="pillars-title" eyebrow="What you can do" title="Think, build and execute in one place" intro="Everything in Orbis serves one of three jobs. Each feature shows whether you can use it today." />
-        <div className="mt-12 grid gap-5 lg:grid-cols-3">
-          {PILLARS.map((p) => (
-            <article key={p.id} aria-labelledby={`pillar-${p.id}`} className="lux-card flex flex-col rounded-[22px] p-7">
-              <p className="text-xs font-medium tracking-[0.18em] text-accent-2 uppercase">{p.label}</p>
-              <h3 id={`pillar-${p.id}`} className="text-balance mt-3 font-serif text-[30px] leading-[1.08] text-fg">
-                {p.title}
-              </h3>
-              <p className="mt-3 text-[15px] leading-relaxed text-muted">{p.text}</p>
-              <ul className="mt-6 flex-1 space-y-2">
-                {featuresIn(p.id).map((f) => (
-                  <li key={f.slug}>
-                    <Link href={`/features/${f.slug}`} className="group flex items-center gap-3 rounded-xl border border-border bg-panel px-3.5 py-2.5 transition hover:border-border-strong hover:bg-panel-2">
-                      <span className="min-w-0 flex-1 text-[15px] text-fg">{f.name}</span>
-                      <StatusBadge status={f.status} />
-                      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted transition group-hover:translate-x-0.5 group-hover:text-fg" aria-hidden />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-              <Link href={p.href} className="mt-6 inline-flex items-center gap-1.5 text-sm text-fg underline-offset-4 hover:underline">
-                {p.cta} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+      {/* What you can do, by outcome */}
+      <section id="features" aria-labelledby="features-title" className="mx-auto max-w-6xl scroll-mt-20 px-5 py-20 sm:px-8">
+        <SectionHeading
+          id="features-title"
+          eyebrow="What you can do"
+          title="Built around getting things done"
+          intro={
+            <>
+              Screens below are captures of real runs on tryorbis.app.{" "}
+              <Link href="/features" className="text-fg underline underline-offset-4 hover:text-accent-2">
+                See every feature and its status
               </Link>
+              .
+            </>
+          }
+        />
+        <div className="mt-14 space-y-20">
+          {OUTCOMES.map((o, i) => (
+            <article key={o.id} aria-labelledby={`outcome-${o.id}`} className="grid grid-cols-1 items-center gap-8 lg:grid-cols-2 lg:gap-12">
+              <div className={i % 2 ? "lg:order-2" : undefined}>
+                <p className="text-xs font-medium tracking-[0.18em] text-accent-2 uppercase">{o.eyebrow}</p>
+                <h3 id={`outcome-${o.id}`} className="text-balance mt-3 font-serif text-[30px] leading-[1.1] text-fg sm:text-[34px]">
+                  {o.title}
+                </h3>
+                <p className="mt-4 text-[16px] leading-relaxed text-muted">{o.text}</p>
+                <ul className="mt-5 space-y-2 text-[15px] text-muted">
+                  {o.points.map((pt) => (
+                    <li key={pt} className="flex gap-2.5">
+                      <Check className="mt-1 h-4 w-4 shrink-0 text-success" aria-hidden />
+                      {pt}
+                    </li>
+                  ))}
+                </ul>
+                {o.id === "agents" && codeSteps.length > 0 && (
+                  <div className="mt-6 rounded-2xl border border-border bg-panel p-4">
+                    <p className="text-[12.5px] font-medium text-muted">From the activity log of the run pictured:</p>
+                    <ol className="mt-2 space-y-1.5 text-[14px] text-fg">
+                      {codeSteps.map((st) => {
+                        const Icon = STEP_ICON[st.kind];
+                        return (
+                          <li key={st.text} className="flex gap-2">
+                            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted" aria-hidden />
+                            <span>
+                              {st.text}
+                              {st.result === "pass" && <span className="ml-1.5 text-[12px] text-success">· passed</span>}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </div>
+                )}
+                <p className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+                  {o.links.map((l) => (
+                    <Link key={l.href} href={l.href} className="inline-flex items-center gap-1.5 text-fg underline-offset-4 hover:underline">
+                      {l.label} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                    </Link>
+                  ))}
+                </p>
+              </div>
+              {o.image && (
+                <figure className={i % 2 ? "lg:order-1" : undefined}>
+                  <div className="lux-card overflow-hidden rounded-[20px] p-1.5">
+                    <Image src={o.image.src} alt={o.image.alt} width={o.image.width} height={o.image.height} sizes="(min-width: 1024px) 560px, 100vw" className="h-auto w-full rounded-[14px]" />
+                  </div>
+                  {o.caption && <figcaption className="mt-2.5 text-xs text-muted">{o.caption}</figcaption>}
+                </figure>
+              )}
             </article>
           ))}
+
+          {/* Usage, in real figures */}
+          <article aria-labelledby="outcome-usage" className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-12">
+            <div>
+              <p className="text-xs font-medium tracking-[0.18em] text-accent-2 uppercase">Usage and privacy</p>
+              <h3 id="outcome-usage" className="text-balance mt-3 font-serif text-[30px] leading-[1.1] text-fg sm:text-[34px]">
+                Know what you&apos;re using and where your data goes
+              </h3>
+              <p className="mt-4 text-[16px] leading-relaxed text-muted">
+                Usage is counted in units: the model you use decides how many a message takes, and Orbis shows an estimate before anything bigger runs. The Usage page lists what&apos;s left,
+                when it resets and every request. Before you send, the message box shows which provider will receive your message.
+              </p>
+              <p className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+                <Link href="/pricing" className="inline-flex items-center gap-1.5 text-fg underline-offset-4 hover:underline">
+                  How usage is counted <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                </Link>
+                <Link href="/security" className="inline-flex items-center gap-1.5 text-fg underline-offset-4 hover:underline">
+                  Security &amp; data <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                </Link>
+              </p>
+            </div>
+            <div className="overflow-hidden rounded-2xl border border-border">
+              <table className="w-full text-left text-[14.5px]">
+                <caption className="border-b border-border bg-panel-2 px-4 py-2.5 text-left text-[13px] text-muted">What tasks use (from Orbis&apos;s current settings)</caption>
+                <thead className="sr-only">
+                  <tr>
+                    <th scope="col">Task</th>
+                    <th scope="col">Usage units</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {UNIT_EXAMPLES.map((u) => (
+                    <tr key={u.task} className="border-b border-border last:border-0">
+                      <td className="px-4 py-3 text-fg">{u.task}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right font-medium text-fg">{u.units}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
         </div>
       </section>
 
@@ -149,20 +247,26 @@ export default function HomePage() {
           title="Built so you can check its work"
           intro={
             <>
-              What Orbis stores, where your messages go and what agents may do — in plain language on{" "}
+              What Orbis stores, where your messages go and what agents may do, in plain language on{" "}
               <Link href="/security" className="text-fg underline underline-offset-4 hover:text-accent-2">
                 Security &amp; data
+              </Link>{" "}
+              and in the{" "}
+              <Link href="/privacy" className="text-fg underline underline-offset-4 hover:text-accent-2">
+                Privacy Policy
               </Link>
               .
             </>
           }
         />
-        <ul className="mt-12 grid gap-4 sm:grid-cols-3">
-          {TRUST.map((t) => (
+        <ul className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {TRUST_POINTS.map((t) => (
             <li key={t.title} className="rounded-2xl border border-border bg-panel p-6">
-              <t.icon className="h-5 w-5 text-accent-2" aria-hidden />
-              <h3 className="mt-4 font-medium text-fg">{t.title}</h3>
-              <p className="mt-1.5 text-[15px] leading-relaxed text-muted">{t.text}</p>
+              <h3 className="flex items-center gap-2 font-medium text-fg">
+                <CircleCheck className="h-4 w-4 shrink-0 text-accent-2" aria-hidden />
+                {t.title}
+              </h3>
+              <p className="mt-2 text-[15px] leading-relaxed text-muted">{t.text}</p>
             </li>
           ))}
         </ul>
@@ -174,40 +278,48 @@ export default function HomePage() {
           id="pricing-title"
           eyebrow="Pricing"
           title="Start free. Upgrade when you need more"
-          intro={`Every account starts on Free. Pro ($${PRICING.pro.price}/month) and Max ($${PRICING.max.price}/month) add usage and larger models. No plan is unlimited, and nothing is charged without you choosing a plan.`}
+          intro="Every account starts on Free, with no credit card. Paid plans add usage and larger models, billed monthly or yearly. No plan is unlimited."
         />
-        <div className="mt-12 grid gap-5 md:grid-cols-3">
-          {(["free", "pro", "max"] as const).map((id) => {
-            const p = PRICING[id];
-            return (
-              <div key={id} className={id === "pro" ? "rounded-[22px] border-2 border-accent bg-panel p-7" : "lux-card rounded-[22px] p-7"}>
-                <h3 className="text-xl font-medium text-fg">{p.name}</h3>
-                <p className="mt-3 font-serif text-[44px] leading-none text-fg">
-                  ${p.price}
-                  <span className="font-sans text-base text-muted">{p.price > 0 ? " / month" : " forever"}</span>
-                </p>
-                <ul className="mt-6 space-y-2.5 text-[15px] text-muted">
-                  {[`${p.window} usage units per 5-hour window`, `${p.weekly.toLocaleString("en-US")} units per week`, p.models, p.code].map((x) => (
-                    <li key={x} className="flex gap-2.5">
-                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
-                      {x}
-                    </li>
-                  ))}
-                </ul>
-                {id === "free" ? (
-                  <PrimaryCta className="mt-8 w-full justify-center" />
-                ) : (
-                  <Link href={`/pricing?plan=${id}`} className="mt-8 inline-flex items-center gap-1.5 text-sm text-fg underline-offset-4 hover:underline">
-                    Compare {p.name} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-                  </Link>
-                )}
-              </div>
-            );
-          })}
+        {!onSale && (
+          <p className="mt-6 rounded-2xl border border-border bg-panel-2 px-4 py-3 text-[14.5px] text-fg" role="note">
+            Paid plans aren&apos;t on sale yet while payments are being set up. Everything on Free works today.
+          </p>
+        )}
+        <div className="mt-8 grid gap-5 md:grid-cols-3">
+          {PLAN_LIMITS.map((p) => (
+            <div key={p.id} className={p.id === "pro" ? "rounded-[22px] border-2 border-accent bg-panel p-6 sm:p-7" : "lux-card rounded-[22px] p-6 sm:p-7"}>
+              <h3 className="text-xl font-medium text-fg">{p.name}</h3>
+              <p className="mt-3 font-serif text-[44px] leading-none text-fg">
+                ${p.price}
+                <span className="font-sans text-base text-muted">{p.price > 0 ? " / month" : " forever"}</span>
+              </p>
+              <p className="mt-2 min-h-[20px] text-[13.5px] text-muted">{p.price > 0 ? `or $${p.yearly.toLocaleString("en-US")} a year (save ${p.discount}%)` : "No credit card needed"}</p>
+              <ul className="mt-5 space-y-2.5 text-[15px] text-muted">
+                {p.lines.map((x) => (
+                  <li key={x} className="flex gap-2.5">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
+                    {x}
+                  </li>
+                ))}
+              </ul>
+              {p.id === "free" ? (
+                <PrimaryCta where="pricing" className="mt-8 w-full justify-center" />
+              ) : (
+                <Link href={`/pricing?plan=${p.id}`} className="mt-8 inline-flex items-center gap-1.5 text-sm text-fg underline-offset-4 hover:underline">
+                  Compare {p.name} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                </Link>
+              )}
+            </div>
+          ))}
         </div>
+        <ul className="mx-auto mt-8 max-w-3xl space-y-1.5 text-[14px] text-muted">
+          <li>Prices are in US dollars, plus tax where it applies. Yearly plans are paid up front.</li>
+          <li>Limits reset on their own: every 5 hours and over a rolling week. When you reach one, Orbis tells you which and when it resets.</li>
+          <li>Nothing is charged automatically and your plan never changes without you.</li>
+        </ul>
         <p className="mt-6 text-center text-sm text-muted">
           <Link href="/pricing" className="text-fg underline underline-offset-4 hover:text-accent-2">
-            See full pricing, a plan comparison and how usage is counted
+            Full pricing, a plan comparison and how usage is counted
           </Link>
         </p>
       </section>
@@ -217,10 +329,10 @@ export default function HomePage() {
         <SectionHeading id="faq-title" eyebrow="FAQ" title="Questions people ask" center />
         <div className="mt-10 divide-y divide-border rounded-2xl border border-border bg-panel">
           {FAQ.map((f) => (
-            <details key={f.q} className="group px-6 py-5 [&_summary::-webkit-details-marker]:hidden">
+            <details key={f.q} className="group px-5 py-5 sm:px-6 [&_summary::-webkit-details-marker]:hidden">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded text-[16px] font-medium text-fg">
                 {f.q}
-                <span className="text-xl leading-none text-faint transition group-open:rotate-45" aria-hidden>
+                <span className="text-xl leading-none text-faint transition group-open:rotate-45 motion-reduce:transition-none" aria-hidden>
                   +
                 </span>
               </summary>
@@ -230,7 +342,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <CtaBand title="Get your first result in a minute" text="Create a free account, ask a question or open Code, and see what Orbis does. No credit card needed." />
+      <CtaBand where="footer" title="Get your first result in a minute" text="Create a free account, ask a question or pick a template, and see what Orbis does. No credit card needed." />
     </>
   );
 }

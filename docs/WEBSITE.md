@@ -6,7 +6,7 @@ and is kept out of search results.
 
 | URL | What it is |
 |---|---|
-| `/` | Homepage: hero with a real capture of the coding agent, "See it work" (real captures of Chat, Code, Council and Mission Control), the Think / Build / Execute pillars with feature status, trust, pricing summary, FAQ |
+| `/` | Homepage: hero with a real capture of the coding agent; "How it works" (four steps, with a working routing demo that runs Orbis's real Auto rules in the browser against the live model list, no model called); outcome sections with real captures (models, compare, agents and templates, projects, usage and privacy with real unit figures); trust; pricing from the plan settings, with yearly prices and a "not on sale yet" note until payments are configured; FAQ. Words and figures are in `src/content/landing.ts`. Call-to-action clicks (`landing_cta`, by position) and demo use (`landing_demo_used`) are counted by Vercel Web Analytics |
 | `/features`, `/features/<slug>` | One page per capability: what it does, who it's for, how to use it, limits |
 | `/pricing` | Free, Pro and Max from the live plan settings; a comparison table, usage examples and what happens at a limit. Pro and Max show "Payments are being set up" until Stripe is configured |
 | `/docs`, `/docs/<slug>` | Practical guides, each linked to its feature page |

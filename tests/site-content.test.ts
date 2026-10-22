@@ -18,8 +18,18 @@ describe("site content", () => {
   it("has unique feature and guide pages that reference each other", () => {
     expect(new Set(FEATURES.map((f) => f.slug)).size).toBe(FEATURES.length);
     expect(new Set(GUIDES.map((g) => g.slug)).size).toBe(GUIDES.length);
-    for (const f of FEATURES) if (f.guide) expect(GUIDES.some((g) => g.slug === f.guide), f.slug).toBe(true);
-    for (const g of GUIDES) if (g.feature) expect(FEATURES.some((f) => f.slug === g.feature), g.slug).toBe(true);
+    for (const f of FEATURES)
+      if (f.guide)
+        expect(
+          GUIDES.some((g) => g.slug === f.guide),
+          f.slug,
+        ).toBe(true);
+    for (const g of GUIDES)
+      if (g.feature)
+        expect(
+          FEATURES.some((f) => f.slug === g.feature),
+          g.slug,
+        ).toBe(true);
   });
 
   it("puts every feature in one of the three pillars", () => {
@@ -85,5 +95,29 @@ describe("legal pages", () => {
     const { default: sitemap } = await import("@/app/sitemap");
     const urls = sitemap().map((e) => new URL(e.url).pathname);
     expect(urls).toEqual(expect.arrayContaining(["/privacy", "/terms"]));
+  });
+});
+
+describe("homepage content", () => {
+  it("links outcomes to real pages and real screenshots", async () => {
+    const { OUTCOMES } = await import("@/content/landing");
+    const appRoutes = new Set(["/templates", "/verify", "/arena"]);
+    for (const o of OUTCOMES) {
+      for (const l of o.links) expect(pages.has(l.href) || appRoutes.has(l.href), l.href).toBe(true);
+      if (o.image) expect(existsSync(join(PUBLIC, o.image.src)), o.image.src).toBe(true);
+    }
+    expect(OUTCOMES.map((o) => o.id)).toEqual(["models", "compare", "agents", "projects"]);
+  });
+
+  it("takes plan figures and unit examples from the enforced settings", async () => {
+    const { PLAN_LIMITS, UNIT_EXAMPLES } = await import("@/content/landing");
+    const { DEFAULT_BILLING, chargeUsd } = await import("@/lib/plans");
+    for (const p of PLAN_LIMITS) {
+      expect(p.price).toBe(PLANS[p.id].priceUsd);
+      expect(p.yearly).toBe(p.price ? chargeUsd(PLANS[p.id], "year") : 0);
+      expect(p.lines[0]).toContain(PLANS[p.id].windowUnits.toLocaleString("en-US"));
+    }
+    const tu = DEFAULT_BILLING.tierUnits;
+    expect(UNIT_EXAMPLES.map((u) => u.units)).toEqual([`${tu.standard} unit`, `${tu.advanced} units`, `${tu.premium} units`, `${tu.standard * 4} units`, `${tu.standard * 3} units`]);
   });
 });

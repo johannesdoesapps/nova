@@ -5,6 +5,7 @@ import { Logo } from "@/components/layout/logo";
 import { FEATURES, GUIDES, STATUS_LABEL, type Status } from "@/content/site";
 import { cn } from "@/lib/utils";
 import { SIGN_IN_HREF, SIGN_UP_HREF } from "./links";
+import { TrackedLink } from "./tracked-link";
 
 const STATUS_DOT: Record<Status, string> = {
   available: "bg-success",
@@ -35,11 +36,22 @@ export function SectionHeading({ eyebrow, title, intro, id, center }: { eyebrow?
   );
 }
 
-export function PrimaryCta({ children = "Get started free", href = SIGN_UP_HREF, className }: { children?: ReactNode; href?: string; className?: string }) {
-  return (
-    <Link href={href} className={cn("inline-flex h-12 items-center gap-2 rounded-full bg-accent px-6 text-[15px] font-medium text-accent-fg shadow-[0_10px_30px_-12px_var(--accent)] transition hover:brightness-110", className)}>
+export function PrimaryCta({ children = "Get started free", href = SIGN_UP_HREF, className, where }: { children?: ReactNode; href?: string; className?: string; where?: string }) {
+  const cls = cn("inline-flex h-12 items-center gap-2 rounded-full bg-accent px-6 text-[15px] font-medium text-accent-fg shadow-[0_10px_30px_-12px_var(--accent)] transition hover:brightness-110", className);
+  const inner = (
+    <>
       {children}
       <ArrowRight className="h-4 w-4" aria-hidden />
+    </>
+  );
+  // Counted (anonymously) by where on the page it is, to see which calls to action lead to sign-ups.
+  return where ? (
+    <TrackedLink href={href} className={cls} event="landing_cta" where={where}>
+      {inner}
+    </TrackedLink>
+  ) : (
+    <Link href={href} className={cls}>
+      {inner}
     </Link>
   );
 }
@@ -52,7 +64,7 @@ export function SecondaryCta({ children, href, className }: { children: ReactNod
   );
 }
 
-export function CtaBand({ title = "Start with Orbis today", text = "Create a free account in under a minute. No credit card needed." }: { title?: string; text?: string }) {
+export function CtaBand({ title = "Start with Orbis today", text = "Create a free account in under a minute. No credit card needed.", where }: { title?: string; text?: string; where?: string }) {
   return (
     <section aria-labelledby="cta-title" className="mx-auto max-w-6xl px-5 py-20 sm:px-8">
       <div className="lux-card rounded-[28px] px-6 py-14 text-center sm:px-12">
@@ -61,7 +73,7 @@ export function CtaBand({ title = "Start with Orbis today", text = "Create a fre
         </h2>
         <p className="mx-auto mt-3 max-w-lg text-muted">{text}</p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <PrimaryCta />
+          <PrimaryCta where={where} />
           <SecondaryCta href="/docs/getting-started">Read the getting-started guide</SecondaryCta>
         </div>
       </div>
