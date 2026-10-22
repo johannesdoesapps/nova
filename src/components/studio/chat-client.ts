@@ -69,7 +69,7 @@ export type ChatEvent =
   | { type: "project"; project: ProjectUse }
   | { type: "tool"; tool: ToolRecord }
   | { type: "delta"; text: string }
-  | { type: "done"; text: string; simulated: boolean; assistantMessageId: string | null; userMessageId?: string | null; estimatedCost: number | null }
+  | { type: "done"; text: string; simulated: boolean; assistantMessageId: string | null; userMessageId?: string | null; estimatedCost: number | null; truncated?: boolean }
   | { type: "error"; message: string };
 
 /** A tool the server ran for this turn (e.g. web search, data analysis). */

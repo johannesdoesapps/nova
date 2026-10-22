@@ -23,6 +23,7 @@ export function ConversationPane({
   thinkingKind,
   feedback,
   onRetry,
+  onContinue,
   onEdit,
   onFeedback,
   onSavePrompt,
@@ -44,6 +45,8 @@ export function ConversationPane({
   thinkingKind: StatusKind;
   feedback: Record<string, Feedback>;
   onRetry: (id: string) => void;
+  /** Ask for the rest of a reply that was cut off at its length limit. */
+  onContinue?: () => void;
   /** Edit a question you sent (the general chat). */
   onEdit?: (id: string, text: string) => void;
   onFeedback: (id: string, f: Feedback) => void;
@@ -128,6 +131,7 @@ export function ConversationPane({
                   feedback={feedback[m.id]}
                   thinkingKind={thinkingKind}
                   onRetry={onRetry}
+                  onContinue={onContinue}
                   onEdit={onEdit}
                   onFeedback={onFeedback}
                   onSavePrompt={onSavePrompt}

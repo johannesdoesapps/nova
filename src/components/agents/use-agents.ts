@@ -151,13 +151,13 @@ export function agentStatus(
   models: { id: string; available: boolean }[] | null,
   demo: boolean,
 ): AgentStatus {
+  // Said plainly to visitors: what the agent works without, not an instruction to set something up.
   const missing = agent.capabilities.find((c) => !caps[c].available);
-  if (missing) {
-    const name = missing === "web_search" ? "Web search" : missing === "code_execution" ? "Code execution" : "A tool";
-    return { tone: "warn", label: "Setup needed", detail: `${name} needs setup` };
-  }
+  if (missing === "web_search") return { tone: "muted", label: "No web search", detail: "Web search isn't switched on for Orbis yet, so this agent answers from the model's own knowledge" };
+  if (missing === "code_execution") return { tone: "muted", label: "Can't run code", detail: "Running code isn't switched on for Orbis yet, so this agent explains and writes code without running it" };
+  if (missing) return { tone: "muted", label: "Limited", detail: "One of this agent's tools isn't available yet" };
   if (agent.modelId && models && !models.some((m) => m.id === agent.modelId && m.available))
-    return { tone: "warn", label: "Setup needed", detail: "Preferred model unavailable; the best available model answers instead" };
+    return { tone: "muted", label: "Uses another model", detail: "Its preferred model isn't available, so the best available model answers instead" };
   if (demo) return { tone: "muted", label: "Demo replies", detail: "Replies are simulated until an AI provider key is added" };
   return { tone: "ok", label: "Ready", detail: "Ready" };
 }

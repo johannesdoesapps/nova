@@ -95,9 +95,10 @@ export class OpenAICompatibleProvider implements AIProvider {
     const res = await this.request(params, this.body(params, true));
     if (!res.body) throw new ApiError("upstream_error", "Empty stream from provider.");
     let served = false;
+    let finish: string | null = null;
     for await (const data of sseData(res.body)) {
       if (data === "[DONE]") break;
-      let j: { model?: string; choices?: { delta?: { content?: string | null } }[]; usage?: OpenAIUsage | null };
+      let j: { model?: string; choices?: { delta?: { content?: string | null }; finish_reason?: string | null }[]; usage?: OpenAIUsage | null };
       try {
         j = JSON.parse(data);
       } catch {
@@ -109,8 +110,10 @@ export class OpenAICompatibleProvider implements AIProvider {
       }
       const text = j.choices?.[0]?.delta?.content;
       if (text) yield { type: "delta", text };
+      if (j.choices?.[0]?.finish_reason) finish = j.choices[0].finish_reason;
       if (j.usage) yield { type: "usage", usage: toUsage(j.usage) };
     }
+    if (finish) yield { type: "stop", reason: finish === "length" ? "length" : finish === "stop" ? "end" : "other" };
   }
 
   /** One turn with Chat Completions function calling (offered for OpenAI's own API). */

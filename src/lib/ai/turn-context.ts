@@ -14,8 +14,10 @@ export interface TurnTool {
   detail?: string;
 }
 
+// Words that mean "this changes from day to day". Kept specific: plain "score", "price of", "recently", "currently"
+// or "right now" also appear in ordinary questions (a good credit score, the price of a book in 1900, help me right now).
 const LIVE_INFO =
-  /\b(latest|breaking|news|headlines?|weather|forecast|temperature outside|score|scores|results? of (?:the )?(?:game|match|election)|stock price|share price|exchange rate|bitcoin price|price of|currently|right now|this week|recent(?:ly)?|just released|new release|who won|is .* open)\b/i;
+  /\b(latest|breaking|news|headlines?|weather|forecast|temperature outside|stock price|share price|exchange rate|(?:bitcoin|btc|ethereum|crypto|gold|oil|petrol|gas) prices?|prices? of (?:bitcoin|btc|ethereum|gold|oil)|live scores?|final score|score (?:of|in) (?:the|last|tonight'?s|today'?s)|who won|results? of (?:the )?(?:game|match|election|race)|this week(?:end)?|just released|new release|is .+ open (?:on|today|now|tomorrow|at)|is .+ open\??$)\b/i;
 
 /** Whether a message asks about things that change over time (news, weather, prices, scores…). */
 export function needsLiveInfo(message: string): boolean {

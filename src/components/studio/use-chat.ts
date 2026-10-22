@@ -7,6 +7,9 @@ import { CHAT_MODES } from "@/lib/ai/modes";
 import { streamChat, type ChatAttachment, type ChatTransport, type ProjectUse } from "./chat-client";
 import { titleFrom, type HistoryStore, type Msg } from "./history";
 
+/** Sent by the Continue button under a reply that was cut off at its length limit. */
+export const CONTINUE_PROMPT = "Please continue exactly where your last reply stopped, without repeating what you already wrote.";
+
 export type LoadState = { status: "idle" } | { status: "loading" } | { status: "error"; message: string };
 
 const chatTransport: ChatTransport = (req, signal) =>
@@ -213,7 +216,7 @@ export function useStudioChat({
           }
           else if (ev.type === "delta") patch((m) => ({ ...m, content: m.content + ev.text }));
           else if (ev.type === "done") {
-            patch((m) => ({ ...m, content: ev.text, status: "done", simulated: ev.simulated, cost: ev.estimatedCost, id: ev.assistantMessageId ?? m.id }));
+            patch((m) => ({ ...m, content: ev.text, status: "done", simulated: ev.simulated, cost: ev.estimatedCost, id: ev.assistantMessageId ?? m.id, truncated: ev.truncated || undefined }));
             // The saved question's id, so it can be edited later.
             const savedId = ev.userMessageId;
             if (savedId) setMessages((ms) => ms.map((m) => (m.id === userMsg.id ? { ...m, id: savedId } : m)));

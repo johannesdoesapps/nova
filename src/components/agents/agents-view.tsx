@@ -341,7 +341,7 @@ function AgentCard({
             agent.capabilities.map((c) => (
               <li
                 key={c}
-                title={`${CAPABILITY_INFO[c].label}${capabilities[c].available ? "" : " (needs setup)"}`}
+                title={`${CAPABILITY_INFO[c].label}${capabilities[c].available ? "" : " (not switched on yet)"}`}
                 className={cn(
                   "grid h-7 w-7 place-items-center rounded-lg border border-s-line [&_svg]:h-3.5 [&_svg]:w-3.5",
                   capabilities[c].available ? "text-s-ink-2" : "text-s-ink-3 opacity-60",

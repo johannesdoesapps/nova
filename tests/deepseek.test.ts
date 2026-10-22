@@ -43,7 +43,7 @@ describe("DeepSeek provider", () => {
     for await (const ev of deepseek().stream({ model: flash, messages: [{ role: "system", content: "Be brief." }, { role: "user", content: "你好" }], maxOutputTokens: 100, temperature: 0.3 })) {
       if (ev.type === "delta") text += ev.text;
       else if (ev.type === "usage") usage = ev.usage;
-      else served = ev.servedModel;
+      else if (ev.type === "served") served = ev.servedModel;
     }
     expect(text).toBe("你好, hello!");
     expect(served).toBe("deepseek-flash");

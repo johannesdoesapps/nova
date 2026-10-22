@@ -200,6 +200,7 @@ export async function POST(req: Request) {
         simulated: model.provider === "demo",
         usage: result.usage,
         estimatedCost: estimateCost(model, result.usage),
+        ...(result.truncated ? { truncated: true } : {}),
       });
     }, req.signal);
   } catch (err) {

@@ -16,7 +16,7 @@ import { useReplyActions } from "@/components/studio/reply-actions";
 import { rateReply, reportEvent } from "@/components/studio/feedback";
 import { ConversationPane } from "@/components/studio/thread";
 import { iconButtonClass, Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/studio/ui";
-import { useStudioChat } from "@/components/studio/use-chat";
+import { CONTINUE_PROMPT, useStudioChat } from "@/components/studio/use-chat";
 import type { AgentInput } from "@/lib/agents/schema";
 import { CAPABILITY_INFO, type AgentConfig, type CapabilityStatus } from "@/lib/agents/types";
 import { cn, relativeTime } from "@/lib/utils";
@@ -347,7 +347,7 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
                   >
                     {CAPABILITY_ICONS[c]}
                     {CAPABILITY_INFO[c].label}
-                    {!capabilities[c].available && <span className="text-s-ink-3">· needs setup</span>}
+                    {!capabilities[c].available && <span className="text-s-ink-3">· not switched on yet</span>}
                   </li>
                 ))
               )}
@@ -385,6 +385,7 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
           thinkingKind={chat.useWeb && canWeb && capabilities.web_search.available ? "web" : analyzing ? "data" : "general"}
           feedback={studio.feedback}
           onRetry={chat.retry}
+          onContinue={() => void chat.send(CONTINUE_PROMPT)}
           onFeedback={studio.giveFeedback}
           onSavePrompt={studio.addPrompt}
           onReplyAction={replies.act}

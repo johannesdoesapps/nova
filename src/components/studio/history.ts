@@ -35,6 +35,8 @@ export interface Msg {
   error?: string;
   /** The user stopped the reply before any text arrived (shown calmly, not as an error). */
   stopped?: boolean;
+  /** The reply hit its length limit and was cut off (shown with a Continue button). */
+  truncated?: boolean;
   /** The reply failed because the visitor isn't signed in. */
   needsSignIn?: boolean;
   simulated?: boolean;

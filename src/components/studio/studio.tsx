@@ -21,7 +21,7 @@ import { ProjectChip } from "./project-chip";
 import { useReplyActions } from "./reply-actions";
 import { rateReply, reportEvent } from "./feedback";
 import { ConversationPane } from "./thread";
-import { useStudioChat } from "./use-chat";
+import { CONTINUE_PROMPT, useStudioChat } from "./use-chat";
 import type { StarterEnv } from "./task-starter";
 import { Welcome } from "./welcome";
 import { isCodeRequest } from "./generating";
@@ -336,6 +336,7 @@ export function Studio({ home = false }: { home?: boolean }) {
           }
           feedback={studio.feedback}
           onRetry={chat.retry}
+          onContinue={() => void chat.send(CONTINUE_PROMPT)}
           onEdit={chat.edit}
           onFeedback={studio.giveFeedback}
           onSavePrompt={studio.addPrompt}

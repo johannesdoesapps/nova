@@ -101,6 +101,7 @@ export class AnthropicProvider implements AIProvider {
         yield { type: "delta", text: REFUSAL_TEXT };
       }
       yield { type: "usage", usage: toUsage(final.usage) };
+      yield { type: "stop", reason: final.stop_reason === "max_tokens" ? "length" : final.stop_reason === "end_turn" ? "end" : "other" };
     } catch (err) {
       throw toApiError(err, params);
     }

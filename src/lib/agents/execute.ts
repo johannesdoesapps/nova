@@ -4,7 +4,7 @@ import { streamWithFallback } from "../ai/fallback";
 import { buildTurnContext, type TurnTool } from "../ai/turn-context";
 import { estimateTokens } from "../ai/cost";
 import { ASSISTANT_BASE } from "../ai/modes";
-import { trimHistory } from "../ai/trim";
+import { omittedNote, trimHistory } from "../ai/trim";
 import type { ChatMessage, ModelWithStatus, Usage } from "../ai/types";
 import { serverEnv } from "../env";
 import { ApiError } from "../http";
@@ -56,6 +56,8 @@ export interface AgentTurnResult {
   sources: SearchSource[];
   tools: ToolRecord[];
   latencyMs: number;
+  /** The reply hit the output limit and was cut off. */
+  truncated: boolean;
 }
 
 const DATA_FILE = /\.(csv|tsv)$/i;
@@ -181,9 +183,11 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
     userContent = `${docs}\n\n${input.message}`;
   }
 
+  const kept = trimHistory(input.history, agent.historyLimit, input.historyChars);
+  const omitted = omittedNote(input.history, kept);
   const messages: ChatMessage[] = [
-    { role: "system", content: buildAgentSystemPrompt(agent, status, extra) },
-    ...trimHistory(input.history, agent.historyLimit, input.historyChars),
+    { role: "system", content: [buildAgentSystemPrompt(agent, status, extra), omitted].filter(Boolean).join("\n\n") },
+    ...kept,
     { role: "user", content: userContent },
   ];
 
@@ -192,6 +196,8 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
   let usage: Usage | null = null;
   let servedModel: string | null = null;
   let model = input.model;
+  // The reply hit the output limit and was cut off.
+  let truncated = false;
   for await (const ev of streamWithFallback(
     model,
     input.fallbacks ?? [],
@@ -206,9 +212,10 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
       model = ev.to;
       send({ type: "model", model: { id: model.id, displayName: model.displayName, provider: model.provider } });
       send({ type: "notice", level: "info", message: `${ev.from.displayName} was unavailable, so ${ev.to.displayName} answered instead (you allowed fallback in Settings).` });
-    } else servedModel = ev.servedModel;
+    } else if (ev.type === "served") servedModel = ev.servedModel;
+    else if (ev.type === "stop") truncated = ev.reason === "length";
   }
   if (sources.length) text = stripInvalidCitations(text, sources);
   usage ??= { inputTokens: estimateTokens(messages), outputTokens: estimateTokens(text), estimated: true };
-  return { model, text, usage, servedModel, sources, tools, latencyMs: performance.now() - started };
+  return { model, text, usage, servedModel, sources, tools, latencyMs: performance.now() - started, truncated };
 }

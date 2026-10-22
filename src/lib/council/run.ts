@@ -43,7 +43,7 @@ export async function streamStep(
           text += ev.text;
           send({ type: "delta", text: ev.text });
         } else if (ev.type === "usage") usage = ev.usage;
-        else servedModel = ev.servedModel;
+        else if (ev.type === "served") servedModel = ev.servedModel;
       }
     } catch (err) {
       status = "error";

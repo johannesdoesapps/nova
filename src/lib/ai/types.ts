@@ -91,7 +91,9 @@ export interface GenerateResult {
 export type StreamEvent =
   | { type: "delta"; text: string }
   | { type: "usage"; usage: Usage }
-  | { type: "served"; servedModel: string };
+  | { type: "served"; servedModel: string }
+  /** Why the reply ended: "length" means it hit the output limit and was cut off. */
+  | { type: "stop"; reason: "length" | "end" | "other" };
 
 export interface AIProvider {
   id: ProviderId;

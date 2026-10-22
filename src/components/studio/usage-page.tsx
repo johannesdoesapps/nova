@@ -77,12 +77,19 @@ export function UsagePage() {
           </p>
 
           {!user ? (
-            <p className="mt-8 text-[14px] text-s-ink-2">
-              <Link href="/login?next=/usage" className="text-s-accent underline-offset-4 hover:underline">
-                Sign in
-              </Link>{" "}
-              to see your usage.
-            </p>
+            <section aria-label="Sign in to see your usage" className="glass mt-6 rounded-[22px] p-5 sm:p-6">
+              <p className="max-w-xl text-[14.5px] leading-relaxed text-s-ink-2">
+                Once you’re signed in, this page shows your plan’s allowance, what you’ve used today and this month, and a history of every request with the model that answered it.
+              </p>
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <Link href="/login?next=/usage" className="inline-flex h-10 items-center rounded-full bg-s-accent px-5 text-[14px] font-medium text-s-accent-ink transition hover:brightness-110">
+                  Sign in to see your usage
+                </Link>
+                <Link href="/pricing" className="text-[13.5px] text-s-ink-2 underline-offset-4 hover:text-s-ink hover:underline">
+                  Compare plans
+                </Link>
+              </div>
+            </section>
           ) : (
             <>
               <section aria-labelledby="usage-now" className="glass mt-6 rounded-[22px] p-4 sm:p-5">

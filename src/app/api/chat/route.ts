@@ -2,7 +2,7 @@ import { fallbackChain, resolveModelChoice, withTimeout } from "@/lib/ai";
 import { streamWithFallback } from "@/lib/ai/fallback";
 import { estimateCost, estimateTokens } from "@/lib/ai/cost";
 import { systemPromptFor } from "@/lib/ai/modes";
-import { trimHistory } from "@/lib/ai/trim";
+import { omittedNote, trimHistory } from "@/lib/ai/trim";
 import { isAutoId } from "@/lib/ai/platform";
 import type { ChatMessage, Usage } from "@/lib/ai/types";
 import { requireUserIfConfigured, type AuthContext } from "@/lib/auth";
@@ -199,13 +199,17 @@ export async function POST(req: Request) {
         userContent = `${docs}\n\n${body.message}`;
       }
 
-      const messages: ChatMessage[] = [{ role: "system", content: system }, ...trimHistory(history, 40, limits.historyChars), { role: "user", content: userContent }];
+      const kept = trimHistory(history, 40, limits.historyChars);
+      const omitted = omittedNote(history, kept);
+      const messages: ChatMessage[] = [{ role: "system", content: omitted ? `${system}\n\n${omitted}` : system }, ...kept, { role: "user", content: userContent }];
       const started = performance.now();
       let text = "";
       let usage: Usage | null = null;
       let servedModel: string | null = null;
       let status: "success" | "error" = "success";
       let failure: string | null = null;
+      // The reply hit the output limit and was cut off.
+      let truncated = false;
       try {
         for await (const ev of streamWithFallback(model, fallbacks, { messages, maxOutputTokens }, () => withTimeout(50_000, signal))) {
           if (ev.type === "delta") {
@@ -216,7 +220,8 @@ export async function POST(req: Request) {
             model = ev.to;
             send({ type: "model", model: { id: model.id, displayName: model.displayName, provider: model.provider } });
             send({ type: "notice", level: "info", message: `${ev.from.displayName} was unavailable, so ${ev.to.displayName} answered instead (you allowed fallback in Settings).` });
-          } else servedModel = ev.servedModel;
+          } else if (ev.type === "served") servedModel = ev.servedModel;
+          else if (ev.type === "stop") truncated = ev.reason === "length";
         }
       } catch (err) {
         status = "error";
@@ -293,6 +298,7 @@ export async function POST(req: Request) {
         simulated: model.provider === "demo",
         usage,
         estimatedCost: estimateCost(model, usage),
+        ...(truncated ? { truncated: true } : {}),
       });
     }, req.signal);
   } catch (err) {

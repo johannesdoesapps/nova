@@ -1,6 +1,6 @@
 "use client";
 import { memo, useState, type ReactNode } from "react";
-import { BookmarkPlus, ChartColumn, Check, ChevronRight, CircleAlert, CircleCheck, Copy, Ellipsis, FileText, Flag, FolderPlus, Globe, MessageSquarePlus, Pencil, RefreshCw, Sparkles, Square, ThumbsDown, ThumbsUp, Wrench } from "lucide-react";
+import { ArrowRight, BookmarkPlus, ChartColumn, Check, ChevronRight, CircleAlert, CircleCheck, Copy, Ellipsis, FileText, Flag, FolderPlus, Globe, MessageSquarePlus, Pencil, RefreshCw, Sparkles, Square, ThumbsDown, ThumbsUp, Wrench } from "lucide-react";
 import { Markdown } from "@/components/common/markdown";
 import { ActionCard } from "@/components/connectors/action-card";
 import { BrandIcon } from "@/components/connectors/brand-icon";
@@ -23,6 +23,7 @@ export const MessageView = memo(function MessageView({
   feedback,
   thinkingKind,
   onRetry,
+  onContinue,
   onEdit,
   onFeedback,
   onSavePrompt,
@@ -40,6 +41,7 @@ export const MessageView = memo(function MessageView({
   feedback?: Feedback;
   thinkingKind: StatusKind;
   onRetry: (id: string) => void;
+  onContinue?: () => void;
   onEdit?: (id: string, text: string) => void;
   onFeedback: (id: string, f: Feedback) => void;
   onSavePrompt: (text: string) => boolean;
@@ -61,7 +63,7 @@ export const MessageView = memo(function MessageView({
   if (m.role === "user") {
     return <UserMessage m={m} busy={busy} onEdit={onEdit} onSavePrompt={onSavePrompt} />;
   }
-  return <AssistantMessage {...{ m, isLast, busy, feedback, thinkingKind, onRetry, onFeedback, onReplyAction, projectActions, onRate, onCopied, assistantName, assistantAvatar, verify }} />;
+  return <AssistantMessage {...{ m, isLast, busy, feedback, thinkingKind, onRetry, onContinue, onFeedback, onReplyAction, projectActions, onRate, onCopied, assistantName, assistantAvatar, verify }} />;
 });
 
 /** A question you sent, with copy, save and (in the general chat) edit. */
@@ -149,6 +151,7 @@ function AssistantMessage({
   feedback,
   thinkingKind,
   onRetry,
+  onContinue,
   onFeedback,
   onReplyAction,
   projectActions,
@@ -164,6 +167,7 @@ function AssistantMessage({
   feedback?: Feedback;
   thinkingKind: StatusKind;
   onRetry: (id: string) => void;
+  onContinue?: () => void;
   onFeedback: (id: string, f: Feedback) => void;
   onReplyAction?: (action: ReplyAction, m: Msg) => void;
   projectActions?: boolean;
@@ -273,6 +277,17 @@ function AssistantMessage({
                 <RefreshCw className="h-3.5 w-3.5" /> Try again
               </button>
             )
+          )}
+        </div>
+      )}
+
+      {m.status === "done" && m.truncated && (
+        <div role="status" className="s-in mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-s-line px-4 py-2.5 text-[13.5px] text-s-ink-2">
+          <span className="min-w-0 flex-1">This reply reached its length limit and was cut off.</span>
+          {isLast && onContinue && (
+            <button type="button" onClick={onContinue} disabled={busy} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-s-line-strong px-3 text-[13px] text-s-ink hover:bg-s-hover disabled:opacity-40">
+              Continue <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+            </button>
           )}
         </div>
       )}
