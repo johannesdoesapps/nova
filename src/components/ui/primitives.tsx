@@ -58,7 +58,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
     <input
       ref={ref}
       className={cn(
-        "h-10 w-full rounded-xl border border-border bg-bg-elev px-3 text-sm text-fg placeholder:text-faint focus:border-accent/60 focus:outline-none",
+        "h-10 w-full rounded-xl border border-border bg-bg-elev px-3 text-sm text-fg placeholder:text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30",
         className,
       )}
       {...props}
@@ -71,7 +71,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
     <textarea
       ref={ref}
       className={cn(
-        "w-full resize-none rounded-xl border border-border bg-bg-elev px-3 py-2.5 text-sm text-fg placeholder:text-faint focus:border-accent/60 focus:outline-none",
+        "w-full resize-none rounded-xl border border-border bg-bg-elev px-3 py-2.5 text-sm text-fg placeholder:text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30",
         className,
       )}
       {...props}
@@ -84,7 +84,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
     <select
       ref={ref}
       className={cn(
-        "h-9 rounded-lg border border-border bg-bg-elev px-2.5 pr-8 text-sm text-fg focus:border-accent/60 focus:outline-none",
+        "h-9 rounded-lg border border-border bg-bg-elev px-2.5 pr-8 text-sm text-fg focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30",
         className,
       )}
       {...props}
