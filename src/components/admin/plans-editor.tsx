@@ -88,6 +88,7 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
                 )}
                 <Num label="Units / 5 hours" value={p.windowUnits} onChange={(v) => setPlan(id, { windowUnits: v })} />
                 <Num label="Units / week" value={p.weeklyUnits} onChange={(v) => setPlan(id, { weeklyUnits: v })} />
+                <Num label="Premium units / week" value={p.topWeeklyUnits} onChange={(v) => setPlan(id, { topWeeklyUnits: v })} hint="0 = no separate limit" />
                 <Num label="Max reply tokens" value={p.maxOutputTokens} step={100} onChange={(v) => setPlan(id, { maxOutputTokens: v })} />
                 <Num label="History characters" value={p.historyChars} step={1000} onChange={(v) => setPlan(id, { historyChars: v })} />
                 <Num label="Web searches / month" value={p.webSearchesPerPeriod} onChange={(v) => setPlan(id, { webSearchesPerPeriod: v })} />
@@ -201,6 +202,8 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Num label="Max cost of one request $" value={b.maxRequestCostUsd} step={0.1} onChange={(v) => set({ maxRequestCostUsd: v })} hint="0 = no cap" />
         <Num label="Site-wide monthly cap $" value={b.siteMonthlyCapUsd} step={10} onChange={(v) => set({ siteMonthlyCapUsd: v })} hint="0 = none; stops new requests" />
+        <Num label="Extra usage pack: units" value={b.creditPackUnits} step={50} onChange={(v) => set({ creditPackUnits: v })} hint="0 = not on sale" />
+        <Num label="Extra usage pack: price $" value={b.creditPackPriceUsd} step={1} onChange={(v) => set({ creditPackPriceUsd: v })} hint="Pro and Max can buy it once Stripe is set up" />
         <Num label="Code runs / month, whole site" value={b.codeRunsSiteMonthly} step={100} onChange={(v) => set({ codeRunsSiteMonthly: v })} hint="0 = none; Vercel Hobby allows 5,000 sandboxes" />
         <Num label="Code run time limit (s)" value={b.codeRunSeconds} onChange={(v) => set({ codeRunSeconds: v })} hint="5–120; sets each plan's worst-case run cost" />
         <Num label="Workspace minutes / month, whole site" value={b.workspaceSiteMonthlyMinutes} step={100} onChange={(v) => set({ workspaceSiteMonthlyMinutes: v })} hint="0 = none" />

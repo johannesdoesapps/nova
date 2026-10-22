@@ -8,6 +8,7 @@ import { entitlementFor } from "@/lib/entitlements";
 import { planCapacity } from "@/lib/billing/scenarios";
 import { DEFAULT_BILLING, PLAN_IDS, chargeUsd, modelTier, planOf, resolveBilling, type ModelTier } from "@/lib/plans";
 import { pageMetadata } from "@/lib/seo";
+import { creditsForSale } from "@/lib/usage";
 import { DEFAULT_STEP_LIMIT } from "@/lib/code/agent/types";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
   const onSale = billingConfigured();
   const settings = await getPlatformSettings();
   const billing = resolveBilling(settings.billing);
+  const creditsOnSale = creditsForSale(billing, onSale);
   const [models, auth] = await Promise.all([getModels(settings), getAuth()]);
   const entitlement = await entitlementFor(auth);
   const live = models.filter((m) => m.available && m.provider !== "demo");
@@ -77,6 +79,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
     { label: "Price", cells: (id) => (P[id].priceUsd === 0 ? "Free" : `$${fmt(P[id].priceUsd)}/month or $${fmt(chargeUsd(P[id], "year"))}/year`) },
     { label: "Usage per 5 hours", cells: (id) => `${fmt(P[id].windowUnits)} units` },
     { label: "Usage per week", cells: (id) => `${fmt(P[id].weeklyUnits)} units` },
+    { label: "Premium models per week", cells: (id) => (!P[id].tiers.includes("premium") ? "Not included" : P[id].topWeeklyUnits > 0 ? `${fmt(P[id].topWeeklyUnits)} units` : "No separate limit") },
     { label: "Messages per day", cells: (id) => (P[id].dailyMessages > 0 ? fmt(P[id].dailyMessages) : "No daily cap") },
     { label: "Models", cells: (id) => P[id].tiers.map((t) => tierNames[t]).join(", ") },
     { label: "Longest reply", cells: (id) => words(P[id].maxOutputTokens) },
@@ -146,11 +149,14 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
         <h2 id="units" className="text-2xl font-medium text-fg">How usage units work</h2>
         <div className="mt-5 space-y-4 text-[15px] leading-relaxed text-muted">
           <p>
-            A message to a fast, low-cost model{fastNames.length ? ` (such as ${fastNames.join(" or ")})` : ""} uses {tu.standard} unit. Larger models cost more to run: a message to an
-            advanced model uses {tu.advanced} units and to a premium model {tu.premium}. The model menu shows each model&rsquo;s units per message.
+            A typical message to a fast, low-cost model{fastNames.length ? ` (such as ${fastNames.join(" or ")})` : ""} uses {tu.standard} unit. Larger models cost more to run: a typical
+            message to an advanced model uses {tu.advanced} units and to a premium model {tu.premium}. Like Claude&rsquo;s limits, size counts too: a typical message is about{" "}
+            {fmt(Math.round((billing.scenario.inputTokens * 0.75) / 100) * 100)} words of context with a {fmt(Math.round((billing.scenario.outputTokens * 0.75) / 50) * 50)}-word reply;
+            longer messages, bigger files and longer conversations use more, short ones less. The model menu shows each model&rsquo;s units for a typical message.
           </p>
           <p>
-            Your 5-hour window starts with your first message and resets five hours later. The weekly limit counts the last seven days, so units come back as older use passes seven days.
+            Your 5-hour window starts with your first message and resets five hours later. The weekly limit resets at the same time each week, counted from when you created your
+            account. On Max, premium models also have their own weekly limit, on top of the one for all models.
             Auto uses the lowest-cost model for everyday requests and a stronger one only for hard coding or reasoning tasks, always within your plan. A model you pick yourself is kept
             until you change it, and a backup model (if you allow one) is never a more expensive kind than the one you chose.
           </p>
@@ -164,9 +170,10 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
         <p className="mt-2 text-[14px] text-muted">Examples, not guarantees: real use depends on the models you pick and how long your conversations get.</p>
         <dl className="mt-5 divide-y divide-border rounded-2xl border border-border bg-panel text-[15px]">
           {[
-            ["A quick question to a fast model", `${tu.standard} unit.`],
+            ["A typical question to a fast model", `${tu.standard} unit.`],
             ["The same question to an advanced or premium model", `${tu.advanced} or ${tu.premium} units.`],
-            ["A long conversation, or one with big attachments", "The same units per message, but more of your monthly AI allowance, because more text is sent with each message."],
+            ["A short question with a short answer", `Less: as little as a tenth of a typical message.`],
+            ["A long conversation, or one with big attachments", "More, in proportion to how much text is sent and written: twice the size uses about twice the units, up to 20 times a typical message."],
             ["A Council with three models", `One message per model's answer, plus the chair model's summary (and the models' reviews of each other in Deep mode). With three fast models in Quick mode: ${4 * tu.standard} units.`],
             ["An Arena comparison of two fast models", `${2 * tu.standard} units. An agreement analysis, final answer or evaluation afterwards is one more message each, to the model that writes it.`],
             ["A coding agent run", `One message per step the agent takes (a small bug fix is typically a handful of steps). It stops to ask before going past ${DEFAULT_STEP_LIMIT} steps. Running code on the project's computer uses workspace time, counted in 10-minute blocks.`],
@@ -182,6 +189,12 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
         <h3 className="mt-10 text-lg font-medium text-fg">When you reach a limit</h3>
         <ul className="mt-3 list-disc space-y-2 pl-5 text-[15px] leading-relaxed text-muted marker:text-muted">
           <li>Orbis tells you which limit you reached and when it resets. The 5-hour window and the weekly allowance reset on their own.</li>
+          {creditsOnSale && (
+            <li>
+              On Pro and Max you can buy extra usage ({fmt(billing.creditPackUnits)} units for ${billing.creditPackPriceUsd.toFixed(2)}) on the Usage page. It keeps your requests going
+              when a limit is reached, and is used only then.
+            </li>
+          )}
           <li>Each plan&rsquo;s monthly AI allowance has a part reserved for advanced models. If that part runs out, Auto and the fast models keep working.</li>
           <li>When the whole monthly allowance is used, Orbis pauses until your billing month renews.</li>
           <li>Nothing is charged automatically and your plan never changes without you. You can cancel or switch plans at any time from your account.</li>

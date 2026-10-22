@@ -18,6 +18,10 @@ export interface UsageState {
   info?: PlanInfo | null;
   window: { used: number; limit: number; resetsAt: number | null };
   week: { used: number; limit: number; resetsAt: number | null };
+  /** Max: the separate weekly limit for premium models. */
+  top?: { used: number; limit: number; resetsAt: number | null } | null;
+  /** Paid plans: extra usage bought separately, and whether it's used automatically. */
+  credits?: { balance: number; auto: boolean } | null;
   /** This month's AI budget: share used, and "economy" (lowest-cost model only) or "exhausted". */
   budget?: {
     usedShare: number;
@@ -63,7 +67,9 @@ export function formatReset(at: number | null): string {
   const d = new Date(at);
   const sameDay = d.toDateString() === new Date().toDateString();
   const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  return sameDay ? time : `${d.toLocaleDateString([], { weekday: "short" })} ${time}`;
+  if (sameDay) return time;
+  // Within a week the weekday is enough; further out (never for these limits), the date too.
+  return at - Date.now() < 6.5 * 86_400_000 ? `${d.toLocaleDateString([], { weekday: "short" })} ${time}` : `${d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} ${time}`;
 }
 
 /** One line under the composer when the allowance is running low or used up. */
@@ -88,11 +94,20 @@ export function UsageNotice({ usage }: { usage: UsageState | null }) {
   const resetsAt = weekly ? usage.week.resetsAt : usage.window.resetsAt;
   if (left > limit * 0.2) return null;
   const when = formatReset(resetsAt);
+  // At the limit with extra usage on: messages keep going, paid from it.
+  if (left === 0 && usage.credits?.auto && usage.credits.balance > 0) {
+    return (
+      <p role="status" className="s-in mt-2 px-3 text-[12.5px] text-s-ink-3">
+        You&rsquo;ve reached your {weekly ? "weekly" : "5-hour"} limit{when ? ` (it resets at ${when})` : ""}, so messages now use your extra usage:{" "}
+        {usage.credits.balance.toLocaleString("en-US", { maximumFractionDigits: 2 })} units left.
+      </p>
+    );
+  }
   return (
     <p role="status" className={cn("s-in mt-2 px-3 text-[12.5px]", left === 0 ? "text-s-danger" : "text-s-ink-3")}>
       {left === 0
         ? `You've reached your ${weekly ? "weekly" : "5-hour"} limit${when ? `. It resets at ${when}` : ""}.`
-        : `${left} usage unit${left === 1 ? "" : "s"} left${when ? ` until ${when}` : ""}.`}
+        : `About ${Math.floor(left).toLocaleString("en-US")} usage unit${Math.floor(left) === 1 ? "" : "s"} left${when ? ` until ${when}` : ""}.`}
       <UpgradeLink usage={usage} />
     </p>
   );
@@ -136,7 +151,8 @@ function UpgradeLink({ usage }: { usage: UsageState }) {
 }
 
 function Meter({ label, used, limit, resetsAt, idle }: { label: string; used: number; limit: number; resetsAt: number | null; idle: string }) {
-  const pct = Math.min(100, Math.round((used / limit) * 100));
+  // Rounded down, so the bar shows 100% (and turns red) only when the limit is really reached.
+  const pct = Math.min(100, Math.floor((used / limit) * 100));
   return (
     <div>
       <div className="flex items-baseline justify-between text-[13px]">
@@ -165,7 +181,7 @@ export function UsageMeters({ usage, billing = false }: { usage: UsageState; bil
             {paid && info ? ` · billed ${info.interval === "year" ? "yearly" : "monthly"}` : ""}
             {usage.budget && paid ? ` · renews ${new Date(usage.budget.resetsAt).toLocaleDateString([], { month: "short", day: "numeric" })}` : ""}
           </p>
-          <p>Larger models use more of your allowance per message.{info?.webSearchesLeft != null && info.webSearchesLeft >= 0 && paid ? ` ${info.webSearchesLeft} web searches left this month.` : ""}</p>
+          <p>Larger models, longer messages and bigger files use more of your allowance.{info?.webSearchesLeft != null && info.webSearchesLeft >= 0 && paid ? ` ${info.webSearchesLeft} web searches left this month.` : ""}</p>
         </div>
         {billing && (
           <div className="flex flex-wrap gap-2">
@@ -183,7 +199,8 @@ export function UsageMeters({ usage, billing = false }: { usage: UsageState; bil
         )}
       </div>
       <Meter label="Current 5-hour session" used={usage.window.used} limit={usage.window.limit} resetsAt={usage.window.resetsAt} idle="Starts with your next message" />
-      <Meter label="This week" used={usage.week.used} limit={usage.week.limit} resetsAt={usage.week.resetsAt} idle="Nothing used in the last 7 days" />
+      <Meter label="This week · all models" used={usage.week.used} limit={usage.week.limit} resetsAt={usage.week.resetsAt} idle="Nothing used this week" />
+      {usage.top && <Meter label="This week · premium models (Opus, Sol)" used={usage.top.used} limit={usage.top.limit} resetsAt={usage.top.resetsAt} idle="Nothing used this week" />}
       {usage.budget && <BudgetDetails budget={usage.budget} />}
     </div>
   );

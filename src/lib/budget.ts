@@ -122,6 +122,8 @@ export async function budgetStatus(auth: AuthContext, entitlement: Entitlement |
     .select("estimated_cost, input_tokens, output_tokens, model_id, model_tier, request_id, created_at")
     .gte("created_at", new Date(start).toISOString())
     .gt("units", 0)
+    // Requests paid with extra usage don't use the plan's monthly allowance.
+    .eq("paid_with_credits", false)
     .limit(20_000);
   if (error) {
     reportError(error, { where: "budgetStatus" });

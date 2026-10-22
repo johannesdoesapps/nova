@@ -67,8 +67,8 @@ function fakeAuth(opts: { admin?: boolean; plan?: Record<string, unknown> | null
     },
     rpc: async (fn: string, args: Record<string, unknown>) => {
       rpc.push([fn, args]);
-      if (fn === "usage_reserve_v4") return { data: opts.reserve ? opts.reserve(args) : fakeReserveV3(args, opts.runs ?? []), error: null };
-      if (fn === "usage_status") return { data: [{ window_used: 3, window_start: "2026-10-19T10:00:00Z", week_used: 20, week_oldest: "2026-10-15T08:00:00Z" }], error: null };
+      if (fn === "usage_reserve_v5") return { data: opts.reserve ? opts.reserve(args) : fakeReserveV3(args, opts.runs ?? []), error: null };
+      if (fn === "usage_status_v2") return { data: [{ window_used: 3, window_start: "2026-10-19T10:00:00Z", week_used: 20, week_start: "2026-10-15T08:00:00Z", top_used: 0, credits: 0, credits_auto: true }], error: null };
       return { data: null, error: null };
     },
   };
@@ -85,7 +85,8 @@ const run = (model = haiku, extra: Partial<Parameters<typeof recordRun>[1]> = {}
   prompt: "hi",
   response: "hello",
   latencyMs: 10,
-  usage: { inputTokens: 5, outputTokens: 2, estimated: false },
+  // A typical message (the planning scenario), so it costs the model's base units.
+  usage: { inputTokens: 2000, outputTokens: 800, estimated: false },
   status: "success" as const,
   ...extra,
 });
@@ -100,7 +101,7 @@ describe("usage policy", () => {
     const t = await enforceLimits(req(), auth, 1, [haiku], { requestId: "00000000-0000-4000-8000-000000000001", purpose: "chat" });
     expect(t).toMatchObject({ units: 1, entitlement: "plan:free", requestId: "00000000-0000-4000-8000-000000000001" });
     expect(rpc[0]).toEqual([
-      "usage_reserve_v4",
+      "usage_reserve_v5",
       expect.objectContaining({ p_units: 1, p_window_limit: 10, p_week_limit: 30, p_purpose: "chat", p_budget_usd: 0.1, p_premium: false, p_daily_limit: 10, p_token_limit: 400_000 }),
     ]);
     // Tokens held for the request: its input plus the longest reply Free allows.
@@ -149,7 +150,7 @@ describe("usage policy", () => {
     const err = await fail(enforceLimits(req(), auth, 1, [sonnet]));
     expect(err).toBeInstanceOf(ApiError);
     expect(err.code).toBe("quota_exceeded");
-    expect(err.message).toBe("Claude Sonnet 5.5 uses 20 units per message, but only 10 of your Pro plan's 5-hour allowance are left. Auto or a lighter model uses 1. Max gives you more.");
+    expect(err.message).toBe("Claude Sonnet 5.5 uses about 20 units for a typical message, but only 10 of your Pro plan's 5-hour allowance are left. Auto or a lighter model uses less. Max gives you more.");
     expect(err.details).toMatchObject({ scope: "window", resetsAt: "2026-10-19T15:00:00.000Z", unitsNeeded: 20, unitsLeft: 10, upgradeTo: "max" });
   });
 
@@ -164,7 +165,7 @@ describe("usage policy", () => {
     const t = await enforceLimits(req(), auth, 1, [opus]);
     expect(t).toMatchObject({ units: 40, entitlement: "admin_unlimited" });
     // Still reserved (so duplicates are refused), but with no limit.
-    expect(rpc[0]).toEqual(["usage_reserve_v4", expect.objectContaining({ p_window_limit: 1_000_000_000, p_week_limit: 1_000_000_000, p_budget_usd: null, p_daily_limit: 0, p_token_limit: 0 })]);
+    expect(rpc[0]).toEqual(["usage_reserve_v5", expect.objectContaining({ p_window_limit: 1_000_000_000, p_week_limit: 1_000_000_000, p_budget_usd: null, p_daily_limit: 0, p_token_limit: 0 })]);
     expect(await planUsage(auth)).toBeNull();
     await recordRun(auth, run(sonnet));
     expect(inserts[0]).toMatchObject({ entitlement: "admin_unlimited", units: 20 });
@@ -311,5 +312,79 @@ describe("AI budget guard", () => {
   it("doesn't apply to administrators", async () => {
     const { auth } = fakeAuth({ admin: true, runs: spend(1000) });
     await expect(enforceLimits(req(), auth, 1, [sonnet])).resolves.toMatchObject({ entitlement: "admin_unlimited" });
+  });
+});
+
+describe("Claude-style limits", () => {
+  it("charges by size: a typical message costs the base units, longer ones more, short ones less, within 0.1×–20×", async () => {
+    const { sizedUnits } = await import("@/lib/plans");
+    expect(sizedUnits(sonnet, 20, { inputTokens: 2000, outputTokens: 800 })).toBe(20);
+    expect(sizedUnits(sonnet, 20, { inputTokens: 4000, outputTokens: 1600 })).toBe(40);
+    expect(sizedUnits(sonnet, 20, { inputTokens: 200, outputTokens: 50 })).toBeLessThan(5);
+    expect(sizedUnits(sonnet, 20, { inputTokens: 10, outputTokens: 1 })).toBe(2);
+    expect(sizedUnits(sonnet, 20, { inputTokens: 5_000_000, outputTokens: 50_000 })).toBe(400);
+    expect(sizedUnits({ inputPrice: null, outputPrice: null }, 20, { inputTokens: 99_999, outputTokens: 9_999 })).toBe(20);
+    expect(sizedUnits(haiku, 1, { inputTokens: null, outputTokens: null })).toBe(1);
+  });
+
+  it("records the real size: a long Sonnet reply uses more units than a typical one", async () => {
+    const { auth, inserts } = fakeAuth({ plan: PRO });
+    await enforceLimits(req(), auth, 1, [sonnet]);
+    await recordRun(auth, run(sonnet, { usage: { inputTokens: 6000, outputTokens: 2400, estimated: false } }));
+    expect(inserts[0]).toMatchObject({ units: 60, paid_with_credits: false });
+  });
+
+  it("resets the week at a fixed time for each account", async () => {
+    const { WEEK_MS, computeUsage, weekStart, PLANS } = await import("@/lib/plans");
+    const anchor = Date.parse("2026-10-01T09:30:00Z");
+    expect(new Date(weekStart(anchor, Date.parse("2026-10-20T12:00:00Z"))).toISOString()).toBe("2026-10-15T09:30:00.000Z");
+    const now = Date.parse("2026-10-16T12:00:00Z");
+    // Used before this week started (14 Oct) doesn't count, even though it's within 7 days.
+    const u = computeUsage([{ at: Date.parse("2026-10-14T12:00:00Z"), units: 20 }, { at: Date.parse("2026-10-16T08:00:00Z"), units: 5 }], now, PLANS.pro, anchor);
+    expect(u.week.used).toBe(5);
+    expect(u.week.resetsAt).toBe(Date.parse("2026-10-15T09:30:00Z") + WEEK_MS);
+  });
+
+  it("reports the fixed reset, the premium weekly limit and extra usage", async () => {
+    const { auth } = fakeAuth({ plan: MAX });
+    const u = (await planUsage(auth))!;
+    expect(u.week.resetsAt).toBe(Date.parse("2026-10-22T08:00:00Z"));
+    expect(u.top).toEqual({ used: 0, limit: 5000, resetsAt: Date.parse("2026-10-22T08:00:00Z") });
+    expect(u.credits).toEqual({ balance: 0, auto: true });
+    const free = (await planUsage(fakeAuth().auth))!;
+    expect(free.top).toBeNull();
+    expect(free.credits).toBeNull();
+  });
+
+  it("asks the database to apply Max's premium weekly limit to premium models, and credits only on paid plans", async () => {
+    const max = fakeAuth({ plan: MAX });
+    await enforceLimits(req(), max.auth, 1, [opus]);
+    expect(max.rpc[0]![1]).toMatchObject({ p_top: true, p_top_week_limit: 5000, p_credits: true });
+    const free = fakeAuth();
+    await enforceLimits(req(), free.auth, 1, [haiku]);
+    expect(free.rpc[0]![1]).toMatchObject({ p_top: false, p_top_week_limit: null, p_credits: false });
+  });
+
+  it("explains the premium weekly limit", async () => {
+    const { auth } = fakeAuth({ plan: MAX, reserve: () => ({ ok: false, reason: "limit", scope: "top_week", used: 4980, limit: 5000, resets_at: "2026-10-26T18:34:00Z", credits: 0, credits_auto: true }) });
+    const err = await fail(enforceLimits(req(), auth, 1, [opus]));
+    expect(err.message).toBe("You've reached your Max plan's weekly limit for premium models. Other models still work.");
+    expect(err.details).toMatchObject({ resetsAt: "2026-10-26T18:34:00.000Z" });
+    expect(err.details).toMatchObject({ scope: "top_week", creditsLeft: 0, canBuyCredits: false });
+  });
+
+  it("points to extra usage that's switched off", async () => {
+    const { auth } = fakeAuth({ plan: PRO, reserve: () => ({ ok: false, reason: "limit", scope: "window", used: 200, limit: 200, resets_at: "2026-10-19T15:00:00Z", credits: 300, credits_auto: false }) });
+    const err = await fail(enforceLimits(req(), auth, 1, [haiku]));
+    expect(err.message).toContain("You have 300 units of extra usage: turn on “Use extra usage automatically” on the Usage page");
+  });
+
+  it("pays with extra usage once a limit is reached: kept out of the plan's limits and charged to the balance", async () => {
+    const { auth, rpc, inserts } = fakeAuth({ plan: PRO, reserve: () => ({ ok: true, credit: true, credits_left: 80, covered: "week" }) });
+    const t = await enforceLimits(req(), auth, 1, [sonnet], { requestId: "00000000-0000-4000-8000-000000000009" });
+    expect(t).toMatchObject({ credit: true, creditsLeft: 80 });
+    await recordRun(auth, run(sonnet));
+    expect(inserts[0]).toMatchObject({ units: 20, paid_with_credits: true });
+    expect(rpc.at(-1)).toEqual(["usage_credit_settle", { p_request_id: "00000000-0000-4000-8000-000000000009", p_units: 20 }]);
   });
 });

@@ -196,3 +196,14 @@ export async function markEvent(id: string, type: string): Promise<void> {
   const { error } = await db.from("stripe_events").upsert({ id, type }, { onConflict: "id", ignoreDuplicates: true });
   if (error) throw new Error(`Could not record event: ${error.message}`);
 }
+
+/** Add bought extra usage for a paid Checkout session. Idempotent: the session id is recorded once. */
+export async function addCredits(session: Stripe.Checkout.Session): Promise<void> {
+  const userId = session.metadata?.user_id ?? session.client_reference_id;
+  const units = Number(session.metadata?.units);
+  if (!userId || !Number.isFinite(units) || units <= 0) throw new Error(`Credit purchase ${session.id} has no user or units`);
+  const db = serviceSupabase();
+  if (!db) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
+  const { error } = await db.rpc("usage_credit_add", { p_user: userId, p_units: units, p_amount_usd: (session.amount_total ?? 0) / 100, p_session: session.id });
+  if (error) throw new Error(`Could not add credits: ${error.message}`);
+}

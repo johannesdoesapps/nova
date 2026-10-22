@@ -34,8 +34,9 @@ beforeAll(async () => {
   await db.exec(`
     create role anon nologin;
     create role authenticated nologin;
+    create role service_role nologin;
     create schema auth;
-    create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}'::jsonb);
+    create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}'::jsonb, created_at timestamptz not null default now());
     create function auth.uid() returns uuid language sql stable as $$
       select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
     $$;
@@ -52,7 +53,7 @@ beforeAll(async () => {
 }, 60_000);
 
 beforeEach(async () => {
-  await db.exec("delete from public.usage_holds; delete from public.model_runs; delete from public.admins;");
+  await db.exec("delete from public.usage_holds; delete from public.model_runs; delete from public.admins; delete from public.usage_credit_events; delete from public.usage_credits;");
 });
 
 describe("usage ledger", () => {
@@ -135,5 +136,70 @@ describe("usage ledger", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ user_email: "alice@example.com", routing_reason: "Auto chose m", request_id: rid(70) });
     expect(JSON.stringify(rows[0])).not.toContain("secret prompt");
+  });
+});
+
+type Reserve5 = Reserve & { credit?: boolean; credits?: number; resets_at?: string; covered?: string; limit?: number };
+const reserve5 = (user: string, id: string, units: number, o: { window?: number; week?: number; top?: boolean; topLimit?: number | null; credits?: boolean } = {}) =>
+  as(user, async () =>
+    (
+      await db.query<{ r: Reserve5 }>(
+        "select public.usage_reserve_v5($1, $2, $3, $4, 0, 0, null, null, $5, 0, 0, null, 0, 0, 'chat', 'm', 180, null, null, $5, $6, $7) as r",
+        [id, units, o.window ?? 1e9, o.week ?? 1e9, o.top ?? false, o.topLimit ?? null, o.credits ?? false],
+      )
+    ).rows[0]!.r,
+  );
+// Runs are stamped with the server's time on insert, so an older run is moved back afterwards, as the server.
+const chargeAt = async (user: string, id: string, units: number, daysAgo: number, tier = "standard") => {
+  await as(user, () => db.query("insert into public.model_runs (model_id, status, request_id, units, model_tier) values ('m', 'success', $1, $2, $3)", [id, units, tier]));
+  if (daysAgo) await db.query(`update public.model_runs set created_at = now() - interval '${daysAgo} days' where request_id = $1`, [id]);
+};
+
+describe("usage v5 (Claude-style limits)", () => {
+  it("counts the week from the account's fixed weekly reset, not the last 7 days", async () => {
+    await db.exec(`update auth.users set created_at = now() - interval '10 days' where id = '${ALICE}'`);
+    await chargeAt(ALICE, rid(500), 50, 5); // before this week started (3 days ago)
+    await chargeAt(ALICE, rid(501), 5, 1);
+    const r = await reserve5(ALICE, rid(502), 10, { week: 60 });
+    expect(r).toMatchObject({ ok: true });
+    const over = await reserve5(ALICE, rid(503), 50, { week: 60 });
+    expect(over).toMatchObject({ ok: false, scope: "week" });
+    // Resets 7 days after this week began: 4 days from now.
+    expect(Date.parse(over.resets_at!) - Date.now()).toBeGreaterThan(3.9 * 86_400_000);
+    expect(Date.parse(over.resets_at!) - Date.now()).toBeLessThan(4.1 * 86_400_000);
+  });
+
+  it("applies the separate weekly limit to premium models only", async () => {
+    await chargeAt(ALICE, rid(510), 40, 0, "premium");
+    expect(await reserve5(ALICE, rid(511), 40, { top: true, topLimit: 60 })).toMatchObject({ ok: false, scope: "top_week", limit: 60 });
+    expect((await reserve5(ALICE, rid(512), 1, { top: false, topLimit: 60 })).ok).toBe(true);
+  });
+
+  it("pays with extra usage over a limit, only when allowed, and keeps it out of the plan's limits", async () => {
+    await chargeAt(ALICE, rid(520), 10, 0);
+    expect(await reserve5(ALICE, rid(521), 5, { window: 10, credits: true })).toMatchObject({ ok: false, scope: "window", credits: 0 });
+    // Bought credits arrive from the payment webhook (service role); the same session counts once.
+    await db.query("select public.usage_credit_add($1, 20, 5, 'cs_1')", [ALICE]);
+    await db.query("select public.usage_credit_add($1, 20, 5, 'cs_1')", [ALICE]);
+    expect(await reserve5(ALICE, rid(522), 5, { window: 10, credits: false })).toMatchObject({ ok: false });
+    expect(await reserve5(ALICE, rid(523), 5, { window: 10, credits: true })).toMatchObject({ ok: true, credit: true, covered: "window" });
+    await as(ALICE, () => db.query("select public.usage_credit_settle($1, 7)", [rid(523)]));
+    const st = await as(ALICE, async () => (await db.query<{ window_used: string; credits: string }>("select * from public.usage_status_v2()")).rows[0]!);
+    expect(Number(st.credits)).toBe(13);
+    expect(Number(st.window_used)).toBe(10);
+    // Turned off: credits aren't used.
+    await as(ALICE, () => db.query("select public.usage_credits_set_auto(false)"));
+    expect(await reserve5(ALICE, rid(524), 5, { window: 10, credits: true })).toMatchObject({ ok: false, credits: 13 });
+  });
+
+  it("lets nobody but the server add credits or change a balance", async () => {
+    await expect(as(ALICE, () => db.query("select public.usage_credit_add($1, 1000, 0, 'free')", [ALICE]))).rejects.toThrow();
+    await expect(as(ALICE, () => db.query("insert into public.usage_credits (user_id, balance) values ($1, 1000)", [ALICE]))).rejects.toThrow();
+    await db.query("select public.usage_credit_add($1, 10, 5, 'cs_2')", [ALICE]);
+    await as(ALICE, () => db.query("update public.usage_credits set balance = 9999 where user_id = $1", [ALICE]));
+    await as(ALICE, () => db.query("select public.usage_credit_settle($1, -500)", [rid(530)]));
+    expect(Number((await db.query<{ balance: string }>("select balance from public.usage_credits where user_id = $1", [ALICE])).rows[0]!.balance)).toBe(10);
+    // Bob can't see Alice's balance.
+    expect((await as(BOB, () => db.query("select * from public.usage_credits"))).rows).toHaveLength(0);
   });
 });

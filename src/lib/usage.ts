@@ -8,16 +8,23 @@ import { budgetPeriod, budgetStatus, checkModelAccess, checkSiteCap, economyMode
 import { estimateCost } from "./ai/cost";
 import type { ModelInfo, Usage } from "./ai/types";
 import { serverEnv } from "./env";
+import { billingConfigured as billingReady } from "./billing/stripe";
 import { ApiError, clientIp } from "./http";
-import { LARGE_MODEL_UNITS, PLANS, WEEK_MS, WINDOW_MS, modelTier, modelUnits, planEconomics, unitsLeft, type BillingSettings, type PlanId, type UsageState } from "./plans";
+import { LARGE_MODEL_UNITS, PLANS, WEEK_MS, WINDOW_MS, modelTier, modelUnits, planEconomics, sizedUnits, unitsLeft, type BillingSettings, type PlanId, type UsageState } from "./plans";
 import { limiter } from "./rate-limit";
 import { reportError } from "./observability";
 import { trackEvent } from "./analytics/server";
 
 /**
  * Usage accounting. Policy (see docs/USAGE.md):
- * - Each model call costs usage units by the model that actually answered:
- *   1 for low-cost models, 15 for larger ones, or the admin's per-model setting.
+ * - Each model call costs usage units by the model that actually answered,
+ *   sized like Claude's limits: a typical message costs the model's base units
+ *   (1 for low-cost models, 20 for larger ones, 40 for premium, or the admin's
+ *   per-model setting); longer messages, files and conversations cost more,
+ *   short ones less (sizedUnits in plans.ts).
+ * - Limits: a 5-hour window, a weekly limit that resets at a fixed time for
+ *   each account, and on Max a separate weekly limit for premium models. On paid
+ *   plans, extra usage bought separately (credits) can pay once a limit is reached.
  * - Before a request runs, its units are reserved atomically in the database
  *   (usage_reserve): a per-user lock means concurrent requests can't both slip
  *   under the limit, and a request id can only be reserved once, so duplicate
@@ -35,6 +42,10 @@ export interface UsageTicket {
   estCostUsd: number;
   /** Set once the first run of this request is recorded. */
   recorded?: boolean;
+  /** The plan's allowance was used up, so this request is paid with extra usage (credits). */
+  credit?: boolean;
+  /** Extra usage left after this request's reservation, when it's paid with credits. */
+  creditsLeft?: number;
 }
 
 const tickets = new WeakMap<object, UsageTicket>();
@@ -45,8 +56,24 @@ export function ticketFor(auth: AuthContext): UsageTicket | null {
   return tickets.get(auth) ?? null;
 }
 
+/**
+ * Units to check and hold before a request: each model's units for a typical
+ * message. Like Claude's limits, the real size is charged when the run is
+ * recorded, so a long last message can take the allowance a little past its limit.
+ */
 function unitsFor(models: ModelInfo[] | undefined, cost: number, overrides: Record<string, number>, tierUnits: BillingSettings["tierUnits"]): number {
   return models?.length ? models.reduce((s, m) => s + modelUnits(m, overrides[m.id], tierUnits), 0) : cost;
+}
+
+/** Extra usage can be bought: an administrator has set a pack, and payments are set up. */
+export function creditsForSale(billing: Pick<BillingSettings, "creditPackUnits" | "creditPackPriceUsd">, paymentsReady: boolean): boolean {
+  return paymentsReady && billing.creditPackUnits > 0 && billing.creditPackPriceUsd > 0;
+}
+
+/** A reset time people can read, in UTC (the server doesn't know the reader's time zone): "Mon 26 Oct, 18:34 UTC". */
+export function resetLabel(iso: string): string {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })}, ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC`;
 }
 
 /** Who to suggest upgrading to when a limit is reached. */
@@ -137,13 +164,14 @@ async function enforceLimitsInner(
   }
   const econ = unlimited ? null : planEconomics(billing, entitlement.plan, entitlement.interval);
   const premium = !!models?.some((m) => modelTier(m) !== "standard");
+  const top = !!models?.some((m) => modelTier(m) === "premium");
   const period = budgetPeriod(entitlement);
   const fb = fallbackPrices(all);
   const plan = entitlement.limits;
   const noModelCaps = unlimited || opts.countsAsMessage === false;
 
   // Accounts without an allowance still reserve, with no limit, so duplicate submissions are refused for everyone.
-  const { data, error } = await auth.supabase.rpc("usage_reserve_v4", {
+  const { data, error } = await auth.supabase.rpc("usage_reserve_v5", {
     p_request_id: requestId,
     p_units: units,
     p_window_limit: noModelCaps ? NO_LIMIT : plan.windowUnits,
@@ -164,28 +192,36 @@ async function enforceLimitsInner(
     p_ttl_seconds: opts.ttlSeconds ?? (models?.length ? 180 : 45),
     p_daily_budget_usd: econ && plan.dailyBudgetPct > 0 ? Math.round(econ.aiBudgetUsd * plan.dailyBudgetPct) / 100 : null,
     p_site_cap_usd: !unlimited && billing.siteMonthlyCapUsd > 0 ? billing.siteMonthlyCapUsd : null,
+    p_top: top,
+    p_top_week_limit: noModelCaps || !plan.topWeeklyUnits ? null : plan.topWeeklyUnits,
+    // Extra usage pays for requests over the limits on paid plans only (like Claude's usage credits).
+    p_credits: !unlimited && entitlement.plan !== "free",
   });
   if (error) {
     // The allowance can't be checked (database unavailable). Fail closed for metered plans so spending can't
     // run unchecked; accounts without an allowance (administrators) carry on.
-    reportError(error, { where: "usage_reserve_v4" });
+    reportError(error, { where: "usage_reserve_v5" });
     if (!unlimited) throw new ApiError("upstream_error", "Usage limits can't be checked right now, so AI requests are paused for a moment. Please try again shortly.");
     return { requestId, units: 0, entitlement: entitlement.label, estCostUsd: 0 };
   }
   const r = data as {
     ok: boolean;
     reason?: "duplicate" | "limit" | "budget" | "tokens";
-    scope?: "window" | "week" | "day" | "exhausted" | "insufficient" | "premium" | "daily" | "site";
+    scope?: "window" | "week" | "top_week" | "day" | "exhausted" | "insufficient" | "premium" | "daily" | "site";
     used?: number;
     limit?: number;
     resets_at?: string;
+    credit?: boolean;
+    credits_left?: number;
+    credits?: number;
+    credits_auto?: boolean;
   };
   if (!r.ok && r.reason === "duplicate") {
     throw new ApiError("conflict", "This message was already sent. Orbis won't run or charge it twice.");
   }
   if (!r.ok) {
     if (unlimited) {
-      reportError(new Error(`usage_reserve_v4 refused an unlimited account: ${r.reason}`), { where: "usage_reserve" });
+      reportError(new Error(`usage_reserve_v5 refused an unlimited account: ${r.reason}`), { where: "usage_reserve" });
       return { requestId, units: 0, entitlement: entitlement.label, estCostUsd: 0 };
     }
     const upgrade = nextPlan(entitlement.plan);
@@ -197,7 +233,21 @@ async function enforceLimitsInner(
     const sameProvider = models?.length === 1 ? standard.filter((m) => m.provider === models[0]!.provider) : [];
     const options = (sameProvider.length ? sameProvider : standard).map((m) => m.id);
     const optionNames = (sameProvider.length ? sameProvider : standard).map((m) => m.displayName).slice(0, 2).join(" or ");
-    const details = { budget: true, resetsAt: new Date(period.end).toISOString(), plan: entitlement.plan, upgradeTo: upgrade, allowedModelId: economy?.id ?? null, alternatives: options };
+    // Extra usage: what's left and whether more can be bought, so the message can say what to do.
+    const creditsLeft = Number(r.credits ?? 0);
+    const canBuy = entitlement.plan !== "free" && creditsForSale(billing, billingReady());
+    const extra =
+      entitlement.plan === "free" || r.scope === "site" || r.scope === "day"
+        ? ""
+        : creditsLeft > 0 && r.credits_auto === false
+          ? ` You have ${creditsLeft.toLocaleString("en-US")} units of extra usage: turn on “Use extra usage automatically” on the Usage page to keep going.`
+          : creditsLeft > 0
+            ? ` Your extra usage (${creditsLeft.toLocaleString("en-US")} units left) isn't enough for this request.${canBuy ? " You can buy more on the Usage page." : ""}`
+            : canBuy
+              ? " You can buy extra usage on the Usage page to keep going."
+              : "";
+    const credits = { creditsLeft, canBuyCredits: canBuy };
+    const details = { budget: true, resetsAt: new Date(period.end).toISOString(), plan: entitlement.plan, upgradeTo: upgrade, allowedModelId: economy?.id ?? null, alternatives: options, ...credits };
     if (r.reason === "budget") {
       if (r.scope === "site") {
         reportError(new Error("Site-wide monthly AI spending limit reached"), { where: "usage.site_cap" });
@@ -206,29 +256,38 @@ async function enforceLimitsInner(
       if (r.scope === "daily") {
         throw new ApiError("quota_exceeded", `You've used today's share of your ${plan.label} plan's AI allowance. It resets at midnight UTC.${upgradeHint}`, { ...details, scope: "daily", resetsAt: r.resets_at ? new Date(r.resets_at).toISOString() : null });
       }
-      if (r.scope === "exhausted") throw new ApiError("quota_exceeded", `You've used this month's AI allowance on your ${plan.label} plan. It renews on ${renews}.${upgradeHint}`, { ...details, scope: "budget", state: "exhausted" });
+      if (r.scope === "exhausted") throw new ApiError("quota_exceeded", `You've used this month's AI allowance on your ${plan.label} plan. It renews on ${renews}.${upgradeHint}${extra}`, { ...details, scope: "budget", state: "exhausted" });
       if (r.scope === "premium") {
         throw new ApiError(
           "quota_exceeded",
-          `${name ?? "This model"} has used this month's allowance for advanced models on your ${plan.label} plan. You can wait until ${renews}, ${upgrade ? `upgrade to ${billing.plans[upgrade].label}, ` : ""}or switch to ${optionNames || "Auto"}, which still has allowance left.`,
+          `${name ?? "This model"} has used this month's allowance for advanced models on your ${plan.label} plan. You can wait until ${renews}, ${upgrade ? `upgrade to ${billing.plans[upgrade].label}, ` : ""}or switch to ${optionNames || "Auto"}, which still has allowance left.${extra}`,
           { ...details, scope: "budget", state: "economy" },
         );
       }
-      throw new ApiError("quota_exceeded", `This request could cost more than what's left of this month's AI allowance. Try ${optionNames || "Auto"} or a shorter request.${upgradeHint}`, { ...details, scope: "budget", state: "insufficient" });
+      throw new ApiError("quota_exceeded", `This request could cost more than what's left of this month's AI allowance. Try ${optionNames || "Auto"} or a shorter request.${upgradeHint}${extra}`, { ...details, scope: "budget", state: "insufficient" });
     }
     if (r.reason === "tokens") {
-      throw new ApiError("quota_exceeded", `You've used this month's ${Number(r.limit).toLocaleString("en-US")}-token allowance on your ${plan.label} plan. It renews on ${renews}.${upgradeHint}`, { ...details, scope: "tokens" });
+      throw new ApiError("quota_exceeded", `You've used this month's ${Number(r.limit).toLocaleString("en-US")}-token allowance on your ${plan.label} plan. It renews on ${renews}.${upgradeHint}${extra}`, { ...details, scope: "tokens" });
     }
     const resetsAt = r.resets_at ? new Date(r.resets_at).toISOString() : null;
     if (r.scope === "day") {
       throw new ApiError("quota_exceeded", `You've sent today's ${r.limit} messages on the ${plan.label} plan. More are available tomorrow (UTC).${upgradeHint}`, { ...details, scope: "day", resetsAt });
     }
-    const left = Math.max(0, Number(r.limit ?? 0) - Number(r.used ?? 0));
+    const left = Math.max(0, Math.round((Number(r.limit ?? 0) - Number(r.used ?? 0)) * 100) / 100);
+    const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+    if (r.scope === "top_week") {
+      throw new ApiError(
+        "quota_exceeded",
+        // The browser adds when it resets, in the reader's time zone (resetsAt).
+        `You've reached your ${plan.label} plan's weekly limit for premium models. Other models still work.${extra}`,
+        { scope: r.scope, resetsAt, plan: entitlement.plan, upgradeTo: upgrade, unitsNeeded: units, unitsLeft: left, alternatives: options, ...credits },
+      );
+    }
     const scope = r.scope === "week" ? "weekly" : "5-hour";
     const message =
       left > 0 && units > left
-        ? `${name ?? "This request"} uses ${units} units per message, but only ${left} of your ${plan.label} plan's ${scope} allowance ${left === 1 ? "is" : "are"} left. Auto or a lighter model uses 1.${upgradeHint}`
-        : `You've reached your ${plan.label} plan's ${scope} limit.${upgradeHint}`;
+        ? `${name ?? "This request"} uses about ${fmt(units)} units for a typical message, but only ${fmt(left)} of your ${plan.label} plan's ${scope} allowance ${left === 1 ? "is" : "are"} left. Auto or a lighter model uses less.${upgradeHint}${extra}`
+        : `You've reached your ${plan.label} plan's ${scope} limit.${upgradeHint}${extra}`;
     throw new ApiError("quota_exceeded", message, {
       scope: r.scope,
       resetsAt,
@@ -236,9 +295,10 @@ async function enforceLimitsInner(
       upgradeTo: upgrade,
       unitsNeeded: units,
       unitsLeft: left,
+      ...credits,
     });
   }
-  const ticket = { requestId, units, entitlement: entitlement.label, estCostUsd };
+  const ticket: UsageTicket = { requestId, units, entitlement: entitlement.label, estCostUsd, ...(r.credit ? { credit: true, creditsLeft: Number(r.credits_left ?? 0) } : {}) };
   tickets.set(auth, ticket);
   return ticket;
 }
@@ -263,17 +323,23 @@ export async function planUsage(auth: AuthContext): Promise<UsageState | null> {
   if (auth.mode !== "authenticated") return null;
   const entitlement = await entitlementFor(auth);
   if (!entitlement || entitlement.kind === "unlimited") return null;
-  const { data, error } = await auth.supabase.rpc("usage_status");
+  const { data, error } = await auth.supabase.rpc("usage_status_v2");
   if (error) {
-    reportError(error, { where: "usage_status" });
+    reportError(error, { where: "usage_status_v2" });
     return null;
   }
-  const row = (Array.isArray(data) ? data[0] : data) as { window_used: number | string; window_start: string | null; week_used: number | string; week_oldest: string | null } | undefined;
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { window_used: number | string; window_start: string | null; week_used: number | string; week_start: string | null; top_used: number | string; credits: number | string; credits_auto: boolean }
+    | undefined;
   const plan = entitlement.limits;
+  // The week resets at a fixed time for each account: the start of this week plus seven days.
+  const weekResets = row?.week_start ? Date.parse(row.week_start) + WEEK_MS : null;
   return {
     plan: plan.id,
     window: { used: Number(row?.window_used ?? 0), limit: plan.windowUnits, resetsAt: row?.window_start ? Date.parse(row.window_start) + WINDOW_MS : null },
-    week: { used: Number(row?.week_used ?? 0), limit: plan.weeklyUnits, resetsAt: row?.week_oldest ? Date.parse(row.week_oldest) + WEEK_MS : null },
+    week: { used: Number(row?.week_used ?? 0), limit: plan.weeklyUnits, resetsAt: weekResets },
+    top: plan.topWeeklyUnits > 0 && plan.tiers.includes("premium") ? { used: Number(row?.top_used ?? 0), limit: plan.topWeeklyUnits, resetsAt: weekResets } : null,
+    credits: plan.id === "free" ? null : { balance: Number(row?.credits ?? 0), auto: row?.credits_auto !== false },
   };
 }
 
@@ -357,7 +423,10 @@ async function recordRunUnsafe(auth: AuthContext & { mode: "authenticated" }, ru
   const refunded = run.status === "error" && !run.response;
   const reserved = ticket && !ticket.recorded && !run.auxiliary ? ticket.estCostUsd : null;
   if (ticket && !run.auxiliary) ticket.recorded = true;
-  const units = refunded || run.auxiliary ? 0 : modelUnits(run.model, settings.modelUnits[run.model.id], entitlement?.billing.tierUnits);
+  // Sized by what this call really cost: a typical message costs the model's base units.
+  const base = modelUnits(run.model, settings.modelUnits[run.model.id], entitlement?.billing.tierUnits);
+  const units = refunded || run.auxiliary ? 0 : sizedUnits(run.model, base, run.usage, entitlement?.billing.scenario);
+  const credit = !!ticket?.credit && !run.auxiliary;
   // Billable extras: each web search adds its cost to the run.
   const searches = run.tools?.filter((t) => t === "web_search").length ?? 0;
   const tokenCost = estimateCost(run.model, run.usage);
@@ -391,9 +460,14 @@ async function recordRunUnsafe(auth: AuthContext & { mode: "authenticated" }, ru
     entitlement: entitlement?.label ?? null,
     error_code: run.error ? redactSecrets(run.error).slice(0, 300) : null,
     tools: run.tools?.length ? run.tools : null,
+    // Paid with extra usage: kept out of the plan's limits and monthly budget.
+    paid_with_credits: credit,
   });
   if (error) reportError(error, { where: "recordRun" });
-  if (ticket?.units && !run.auxiliary) {
+  if (credit) {
+    const fin = await auth.supabase.rpc("usage_credit_settle", { p_request_id: ticket!.requestId, p_units: units });
+    if (fin.error) reportError(fin.error, { where: "usage_credit_settle" });
+  } else if (ticket?.units && !run.auxiliary) {
     const fin = await auth.supabase.rpc("usage_finish", { p_request_id: ticket.requestId, p_state: "settled" });
     if (fin.error) reportError(fin.error, { where: "usage_finish" });
   }

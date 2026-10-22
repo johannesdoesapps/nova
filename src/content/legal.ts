@@ -77,7 +77,7 @@ export const PRIVACY: LegalSection[] = [
         list: [
           "**Sign-in providers:** if you sign in with Google or GitHub, we receive your name, email address and account ID from them.",
           "**Connected apps:** when you connect an app, we store an account label (such as the connected account's email address), the permissions you granted, encrypted access tokens and when the connection was made, checked and last used. When you confirm an action in an app, we log the app, the action, whether it worked and a short summary, but not the message or document content. What Orbis reads from your apps is used to answer you and is saved only as part of that answer and its cited sources.",
-          "**Payments:** when paid plans are on sale, Stripe tells us your customer ID, plan, subscription status and billing period, never your card number.",
+          "**Payments:** when paid plans are on sale, Stripe tells us your customer ID, plan, subscription status and billing period, never your card number. If you buy extra usage, we record the units, the amount paid and Stripe's reference for the payment, and each time extra usage pays for a request.",
         ],
       },
     ],
@@ -346,6 +346,7 @@ export const TERMS: LegalSection[] = [
           "The Free plan costs nothing and has usage limits. Paid plans (Pro and Max) and their prices are shown on the [Pricing](/pricing) page in US dollars, plus any tax that applies. Paid plans aren't on sale yet; this section applies once they are.",
           "Paid plans are billed in advance, monthly or yearly, through our payment provider, Stripe, and renew automatically until you cancel. You can cancel at any time: you keep your plan until the end of the period you've paid for and won't be charged again.",
           "Upgrades are charged pro rata straight away. Downgrades are credited against your next invoice.",
+          "**Extra usage:** on Pro and Max you can buy packs of extra usage units, when they're on sale, as a one-off payment. They're used only when one of your plan's limits is reached (and only while “Use extra usage automatically” is on), stay in your account while it exists, and can't be exchanged for money. If you cancel your plan, units you haven't used stay available for when you subscribe again.",
           "Each plan's limits are described on the Pricing page and shown in the app. No plan is unlimited. We'll give you at least 30 days' notice of a price increase or of a reduction in what your plan includes, and it will apply only from your next billing period. If you don't want to continue, you can cancel before then.",
           `**14-day cancellation (UK consumers):** you can cancel a new paid subscription within 14 days of buying it and get a refund, by emailing ${mail}. If you started using the paid plan during those 14 days, we may deduct an amount for what you used. Apart from this, and where the law requires otherwise, we don't refund part-used billing periods.`,
         ],

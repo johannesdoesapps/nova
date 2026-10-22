@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { useApp } from "@/components/layout/app-context";
@@ -8,6 +9,7 @@ import { featureLabel, groupUsage, type UsageRow } from "@/lib/usage-labels";
 import { cn } from "@/lib/utils";
 import { StudioHeader, useStudio } from "./frame";
 import { formatReset, UsageMeters, type PlanInfo, type UsageState } from "./usage";
+import { ExtraUsage } from "./extra-usage";
 
 type View = "requests" | "day" | "model" | "feature";
 const VIEWS: { id: View; label: string }[] = [
@@ -32,6 +34,8 @@ export function UsagePage() {
   const [view, setView] = useState<View>("requests");
   const [feature, setFeature] = useState("");
   const [reload, setReload] = useState(0);
+  // Back from Stripe Checkout after buying extra usage.
+  const creditsBought = useSearchParams().get("credits") === "bought";
 
   useEffect(() => {
     if (!user) return;
@@ -124,9 +128,11 @@ export function UsagePage() {
                       <UsageMeters usage={overview.usage} billing={integrations.billing} />
                     </div>
                     <p className="mt-4 text-[12.5px] leading-relaxed text-s-ink-3">
-                      How resets work: the 5-hour limit counts from your first message in a session and resets 5 hours later. The weekly limit counts the last 7 days, so units come back as older usage
-                      passes 7 days. Failed requests with no reply aren’t charged.
+                      How it works: a typical message uses the units shown in the model menu; longer messages, bigger files and longer conversations use more, short ones less. The 5-hour limit counts
+                      from your first message in a session and resets 5 hours later. The weekly limit resets at the same time each week for your account
+                      {overview.usage.top ? ", for all models and separately for premium models" : ""}. Failed requests with no reply aren’t charged.
                     </p>
+                    {overview.usage.credits && <ExtraUsage credits={overview.usage.credits} bought={creditsBought} onChanged={() => setReload((n) => n + 1)} />}
                   </>
                 ) : (
                   <p className="text-[13.5px] text-s-ink-2">No allowance information for your account.</p>

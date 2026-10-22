@@ -4,8 +4,10 @@ import { maxCodeRunCostUsd, workspaceMinuteCostUsd } from "./code/pricing";
 
 /**
  * Plans and their economics. Free, Pro and Max, priced in USD. Usage is
- * paced Claude-style (a 5-hour window and a rolling weekly cap, in usage
- * units) and protected by a monthly AI budget per account that keeps the
+ * paced Claude-style (a 5-hour window, a weekly limit that resets at a fixed
+ * time for each account, and on Max a separate weekly limit for premium
+ * models, all in usage units sized by what each request really costs) and
+ * protected by a monthly AI budget per account that keeps the
  * target profit margin (see docs/PRICING.md for the numbers behind the
  * defaults). Administrators change everything below in Admin → Plans &
  * pricing; these are the defaults.
@@ -25,6 +27,8 @@ const planSchema = z.object({
   annualDiscountPct: z.number().min(0).max(80).default(10),
   windowUnits: z.number().int().min(1).max(1_000_000),
   weeklyUnits: z.number().int().min(1).max(10_000_000),
+  /** A separate weekly limit for premium-tier models, in units (0 = none; like Claude's weekly limit for its top models). */
+  topWeeklyUnits: z.number().int().min(0).max(10_000_000).default(0),
   /** Model tiers this plan may use. */
   tiers: z.array(z.enum(MODEL_TIERS)).min(1),
   /** Longest reply per request, in tokens. */
@@ -100,7 +104,13 @@ export const billingSettingsSchema = z.object({
       cachedInputPct: z.number().min(0).max(100).default(0),
     })
     .default({ inputTokens: 2000, outputTokens: 800, callsPerMessage: 1.05, cachedInputPct: 0 }),
-  /** Usage units per message by model tier (admins can still override single models). */
+  /**
+   * Extra usage: a pack of units people on paid plans can buy to keep going after a limit. Off (0) until an
+   * administrator sets both the units and the price, and payments are set up.
+   */
+  creditPackUnits: z.number().int().min(0).max(1_000_000).default(0),
+  creditPackPriceUsd: z.number().min(0).max(1000).default(0),
+  /** Usage units for a typical message by model tier (admins can still override single models); real messages are sized by what they cost. */
   tierUnits: z.object({ standard: z.number().min(0).max(1000), advanced: z.number().min(0).max(1000), premium: z.number().min(0).max(1000) }),
   /** Tier overrides by model id (which plans include a model). */
   modelTiers: z.record(z.string().min(1).max(120), z.enum(MODEL_TIERS)).default({}),
@@ -123,6 +133,7 @@ export const DEFAULT_BILLING: BillingSettings = {
       annualDiscountPct: 0,
       windowUnits: 10,
       weeklyUnits: 30,
+      topWeeklyUnits: 0,
       tiers: ["standard"],
       maxOutputTokens: 1200,
       historyChars: 12_000,
@@ -142,6 +153,7 @@ export const DEFAULT_BILLING: BillingSettings = {
       annualDiscountPct: 10,
       windowUnits: 200,
       weeklyUnits: 1100,
+      topWeeklyUnits: 0,
       tiers: ["standard", "advanced"],
       maxOutputTokens: 2400,
       historyChars: 24_000,
@@ -160,6 +172,7 @@ export const DEFAULT_BILLING: BillingSettings = {
       annualDiscountPct: 10,
       windowUnits: 2000,
       weeklyUnits: 10_000,
+      topWeeklyUnits: 5000,
       tiers: ["standard", "advanced", "premium"],
       maxOutputTokens: 4800,
       historyChars: 80_000,
@@ -194,6 +207,8 @@ export const DEFAULT_BILLING: BillingSettings = {
   scenario: { inputTokens: 2000, outputTokens: 800, callsPerMessage: 1.05, cachedInputPct: 0 },
   tierUnits: { standard: 1, advanced: 20, premium: 40 },
   modelTiers: {},
+  creditPackUnits: 0,
+  creditPackPriceUsd: 0,
 };
 
 function mergeBilling(stored: unknown) {
@@ -229,7 +244,9 @@ export function validateBilling(stored: unknown): { ok: true; billing: BillingSe
   if (!b.plans.free.tiers.includes("standard")) return { ok: false, error: "Plans & pricing: Free must include standard models." };
   for (const id of PLAN_IDS) {
     if (b.plans[id].weeklyUnits < b.plans[id].windowUnits) return { ok: false, error: `Plans & pricing: ${b.plans[id].label}'s weekly allowance must be at least its 5-hour allowance.` };
+    if (b.plans[id].topWeeklyUnits > b.plans[id].weeklyUnits) return { ok: false, error: `Plans & pricing: ${b.plans[id].label}'s premium weekly limit can't be more than its weekly allowance.` };
   }
+  if ((b.creditPackUnits > 0) !== (b.creditPackPriceUsd > 0)) return { ok: false, error: "Plans & pricing: set both the extra-usage pack's units and its price, or neither." };
   if (b.plans.pro.priceUsd <= 0 || b.plans.max.priceUsd <= 0) return { ok: false, error: "Plans & pricing: paid plans need a price above $0." };
   return { ok: true, billing: b };
 }
@@ -359,6 +376,37 @@ export function modelUnits(
   return tierUnits[modelTier(m)];
 }
 
+/** Most and least a single request is charged, as a multiple of a typical message's units. */
+export const SIZE_MIN = 0.1;
+export const SIZE_MAX = 20;
+
+/**
+ * Units for one model call, sized like Claude's limits: a typical message (the
+ * planning scenario: about 1,500 words of context and a 600-word reply) costs
+ * the model's base units; longer messages, files and conversations cost more,
+ * short ones less, in proportion to what the call really costs. Clamped to
+ * 0.1×–20× the base, rounded to 0.01. Models without a verified price keep the base.
+ */
+export function sizedUnits(
+  model: Pick<ModelInfo, "inputPrice" | "outputPrice"> & Partial<Pick<ModelInfo, "cachedInputPrice" | "cacheWritePrice" | "cacheWritesUnreported" | "longContext">>,
+  base: number,
+  usage: { inputTokens: number | null; outputTokens: number | null; cachedInputTokens?: number | null; cacheWriteInputTokens?: number | null },
+  scenario: Pick<BillingSettings["scenario"], "inputTokens" | "outputTokens"> = DEFAULT_BILLING.scenario,
+): number {
+  if (base <= 0) return 0;
+  const price = (inTok: number, outTok: number, cached = 0, writes = 0) =>
+    model.inputPrice === null || model.outputPrice === null
+      ? null
+      : ((inTok - cached - writes) * model.inputPrice + cached * (model.cachedInputPrice ?? model.inputPrice) + writes * (model.cacheWritePrice ?? model.inputPrice) + outTok * model.outputPrice) / 1_000_000;
+  const typical = price(scenario.inputTokens, scenario.outputTokens);
+  if (!typical || usage.inputTokens === null || usage.outputTokens === null) return base;
+  const cached = Math.min(usage.inputTokens, Math.max(0, usage.cachedInputTokens ?? 0));
+  const writes = model.cacheWritesUnreported ? 0 : Math.min(usage.inputTokens - cached, Math.max(0, usage.cacheWriteInputTokens ?? 0));
+  const actual = price(usage.inputTokens, usage.outputTokens, cached, writes)!;
+  const units = base * Math.min(SIZE_MAX, Math.max(SIZE_MIN, actual / typical));
+  return Math.max(0.01, Math.round(units * 100) / 100);
+}
+
 export interface UnitRun {
   /** Epoch milliseconds. */
   at: number;
@@ -369,6 +417,15 @@ export interface UsageState {
   plan: PlanId;
   window: { used: number; limit: number; resetsAt: number | null };
   week: { used: number; limit: number; resetsAt: number | null };
+  /** The separate weekly limit for premium models, when the plan has one. */
+  top?: { used: number; limit: number; resetsAt: number | null } | null;
+  /** Extra usage bought separately, and whether it's used automatically when a limit is reached. */
+  credits?: { balance: number; auto: boolean } | null;
+}
+
+/** Start of the weekly period containing `now`: whole weeks after the account's anchor (when it was created). */
+export function weekStart(anchor: number, now: number): number {
+  return anchor + Math.floor(Math.max(0, now - anchor) / WEEK_MS) * WEEK_MS;
 }
 
 /** Units left before either the 5-hour window or the weekly cap is reached. */
@@ -381,7 +438,7 @@ export function unitsLeft(u: UsageState): number {
  * lasts five hours; the weekly cap counts everything in the last seven days.
  * `runs` must be sorted oldest first.
  */
-export function computeUsage(runs: UnitRun[], now: number, plan: Pick<Plan, "id" | "windowUnits" | "weeklyUnits">): UsageState {
+export function computeUsage(runs: UnitRun[], now: number, plan: Pick<Plan, "id" | "windowUnits" | "weeklyUnits">, anchor?: number): UsageState {
   const recent = runs.filter((r) => r.at > now - WEEK_MS && r.at <= now);
   let windowStart: number | null = null;
   for (const r of recent) {
@@ -389,11 +446,14 @@ export function computeUsage(runs: UnitRun[], now: number, plan: Pick<Plan, "id"
   }
   const active = windowStart !== null && now < windowStart + WINDOW_MS;
   const windowUsed = active ? recent.filter((r) => r.at >= windowStart!).reduce((s, r) => s + r.units, 0) : 0;
-  const weekUsed = recent.reduce((s, r) => s + r.units, 0);
+  // With the account's anchor, the week is fixed (as usage_compute_v2 counts it); without one, the last 7 days.
+  const kStart = anchor !== undefined ? weekStart(anchor, now) : null;
+  const inWeek = kStart === null ? recent : recent.filter((r) => r.at >= kStart);
+  const weekUsed = inWeek.reduce((s, r) => s + r.units, 0);
   return {
     plan: plan.id,
     window: { used: windowUsed, limit: plan.windowUnits, resetsAt: active ? windowStart! + WINDOW_MS : null },
-    week: { used: weekUsed, limit: plan.weeklyUnits, resetsAt: recent.length ? recent[0]!.at + WEEK_MS : null },
+    week: { used: weekUsed, limit: plan.weeklyUnits, resetsAt: kStart !== null ? kStart + WEEK_MS : recent.length ? recent[0]!.at + WEEK_MS : null },
   };
 }
 

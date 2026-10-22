@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { eventSeen, invoiceLedger, markEvent, recordLedger, refundLedger, stripeClient, syncSubscription, userForCustomer } from "@/lib/billing/stripe";
+import { addCredits, eventSeen, invoiceLedger, markEvent, recordLedger, refundLedger, stripeClient, syncSubscription, userForCustomer } from "@/lib/billing/stripe";
 import { serverEnv } from "@/lib/env";
 import { reportError } from "@/lib/observability";
 
@@ -30,10 +30,13 @@ export async function POST(req: Request) {
   try {
     if (await eventSeen(event.id)) return NextResponse.json({ received: true, duplicate: true });
     switch (event.type) {
-      case "checkout.session.completed": {
+      case "checkout.session.completed":
+      case "checkout.session.async_payment_succeeded": {
         const s = event.data.object;
         const subId = typeof s.subscription === "string" ? s.subscription : s.subscription?.id;
         if (s.mode === "subscription" && subId) await syncSubscription(stripe, subId, s.client_reference_id);
+        // Extra usage: added once the payment has gone through (each session counts once).
+        if (s.mode === "payment" && s.metadata?.kind === "credits" && s.payment_status === "paid") await addCredits(s);
         break;
       }
       case "customer.subscription.created":
