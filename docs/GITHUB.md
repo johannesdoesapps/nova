@@ -61,8 +61,7 @@ The sign-in button appears within about a minute; no redeploy is needed.
    - **Homepage URL:** `https://tryorbis.app`
    - **Setup URL:** `https://tryorbis.app/chat`. Tick **Redirect on update**.
    - **Webhook:** untick **Active**.
-   - **Repository permissions → Contents:** Read-only. Metadata stays Read-only automatically. Leave everything else at No access.
-     - To use **Code → Changes → Push to GitHub**, choose **Read and write** instead. Pushes only ever create new branches; see CODE_AGENT.md.
+   - **Repository permissions → Contents:** Read and write (needed for **Code → Changes → Push to GitHub**; pushes only ever create new branches). Read-only is enough if you only want to attach files and import. Metadata stays Read-only automatically. Leave everything else at No access.
    - **Where can this GitHub App be installed?** Any account.
 2. Click **Create GitHub App**. On the app's page:
    - copy the **App ID**;
@@ -82,3 +81,12 @@ Sign in, open a chat, and go to `+` → **Add from GitHub**. You should be able 
 3. tick a file and click **Add**.
 
 The file then shows as an attachment on the message.
+
+## Working on one repository from Orbis Code and elsewhere
+
+A Code project imported from GitHub remembers the git blob id of each file as it was imported (`code_projects.source_base`). Two buttons in **Code → Changes** use it:
+
+- **Update from GitHub** brings in the default branch. A file changed only on GitHub is updated; a file changed only in Orbis is kept; a file changed in both places keeps Orbis's version and is listed. Files deleted on GitHub are removed only if Orbis didn't change them.
+- **Push to GitHub** (to the repository the project came from) sends only the files changed or deleted in Orbis since the last import or update, as one commit on a new branch. If GitHub changed any of the same files meanwhile, it stops and lists them; the user can update first or push anyway (the pull request shows both versions).
+
+Administrators' projects can hold 2,000 files and 20 MB (others: 300 files, 3 MB), so Orbis's own repository fits. Logic: `src/lib/code/github-sync.ts`; tests: `tests/github-sync.test.ts`.

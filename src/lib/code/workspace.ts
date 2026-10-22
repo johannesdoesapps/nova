@@ -1,7 +1,7 @@
 import "server-only";
 import { Sandbox } from "@vercel/sandbox";
 import { sandboxCredentials } from "@/lib/workforce/sandbox-vercel";
-import { IGNORED_DIRS, isIgnoredPath, MAX_FILE_BYTES, MAX_PROJECT_FILES, PREVIEW_PORT, type ProjectFile } from "./projects";
+import { ADMIN_MAX_PROJECT_FILES, IGNORED_DIRS, isIgnoredPath, MAX_FILE_BYTES, PREVIEW_PORT, type ProjectFile } from "./projects";
 
 /**
  * Code workspace computers: one Vercel Sandbox microVM per session (1 vCPU,
@@ -119,7 +119,7 @@ function walk(dir) {
     if (e.isDirectory()) { if (!ignored.has(e.name)) walk(full); continue; }
     if (!e.isFile()) continue;
     const rel = relative(root, full);
-    if (paths.length >= ${MAX_PROJECT_FILES * 2}) { overflow = true; return; }
+    if (paths.length >= ${ADMIN_MAX_PROJECT_FILES * 2}) { overflow = true; return; }
     paths.push(rel);
     let st;
     try { st = statSync(full); } catch { continue; }

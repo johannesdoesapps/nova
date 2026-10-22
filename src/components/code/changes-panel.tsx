@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Bookmark, ExternalLink, GitBranch, History, Loader2, Undo2, X } from "lucide-react";
+import { ArrowLeft, Bookmark, CloudDownload, ExternalLink, GitBranch, History, Loader2, Undo2, X } from "lucide-react";
 import { VERIFICATION_LABEL } from "@/lib/code/agent/report";
 import { STATUS_LABEL, type AgentChange, type RunView } from "@/lib/code/agent/types";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,8 @@ export function ChangesPanel({ projectId, sourceRepo, focusRun, onFilesChanged }
   const [error, setError] = useState<CodeApiError | null>(null);
   const [working, setWorking] = useState<string | null>(null);
   const [pushing, setPushing] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  const [pulled, setPulled] = useState<PullResult | null>(null);
   const [version, setVersion] = useState(0);
   const changes = selected && loadedChanges?.runId === selected ? loadedChanges.list : null;
   const [loadedCheckpoints, setLoadedCheckpoints] = useState<{ runId: string; list: CheckpointInfo[] } | null>(null);
@@ -94,6 +96,20 @@ export function ChangesPanel({ projectId, sourceRepo, focusRun, onFilesChanged }
     }
   };
 
+  const pull = async () => {
+    setPulling(true);
+    setError(null);
+    setPulled(null);
+    try {
+      setPulled(await post<PullResult>(`/api/code/projects/${projectId}/github-pull`, {}));
+      onFilesChanged();
+    } catch (e) {
+      setError(e as CodeApiError);
+    } finally {
+      setPulling(false);
+    }
+  };
+
   const run = runs?.find((r) => r.id === selected) ?? null;
   const live = (changes ?? []).filter((c) => c.before !== c.after);
   const active = live.filter((c) => !c.revertedAt);
@@ -111,7 +127,18 @@ export function ChangesPanel({ projectId, sourceRepo, focusRun, onFilesChanged }
             <span className="text-[11.5px] font-medium uppercase tracking-[0.08em] text-s-ink-3">Changes</span>
           </>
         )}
-        <button type="button" onClick={() => setPushing(true)} className="ml-auto inline-flex h-7 items-center gap-1 rounded-full border border-s-line px-2.5 text-[12px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink">
+        {sourceRepo && (
+          <button
+            type="button"
+            onClick={() => void pull()}
+            disabled={pulling}
+            title={`Bring in the latest from ${sourceRepo}. Files you changed in Orbis are kept.`}
+            className="ml-auto inline-flex h-7 items-center gap-1 rounded-full border border-s-line px-2.5 text-[12px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink disabled:opacity-50"
+          >
+            {pulling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CloudDownload className="h-3.5 w-3.5" />} Update from GitHub
+          </button>
+        )}
+        <button type="button" onClick={() => setPushing(true)} className={cn("inline-flex h-7 items-center gap-1 rounded-full border border-s-line px-2.5 text-[12px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink", !sourceRepo && "ml-auto")}>
           <GitBranch className="h-3.5 w-3.5" /> Push to GitHub
         </button>
       </div>
@@ -125,6 +152,8 @@ export function ChangesPanel({ projectId, sourceRepo, focusRun, onFilesChanged }
             </button>
           </div>
         )}
+
+        {pulled && <PullSummary result={pulled} onClose={() => setPulled(null)} />}
 
         {pushing && <PushForm projectId={projectId} sourceRepo={sourceRepo} onClose={() => setPushing(false)} />}
 
@@ -239,14 +268,18 @@ function PushForm({ projectId, sourceRepo, onClose }: { projectId: string; sourc
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ compareUrl: string; commitUrl: string; branch: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** GitHub changed some of the same files: the user may push anyway, replacing them on the new branch. */
+  const [clash, setClash] = useState(false);
+  const [overwrite, setOverwrite] = useState(false);
 
   const push = async () => {
     setBusy(true);
     setError(null);
     try {
-      setResult(await post(`/api/code/projects/${projectId}/github-push`, { repo: repo.trim(), branch: branch.trim(), message: message.trim(), confirm: true }));
+      setResult(await post(`/api/code/projects/${projectId}/github-push`, { repo: repo.trim(), branch: branch.trim(), message: message.trim(), confirm: true, ...(overwrite ? { overwrite: true } : {}) }));
     } catch (e) {
       setError((e as Error).message);
+      if ((e as CodeApiError).code === "conflict") setClash(true);
     } finally {
       setBusy(false);
     }
@@ -296,12 +329,63 @@ function PushForm({ projectId, sourceRepo, onClose }: { projectId: string; sourc
             Create this branch on GitHub with the project&apos;s files as one commit. Existing branches are never changed.
           </label>
           {error && <p className="text-[12.5px] text-s-danger">{error}</p>}
+          {clash && (
+            <label className="flex items-start gap-2 text-[12px] text-s-ink-2">
+              <input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} className="mt-0.5" />
+              Push anyway: on the new branch, Orbis&apos;s versions of these files replace GitHub&apos;s. You can compare both in the pull request before merging.
+            </label>
+          )}
           <button type="submit" disabled={!confirmed || busy || !repo.trim() || !branch.trim() || !message.trim()} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-s-accent px-3.5 text-[12.5px] font-medium text-s-accent-ink disabled:opacity-40">
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitBranch className="h-3.5 w-3.5" />} Push
           </button>
           <p className="text-[11.5px] leading-snug text-s-ink-3">Needs GitHub connected to Orbis, with write access for Orbis&apos;s GitHub app on that repository.</p>
         </form>
       )}
+    </div>
+  );
+}
+
+interface PullResult {
+  repo: string;
+  branch: string;
+  updated: number;
+  added: number;
+  removed: number;
+  keptLocal: number;
+  conflicts: string[];
+  leftOut: string[];
+  leftOutCount: number;
+}
+
+/** What "Update from GitHub" did, in plain words. */
+function PullSummary({ result: r, onClose }: { result: PullResult; onClose: () => void }) {
+  const moved = r.updated + r.added + r.removed;
+  const parts = [r.updated && `${r.updated} updated`, r.added && `${r.added} added`, r.removed && `${r.removed} removed`].filter(Boolean).join(", ");
+  return (
+    <div role="status" className="mb-3 rounded-xl border border-s-line p-3 text-[13px]">
+      <div className="flex items-start gap-2">
+        <CloudDownload className="mt-0.5 h-4 w-4 shrink-0 text-s-ink-3" />
+        <div className="min-w-0 flex-1 space-y-1.5 text-s-ink-2">
+          <p className="text-s-ink">
+            {moved ? `Brought in the latest from ${r.repo} (${r.branch}): ${parts}.` : `Already up to date with ${r.repo} (${r.branch}).`}
+          </p>
+          {r.keptLocal > 0 && <p>Kept {r.keptLocal} file{r.keptLocal === 1 ? "" : "s"} you changed in Orbis.</p>}
+          {r.conflicts.length > 0 && (
+            <p>
+              Changed both here and on GitHub, so Orbis&apos;s version was kept: <span className="font-mono text-[12px]">{r.conflicts.join(", ")}</span>. Push to a branch and ask Claude to combine them.
+            </p>
+          )}
+          {r.leftOutCount > 0 && (
+            <p>
+              {r.leftOutCount} new file{r.leftOutCount === 1 ? "" : "s"} didn&apos;t fit the project&apos;s size limit and {r.leftOutCount === 1 ? "was" : "were"} left out
+              {r.leftOut.length ? `: ${r.leftOut.slice(0, 5).join(", ")}${r.leftOutCount > 5 ? "…" : ""}` : ""}.
+            </p>
+          )}
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close" className="shrink-0 text-s-ink-3 hover:text-s-ink">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 }

@@ -97,6 +97,32 @@ describe("projects and files", () => {
     await as(ALICE, () => q("insert into public.code_files (project_id, path, content) select $1, 'f' || g, repeat('x', 200000) from generate_series(1, 15) g", [p2]));
     await expect(as(ALICE, () => q("insert into public.code_files (project_id, path, content) values ($1, 'f16', repeat('x', 200000))", [p2]))).rejects.toThrow(/at most 3 MB/);
   });
+
+  it("gives administrators larger projects (2,000 files, 20 MB), and only them", async () => {
+    await db.exec(`reset role; insert into public.admins (user_id) values ('${BOB}') on conflict do nothing;`);
+    try {
+      const big = await newProject(BOB, "Orbis itself");
+      await as(BOB, () => q("insert into public.code_files (project_id, path) select $1, 'f' || g from generate_series(1, 2000) g", [big]));
+      await expect(as(BOB, () => q("insert into public.code_files (project_id, path) values ($1, 'one-more')", [big]))).rejects.toThrow(/at most 2000 files/);
+      const heavy = await newProject(BOB, "Heavy");
+      await as(BOB, () => q("insert into public.code_files (project_id, path, content) select $1, 'f' || g, repeat('x', 200000) from generate_series(1, 30) g", [heavy])); // 6 MB: over the usual 3
+      await expect(as(BOB, () => q("insert into public.code_files (project_id, path, content) select $1, 'g' || g, repeat('x', 200000) from generate_series(1, 80) g", [heavy]))).rejects.toThrow(/at most 20 MB/);
+      // Alice isn't an administrator: still 300 files.
+      const p = await newProject(ALICE);
+      await expect(as(ALICE, () => q("insert into public.code_files (project_id, path) select $1, 'f' || g from generate_series(1, 301) g", [p]))).rejects.toThrow(/at most 300 files/);
+    } finally {
+      await db.exec(`reset role; delete from public.admins where user_id = '${BOB}';`);
+    }
+  });
+
+  it("remembers which GitHub version each file came from, and only for the owner", async () => {
+    const p = await as(ALICE, async () => (await q<{ id: string }>(`insert into public.code_projects (name, template, source_repo, source_base) values ('Repo', 'github', 'alice/app', '{"a.ts":"ce013625030ba8dba906f756967f9e9ca394464a"}') returning id`))[0]!.id);
+    await as(ALICE, () => q(`update public.code_projects set source_base = '{"a.ts":"e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"}' where id = $1`, [p]));
+    expect(await as(ALICE, () => q("select source_base from public.code_projects where id = $1", [p]))).toEqual([{ source_base: { "a.ts": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391" } }]);
+    await as(BOB, () => q(`update public.code_projects set source_base = '{}' where id = $1`, [p]));
+    expect((await as(ALICE, () => q<{ source_base: object }>("select source_base from public.code_projects where id = $1", [p])))[0]!.source_base).toHaveProperty("a.ts");
+    await expect(as(ALICE, () => q(`update public.code_projects set source_base = '[1]' where id = $1`, [p]))).rejects.toThrow(/check constraint/);
+  });
 });
 
 describe("workspace time blocks", () => {

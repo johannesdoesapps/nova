@@ -9,6 +9,13 @@ import { z } from "zod";
 export const MAX_PROJECT_FILES = 300;
 export const MAX_FILE_BYTES = 204_800;
 export const MAX_PROJECT_BYTES = 3 * 1024 * 1024;
+/** Administrators' projects are larger, so Orbis's own code fits (the database applies the same rule). */
+export const ADMIN_MAX_PROJECT_FILES = 2000;
+export const ADMIN_MAX_PROJECT_BYTES = 20 * 1024 * 1024;
+
+export function projectLimits(admin: boolean): { files: number; bytes: number } {
+  return admin ? { files: ADMIN_MAX_PROJECT_FILES, bytes: ADMIN_MAX_PROJECT_BYTES } : { files: MAX_PROJECT_FILES, bytes: MAX_PROJECT_BYTES };
+}
 /** The port a project's app listens on for the live preview. */
 export const PREVIEW_PORT = 3000;
 

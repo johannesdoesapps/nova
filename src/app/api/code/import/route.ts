@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { MAX_PROJECT_BYTES, MAX_PROJECT_FILES, validProjectPath, type ProjectFile } from "@/lib/code/projects";
+import { isAdmin } from "@/lib/admin";
+import { projectLimits, validProjectPath, type ProjectFile } from "@/lib/code/projects";
 import { codeContext, createProject } from "@/lib/code/server";
 import { REPO_RE, repoFile, repoTree } from "@/lib/github/app";
 import { requireRepoAccess } from "@/lib/github/server";
@@ -35,22 +36,27 @@ export async function POST(req: Request) {
     const auth = await codeContext("code-import", 5);
     const token = await requireRepoAccess();
     const tree = await repoTree(token, input.repo);
+    const limits = projectLimits(await isAdmin(auth));
     let total = 0;
     const picked = tree.files.filter((f) => {
       if (!validProjectPath(f.path)) return false;
-      if (total + f.size > MAX_PROJECT_BYTES) return false;
+      if (total + f.size > limits.bytes) return false;
       total += f.size;
       return true;
-    }).slice(0, MAX_PROJECT_FILES);
+    }).slice(0, limits.files);
     if (!picked.length) throw new ApiError("bad_request", "That repository has no text files Orbis can open.");
     const read = await pool(picked, 8, (f) => repoFile(token, input.repo, f.path).catch(() => null));
     const files: ProjectFile[] = read.filter((r): r is NonNullable<typeof r> => r !== null).map((r) => ({ path: r.path, content: r.content }));
+    // Which GitHub version each file came from, for "Update from GitHub" and "Push to GitHub".
+    const shaOf = new Map(picked.map((f) => [f.path, f.sha]));
+    const sourceBase = Object.fromEntries(files.map((f) => [f.path, shaOf.get(f.path)!]));
     const left = tree.files.length - files.length;
     const project = await createProject(auth, {
       name: input.name ?? input.repo.split("/")[1]!,
       template: "github",
       runCommand: "",
       sourceRepo: input.repo,
+      sourceBase,
       files,
     });
     return NextResponse.json({ project, imported: files.length, leftOut: left, truncated: tree.truncated }, { status: 201 });

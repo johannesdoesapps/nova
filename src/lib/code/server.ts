@@ -7,7 +7,7 @@ import { ApiError, requireUuid } from "@/lib/http";
 import { reportError } from "@/lib/observability";
 import { limiter } from "@/lib/rate-limit";
 import { workspaceBlockCostUsd } from "./pricing";
-import { byteLength, isIgnoredPath, MAX_FILE_BYTES, validProjectPath, type ProjectFile, type ProjectSummary } from "./projects";
+import { ADMIN_MAX_PROJECT_FILES, byteLength, isIgnoredPath, MAX_FILE_BYTES, validProjectPath, type ProjectFile, type ProjectSummary } from "./projects";
 import { collectFiles, seedWorkspace, syncPlan, vercelWorkspaces, workspaceName, workspacesAvailable, type WorkspaceBackend, type WorkspaceBox } from "./workspace";
 
 /**
@@ -64,7 +64,7 @@ export async function getProjectRow(auth: Authed, id: string): Promise<ProjectSu
 }
 
 export async function getFiles(auth: Authed, projectId: string): Promise<ProjectFile[]> {
-  const { data, error } = await auth.supabase.from("code_files").select("path, content").eq("project_id", projectId).order("path").limit(1000);
+  const { data, error } = await auth.supabase.from("code_files").select("path, content").eq("project_id", projectId).order("path").limit(ADMIN_MAX_PROJECT_FILES);
   if (error) throw dbError(error, "code.files.list");
   return data as ProjectFile[];
 }
@@ -72,7 +72,7 @@ export async function getFiles(auth: Authed, projectId: string): Promise<Project
 /** Create a project with its first files, within the plan's number of projects. */
 export async function createProject(
   auth: Authed,
-  input: { name: string; template: string; runCommand: string; sourceRepo?: string | null; files: ProjectFile[] },
+  input: { name: string; template: string; runCommand: string; sourceRepo?: string | null; sourceBase?: Record<string, string> | null; files: ProjectFile[] },
 ): Promise<ProjectSummary> {
   const entitlement = await entitlementFor(auth);
   if (!entitlement) throw new ApiError("not_configured", "Projects need accounts to be set up.");
@@ -91,7 +91,7 @@ export async function createProject(
   }
   const { data, error } = await auth.supabase
     .from("code_projects")
-    .insert({ name: input.name, template: input.template, run_command: input.runCommand, source_repo: input.sourceRepo ?? null })
+    .insert({ name: input.name, template: input.template, run_command: input.runCommand, source_repo: input.sourceRepo ?? null, ...(input.sourceBase ? { source_base: input.sourceBase } : {}) })
     .select(PROJECT_COLS)
     .single();
   if (error) throw dbError(error, "code.projects.create");

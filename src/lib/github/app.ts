@@ -1,5 +1,5 @@
 import "server-only";
-import { createSign } from "node:crypto";
+import { createHash, createSign } from "node:crypto";
 import { ApiError } from "@/lib/http";
 
 /**
@@ -154,6 +154,14 @@ export const REPO_RE = /^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}$/;
 export interface TreeFile {
   path: string;
   size: number;
+  /** Git's blob id for the file's content (see gitBlobSha). */
+  sha: string;
+}
+
+/** Git's blob id for some text: sha1 of "blob <bytes>\0<content>", the same id GitHub lists in a tree. */
+export function gitBlobSha(content: string): string {
+  const buf = Buffer.from(content, "utf8");
+  return createHash("sha1").update(`blob ${buf.length}\0`).update(buf).digest("hex");
 }
 
 /** Files we can show as text (by extension or well-known name), skipping vendored and build folders. */
@@ -167,10 +175,10 @@ export async function repoTree(token: string, repo: string, f: Fetch = fetch): P
   const meta = await gh<{ default_branch: string }>(`/repos/${repo}`, token, {}, f);
   if (!meta.data) throw new ApiError("not_found", "That repository isn't available to Orbis. Check which repositories you gave Orbis access to on GitHub.");
   const branch = meta.data.default_branch;
-  const t = await gh<{ tree: { path: string; type: string; size?: number }[]; truncated: boolean }>(`/repos/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`, token, {}, f);
+  const t = await gh<{ tree: { path: string; type: string; size?: number; sha: string }[]; truncated: boolean }>(`/repos/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`, token, {}, f);
   const files = (t.data?.tree ?? [])
     .filter((x) => x.type === "blob" && (x.size ?? 0) <= MAX_FILE_BYTES && !SKIP_DIRS.test(x.path) && (TEXT_EXT.test(x.path) || TEXT_NAMES.test(x.path)))
-    .map((x) => ({ path: x.path, size: x.size ?? 0 }))
+    .map((x) => ({ path: x.path, size: x.size ?? 0, sha: x.sha }))
     .slice(0, 5000);
   return { branch, files, truncated: Boolean(t.data?.truncated) || files.length === 5000 };
 }

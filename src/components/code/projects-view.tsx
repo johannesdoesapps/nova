@@ -399,7 +399,8 @@ export function CodeProjectsView() {
                     {!repos && !repoNote && <p className="text-[13px] text-s-ink-3">Looking for your repositories…</p>}
                     {repoNote && <p className="text-[13px] text-s-ink-2">{repoNote}</p>}
                     <p className="mt-2 text-[12px] text-s-ink-3">
-                      Text files up to 100 KB from the default branch are copied. To send changes back, use Push to GitHub, which always makes a new branch.
+                      Text files up to 100 KB from the default branch are copied. Later, Update from GitHub brings in new changes without touching yours, and Push to GitHub sends your changes to a new
+                      branch.
                     </p>
                   </div>
                   <button
