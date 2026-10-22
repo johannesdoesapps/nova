@@ -323,7 +323,7 @@ function AssistantMessage({
           {typeof m.cost === "number" && m.cost > 0 && <span className="ml-2 text-[11.5px] text-s-ink-3">≈ {formatUsd(m.cost)}</span>}
         </div>
       )}
-      {m.status === "done" && <VerifyPanel state={verify.state} onClose={verify.close} onRetry={verify.run} />}
+      {m.status === "done" && <VerifyPanel state={verify.state} onClose={verify.close} onRetry={verify.run} onOpenFull={verify.openFull} />}
     </div>
   );
 }

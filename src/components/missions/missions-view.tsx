@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowRight, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { useCatalog } from "@/components/common/model-picker";
@@ -30,7 +30,9 @@ export function MissionsView() {
   const catalog = useCatalog();
   const [missions, setMissions] = useState<MissionSummary[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [goal, setGoal] = useState("");
+  // A goal handed over from the "Plan a project" template (?goal=).
+  const params = useSearchParams();
+  const [goal, setGoal] = useState(() => params.get("goal")?.slice(0, 4000) ?? "");
   const [modelId, setModelId] = useState<string>("auto:deep");
   const [planning, setPlanning] = useState(false);
   const [plan, setPlan] = useState<MissionPlan | null>(null);

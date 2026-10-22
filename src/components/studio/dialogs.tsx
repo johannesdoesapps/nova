@@ -1,14 +1,14 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
-import { Archive, ArchiveRestore, Bookmark, Check, FolderKanban, Monitor, Moon, Plus, Sun, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, Bookmark, Check, Copy, FolderKanban, Monitor, Moon, Pencil, Plus, Sun, Trash2 } from "lucide-react";
 import { saveNote } from "@/components/projects/save-to-project";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import { CHAT_MODES, MODE_LABELS, type ChatMode } from "@/lib/ai/modes";
 import { REPLY_LENGTH_LABEL, REPLY_LENGTHS, REPLY_STYLE_LABEL, REPLY_STYLES, type ReplyLength, type ReplyStyle } from "@/lib/ai/reply-settings";
 import { cn } from "@/lib/utils";
 import type { ConvSummary, Msg } from "./history";
-import type { SavedPrompt, StudioSettings, ThemePref } from "./prefs";
+import type { PromptPatch, SavedPrompt, StudioSettings, ThemePref } from "./prefs";
 import { Dialog, IconButton, Kbd, Segmented, Switch } from "./ui";
 import { UsageMeters, useUsage } from "./usage";
 import { useApp } from "@/components/layout/app-context";
@@ -286,6 +286,8 @@ export function PromptsDialog({
   prompts,
   onAdd,
   onRemove,
+  onUpdate,
+  onDuplicate,
   onUse,
 }: {
   open: boolean;
@@ -293,12 +295,20 @@ export function PromptsDialog({
   prompts: SavedPrompt[];
   onAdd: (text: string) => boolean;
   onRemove: (id: string) => void;
+  onUpdate: (id: string, patch: PromptPatch) => void;
+  onDuplicate: (id: string) => boolean;
   onUse: (text: string) => void;
 }) {
   const [draft, setDraft] = useState("");
   const [note, setNote] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [folder, setFolder] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const folders = [...new Set(prompts.map((p) => p.folder).filter((f): f is string => !!f))].sort((a, b) => a.localeCompare(b));
+  const q = query.trim().toLowerCase();
+  const shown = prompts.filter((p) => (!folder || p.folder === folder) && (!q || `${p.title ?? ""} ${p.folder ?? ""} ${p.text}`.toLowerCase().includes(q)));
   return (
-    <Dialog open={open} onClose={onClose} title="Saved prompts" description="Reusable prompts, kept in this browser." width={560}>
+    <Dialog open={open} onClose={onClose} title="Saved prompts" description="Reusable prompts, kept in this browser (not synced to your account)." width={600}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -324,7 +334,7 @@ export function PromptsDialog({
           className="s-scroll block w-full resize-none rounded-2xl border border-s-line-strong bg-transparent px-3.5 py-2.5 text-[14px] text-s-ink outline-none transition placeholder:text-s-ink-3 focus:border-[color-mix(in_srgb,var(--s-accent)_45%,transparent)] focus-visible:outline-none"
         />
         <div className="mt-2 flex items-center justify-between gap-3">
-          <span className="text-[12.5px] text-s-ink-3">{note ?? "Tip: save any of your messages with the bookmark icon."}</span>
+          <span className="text-[12.5px] text-s-ink-3">{note ?? "Tip: save any message, or any reply from its ⋯ menu."}</span>
           <button type="submit" className={btnPrimary} disabled={!draft.trim()}>
             <Plus /> Save
           </button>
@@ -336,25 +346,90 @@ export function PromptsDialog({
           <p className="mt-2 text-[13.5px] text-s-ink-2">No saved prompts yet.</p>
         </div>
       ) : (
-        <ul className="flex flex-col gap-1.5">
-          {prompts.map((p) => (
-            <li key={p.id} className="group flex items-start gap-2 rounded-2xl border border-s-line p-1.5 transition hover:border-s-line-strong">
-              <button
-                type="button"
-                onClick={() => onUse(p.text)}
-                className="min-w-0 flex-1 rounded-xl px-2.5 py-1.5 text-left text-[13.5px] leading-relaxed text-s-ink-2 transition hover:text-s-ink"
-                title="Use this prompt"
-              >
-                <span className="line-clamp-3 whitespace-pre-wrap">{p.text}</span>
-              </button>
-              <IconButton size="sm" label="Delete prompt" onClick={() => onRemove(p.id)}>
-                <Trash2 />
-              </IconButton>
-            </li>
-          ))}
-        </ul>
+        <>
+          {(prompts.length > 5 || folders.length > 0) && (
+            <div className="mb-3 flex flex-wrap items-center gap-1.5">
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search prompts" aria-label="Search prompts" className="h-8 min-w-0 flex-1 rounded-lg border border-s-line bg-transparent px-2.5 text-[13px] outline-none placeholder:text-s-ink-3 focus:border-s-line-strong" />
+              {folders.length > 0 &&
+                [null, ...folders].map((f) => (
+                  <button key={f ?? "all"} type="button" aria-pressed={folder === f} onClick={() => setFolder(f)} className={cn("h-8 rounded-lg border px-2.5 text-[12.5px] transition", folder === f ? "border-s-line-strong bg-s-hover text-s-ink" : "border-s-line text-s-ink-2 hover:bg-s-hover")}>
+                    {f ?? "All"}
+                  </button>
+                ))}
+            </div>
+          )}
+          {shown.length === 0 ? (
+            <p className="px-1 py-4 text-[13.5px] text-s-ink-3">No prompts match.</p>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {shown.map((p) =>
+                editing === p.id ? (
+                  <PromptEditor key={p.id} prompt={p} folders={folders} onCancel={() => setEditing(null)} onSave={(patch) => { onUpdate(p.id, patch); setEditing(null); }} />
+                ) : (
+                  <li key={p.id} className="group flex items-start gap-1 rounded-2xl border border-s-line p-1.5 transition hover:border-s-line-strong">
+                    <button type="button" onClick={() => onUse(p.text)} className="min-w-0 flex-1 rounded-xl px-2.5 py-1.5 text-left text-[13.5px] leading-relaxed text-s-ink-2 transition hover:text-s-ink" title="Use this prompt">
+                      {(p.title || p.folder) && (
+                        <span className="mb-0.5 flex items-center gap-1.5 text-[12.5px]">
+                          {p.title && <span className="font-medium text-s-ink">{p.title}</span>}
+                          {p.folder && <span className="rounded-full border border-s-line px-1.5 text-[11px] text-s-ink-3">{p.folder}</span>}
+                        </span>
+                      )}
+                      <span className="line-clamp-3 whitespace-pre-wrap">{p.text}</span>
+                    </button>
+                    <IconButton size="sm" label="Edit prompt" onClick={() => setEditing(p.id)}>
+                      <Pencil />
+                    </IconButton>
+                    <IconButton size="sm" label="Duplicate prompt" onClick={() => onDuplicate(p.id) || setNote("You can keep up to 100 prompts.")}>
+                      <Copy />
+                    </IconButton>
+                    <IconButton size="sm" label="Delete prompt" onClick={() => onRemove(p.id)}>
+                      <Trash2 />
+                    </IconButton>
+                  </li>
+                ),
+              )}
+            </ul>
+          )}
+        </>
       )}
     </Dialog>
+  );
+}
+
+function PromptEditor({ prompt, folders, onSave, onCancel }: { prompt: SavedPrompt; folders: string[]; onSave: (patch: PromptPatch) => void; onCancel: () => void }) {
+  const [title, setTitle] = useState(prompt.title ?? "");
+  const [folder, setFolder] = useState(prompt.folder ?? "");
+  const [text, setText] = useState(prompt.text);
+  const input = "h-8 min-w-0 flex-1 rounded-lg border border-s-line bg-transparent px-2.5 text-[13px] outline-none placeholder:text-s-ink-3 focus:border-s-line-strong";
+  return (
+    <li className="rounded-2xl border border-s-line-strong p-2.5">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (text.trim()) onSave({ title, folder, text });
+        }}
+        className="space-y-2"
+      >
+        <div className="flex gap-2">
+          <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} placeholder="Name (optional)" aria-label="Prompt name" className={input} />
+          <input value={folder} onChange={(e) => setFolder(e.target.value)} maxLength={40} placeholder="Folder (optional)" aria-label="Folder" list="prompt-folders" className={input} />
+          <datalist id="prompt-folders">
+            {folders.map((f) => (
+              <option key={f} value={f} />
+            ))}
+          </datalist>
+        </div>
+        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4} maxLength={4000} aria-label="Prompt text" className="block w-full resize-y rounded-xl border border-s-line bg-transparent px-2.5 py-2 text-[13.5px] outline-none focus:border-s-line-strong" />
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onCancel} className={btnQuiet}>
+            Cancel
+          </button>
+          <button type="submit" disabled={!text.trim()} className={btnPrimary}>
+            Save
+          </button>
+        </div>
+      </form>
+    </li>
   );
 }
 

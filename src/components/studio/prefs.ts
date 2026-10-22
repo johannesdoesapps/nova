@@ -5,7 +5,7 @@ import { useLocalStorage } from "@/hooks/use-local-storage";
 import { CHAT_MODES, type ChatMode } from "@/lib/ai/modes";
 import type { ReplyLength, ReplyStyle } from "@/lib/ai/reply-settings";
 
-function useStoredJson<T>(key: string, fallback: T, valid: (v: unknown) => v is T): [T, (v: T) => void] {
+export function useStoredJson<T>(key: string, fallback: T, valid: (v: unknown) => v is T): [T, (v: T) => void] {
   const [raw, setRaw] = useLocalStorage(key);
   const value = useMemo(() => {
     if (!raw) return fallback;
@@ -94,6 +94,22 @@ export interface SavedPrompt {
   id: string;
   text: string;
   createdAt: string;
+  /** Optional short name shown instead of the start of the text. */
+  title?: string;
+  /** Optional folder, for organising. */
+  folder?: string;
+  updatedAt?: string;
+}
+
+export type PromptPatch = Partial<Pick<SavedPrompt, "text" | "title" | "folder">>;
+
+/** A saved prompt with a change applied (trimmed; empty title or folder removed). */
+export function patchPrompt(p: SavedPrompt, patch: PromptPatch, now = new Date().toISOString()): SavedPrompt {
+  const next: SavedPrompt = { ...p, updatedAt: now };
+  if (patch.text !== undefined) next.text = patch.text.trim().slice(0, 4000) || p.text;
+  if (patch.title !== undefined) next.title = patch.title.trim().slice(0, 80) || undefined;
+  if (patch.folder !== undefined) next.folder = patch.folder.trim().slice(0, 40) || undefined;
+  return next;
 }
 
 export function useSavedPrompts() {
@@ -108,7 +124,19 @@ export function useSavedPrompts() {
     [prompts, set],
   );
   const remove = useCallback((id: string) => set(prompts.filter((p) => p.id !== id)), [prompts, set]);
-  return { prompts, add, remove };
+  const update = useCallback((id: string, patch: PromptPatch) => set(prompts.map((p) => (p.id === id ? patchPrompt(p, patch) : p))), [prompts, set]);
+  const duplicate = useCallback(
+    (id: string) => {
+      const i = prompts.findIndex((p) => p.id === id);
+      if (i < 0 || prompts.length >= 100) return false;
+      const src = prompts[i]!;
+      const copy: SavedPrompt = { ...src, id: crypto.randomUUID(), title: `${src.title ?? "Prompt"} (copy)`.slice(0, 80), createdAt: new Date().toISOString(), updatedAt: undefined };
+      set([...prompts.slice(0, i + 1), copy, ...prompts.slice(i + 1)]);
+      return true;
+    },
+    [prompts, set],
+  );
+  return { prompts, add, remove, update, duplicate };
 }
 
 /* Feedback --------------------------------------------------------------- */

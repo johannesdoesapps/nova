@@ -1,10 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { CircleAlert, ExternalLink, Loader2, ShieldCheck, X } from "lucide-react";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import type { ClaimKind, ClaimStatus } from "@/lib/claims/types";
 import { cn } from "@/lib/utils";
+import { openInVerify } from "@/lib/verify/handoff";
+import { categoryOf, CATEGORIES } from "@/lib/verify/categories";
 import type { VerifyResult } from "@/lib/verify/schema";
 import { IconButton } from "./ui";
 
@@ -39,7 +42,7 @@ export function useVerify(question: string, answer: string) {
       setState({ status: "error", error: e instanceof Error ? e.message : "The check failed." });
     }
   };
-  return { state, run, close: () => setState({ status: "idle" }) };
+  return { state, run, close: () => setState({ status: "idle" }), openFull: () => openInVerify(question, answer) };
 }
 
 export function VerifyButton({ onClick, loading }: { onClick: () => void; loading: boolean }) {
@@ -50,7 +53,7 @@ export function VerifyButton({ onClick, loading }: { onClick: () => void; loadin
   );
 }
 
-export function VerifyPanel({ state, onClose, onRetry }: { state: ReturnType<typeof useVerify>["state"]; onClose: () => void; onRetry: () => void }) {
+export function VerifyPanel({ state, onClose, onRetry, onOpenFull }: { state: ReturnType<typeof useVerify>["state"]; onClose: () => void; onRetry: () => void; onOpenFull?: () => void }) {
   if (state.status === "idle") return null;
   return (
     <section aria-label="Verification" className="glass s-in mt-3 rounded-2xl p-4 text-[13.5px]">
@@ -93,9 +96,9 @@ export function VerifyPanel({ state, onClose, onRetry }: { state: ReturnType<typ
               <li key={i} className="rounded-xl border border-s-line px-3 py-2">
                 <div className="flex flex-wrap items-center gap-1.5">
                   {c.status ? (
-                    <span className={cn("rounded-full border px-2 py-0.5 text-[11.5px] font-medium", STATUS[c.status].tone)}>{STATUS[c.status].label}</span>
+                    <span className={cn("rounded-full border px-2 py-0.5 text-[11.5px] font-medium", STATUS[c.status].tone)}>{CATEGORIES[categoryOf(c.status)].label}</span>
                   ) : (
-                    <span className="rounded-full border border-s-line px-2 py-0.5 text-[11.5px] text-s-ink-3">Not verified</span>
+                    <span className="rounded-full border border-s-line px-2 py-0.5 text-[11.5px] text-s-ink-3">Not checked</span>
                   )}
                   <span className="rounded-full bg-s-hover px-2 py-0.5 text-[11.5px] text-s-ink-2">{KIND[c.kind]}</span>
                   {c.hedged && <span className="text-[11.5px] text-s-ink-3">hedged</span>}
@@ -141,6 +144,11 @@ export function VerifyPanel({ state, onClose, onRetry }: { state: ReturnType<typ
               {n}
             </p>
           ))}
+          {onOpenFull && (
+            <Link href="/verify" onClick={onOpenFull} className="self-start text-[12.5px] text-s-ink-2 underline underline-offset-4 hover:text-s-ink">
+              Open in Verify: choose claims, add your own documents, or write a revised answer
+            </Link>
+          )}
         </div>
       )}
     </section>

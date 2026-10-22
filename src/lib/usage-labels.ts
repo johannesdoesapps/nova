@@ -9,6 +9,7 @@ const FEATURES: [RegExp, string][] = [
   [/^code_run$/, "Run code"],
   [/^code_workspace$/, "Code computer time"],
   [/^mission/, "Missions"],
+  [/^template$/, "Templates"],
   [/^connector/, "Connectors"],
   [/^search$/, "Web search"],
   [/^(verify|claims|hypotheses|trial|benchmark|route)$/, "Research tools"],

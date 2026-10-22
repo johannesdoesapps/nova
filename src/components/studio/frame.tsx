@@ -38,6 +38,8 @@ interface StudioContext {
   on: <T = unknown>(event: FrameEvent, cb: (detail: T) => void) => () => void;
   /** A saved prompt chosen while no composer was on screen. */
   takePendingPrompt: () => string | null;
+  /** Open a new chat with `text` in the box (not sent). */
+  startChatWith: (text: string) => void;
 }
 
 const Ctx = createContext<StudioContext | null>(null);
@@ -62,7 +64,7 @@ export function StudioFrame({ children }: { children: ReactNode }) {
 
   const theme = useTheme();
   const [settings, updateSettings] = useSettings();
-  const { prompts, add: addPrompt, remove: removePrompt } = useSavedPrompts();
+  const { prompts, add: addPrompt, remove: removePrompt, update: updatePrompt, duplicate: duplicatePrompt } = useSavedPrompts();
   const { feedback, give: giveFeedback } = useFeedback();
 
   // Events between the frame and the page inside it.
@@ -216,6 +218,10 @@ export function StudioFrame({ children }: { children: ReactNode }) {
     notify,
     on,
     takePendingPrompt,
+    startChatWith: (text: string) => {
+      pendingPrompt.current = text;
+      router.push("/chat?new=1");
+    },
   };
 
   return (
@@ -361,6 +367,8 @@ export function StudioFrame({ children }: { children: ReactNode }) {
           prompts={prompts}
           onAdd={addPrompt}
           onRemove={removePrompt}
+          onUpdate={updatePrompt}
+          onDuplicate={duplicatePrompt}
           onUse={(text) => {
             setPromptsOpen(false);
             // Fill whichever composer is on screen; otherwise open a new chat with it.

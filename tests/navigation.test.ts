@@ -213,17 +213,17 @@ describe("the Chat / Code switch", () => {
 });
 
 describe("the redesigned sidebar", () => {
-  it("is Home, Agents, Projects, then Tools; Missions lives under Projects", () => {
+  it("is Home, Agents, Projects, Templates, then Tools; Missions lives under Projects", () => {
     expect(
       sidebarFor(false)
         .filter((e) => e.group === "main")
         .map((e) => e.id),
-    ).toEqual(["home", "agents", "projects"]);
+    ).toEqual(["home", "agents", "projects", "templates"]);
     expect(
       sidebarFor(false)
         .filter((e) => e.group === "tools")
         .map((e) => e.id),
-    ).toEqual(["discover", "council", "arena", "connectors"]);
+    ).toEqual(["discover", "council", "arena", "verify", "connectors"]);
     expect(sidebarFor(true).some((e) => e.id === "missions")).toBe(false);
     // Still one command-palette destination.
     expect(navFor(false).filter((e) => e.id === "missions")).toHaveLength(1);

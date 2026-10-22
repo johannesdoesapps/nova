@@ -1,4 +1,4 @@
-import { Bot, Code2, Compass, Flag, Gauge, FolderKanban, House, MessagesSquare, Plug, SlidersHorizontal, Swords, Users, Workflow, type LucideIcon } from "lucide-react";
+import { Bot, Code2, Compass, Flag, Gauge, FolderKanban, House, LayoutTemplate, MessagesSquare, Plug, ShieldCheck, SlidersHorizontal, Swords, Users, Workflow, type LucideIcon } from "lucide-react";
 
 /**
  * The app's one navigation list: the sidebar (desktop, collapsed and the
@@ -6,7 +6,7 @@ import { Bot, Code2, Compass, Flag, Gauge, FolderKanban, House, MessagesSquare, 
  * destination appears once, with one label and one icon everywhere.
  */
 
-export type Section = "home" | "chat" | "code" | "projects" | "agents" | "discover" | "missions" | "council" | "arena" | "connectors" | "usage" | "workforce" | "admin";
+export type Section = "home" | "chat" | "code" | "projects" | "templates" | "agents" | "discover" | "missions" | "council" | "arena" | "verify" | "connectors" | "usage" | "workforce" | "admin";
 
 export interface NavEntry {
   id: Section;
@@ -27,10 +27,12 @@ export const NAV_ENTRIES: NavEntry[] = [
   { id: "code", label: "Code", href: "/code", icon: Code2, group: "mode", hint: "Build and fix software with the coding agent" },
   { id: "agents", label: "Agents", href: "/agents", icon: Bot, group: "main", hint: "Specialised assistants, including the Security Team" },
   { id: "projects", label: "Projects", href: "/projects", icon: FolderKanban, group: "main", hint: "Ongoing work: code projects, missions and their tasks" },
+  { id: "templates", label: "Templates", href: "/templates", icon: LayoutTemplate, group: "main", hint: "Ready-made workflows for common tasks" },
   { id: "discover", label: "Discover", href: "/discover", icon: Compass, group: "tools", hint: "What Orbis can do, with ways to try it" },
   { id: "missions", label: "Missions", href: "/missions", icon: Flag, group: "main", hint: "Plan projects and track tasks", parent: "projects" },
   { id: "council", label: "Council", href: "/council", icon: Users, group: "tools", hint: "Several models answer; one combined reply" },
   { id: "arena", label: "Arena", href: "/arena", icon: Swords, group: "tools", hint: "Compare models side by side, blind if you like" },
+  { id: "verify", label: "Verify", href: "/verify", icon: ShieldCheck, group: "tools", hint: "Check claims against sources" },
   { id: "connectors", label: "Connectors", href: "/connectors", icon: Plug, group: "tools", hint: "Connect Gmail, GitHub, Drive and more" },
   { id: "usage", label: "Usage", href: "/usage", icon: Gauge, group: "main", hint: "Your allowance, resets and usage history", parent: "home" },
   { id: "workforce", label: "Workforce", href: "/workforce", icon: Workflow, group: "admin", hint: "Internal AI engineers" },
