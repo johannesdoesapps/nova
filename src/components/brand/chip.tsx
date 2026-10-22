@@ -11,9 +11,9 @@ const useGradientId = () => "chip" + useId().replace(/[^a-zA-Z0-9_-]/g, "");
 
 const STOPS = (
   <>
-    <stop offset="0" stopColor="#22d3ee" />
-    <stop offset="0.5" stopColor="#3b82f6" />
-    <stop offset="1" stopColor="#8b5cf6" />
+    <stop offset="0" stopColor="#7c3aed" />
+    <stop offset="0.5" stopColor="#d946ef" />
+    <stop offset="1" stopColor="#fb7185" />
   </>
 );
 
@@ -31,7 +31,7 @@ export function ChipMark({ className, simple = false, title }: { className?: str
           {STOPS}
         </linearGradient>
       </defs>
-      <path d={simple ? PINS_SIMPLE : PINS} stroke="#60a5fa" strokeWidth={simple ? 5 : 4} strokeLinecap="round" fill="none" />
+      <path d={simple ? PINS_SIMPLE : PINS} stroke="#c084fc" strokeWidth={simple ? 5 : 4} strokeLinecap="round" fill="none" />
       {simple ? <rect x="14" y="14" width="36" height="36" rx="8" fill={`url(#${id})`} /> : <rect x="16" y="16" width="32" height="32" rx="7" fill={`url(#${id})`} />}
       <circle cx="32" cy="32" r={simple ? 8 : 7.5} fill="none" stroke="#ffffff" strokeWidth={simple ? 5 : 4.2} />
       {!simple && <circle cx="40.5" cy="23.5" r="2.2" fill="#ffffff" />}
@@ -54,9 +54,9 @@ export function ChipMascot({ mood = "hello", className, title }: { mood?: ChipMo
           {STOPS}
         </linearGradient>
       </defs>
-      <path d={`M24 14V8M32 14V8M40 14V8${leftArm}M14 38H8${rightArm}M50 38H56M26 50V57M38 50V57M23 57H28M35 57H41`} stroke="#60a5fa" strokeWidth="3" strokeLinecap="round" fill="none" />
+      <path d={`M24 14V8M32 14V8M40 14V8${leftArm}M14 38H8${rightArm}M50 38H56M26 50V57M38 50V57M23 57H28M35 57H41`} stroke="#c084fc" strokeWidth="3" strokeLinecap="round" fill="none" />
       <rect x="14" y="14" width="36" height="36" rx="9" fill={`url(#${id})`} />
-      <rect x="19" y="21" width="26" height="20" rx="6" fill="#0a0f1e" />
+      <rect x="19" y="21" width="26" height="20" rx="6" fill="#141217" />
       <circle cx="45.5" cy="18" r="1.8" fill="#ffffff" />
       {mood === "hello" && (
         <>
@@ -67,9 +67,9 @@ export function ChipMascot({ mood = "hello", className, title }: { mood?: ChipMo
       )}
       {mood === "thinking" && (
         <>
-          <circle className="s-dot [transform-box:fill-box]" cx="26" cy="31" r="2.2" fill="#5cf2ff" />
-          <circle className="s-dot [animation-delay:160ms] [transform-box:fill-box]" cx="32" cy="31" r="2.2" fill="#5cf2ff" />
-          <circle className="s-dot [animation-delay:320ms] [transform-box:fill-box]" cx="38" cy="31" r="2.2" fill="#5cf2ff" />
+          <circle className="s-dot [transform-box:fill-box]" cx="26" cy="31" r="2.2" fill="#f0abfc" />
+          <circle className="s-dot [animation-delay:160ms] [transform-box:fill-box]" cx="32" cy="31" r="2.2" fill="#f0abfc" />
+          <circle className="s-dot [animation-delay:320ms] [transform-box:fill-box]" cx="38" cy="31" r="2.2" fill="#f0abfc" />
         </>
       )}
       {mood === "happy" && (
