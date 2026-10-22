@@ -123,9 +123,9 @@ export function friendlyAuthError(message: string | undefined, mode: "signin" | 
   return `${what} isn't available right now. Please try again in a minute.`;
 }
 
-/** Name for a new account from the profile data Supabase stores (email sign-up or Google). */
+/** Name for an account from the profile data Supabase stores (email sign-up, Google, or GitHub, where the username stands in when no name is set). */
 export function displayNameFrom(meta: Record<string, unknown> | null | undefined): string | null {
-  for (const k of ["display_name", "full_name", "name"]) {
+  for (const k of ["display_name", "full_name", "name", "preferred_username", "user_name"]) {
     const v = meta?.[k];
     if (typeof v === "string" && v.trim()) return v.trim().slice(0, 80);
   }

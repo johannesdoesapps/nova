@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { api, CodeApiError, post, putBuildRequest, type Allowance } from "./api";
 import { useAttachments } from "./attachments";
 import { PromptBar } from "./prompt-bar";
+import { Greeting } from "@/components/studio/greeting";
 
 /**
  * Code's start screen: one prompt bar, front and centre. Starting a project
@@ -256,7 +257,12 @@ export function CodeProjectsView() {
     </StudioHeader>
   );
 
-  const title = <h1 className="s-in text-center font-serif text-[clamp(30px,4.5vw,42px)] leading-[1.08] tracking-[-0.01em]">What would you like to build?</h1>;
+  const title = (
+    <div className="flex flex-col items-center">
+      <Greeting name={user?.displayName} />
+      <h1 className="s-in mt-2 text-center font-serif text-[clamp(30px,4.5vw,42px)] leading-[1.08] tracking-[-0.01em] [animation-delay:80ms]">What would you like to build?</h1>
+    </div>
+  );
 
   if (!user) {
     return (

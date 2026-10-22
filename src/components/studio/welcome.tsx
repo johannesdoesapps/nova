@@ -1,14 +1,12 @@
 "use client";
 import Link from "next/link";
-import { useSyncExternalStore, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 import type { HomeAction } from "@/lib/home";
 import type { StarterTask, StarterTaskId } from "@/lib/starter";
 import type { ConvSummary } from "./history";
 import { TaskStarter, type StarterEnv } from "./task-starter";
-import { OrbisMark } from "./ui";
-
-const noSubscribe = () => () => {};
+import { Greeting } from "./greeting";
 
 /**
  * The chat's start screen: one question, the prompt box, and the task starter
@@ -31,19 +29,9 @@ export function Welcome({
   /** The latest conversation, to continue it. */
   recent?: ConvSummary | null;
 }) {
-  // The hour is only known in the browser; render nothing on the server.
-  const hour = useSyncExternalStore(
-    noSubscribe,
-    () => new Date().getHours(),
-    () => null,
-  );
-  const part = hour === null ? null : hour < 5 || hour >= 18 ? "Good evening" : hour < 12 ? "Good morning" : "Good afternoon";
-  const greeting = part && (name ? `${part}, ${name}` : part);
-
   return (
     <div className="mx-auto flex min-h-full w-full max-w-[760px] flex-col items-center justify-center px-4 pb-16 pt-10 sm:px-6">
-      <OrbisMark className="s-in h-9 w-9" />
-      <p className="s-in mt-6 h-5 text-[14px] text-s-ink-3 [animation-delay:40ms]">{greeting}</p>
+      <Greeting name={name} />
       <h1 className="s-in mt-2 text-balance text-center font-serif text-[clamp(32px,5.6vw,48px)] leading-[1.08] tracking-[-0.01em] [animation-delay:80ms]">What do you want to accomplish?</h1>
 
       <div className="s-in mt-8 w-full [animation-delay:120ms]">{composer}</div>
