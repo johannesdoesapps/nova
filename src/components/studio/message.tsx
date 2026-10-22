@@ -7,7 +7,7 @@ import { BrandIcon } from "@/components/connectors/brand-icon";
 import { cn, formatUsd } from "@/lib/utils";
 import type { Msg } from "./history";
 import type { Feedback } from "./prefs";
-import { IconButton, iconButtonClass, Menu, MenuItem, MenuSeparator, OrbisMark } from "./ui";
+import { IconButton, iconButtonClass, Menu, MenuItem, MenuSeparator } from "./ui";
 import { FeedbackReasons } from "./feedback";
 import type { FeedbackRating } from "@/lib/analytics/events";
 
@@ -180,21 +180,15 @@ function AssistantMessage({
   const shown = streaming ? m.content.replace(/```orbis-action[\s\S]*$/, "").trimEnd() : m.content;
   return (
     <div className="group/msg s-in">
-      <div className="mb-2.5 flex items-center gap-2 text-[12.5px] text-s-ink-3">
-        {assistantAvatar ?? <OrbisMark simple className="h-[18px] w-[18px]" />}
-        <span className="font-medium text-s-ink-2">{assistantName ?? m.modelName ?? "Orbis"}</span>
-        {assistantName && m.modelName && <span className="hidden sm:inline">· {m.modelName}</span>}
-        {m.routing && (
-          <span title={m.routing} className="inline-flex items-center gap-1 rounded-full bg-s-accent-soft px-2 py-px text-[11px] text-s-accent">
-            <Sparkles className="h-3 w-3" /> Auto
-          </span>
-        )}
-        {m.simulated && (
-          <span className="rounded-full border border-s-line-strong px-2 py-px text-[11px]" title="No AI provider is configured; this reply is a template.">
-            Simulated
-          </span>
-        )}
-      </div>
+      {/* Orbis's own replies have no header line; an agent's name and picture show who is talking. */}
+      {assistantName && (
+        <div className="mb-2.5 flex items-center gap-2 text-[12.5px] text-s-ink-3">
+          {assistantAvatar}
+          <span className="font-medium text-s-ink-2">{assistantName}</span>
+          {m.modelName && <span className="hidden sm:inline">· {m.modelName}</span>}
+          <ReplyTags m={m} />
+        </div>
+      )}
 
       {m.notices?.map((n, i) => (
         <p key={i} className="mb-3 flex items-start gap-2 rounded-2xl border border-s-line px-3.5 py-2.5 text-[13.5px] text-s-ink-2">
@@ -346,6 +340,12 @@ function AssistantMessage({
             </Menu>
           )}
           {typeof m.cost === "number" && m.cost > 0 && <span className="ml-2 text-[11.5px] text-s-ink-3">≈ {formatUsd(m.cost)}</span>}
+          {!assistantName && (m.modelName || m.routing || m.simulated) && (
+            <span className="ml-1.5 flex min-w-0 items-center gap-1.5 text-[12px] text-s-ink-3">
+              {m.modelName && <span className="truncate">{m.modelName}</span>}
+              <ReplyTags m={m} />
+            </span>
+          )}
         </div>
       )}
       {asking && onRate && <FeedbackReasons className="mt-2 max-w-[520px]" onCancel={() => setAsking(false)} onSend={(rating, comment) => onRate(m, rating, comment)} />}
@@ -421,5 +421,23 @@ function SavePromptAction({ onSave }: { onSave: () => boolean }) {
     >
       {done ? <Check className="s-pop text-s-accent" /> : <BookmarkPlus />}
     </IconButton>
+  );
+}
+
+/** "Auto" when Orbis picked the model, "Simulated" when no AI provider is set up. */
+function ReplyTags({ m }: { m: Msg }) {
+  return (
+    <>
+      {m.routing && (
+        <span title={m.routing} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-s-accent-soft px-2 py-px text-[11px] text-s-accent">
+          <Sparkles className="h-3 w-3" /> Auto
+        </span>
+      )}
+      {m.simulated && (
+        <span className="shrink-0 rounded-full border border-s-line-strong px-2 py-px text-[11px]" title="No AI provider is configured; this reply is a template.">
+          Simulated
+        </span>
+      )}
+    </>
   );
 }
