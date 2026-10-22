@@ -3,7 +3,8 @@ import { isAdmin } from "@/lib/admin";
 import { getAuth } from "@/lib/auth";
 import { engineFetch } from "@/lib/engine";
 import { publicEnv } from "@/lib/env";
-import { ApiError, clientIp, errorResponse } from "@/lib/http";
+import { engineRequestUsesModel } from "@/lib/engine-guard";
+import { ApiError, clientIp, errorResponse, readBodyLimited } from "@/lib/http";
 import { limiter } from "@/lib/rate-limit";
 
 export const maxDuration = 120;
@@ -33,10 +34,9 @@ async function proxy(req: Request, ctx: RouteContext<"/api/engine/[...path]">) {
     const ip = clientIp(req);
     if (!limiter("engine", 240, 60_000).check(ip, req.method === "GET" ? 1 : 3).ok) throw new ApiError("rate_limited", "Too many requests. Please slow down.");
     const max = path.endsWith("import") ? 10_500_000 : 2_000_000;
-    const body = req.method === "GET" || req.method === "HEAD" ? undefined : await req.text();
-    if (body && body.length > max) throw new ApiError("payload_too_large", "Request body too large.");
-    if (body && /"use_model"\s*:\s*true/.test(body) && !(auth && (await isAdmin(auth)))) {
-      throw new ApiError("forbidden", "AI planning in the Lab is limited to administrators for now; the rule-based planner is available to everyone.");
+    const body = req.method === "GET" || req.method === "HEAD" ? undefined : await readBodyLimited(req, max);
+    if (engineRequestUsesModel(path, body) && !(auth && (await isAdmin(auth)))) {
+      throw new ApiError("forbidden", "AI models in the Lab are limited to administrators for now; the rule-based planner and dry runs are available to everyone.");
     }
     const query = new URL(req.url).searchParams.toString();
     const res = await engineFetch(path, { method: req.method, body: body || undefined, query, requestId: crypto.randomUUID() });

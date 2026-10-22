@@ -87,7 +87,7 @@ export function SiteFooter() {
     <footer className="border-t border-border">
       <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 sm:px-8 md:grid-cols-[1.3fr_1fr_1fr_1fr]">
         <div>
-          <Link href="/" aria-label="Orbis home" className="inline-block rounded-lg">
+          <Link href="/" aria-label="Orbis home" className="inline-block rounded-lg py-1">
             <Logo />
           </Link>
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted">
@@ -113,10 +113,10 @@ export function SiteFooter() {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-6 text-xs text-muted sm:px-8">
           <p>© {year} Orbis. AI can make mistakes — check important information.</p>
           <nav aria-label="Legal" className="flex gap-5">
-            <Link href="/privacy" className="transition-colors hover:text-fg">
+            <Link href="/privacy" className="inline-block py-1 transition-colors hover:text-fg">
               Privacy Policy
             </Link>
-            <Link href="/terms" className="transition-colors hover:text-fg">
+            <Link href="/terms" className="inline-block py-1 transition-colors hover:text-fg">
               Terms of Service
             </Link>
           </nav>

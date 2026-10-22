@@ -67,7 +67,9 @@ export function AdminView() {
         <StudioHeader>
           <span className="text-[14px] font-medium text-s-ink-2">Admin</span>
         </StudioHeader>
-        <div className="grid flex-1 place-items-center px-6 text-center text-[14px] text-s-ink-2">Only site administrators can open this page.</div>
+        <div className="grid flex-1 place-items-center px-6 text-center">
+          <h1 className="text-[14px] font-normal text-s-ink-2">Only site administrators can open this page.</h1>
+        </div>
       </>
     );
   }

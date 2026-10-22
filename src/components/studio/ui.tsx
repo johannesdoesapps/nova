@@ -327,7 +327,7 @@ export function Switch({ checked, onChange, label, disabled }: { checked: boolea
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative inline-flex h-[22px] w-[38px] shrink-0 items-center rounded-full border transition-colors duration-200 disabled:opacity-40",
+        "relative inline-flex h-[22px] w-[38px] shrink-0 items-center rounded-full border transition-colors duration-200 after:absolute after:-inset-[5px] after:content-[''] disabled:opacity-40",
         checked ? "border-transparent bg-s-accent" : "border-s-line-strong bg-s-hover",
       )}
     >

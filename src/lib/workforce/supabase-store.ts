@@ -1,5 +1,6 @@
 import "server-only";
 import { ApiError } from "../http";
+import { reportError } from "../observability";
 import type { ServerSupabase } from "../supabase/server";
 import { parseSettings, type WorkforceSettings } from "./settings";
 import type { NewApproval, NewEvent, NewStep, NewTask, WorkforceStore } from "./store";
@@ -12,8 +13,10 @@ export class SupabaseStore implements WorkforceStore {
     private userId: string,
   ) {}
 
+  /** The database's own error text stays in the logs; the screen gets a plain message. */
   private fail(what: string, error?: { message?: string } | null): never {
-    throw new ApiError("internal", `Could not save or load ${what}.${error?.message ? ` (${error.message.slice(0, 120)})` : ""}`);
+    if (error) reportError(error, { where: `workforce store: ${what}` });
+    throw new ApiError("internal", `Could not save or load ${what}.`);
   }
 
   async getSettings() {

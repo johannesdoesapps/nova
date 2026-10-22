@@ -164,9 +164,11 @@ export function MissionView({ id }: { id: string }) {
   if (!user) {
     return (
       <div className="grid flex-1 place-items-center text-[14px] text-s-ink-2">
-        <Link href={`/login?next=/missions/${id}`} className="underline">
-          Sign in to open this mission
-        </Link>
+        <h1 className="font-normal">
+          <Link href={`/login?next=/missions/${id}`} className="underline">
+            Sign in to open this mission
+          </Link>
+        </h1>
       </div>
     );
   }

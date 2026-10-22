@@ -333,7 +333,7 @@ function TemplateView({ template: t, own, mine, setMine }: { template: Template;
       <div className="s-scroll min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[820px] px-4 pb-24 pt-2 sm:px-8">
           <span className="text-[12px] font-medium uppercase tracking-[0.08em] text-s-ink-3">{CATEGORY_LABELS[t.category]}</span>
-          <h2 className="mt-1 font-serif text-[clamp(28px,4.6vw,38px)] leading-tight">{own?.name ?? t.name}</h2>
+          <h1 className="mt-1 font-serif text-[clamp(28px,4.6vw,38px)] leading-tight">{own?.name ?? t.name}</h1>
           <p className="mt-2 text-[15px] text-s-ink-2">{t.description}</p>
           <p className="mt-2 text-[13.5px] text-s-ink-3">
             <span className="text-s-ink-2">You get:</span> {t.outcome}

@@ -67,8 +67,8 @@ export function AgentWorkspace({ id }: { id: string }) {
 
 function BackLink() {
   return (
-    <Link href="/agents" className="inline-flex h-9 shrink-0 items-center gap-1 rounded-xl pl-1.5 pr-2.5 text-[13.5px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink">
-      <ChevronLeft className="h-4 w-4" />
+    <Link href="/agents" aria-label="All agents" className="inline-flex h-9 shrink-0 items-center gap-1 rounded-xl pl-1.5 pr-2.5 text-[13.5px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink">
+      <ChevronLeft className="h-4 w-4" aria-hidden />
       <span className="hidden sm:inline">Agents</span>
     </Link>
   );

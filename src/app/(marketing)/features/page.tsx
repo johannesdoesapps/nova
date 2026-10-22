@@ -28,9 +28,9 @@ export default function FeaturesPage() {
           </h2>
           <ul className="mt-6 grid gap-4 md:grid-cols-2">
             {featuresIn(p.id).map((f) => (
-              <li key={f.slug}>
-                <Link href={`/features/${f.slug}`} className="group flex h-full flex-col rounded-2xl border border-border bg-panel p-7 transition hover:border-border-strong hover:bg-panel-2">
-                  <div className="flex items-center justify-between gap-3">
+              <li key={f.slug} className="min-w-0">
+                <Link href={`/features/${f.slug}`} className="group flex h-full flex-col rounded-2xl border border-border bg-panel p-5 transition sm:p-7 hover:border-border-strong hover:bg-panel-2">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
                     <h3 className="text-xl font-medium text-fg">{f.name}</h3>
                     <StatusBadge status={f.status} />
                   </div>

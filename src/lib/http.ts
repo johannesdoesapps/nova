@@ -89,7 +89,7 @@ export async function parseJsonBody<T extends z.ZodType>(
 }
 
 /** Read a body as text, stopping as soon as it passes maxBytes (a missing or false Content-Length can't bypass the limit). */
-async function readBodyLimited(req: Request, maxBytes: number): Promise<string> {
+export async function readBodyLimited(req: Request, maxBytes: number): Promise<string> {
   if (!req.body) return "";
   const reader = req.body.getReader();
   const chunks: Uint8Array[] = [];

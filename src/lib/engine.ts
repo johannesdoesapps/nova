@@ -40,9 +40,15 @@ export async function engineIdentity(): Promise<{ sub: string; email: string | n
   return { sub: `guest:${id}`, email: null, name: null, guest: true };
 }
 
+export const ENGINE_UNAVAILABLE = "This feature's service isn't available right now. Please try again later.";
+
 export async function engineFetch(path: string, init: { method?: string; body?: string; query?: string; requestId?: string } = {}): Promise<Response> {
   const { url, secret } = engineConfig();
-  if (!secret) throw new ApiError("not_configured", "The Orbis engine is not configured. Set ORBIS_ENGINE_SECRET (and ORBIS_ENGINE_URL) for both the web app and the engine.");
+  if (!secret) {
+    // The setup hint is for the operator's logs; visitors (e.g. on a shared link) get a plain message.
+    console.warn("Orbis engine not configured: set ORBIS_ENGINE_SECRET (and ORBIS_ENGINE_URL) for both the web app and the engine.");
+    throw new ApiError("not_configured", ENGINE_UNAVAILABLE);
+  }
   const who = await engineIdentity();
   try {
     return await fetch(`${url}/${path}${init.query ? `?${init.query}` : ""}`, {
@@ -59,6 +65,6 @@ export async function engineFetch(path: string, init: { method?: string; body?: 
   } catch {
     // The address and start command are for operators (logs), not visitors.
     reportError(new Error(`Orbis engine not reachable at ${url}`), { where: "engine" });
-    throw new ApiError("not_configured", "This feature's service isn't available right now. Please try again later.");
+    throw new ApiError("not_configured", ENGINE_UNAVAILABLE);
   }
 }

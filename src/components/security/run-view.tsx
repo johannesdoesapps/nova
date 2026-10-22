@@ -60,7 +60,7 @@ export function RunView({ id }: { id: string }) {
         {header}
         <div role="alert" className="mx-auto mt-16 flex max-w-md flex-col items-center px-6 text-center">
           <CircleAlert className="h-6 w-6 text-s-danger" />
-          <p className="mt-3 text-[15px]">{error}</p>
+          <h1 className="mt-3 text-[15px] font-normal">{error}</h1>
         </div>
       </>
     );

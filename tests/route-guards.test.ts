@@ -48,7 +48,9 @@ describe("AI endpoints pass their models to the usage guard", () => {
   it("the engine proxy requires an account for changes and an admin for model calls", () => {
     const src = readFileSync(join(__dirname, "..", "src/app/api/engine/[...path]/route.ts"), "utf8");
     expect(src).toMatch(/Sign in to make changes/);
-    expect(src).toMatch(/use_model/);
+    // Which requests count as model calls is tested in engine-guard.test.ts; here, that the route applies it to non-admins.
+    expect(src).toMatch(/engineRequestUsesModel\(path, body\) && !\(auth && \(await isAdmin\(auth\)\)\)/);
+    expect(src).toMatch(/readBodyLimited\(req, max\)/);
     expect(src).toMatch(/p === "\.\."/);
   });
 });
