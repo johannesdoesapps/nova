@@ -40,7 +40,7 @@
   --s-light-a: rgba(255, 255, 255, 0.95);
   --s-light-b: rgba(196, 192, 214, 0.22);
   --s-grain: 0.022;
-  --s-ring: rgba(29, 29, 33, 0.28);
+  --s-ring: rgba(29, 29, 33, 0.6);
   --s-ease: cubic-bezier(0.22, 0.8, 0.24, 1);
   --s-spring: cubic-bezier(0.3, 1.35, 0.45, 1);
   color-scheme: light;
@@ -82,7 +82,7 @@
   --s-light-a: rgba(255, 255, 255, 0.055);
   --s-light-b: rgba(170, 164, 210, 0.055);
   --s-grain: 0.035;
-  --s-ring: rgba(230, 228, 236, 0.38);
+  --s-ring: rgba(230, 228, 236, 0.62);
   color-scheme: dark;
 }
 
@@ -258,6 +258,10 @@ html.theming .studio * {
 .s-prose .orbis-code-head { border-bottom: 1px solid var(--s-line); color: var(--s-ink-3); padding: 0.4em 0.5em 0.4em 1.1em; }
 .s-prose pre { background: transparent; border: 0; padding: 1em 1.1em; overflow-x: auto; font-size: 13.5px; line-height: 1.65; }
 .s-prose pre code { background: none; padding: 0; font-size: inherit; }
+.s-prose .orbis-table { margin: 1em 0; border: 1px solid var(--s-line); border-radius: 14px; }
+.s-prose .orbis-table th, .s-prose .orbis-table td { border-bottom-color: var(--s-line); line-height: 1.55; }
+.s-prose .orbis-table th { background: var(--s-code); color: var(--s-ink); }
+.s-prose pre:focus-visible, .s-prose .orbis-table:focus-visible { outline: 2px solid var(--s-ring); outline-offset: -2px; border-radius: 14px; }
 /* Code colours: muted metals on glass, never neon. */
 .studio { --tok-k: #6a5fb0; --tok-s: #4f7a5c; --tok-n: #a0663a; --tok-f: #2f5f86; --tok-c: var(--s-ink-3); }
 :root[data-theme="dark"] .studio { --tok-k: #b9b1f0; --tok-s: #9fc8a7; --tok-n: #e2b48a; --tok-f: #9cc3e6; --tok-c: #75747c; }

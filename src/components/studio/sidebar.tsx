@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { Archive, Bookmark, ChevronDown, Code2, CreditCard, Download, Ellipsis, FolderInput, Gauge, LayoutGrid, FolderPlus, LogIn, LogOut, Monitor, Moon, Pencil, Pin, PinOff, Search, Settings2, SquarePen, Sun, Trash2, X } from "lucide-react";
 import type { AppUser } from "@/components/layout/app-context";
 import { cn } from "@/lib/utils";
@@ -88,6 +88,23 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
   }, [p.conversations, query, found]);
   const searching = !!onSearch && !!query.trim() && found?.q.toLowerCase() !== query.trim().toLowerCase();
 
+  // On phones the sidebar is a modal drawer: focus moves into it when it opens and back when it closes,
+  // and while it's closed (off screen) it can't be reached with Tab.
+  const phone = useSyncExternalStore(subscribePhone, readPhone, () => false);
+  const drawer = phone && p.mobileOpen;
+  const asideRef = useRef<HTMLElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!drawer) return;
+    const aside = asideRef.current;
+    openerRef.current = document.activeElement as HTMLElement | null;
+    aside?.querySelector<HTMLElement>("[data-drawer-close]")?.focus();
+    return () => {
+      const opener = openerRef.current;
+      if (opener?.isConnected && (!document.activeElement || document.activeElement === document.body || aside?.contains(document.activeElement))) opener.focus();
+    };
+  }, [drawer]);
+
   const rail = p.collapsed;
   // In Code, the sidebar is about projects; everywhere else, about chats.
   const inCode = p.section === "code";
@@ -124,7 +141,21 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
         )}
       />
       <aside
+        ref={asideRef}
         aria-label="Sidebar"
+        role={drawer ? "dialog" : undefined}
+        aria-modal={drawer || undefined}
+        inert={phone && !p.mobileOpen}
+        onKeyDown={
+          drawer
+            ? (e) => {
+                if (e.key === "Escape") {
+                  e.stopPropagation();
+                  p.onCloseMobile();
+                } else if (e.key === "Tab") trapTab(e);
+              }
+            : undefined
+        }
         className={cn(
           "glass max-md:!bg-[var(--s-glass-menu)] fixed inset-y-0 left-0 z-40 flex w-[min(300px,86vw)] flex-col overflow-hidden border-0 border-r !shadow-none transition-[transform,width] duration-300 ease-[cubic-bezier(.2,.7,.2,1)]",
           "pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] md:relative md:z-auto md:translate-x-0",
@@ -138,7 +169,7 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
             <OrbisMark className="h-7 w-7 text-s-ink" />
             <span className="text-[15px] font-semibold tracking-[0.22em]">ORBIS</span>
           </Link>
-          <IconButton label="Close sidebar" onClick={p.onCloseMobile} className="ml-auto">
+          <IconButton label="Close sidebar" onClick={p.onCloseMobile} className="ml-auto" data-drawer-close="">
             <X />
           </IconButton>
         </div>
@@ -191,7 +222,7 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
                 onKeyDown={(e) => e.key === "Escape" && setQuery("")}
                 placeholder="Search chats"
                 aria-label="Search chats"
-                className="h-9 w-full rounded-xl border border-transparent bg-s-hover pl-9 pr-12 text-[13.5px] text-s-ink outline-none transition placeholder:text-s-ink-3 focus:border-s-line-strong focus:bg-transparent focus-visible:outline-none [&::-webkit-search-cancel-button]:hidden"
+                className="h-9 w-full rounded-xl border border-transparent bg-s-hover pl-9 pr-12 text-[13.5px] text-s-ink outline-none transition placeholder:text-s-ink-3 focus:border-s-line-strong focus:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--s-ring)] [&::-webkit-search-cancel-button]:hidden"
               />
               <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 [@media(hover:none)]:hidden">
                 <Kbd>{mac ? "⌘K" : "Ctrl K"}</Kbd>
@@ -305,6 +336,30 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
       </aside>
     </>
   );
+}
+
+/** Below the md breakpoint the sidebar is a drawer. */
+const PHONE = "(max-width: 767.98px)";
+function subscribePhone(l: () => void) {
+  const mq = window.matchMedia(PHONE);
+  mq.addEventListener("change", l);
+  return () => mq.removeEventListener("change", l);
+}
+const readPhone = () => window.matchMedia(PHONE).matches;
+
+/** Tab and Shift+Tab stay inside the open drawer. */
+function trapTab(e: KeyboardEvent<HTMLElement>) {
+  const items = [...e.currentTarget.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex='-1'])")].filter((el) => el.offsetParent !== null);
+  if (!items.length) return;
+  const first = items[0]!;
+  const last = items[items.length - 1]!;
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
 }
 
 const MORE_KEY = "orbis.nav.more";

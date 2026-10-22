@@ -162,6 +162,12 @@ body {
 .orbis-code-head { display: flex; align-items: center; justify-content: space-between; padding: 0.35em 0.6em 0.35em 1em; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--fg-faint); font-family: var(--font-mono); }
 .orbis-prose a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 .orbis-prose strong { font-weight: 600; }
+.orbis-table { overflow-x: auto; margin: 0.8em 0; border: 1px solid var(--border); border-radius: 10px; }
+.orbis-table table { border-collapse: collapse; width: max-content; min-width: 100%; font-size: 0.93em; }
+.orbis-table th, .orbis-table td { padding: 0.45em 0.8em; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; max-width: 20rem; overflow-wrap: break-word; }
+.orbis-table th { font-weight: 600; background: var(--panel-2); }
+.orbis-table tr:last-child td { border-bottom: 0; }
+.orbis-prose pre:focus-visible, .orbis-table:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 @keyframes orbis-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
 .orbis-dot { animation: orbis-pulse 1.2s ease-in-out infinite; }

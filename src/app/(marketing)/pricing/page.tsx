@@ -116,7 +116,8 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
       <section aria-labelledby="compare" className="mx-auto max-w-6xl px-5 py-14 sm:px-8">
         <h2 id="compare" className="text-2xl font-medium text-fg">Compare plans</h2>
         <p className="mt-2 text-[15px] text-muted">Read from the same settings Orbis uses to enforce limits, so this table always matches what you get.</p>
-        <div className="s-scroll mt-6 overflow-x-auto rounded-2xl border border-border">
+        {/* Focusable so keyboard users can scroll it sideways on narrow screens. */}
+        <div tabIndex={0} role="region" aria-label="Plan comparison (scrolls sideways on small screens)" className="s-scroll mt-6 overflow-x-auto rounded-2xl border border-border focus-visible:outline-2 focus-visible:outline-accent">
           <table className="w-full min-w-[640px] border-collapse text-left text-[14px]">
             <caption className="sr-only">What each plan includes</caption>
             <thead>

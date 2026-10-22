@@ -9,8 +9,9 @@ import { highlight } from "./highlight";
 /**
  * Small, safe Markdown renderer. It builds React elements (never raw HTML),
  * so model or web text cannot inject markup. Supports headings, lists, code
- * blocks (with a language label and copy button), quotes, rules, inline code,
- * bold/italic, http(s) links and [n] citation chips. With `runnable`, code
+ * blocks (with a language label and copy button), tables, quotes, rules,
+ * inline code, bold/italic, http(s) links and [n] citation chips. Wide code
+ * blocks and tables scroll sideways inside a region that keyboards can reach. With `runnable`, code
  * blocks in a supported language get a Run button (see /api/code/run).
  */
 export function Markdown({
@@ -42,9 +43,36 @@ export function Markdown({
                   <span>{b.lang || "code"}</span>
                   <CodeCopy text={b.text} />
                 </div>
-                <pre>
+                <pre tabIndex={0} aria-label={b.lang ? `Code, ${b.lang}` : "Code"}>
                   <code>{highlight(b.text, b.lang)}</code>
                 </pre>
+              </div>
+            );
+          case "table":
+            return (
+              <div key={i} className="orbis-table" tabIndex={0} role="region" aria-label="Table">
+                <table>
+                  <thead>
+                    <tr>
+                      {b.head.map((c, j) => (
+                        <th key={j} scope="col" style={b.align[j] ? { textAlign: b.align[j] } : undefined}>
+                          {inl(c)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {b.rows.map((r, j) => (
+                      <tr key={j}>
+                        {b.head.map((_, k) => (
+                          <td key={k} style={b.align[k] ? { textAlign: b.align[k] } : undefined}>
+                            {inl(r[k] ?? "")}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             );
           case "h":
@@ -72,7 +100,21 @@ type Block =
   | { type: "quote"; text: string }
   | { type: "hr" }
   | { type: "ul"; items: string[] }
-  | { type: "ol"; items: string[] };
+  | { type: "ol"; items: string[] }
+  | { type: "table"; head: string[]; align: ("left" | "center" | "right" | undefined)[]; rows: string[][] };
+
+const TABLE_ROW = /^\s*\|?.*\|.*$/;
+const TABLE_RULE = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+
+/** A table row's cells: outer pipes dropped, split on pipes that aren't escaped. */
+function cells(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/(?<!\\)\|$/, "")
+    .split(/(?<!\\)\|/)
+    .map((c) => c.trim().replace(/\\\|/g, "|"));
+}
 
 function parseBlocks(src: string): Block[] {
   const lines = src.replace(/\r\n/g, "\n").split("\n");
@@ -91,6 +133,17 @@ function parseBlocks(src: string): Block[] {
       i++;
       while (i < lines.length && !lines[i]!.trim().startsWith("```")) code.push(lines[i++]!);
       out.push({ type: "code", lang, text: code.join("\n") });
+      continue;
+    }
+    if (TABLE_ROW.test(line) && TABLE_RULE.test(lines[i + 1] ?? "") && cells(lines[i + 1]!).length === cells(line).length) {
+      flush();
+      const head = cells(line);
+      const align = cells(lines[i + 1]!).map((c) => (c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : c.startsWith(":") ? "left" : undefined));
+      const rows: string[][] = [];
+      i += 2;
+      while (i < lines.length && lines[i]!.trim() && lines[i]!.includes("|")) rows.push(cells(lines[i++]!));
+      i--;
+      out.push({ type: "table", head, align, rows });
       continue;
     }
     if (/^\s{0,3}(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
@@ -205,7 +258,7 @@ function RunnableCode({ lang, text }: { lang: string; text: string }) {
           <CodeCopy text={text} />
         </span>
       </div>
-      <pre>
+      <pre tabIndex={0} aria-label={`Code, ${lang}`}>
         <code>{highlight(text, lang)}</code>
       </pre>
       <RunOutput state={state} />

@@ -64,7 +64,7 @@ export function TaskStarter({
             key={t.id}
             type="button"
             aria-pressed={active === t.id}
-            aria-controls="starter-panel"
+            aria-controls={active === t.id ? "starter-panel" : undefined}
             onClick={() => choose(t)}
             className={cn(
               "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-[13px] transition active:scale-[0.98] [&_svg]:h-3.5 [&_svg]:w-3.5",

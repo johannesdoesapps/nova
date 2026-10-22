@@ -286,9 +286,10 @@ export function Composer(p: ComposerProps) {
             </button>
           )}
 
-          <div className="ml-auto flex items-center gap-1">
+          {/* The model name gives way on narrow screens so Send always fits. */}
+          <div className="ml-auto flex min-w-0 items-center gap-1 [&>*]:shrink-0">
             <WhereItGoes models={p.models} modelId={p.modelId} web={p.useWeb && webAllowed && p.webAvailable} files={p.attachments.length} />
-            <ModelSelector models={p.models} value={p.modelId} onChange={p.onModel} auto={p.auto ?? null} />
+            <ModelSelector models={p.models} value={p.modelId} onChange={p.onModel} auto={p.auto ?? null} className="min-w-0 !shrink" />
 
             {speech.supported && (
               <IconButton

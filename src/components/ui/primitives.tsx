@@ -140,7 +140,7 @@ export function Notice({
       <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", map.ic)} aria-hidden />
       <div className="min-w-0 space-y-1">
         {title ? <div className="font-medium">{title}</div> : null}
-        {children ? <div className="text-muted [&_code]:font-mono [&_code]:text-fg">{children}</div> : null}
+        {children ? <div className="text-muted [overflow-wrap:anywhere] [&_code]:font-mono [&_code]:text-fg">{children}</div> : null}
       </div>
     </div>
   );

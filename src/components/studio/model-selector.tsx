@@ -240,7 +240,9 @@ export function ModelSelector({
         )}
       </div>
 
-      <div id={listId} role="listbox" aria-label="Models" className="s-scroll min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
+      <div className="s-scroll min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
+      {/* Only options and groups of options inside the listbox; notes and links sit outside it. */}
+      <div id={listId} role="listbox" aria-label="Models">
         {showAuto &&
           (auto?.enabled ? (
             <div role="group" aria-label="Smart Router">
@@ -269,16 +271,9 @@ export function ModelSelector({
                   </div>
                 );
               })}
-              <a
-                href="/council"
-                className="mx-2.5 mt-1 flex items-center justify-between rounded-lg px-0 py-1.5 text-[12.5px] text-s-ink-3 transition hover:text-s-ink"
-              >
-                <span>Council: ask several models at once</span>
-                <span aria-hidden>→</span>
-              </a>
             </div>
           ) : (
-            <div className="flex items-start gap-3 rounded-xl px-2.5 py-2 opacity-60" aria-disabled>
+            <div className="flex items-start gap-3 rounded-xl px-2.5 py-2 opacity-60" role="option" aria-selected={false} aria-disabled>
               <ProviderMark provider="auto" />
               <div className="min-w-0 flex-1">
                 <div className="text-[13.5px] font-medium">Auto</div>
@@ -339,8 +334,15 @@ export function ModelSelector({
           </div>
         ))}
 
+      </div>
         {models && !options.length && !(showAuto && !auto?.enabled) && (
-          <p className="px-3 py-6 text-center text-[13px] text-s-ink-3">{available.length ? "No models match your search." : "No models are configured yet."}</p>
+          <p role="status" className="px-3 py-6 text-center text-[13px] text-s-ink-3">{available.length ? "No models match your search." : "No models are configured yet."}</p>
+        )}
+        {showAuto && auto?.enabled && (
+          <a href="/council" className="mx-2.5 mt-1 flex items-center justify-between rounded-lg px-0 py-1.5 text-[12.5px] text-s-ink-3 transition hover:text-s-ink">
+            <span>Council: ask several models at once</span>
+            <span aria-hidden>→</span>
+          </a>
         )}
       </div>
       {hiddenCount > 0 && (
