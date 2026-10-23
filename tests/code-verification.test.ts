@@ -201,6 +201,17 @@ describe("the page", () => {
     expect(canRerun(report({ testSetup: null }))).toBe(false);
   });
 
+  it("offers Try again when a task failed, with the error, and not when it finished", () => {
+    const props = { onShowChanges: () => {}, onOpenFile: () => {}, onRerun: async () => {}, onUndo: async () => {}, onRetry: () => {} };
+    const failed = renderToStaticMarkup(
+      createElement(VerificationPanel, { ...props, run: view({ status: "failed", error: "The AI provider rejected the request.", report: report({ outcome: "failed" }) }) }),
+    );
+    expect(failed).toContain("Failed");
+    expect(failed).toContain("The AI provider rejected the request.");
+    expect(failed).toContain("Try again");
+    expect(renderToStaticMarkup(createElement(VerificationPanel, { ...props, run: view() }))).not.toContain("Try again");
+  });
+
   it("renders the verdict, the task, the agent's words labelled as such, every check with its status in words, and Review changes", () => {
     const html = renderToStaticMarkup(
       createElement(VerificationPanel, {

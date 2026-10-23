@@ -82,6 +82,12 @@ export const METRICS = [
     source: "Product events and feedback",
   },
   {
+    id: "onboarding",
+    name: "Onboarding",
+    definition: "Of people who signed up in the period, how many picked each starting point in first-run onboarding, how many skipped it, and how many used AI on two or more different days.",
+    source: "Account preferences and usage records",
+  },
+  {
     id: "first_build",
     name: "First coding agent run",
     definition: "Of people who signed up in the period, the share who started a coding agent run within 7 days, and the share whose run finished.",

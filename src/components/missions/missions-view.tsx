@@ -266,7 +266,12 @@ export function MissionsView() {
                 <div className="s-skeleton h-28 rounded-[20px]" />
               </div>
             )}
-            {missions?.length === 0 && <p className="text-[14px] text-s-ink-3">No missions yet. Describe a goal above to start one.</p>}
+            {missions?.length === 0 && (
+              <p className="max-w-xl text-[14px] leading-relaxed text-s-ink-3">
+                No missions yet. A mission turns a goal into milestones and tasks you can tick off, and AI drafts the tasks it can help with. Describe a goal above, or pick one of the
+                examples under the box to see a plan first; nothing is saved until you create it.
+              </p>
+            )}
             <div className="grid gap-3 sm:grid-cols-2">
               {missions?.map((m) => {
                 const p = progressOf(m.counts);

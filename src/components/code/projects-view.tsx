@@ -46,6 +46,9 @@ export function minutesLine(a: Allowance): string {
   return `${a.left?.toLocaleString("en-US")} of ${a.limit.toLocaleString("en-US")} workspace minutes left this month`;
 }
 
+const GITHUB_NEEDED =
+  "To import a repository, Orbis needs your permission to read it on GitHub. Connect GitHub in Connectors and choose which repositories Orbis may see; it reads only those, and only when you import.";
+
 /** A short project name from a website request. */
 export function siteName(prompt: string): string {
   const called = prompt.match(/\bcalled\s+["“]?([A-Z][\w&' -]{1,30}?)["”]?(?=[.,;:!?]|\s+(?:with|that|for|and|in)\b|$)/);
@@ -169,7 +172,7 @@ export function CodeProjectsView() {
     try {
       const s = await api<{ configured: boolean; linked: boolean; installed: boolean }>("/api/github/status");
       if (!s.configured) return setRepoNote("GitHub isn't set up on this site yet.");
-      if (!s.linked || !s.installed) return setRepoNote("Connect GitHub first: open Connectors and connect GitHub, or in a chat press + and choose “Add from GitHub”.");
+      if (!s.linked || !s.installed) return setRepoNote(GITHUB_NEEDED);
       const r = await api<{ repos: Repo[] }>("/api/github/repos");
       setRepos(r.repos);
       if (!r.repos.length) setRepoNote("Orbis can't see any of your repositories yet.");
@@ -177,6 +180,21 @@ export function CodeProjectsView() {
       setRepoNote((e as Error).message);
     }
   };
+
+  // "?start=example" / "?start=github" (from onboarding): set up the example project, or open the import, once.
+  const startParam = params.get("start");
+  const startedFrom = useRef(false);
+  useEffect(() => {
+    if (!user || startedFrom.current || (startParam !== "example" && startParam !== "github")) return;
+    startedFrom.current = true;
+    const t = setTimeout(() => {
+      router.replace("/code", { scroll: false });
+      if (startParam === "example") void tryExample();
+      else void loadRepos();
+    }, 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once for the starting point asked for
+  }, [user, startParam]);
 
   const importRepo = async () => {
     if (!repo) return;
@@ -265,6 +283,8 @@ export function CodeProjectsView() {
 
   const count = data?.projects.length ?? 0;
   const target = data?.projects.find((p) => p.id === siteTarget);
+  // First-time guidance: arriving from onboarding, or no projects yet.
+  const guided = params.get("from") === "welcome" || (!!data && count === 0);
 
   return (
     <>
@@ -338,6 +358,46 @@ export function CodeProjectsView() {
               />
             </section>
 
+            {guided && !site.trim() && !busy && (
+              <section aria-label="How building a website works" className="s-in mt-4 rounded-2xl border border-s-line p-4 text-[13px] leading-relaxed">
+                <p className="text-s-ink-2">
+                  Say what the site is for, the sections you want and the look. The agent writes the files, starts the site on this project&apos;s private computer, opens it in a real browser at
+                  desktop and phone sizes, fixes what it finds, and reports what it checked. You can watch each step and stop it at any time; nothing is published.
+                </p>
+                <p className="mt-3 text-[12px] text-s-ink-3">Start from an example and edit it:</p>
+                <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                  {SITE_EXAMPLES.map((x) => (
+                    <li key={x.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSite(x.prompt);
+                          requestAnimationFrame(() => siteBox.current?.focus());
+                        }}
+                        className="inline-flex h-8 items-center rounded-full border border-s-line px-3 text-[12.5px] text-s-ink-2 transition hover:border-s-line-strong hover:text-s-ink"
+                      >
+                        {x.label}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-[12.5px] text-s-ink-3">
+                  Not a website?{" "}
+                  <button type="button" onClick={() => void tryExample()} className="text-s-ink-2 underline underline-offset-2 hover:text-s-ink">
+                    Fix a bug in an example project
+                  </button>
+                  {" · "}
+                  <button type="button" onClick={() => void loadRepos()} className="text-s-ink-2 underline underline-offset-2 hover:text-s-ink">
+                    Import from GitHub
+                  </button>
+                  {" · "}
+                  <button type="button" onClick={() => setOpen("new")} className="text-s-ink-2 underline underline-offset-2 hover:text-s-ink">
+                    Start from a template
+                  </button>
+                </p>
+              </section>
+            )}
+
             {error && (
               <p role="alert" className="mt-4 rounded-xl border border-s-danger/40 px-3.5 py-2.5 text-[13px] text-s-danger">
                 {error.message}{" "}
@@ -379,6 +439,11 @@ export function CodeProjectsView() {
                     )}
                     {!repos && !repoNote && <p className="text-[13px] text-s-ink-3">Looking for your repositories…</p>}
                     {repoNote && <p className="text-[13px] text-s-ink-2">{repoNote}</p>}
+                    {repoNote === GITHUB_NEEDED && (
+                      <Link href="/connectors" className="mt-2 inline-flex h-9 items-center gap-1.5 rounded-full bg-s-accent px-4 text-[13px] font-medium text-s-accent-ink">
+                        Connect GitHub <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                      </Link>
+                    )}
                     <p className="mt-2 text-[12px] text-s-ink-3">
                       Text files up to 100 KB from the default branch are copied. Later, Update from GitHub brings in new changes without touching yours, and Push to GitHub sends your changes to a new
                       branch.

@@ -1,9 +1,11 @@
 "use client";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import Link from "next/link";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Bot, Bug, ChartColumn, Code2, FileText, Flag, Flame, Globe, GraduationCap, Lightbulb, PenLine, Play, Plug, Scale, Sparkles, Swords, Telescope, Users } from "lucide-react";
 import { greetingFor, homeActionById, planDayPrompt, type HomeAction, type IconName } from "@/lib/home";
 import type { StarterTask, StarterTaskId } from "@/lib/starter";
+import { FirstRun } from "./first-run";
 import { TaskStarter, type StarterEnv } from "./task-starter";
 import { OrbisMark } from "./ui";
 
@@ -36,12 +38,17 @@ export interface HomeProps {
   onAction: (a: HomeAction) => void;
   notice?: ReactNode;
   starter: { active: StarterTaskId | null; onChoose: (task: StarterTask | null) => void; env: StarterEnv };
+  /** A new account (see lib/onboarding): show the guided start instead of the usual start screen. */
+  firstRun?: boolean;
+  signedIn?: boolean;
 }
 
 /** The start page: the logo, a greeting with today's date, one question, the prompt box and the task starter. */
-export function Home({ name, composer, onAction, notice, starter }: HomeProps) {
+export function Home({ name, composer, onAction, notice, starter, firstRun = false, signedIn = false }: HomeProps) {
   const router = useRouter();
   const params = useSearchParams();
+  // First-run onboarding: new accounts, or anyone who opens "Getting started" (/home?welcome=1).
+  const [welcome, setWelcome] = useState(() => signedIn && (firstRun || params.get("welcome") === "1"));
 
   // The time is only known in the browser; render placeholders on the server.
   const now = useSyncExternalStore(
@@ -74,6 +81,19 @@ export function Home({ name, composer, onAction, notice, starter }: HomeProps) {
 
   const greeting = date ? greetingFor(date.getHours(), name) : null;
 
+  if (welcome)
+    return (
+      <div className="mx-auto flex min-h-full w-full max-w-[1080px] flex-col justify-center px-4 pb-24 pt-6 sm:px-6 sm:pt-10 lg:pt-14">
+        <div className="mx-auto flex w-full max-w-[760px] flex-col items-center">
+          <OrbisMark className="s-in mb-6 h-9 w-9" />
+          <FirstRun name={name} onAction={runAction} onClose={() => setWelcome(false)} />
+          <p className="mt-8 w-full text-left text-[12.5px] font-medium text-s-ink-3">Or ask anything</p>
+          <div className="mt-2 w-full text-left">{composer}</div>
+          {notice && <div className="mt-5 text-center text-[12.5px] text-s-ink-3">{notice}</div>}
+        </div>
+      </div>
+    );
+
   return (
     <div className="mx-auto flex min-h-full w-full max-w-[1080px] flex-col justify-center px-4 pb-24 pt-6 sm:px-6 sm:pt-10 lg:pt-14">
       <div className="mx-auto flex w-full max-w-[760px] flex-col items-center text-center">
@@ -85,6 +105,11 @@ export function Home({ name, composer, onAction, notice, starter }: HomeProps) {
         <div className="mt-7 w-full text-left">{composer}</div>
         <TaskStarter active={starter.active} onChoose={starter.onChoose} onAction={runAction} env={starter.env} home />
         {notice && <div className="mt-5 text-center text-[12.5px] text-s-ink-3">{notice}</div>}
+        {signedIn && (
+          <Link href="/home?welcome=1" onClick={() => setWelcome(true)} className="mt-6 text-[12.5px] text-s-ink-3 underline-offset-4 hover:text-s-ink hover:underline">
+            Getting started with Orbis
+          </Link>
+        )}
       </div>
     </div>
   );

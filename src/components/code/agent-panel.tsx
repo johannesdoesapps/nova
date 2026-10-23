@@ -725,7 +725,17 @@ export function AgentPanel({
                 </div>
               )}
 
-              {ended && <VerificationPanel run={run} onShowChanges={() => onShowChanges(run.id)} onOpenFile={onOpenFile} onRerun={rerun} onUndo={undoAll} onOpenPreview={onOpenPreview} />}
+              {ended && (
+                <VerificationPanel
+                  run={run}
+                  onShowChanges={() => onShowChanges(run.id)}
+                  onOpenFile={onOpenFile}
+                  onRerun={rerun}
+                  onUndo={undoAll}
+                  onOpenPreview={onOpenPreview}
+                  onRetry={() => void start(run.request, modeOf(run.options)?.id ?? mode, run.options.modelId ?? modelId)}
+                />
+              )}
               {ended && (
                 <button
                   type="button"

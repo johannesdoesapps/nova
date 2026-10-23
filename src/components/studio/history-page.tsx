@@ -78,12 +78,20 @@ export function HistoryPage() {
                     <p className="mt-1 text-[13px]">{search ? "Titles and message text were searched. Archived chats are not included." : "Only titles are searched in a guest browser."}</p>
                   </>
                 ) : (
-                  <p>
-                    No conversations yet.{" "}
-                    <Link href="/chat?new=1" className="text-s-ink underline underline-offset-4">
-                      Start one
-                    </Link>
-                  </p>
+                  <div className="rounded-2xl border border-dashed border-s-line-strong px-5 py-6">
+                    <p className="text-[14.5px] font-medium text-s-ink">No conversations yet</p>
+                    <p className="mt-1 text-[13.5px] leading-relaxed">
+                      Every chat you have is kept here, newest first, so you can search it and pick it up again. Start with a question, a draft to improve, or code to explain.
+                    </p>
+                    <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[13.5px]">
+                      <Link href="/chat?new=1" className="text-s-ink underline underline-offset-4">
+                        Start a chat
+                      </Link>
+                      <Link href="/home?welcome=1" className="text-s-ink-2 underline underline-offset-4 hover:text-s-ink">
+                        See ways to get started
+                      </Link>
+                    </p>
+                  </div>
                 )}
               </div>
             ) : (

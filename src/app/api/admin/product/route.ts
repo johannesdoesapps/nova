@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
-import { productReport, type CodeFunnel, type RawMetrics } from "@/lib/analytics/metrics";
+import { productReport, type CodeFunnel, type OnboardingFunnel, type RawMetrics } from "@/lib/analytics/metrics";
 import { getAuth } from "@/lib/auth";
 import { ApiError, errorResponse } from "@/lib/http";
 
@@ -15,9 +15,13 @@ export async function GET(req: Request) {
     const auth = await requireAdmin(await getAuth());
     const days = Math.min(365, Math.max(1, Number(new URL(req.url).searchParams.get("days")) || 30));
     const since = new Date(Date.now() - days * 86_400_000).toISOString();
-    const [{ data, error }, code] = await Promise.all([auth.supabase.rpc("admin_product_metrics", { p_since: since }), auth.supabase.rpc("admin_code_funnel", { p_since: since })]);
+    const [{ data, error }, code, onboarding] = await Promise.all([
+      auth.supabase.rpc("admin_product_metrics", { p_since: since }),
+      auth.supabase.rpc("admin_code_funnel", { p_since: since }),
+      auth.supabase.rpc("admin_onboarding_funnel", { p_since: since }),
+    ]);
     if (error || !data) throw new ApiError("internal", "Couldn't load the product figures.");
-    const raw = { ...(data as RawMetrics), code: code.error ? null : (code.data as CodeFunnel) };
+    const raw = { ...(data as RawMetrics), code: code.error ? null : (code.data as CodeFunnel), onboarding: onboarding.error ? null : (onboarding.data as OnboardingFunnel) };
     return NextResponse.json({ days, raw, rows: productReport(raw) }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     return errorResponse(err);

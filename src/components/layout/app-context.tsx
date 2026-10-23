@@ -1,5 +1,6 @@
 "use client";
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import type { OnboardingState } from "@/lib/onboarding";
 
 export interface AppUser {
   id: string;
@@ -9,6 +10,10 @@ export interface AppUser {
   isAdmin?: boolean;
   /** The chat model the user chose ("auto" or a model id), saved on their account. */
   preferredModel?: string | null;
+  /** The starting point chosen (or skipped) in first-run onboarding, saved on the account. */
+  onboarding?: OnboardingState | null;
+  /** A new account: not onboarded and nothing made yet, so Home shows the guided start. */
+  firstRun?: boolean;
 }
 
 export interface Recents {

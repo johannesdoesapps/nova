@@ -57,6 +57,7 @@ export function VerificationPanel({
   onRerun,
   onUndo,
   onOpenPreview,
+  onRetry,
 }: {
   run: RunView;
   onShowChanges: () => void;
@@ -64,6 +65,8 @@ export function VerificationPanel({
   onRerun: () => Promise<void>;
   onUndo: () => Promise<void>;
   onOpenPreview?: () => void;
+  /** Start the same request again as a new session (offered when the run failed or was stopped). */
+  onRetry?: () => void;
 }) {
   const [rerunning, setRerunning] = useState(false);
   const r = run.report;
@@ -99,6 +102,18 @@ export function VerificationPanel({
         </div>
       </div>
       {run.error && <p className="mt-2 rounded-xl border border-s-danger/40 px-3 py-2 text-s-danger">{run.error}</p>}
+      {(state === "failed" || state === "cancelled") && onRetry && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-s-ink-2">
+          <span>{state === "failed" ? "Nothing is lost: changes so far are kept, and you can undo them below." : "Changes made before you stopped are kept until you undo them."}</span>
+          <button
+            type="button"
+            onClick={onRetry}
+            className="inline-flex h-8 items-center gap-1.5 rounded-full bg-s-accent px-3.5 text-[12.5px] font-medium text-s-accent-ink transition hover:brightness-110"
+          >
+            <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Try again
+          </button>
+        </div>
+      )}
       {assessment && assessment.reasons.length > 0 && (
         <ul className="mt-2 list-disc space-y-0.5 pl-5 text-[13px] text-s-ink-2" aria-label="Why it isn't verified">
           {assessment.reasons.map((x) => (

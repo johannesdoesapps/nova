@@ -312,6 +312,8 @@ export function Studio({ home = false }: { home?: boolean }) {
             onAction={runAction}
             notice={notice}
             starter={{ active: starterId, onChoose: applyTask, env: starterEnv }}
+            firstRun={!!user?.firstRun}
+            signedIn={!!user}
           />
         </div>
       ) : empty ? (

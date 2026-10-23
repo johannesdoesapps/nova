@@ -172,7 +172,20 @@ export function ProjectsHub() {
                 ))}
               </div>
             ) : nothing ? (
-              <p className="rounded-2xl border border-dashed border-s-line-strong px-5 py-8 text-center text-[14px] text-s-ink-3">No projects yet. Start one above.</p>
+              <div className="rounded-2xl border border-dashed border-s-line-strong px-5 py-7 text-center text-[14px] text-s-ink-3">
+                <p className="font-medium text-s-ink">No projects yet</p>
+                <p className="mx-auto mt-1 max-w-lg leading-relaxed">
+                  Use a project for work that takes more than one chat: code the agent builds and tests, or a goal broken into tasks. Pick one of the options above, or try an example.
+                </p>
+                <p className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-[13.5px]">
+                  <Link href="/code?idea=saas&from=welcome" className="text-s-ink underline underline-offset-4">
+                    Build an example landing page
+                  </Link>
+                  <Link href="/code?start=example" className="text-s-ink-2 underline underline-offset-4 hover:text-s-ink">
+                    Fix a bug in an example project
+                  </Link>
+                </p>
+              </div>
             ) : rows.length === 0 ? (
               <p className="px-1 py-6 text-[14px] text-s-ink-3">{query.trim() ? `No projects match “${query.trim()}”.` : "Nothing here yet."}</p>
             ) : (

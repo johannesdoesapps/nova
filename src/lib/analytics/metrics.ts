@@ -28,6 +28,16 @@ export interface RawMetrics {
   paid: { live_subscriptions: number; any_paid_ever: number };
   /** From admin_code_funnel, added by the API; missing if it couldn't be loaded. */
   code?: CodeFunnel | null;
+  /** From admin_onboarding_funnel, added by the API; missing if it couldn't be loaded. */
+  onboarding?: OnboardingFunnel | null;
+}
+
+/** What admin_onboarding_funnel returns. */
+export interface OnboardingFunnel {
+  signups: number;
+  chosen: Record<string, number>;
+  skipped: number;
+  returned: number;
 }
 
 /** What admin_code_funnel returns. */
@@ -57,6 +67,23 @@ export function duration(minutes: number | null): string | null {
   if (minutes < 90) return `${Math.round(minutes)} min`;
   if (minutes < 48 * 60) return `${Math.round(minutes / 60)} h`;
   return `${Math.round(minutes / 1440)} days`;
+}
+
+const PATH_LABEL: Record<string, string> = { website: "website", project: "existing project", bug: "bug", question: "question", none: "other" };
+
+function onboardingRow(o: OnboardingFunnel | null | undefined): MetricRow {
+  if (!o) return { id: "onboarding", value: null, detail: "First-run onboarding", note: "Couldn't be loaded." };
+  const chose = Object.values(o.chosen).reduce((n, v) => n + v, 0);
+  const paths = Object.entries(o.chosen)
+    .sort((a, b) => b[1] - a[1])
+    .map(([p, n]) => `${PATH_LABEL[p] ?? p} ${n}`)
+    .join(" · ");
+  return {
+    id: "onboarding",
+    value: o.signups ? pct(chose, o.signups) : null,
+    detail: `${chose} of ${o.signups} sign-ups picked a starting point${paths ? ` (${paths})` : ""} · ${o.skipped} skipped · ${o.returned} used AI on 2+ days`,
+    note: o.signups ? small(o.signups) : "No sign-ups in this period.",
+  };
 }
 
 function codeRow(c: CodeFunnel | null | undefined): MetricRow {
@@ -99,6 +126,7 @@ export function productReport(m: RawMetrics): MetricRow[] {
       detail: `${m.first_useful} of ${m.signups} sign-ups used a result (copied, saved, rated helpful, or finished a template, check or comparison)`,
       note: m.minutes_to_first_useful === null ? `No useful results recorded yet. ${eventsNote}` : eventsNote,
     },
+    onboardingRow(m.onboarding),
     codeRow(m.code),
     {
       id: "retention",
