@@ -142,7 +142,7 @@ describe("fallback", () => {
     const { streamWithFallback } = await import("@/lib/ai/fallback");
     const events: string[] = [];
     try {
-      for await (const ev of streamWithFallback(chain[0]!, chain.slice(1), { messages: [] }, () => new AbortController().signal, (p) => provider(behaviours[p]!))) {
+      for await (const ev of streamWithFallback(chain[0]!, chain.slice(1), { messages: [] }, () => new AbortController().signal, {}, (p) => provider(behaviours[p]!))) {
         events.push(ev.type === "fallback" ? `fallback:${ev.to.id}` : ev.type);
       }
     } catch (e) {

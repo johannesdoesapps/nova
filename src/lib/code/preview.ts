@@ -146,11 +146,16 @@ const TOOLS_DIR = "/tmp/orbis-tools";
  * computer can reach npm and nothing else) outside the project, once per
  * computer, and run the check script against the running preview.
  */
-export async function runPreviewCheck(box: WorkspaceBox, path: string, d: WsDirs = WS_DIRS, port = PREVIEW_PORT): Promise<PreviewCheckRaw> {
+export async function runPreviewCheck(box: WorkspaceBox, path: string, d: WsDirs = WS_DIRS, port = PREVIEW_PORT, opts: { budgetMs?: number } = {}): Promise<PreviewCheckRaw> {
+  // The browser's setup (first check on a computer) and the check itself share the time the caller has left.
+  const budget = Math.floor((opts.budgetMs ?? 240_000) / 1000);
+  if (budget < 30) return { url: path, viewports: [], links: [], error: "There wasn't enough time left in this step for the browser check. Run it again in the next step." };
+  const runS = Math.min(90, Math.max(20, budget - 10));
+  const installS = Math.min(150, Math.max(10, budget - runS));
   const script = `${d.jobs}/check.mjs`;
   await box.writeFiles([{ path: script, content: CHECK_SCRIPT }]);
-  const install = `mkdir -p ${TOOLS_DIR} && cd ${TOOLS_DIR} && (test -f node_modules/puppeteer-core/package.json || timeout 150 npm i --no-audit --no-fund --no-save --prefix ${TOOLS_DIR} ${CHECK_TOOLS.join(" ")} > ${TOOLS_DIR}/install.log 2>&1 || (tail -c 1500 ${TOOLS_DIR}/install.log; exit 7))`;
-  const run = `cd /tmp && AWS_EXECUTION_ENV=AWS_Lambda_nodejs22.x timeout 90 node ${script} ${JSON.stringify(`http://127.0.0.1:${port}`)} ${JSON.stringify(path)} ${TOOLS_DIR}/node_modules/`;
+  const install = `mkdir -p ${TOOLS_DIR} && cd ${TOOLS_DIR} && (test -f node_modules/puppeteer-core/package.json || timeout ${installS} npm i --no-audit --no-fund --no-save --prefix ${TOOLS_DIR} ${CHECK_TOOLS.join(" ")} > ${TOOLS_DIR}/install.log 2>&1 || (tail -c 1500 ${TOOLS_DIR}/install.log; exit 7))`;
+  const run = `cd /tmp && AWS_EXECUTION_ENV=AWS_Lambda_nodejs22.x timeout ${runS} node ${script} ${JSON.stringify(`http://127.0.0.1:${port}`)} ${JSON.stringify(path)} ${TOOLS_DIR}/node_modules/`;
   const raw = await sh(box, `${install} && ${run} || echo '{"error":"The browser check couldn\\u0027t run (exit '$?')."}'`, d);
   const start = raw.indexOf('{"');
   try {

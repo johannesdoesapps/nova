@@ -34,6 +34,8 @@ const script: { turns: Turn[]; seen: ToolTurnParams[]; json: string[]; model: Mo
 const call = (name: string, args: Record<string, unknown> = {}, id = `toolu_${Math.random().toString(36).slice(2, 8)}`) => ({ id, name, args });
 const turn = (text: string, ...calls: ReturnType<typeof call>[]): Partial<ToolTurnResult> => ({ text, calls, stop: calls.length ? "tool_use" : "end_turn" });
 
+/** The time limit given to each model call, in order. */
+const timeouts: number[] = [];
 const toolTurn = vi.fn(async (p: ToolTurnParams): Promise<ToolTurnResult> => {
   script.seen.push(structuredClone(p));
   const next = script.turns.shift();
@@ -49,7 +51,10 @@ vi.mock("@/lib/ai", () => ({
     script.needs = ctx.needs ?? [];
     return { model: script.model, routing: null };
   },
-  withTimeout: () => new AbortController().signal,
+  withTimeout: (ms: number) => {
+    timeouts.push(ms);
+    return new AbortController().signal;
+  },
 }));
 vi.mock("@/lib/ai/platform", () => ({ autoIdFor: () => "auto:coding" }));
 vi.mock("@/lib/observability", () => ({ reportError: vi.fn() }));
@@ -108,6 +113,7 @@ vi.mock("@/lib/code/workspace", () => ({
 // The live preview: the server and the browser check, scripted.
 const preview = { starts: [] as string[], checks: [] as string[], problems: [["Phone: the page scrolls sideways by 120px."]] as string[][] };
 vi.mock("@/lib/code/preview", () => ({
+  PREVIEW_START_MS: 90_000,
   startPreview: async (_b: unknown, cmd: string) => {
     preview.starts.push(cmd);
     return { state: "running", http: 200, exitCode: null, log: "Serving HTTP on 0.0.0.0 port 3000", waitedMs: 1500, otherPorts: [] };
@@ -241,6 +247,7 @@ const { stepRun, respondToRun, cancelRun, addUsage, reverifyRun } = await import
 const { taskState } = await import("@/lib/code/agent/verdict");
 const { toRunView } = await import("@/lib/code/agent/runs");
 const { scrub } = await import("@/lib/code/agent/runs");
+const real = await vi.importActual<typeof import("@/lib/code/agent/runs")>("@/lib/code/agent/runs");
 
 const auth = { mode: "authenticated", userId: "u1" } as never;
 const req = () => new Request("https://tryorbis.app/api/code/agent/x/step", { method: "POST" });
@@ -292,6 +299,7 @@ beforeEach(() => {
   script.json = [];
   script.model = MODEL;
   toolTurn.mockClear();
+  timeouts.length = 0;
   generate.mockClear();
   releaseUsage.mockClear();
   recordRunLater.mockClear();
@@ -557,7 +565,7 @@ describe("recovery", () => {
     const r = await stepRun(req(), auth, id);
     expect(r.run.status).toBe("failed");
     expect(r.run.error).toContain("couldn't process this request (error 400)");
-    expect(r.run.report).toMatchObject({ outcome: "failed" });
+    expect(r.run.report).toMatchObject({ outcome: "failed", failure: "provider_rejected", usage: { retries: 1 } });
     expect(releaseUsage).toHaveBeenCalledTimes(1);
   });
 
@@ -572,6 +580,7 @@ describe("recovery", () => {
     const third = await stepRun(req(), auth, id);
     expect(third.run.status).toBe("failed");
     expect(third.run.error).toContain("failed 3 times in a row");
+    expect(third.run.report).toMatchObject({ failure: "provider_unavailable", usage: { retries: 3 } });
     expect(events(id).filter((e) => e.title.startsWith("Started with"))).toHaveLength(1);
   });
 
@@ -667,7 +676,108 @@ describe("recovery", () => {
     const r = await stepRun(req(), auth, id);
     expect(r.run).toMatchObject({ status: "failed" });
     expect(r.run.error).toContain("declined");
-    expect(r.run.report).toMatchObject({ outcome: "failed", verification: "not_run" });
+    expect(r.run.report).toMatchObject({ outcome: "failed", verification: "not_run", failure: "refused" });
+  });
+});
+
+describe("time limits, duplicate requests and run records", () => {
+  const working = () => newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true } });
+
+  it("gives each model call only the time that leaves room for one command and saving before the route's limit", async () => {
+    const { modelTimeoutFor, STEP_BUDGET_MS } = await import("@/lib/code/agent/engine");
+    const t = 1_000_000;
+    // Fresh request: 270 s budget − 135 s kept for a command and saving.
+    expect(modelTimeoutFor(t + STEP_BUDGET_MS, t)).toBe(135_000);
+    expect(modelTimeoutFor(t + 10 * STEP_BUDGET_MS, t)).toBe(170_000);
+    expect(modelTimeoutFor(t + STEP_BUDGET_MS, t + 200_000)).toBe(0);
+    // The worst case before this change: 45 s chaining + 170 s model + 120 s command = 335 s, past the 300 s limit.
+    const worst = 45_000 + modelTimeoutFor(t + STEP_BUDGET_MS, t + 45_000) + 120_000;
+    expect(worst).toBeLessThanOrEqual(STEP_BUDGET_MS);
+  });
+
+  it("shortens a chained step's model call and stops chaining once the request has used its time", async () => {
+    const id = working();
+    const t0 = Date.now();
+    let elapsed = 0;
+    script.turns.push(
+      () => {
+        elapsed = 40_000;
+        return turn("Look.", call("list_files"));
+      },
+      () => {
+        elapsed = 50_000;
+        return turn("Look again.", call("git_status"));
+      },
+      turn("Done.", call("finish", { summary: "ok" })),
+    );
+    const r = await stepRun(req(), auth, id, { now: () => t0 + elapsed });
+    expect(toolTurn).toHaveBeenCalledTimes(2);
+    // First call: a fresh budget. Second: started 40 s in, so 40 s less.
+    expect(timeouts).toEqual([135_000, 95_000]);
+    expect(r.run.status).toBe("running");
+    expect(run(id).locked_until).toBeNull();
+  });
+
+  it("runs an approved command once, however many times the approval is sent", async () => {
+    const id = newRun({ status: "awaiting_approval", plan: { summary: "x", steps: ["x"], approved: true }, pending: { kind: "command", command: "npm run build", reason: "builds" } });
+    const results = await Promise.allSettled([respondToRun(auth, id, { decision: "approve" }), respondToRun(auth, id, { decision: "approve" }), respondToRun(auth, id, { decision: "approve" })]);
+    expect(commands).toEqual(["npm run build"]);
+    expect(results.filter((x) => x.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((x) => x.status === "rejected").map((x) => (x as PromiseRejectedResult).reason.code)).toEqual(["conflict", "conflict"]);
+    await expect(respondToRun(auth, id, { decision: "approve" })).rejects.toMatchObject({ code: "conflict" });
+    expect(commands).toEqual(["npm run build"]);
+  });
+
+  it("records why a run failed when no model is set up", async () => {
+    script.model = { ...MODEL, id: "demo", provider: "demo" as ModelInfo["provider"] };
+    const r = await stepRun(req(), auth, working());
+    expect(r.run.status).toBe("failed");
+    expect(r.run.report).toMatchObject({ outcome: "failed", failure: "no_model" });
+  });
+
+  it("logs one line per ended run with its outcome and timings, never the request, code or output", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const id = newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true }, request: "Fix the bug with the key sk-live-SECRET123", created_at: new Date(Date.now() - 5_000).toISOString() });
+    script.turns.push(turn("Fixing.", call("edit_file", { path: "sum.js", search: "a - b", replace: "a + b" })), turn("Done.", call("finish", { summary: "ok" })));
+    await stepRun(req(), auth, id);
+    while (run(id).status !== "completed") await stepRun(req(), auth, id);
+    const lines = info.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("agent_run_end"));
+    info.mockRestore();
+    expect(lines).toHaveLength(1);
+    const line = JSON.parse(lines[0]!);
+    expect(line).toMatchObject({ event: "agent_run_end", runId: id, status: "completed", state: "verified", failure: null, retries: 0, modelCalls: 2 });
+    expect(line.totalMs).toBeGreaterThanOrEqual(5_000);
+    expect(line.firstProgressMs).toBeGreaterThanOrEqual(5_000);
+    expect(typeof line.verifyMs).toBe("number");
+    expect(lines[0]).not.toMatch(/SECRET|sum\.js|a \+ b|Fix the bug/);
+    expect(run(id).report).toMatchObject({ timing: { totalMs: line.totalMs, verifyMs: line.verifyMs } });
+  });
+
+  it("works out timings from the run's records only", async () => {
+    const { runTiming } = await import("@/lib/code/agent/engine");
+    const at = (s: number) => new Date(Date.parse("2026-10-23T10:00:00Z") + s * 1000).toISOString();
+    const evs = [
+      { kind: "status" as const, title: "Started", detail: null, createdAt: at(1) },
+      { kind: "inspect" as const, title: "Read 3 files", detail: null, createdAt: at(4) },
+      { kind: "status" as const, title: "Verification finished", detail: { verifyMs: 12_000 }, createdAt: at(30) },
+    ];
+    expect(runTiming({ created_at: at(0) }, evs, Date.parse(at(40)))).toEqual({ totalMs: 40_000, firstProgressMs: 4_000, verifyMs: 12_000 });
+    expect(runTiming({ created_at: at(0) }, [evs[0]!], Date.parse(at(2)))).toEqual({ totalMs: 2_000, firstProgressMs: null, verifyMs: null });
+  });
+
+  it("tells the page how long the current step has really been running, and changes its version when the run is taken or saved", () => {
+    const { runVersion } = real;
+    const lockedUntil = new Date(Date.now() + 240_000).toISOString();
+    const row = { ...db.runs.get(working())!, updated_at: "2026-10-23T10:00:00Z" };
+    const idle = toRunView(row);
+    expect(idle.stepStartedAt).toBeNull();
+    const busy = toRunView({ ...row, locked_until: lockedUntil });
+    expect(busy.busy).toBe(true);
+    expect(Date.now() - Date.parse(busy.stepStartedAt!)).toBeGreaterThanOrEqual(59_000);
+    expect(Date.now() - Date.parse(busy.stepStartedAt!)).toBeLessThan(62_000);
+    expect(runVersion(row)).not.toBe(runVersion({ ...row, locked_until: lockedUntil }));
+    expect(runVersion(row)).not.toBe(runVersion({ ...row, updated_at: "2026-10-23T10:00:01Z" }));
+    expect(busy.version).toBe(runVersion({ ...row, locked_until: lockedUntil }));
   });
 });
 

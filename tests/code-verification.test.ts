@@ -71,6 +71,8 @@ function view(o: Partial<RunView> = {}): RunView {
     report: report(),
     createdAt: EDIT,
     updatedAt: AFTER,
+    version: `${AFTER}|`,
+    stepStartedAt: null,
     ...o,
   };
 }

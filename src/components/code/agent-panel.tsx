@@ -60,7 +60,7 @@ import { countFirstTask } from "@/lib/first-task";
  */
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-type RunDetail = { run: RunView; events: AgentEvent[]; attachments?: AttachmentMeta[] };
+type RunDetail = { run: RunView; events: AgentEvent[]; attachments?: AttachmentMeta[] } | { unchanged: true; busy: boolean; stepStartedAt: string | null; events: AgentEvent[] };
 type RevertResult = { ok: boolean; reverted: string[]; conflicts: string[] };
 
 // ---------------------------------------------------------------- permission modes
@@ -344,14 +344,28 @@ export function AgentPanel({
 
   /** Fetch the run and its new activity; reload files when the agent touched them. */
   const refresh = useCallback(async (runId: string): Promise<RunView> => {
-    const r = await api<RunDetail>(`/api/code/agent/${runId}?after=${lastSeq.current}`);
-    if (!alive.current) return r.run;
-    if (r.attachments) setRunAttachments(r.attachments);
-    // A slower, older response never replaces a newer state of the same run (the page shows what the server last said).
-    if (!isOlderView(latestView.current, r.run)) {
-      latestView.current = r.run;
-      setRun(r.run);
-      runChanged.current(r.run);
+    // The version already shown, so an unchanged run isn't sent again (only whether a step holds it, and new activity).
+    const shown = latestView.current?.id === runId ? latestView.current : null;
+    const r = await api<RunDetail>(`/api/code/agent/${runId}?after=${lastSeq.current}${shown ? `&known=${encodeURIComponent(shown.version)}` : ""}`);
+    let current: RunView;
+    if ("unchanged" in r) {
+      current = { ...shown!, busy: r.busy, stepStartedAt: r.stepStartedAt };
+      if (!alive.current) return current;
+      // Only when the page still shows that version: a newer state that arrived meanwhile stays.
+      if (latestView.current?.id === runId && latestView.current.version === shown!.version) {
+        latestView.current = current;
+        setRun(current);
+      } else current = latestView.current ?? current;
+    } else {
+      current = r.run;
+      if (!alive.current) return current;
+      if (r.attachments) setRunAttachments(r.attachments);
+      // A slower, older response never replaces a newer state of the same run (the page shows what the server last said).
+      if (!isOlderView(latestView.current, r.run)) {
+        latestView.current = r.run;
+        setRun(r.run);
+        runChanged.current(r.run);
+      }
     }
     const fresh = r.events.filter((e) => e.seq > lastSeq.current);
     if (fresh.length) {
@@ -363,7 +377,7 @@ export function AgentPanel({
       else if (fresh.some((e) => e.kind === "inspect" && e.detail?.preview)) previewChanged.current?.("checked");
       else if (touched) previewChanged.current?.("changed");
     }
-    return r.run;
+    return current;
   }, []);
 
   const open = useCallback(
@@ -712,6 +726,7 @@ export function AgentPanel({
                 ))}
               </ol>
 
+              {run.busy && run.stepStartedAt && !ended && <StepClock since={run.stepStartedAt} />}
               {(driving || run.busy) && !ended && (
                 run.pending?.kind === "job" ? (
                   <p role="status" className="flex items-center gap-2.5 px-1 text-[13px] text-s-ink-3">
@@ -1080,6 +1095,25 @@ function EventRow({ event: e }: { event: AgentEvent }) {
 
 const minutes = (ms: number) => (ms < 60_000 ? `${Math.max(1, Math.round(ms / 1000))} s` : `${Math.round(ms / 60_000)} min`);
 const usd = (n: number) => (n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`);
+
+/**
+ * How long the step in progress has been running, from when it took the run (server time). A step can't
+ * outlive the server's 5-minute limit, so past that it says the step stopped and the run will carry on.
+ */
+function StepClock({ since }: { since: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const s = Math.max(0, Math.round((now - Date.parse(since)) / 1000));
+  const text = s >= 300 ? "This step stopped without finishing; the next one picks up from what was saved." : `This step has been running for ${s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s`}.`;
+  return (
+    <p className="px-1 text-[12px] text-s-ink-3" aria-live="off">
+      {text}
+    </p>
+  );
+}
 
 /** Tokens used against the run's budget, estimated cost and working time. */
 function UsageLine({ run }: { run: RunView }) {

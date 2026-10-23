@@ -76,7 +76,13 @@ export interface RunUsage {
   estimated?: boolean;
   /** Model calls that failed in a row (reset by a successful one). */
   modelFailuresInRow?: number;
+  /** Model calls that failed over the whole run (each one retried or ended the run). */
+  retries?: number;
 }
+
+/** Why a run failed, for the report and reliability figures. */
+export const FAILURE_KINDS = ["no_model", "provider_rejected", "provider_not_configured", "provider_unavailable", "refused", "unreadable_replies", "internal"] as const;
+export type FailureKind = (typeof FAILURE_KINDS)[number];
 
 export const EMPTY_USAGE: RunUsage = { inputTokens: 0, outputTokens: 0, costUsd: 0, modelCalls: 0, models: [] };
 
@@ -185,6 +191,10 @@ export interface RunReport {
   testSetup?: string | null;
   /** A website task. */
   web?: boolean;
+  /** Real timings from the run's records (ms): created → ended, created → first progress, and the verification phase. */
+  timing?: { totalMs: number; firstProgressMs: number | null; verifyMs: number | null };
+  /** Why the run failed (failed runs only). */
+  failure?: FailureKind;
 }
 
 /** How a check ended. "not_run" is never shown as success; "stale" ran before the last change; "error" couldn't complete. */
@@ -243,6 +253,10 @@ export interface RunView {
   report: RunReport | null;
   createdAt: string;
   updatedAt: string;
+  /** Changes whenever the run is saved or a step takes or releases it; the page sends it back so an unchanged run isn't sent again. */
+  version: string;
+  /** When the step in progress started (from its lock), or null when none is. */
+  stepStartedAt: string | null;
 }
 
 export const EVENT_KINDS = ["status", "note", "inspect", "plan", "edit", "command", "question", "answer", "approval", "error", "summary", "revert", "git"] as const;

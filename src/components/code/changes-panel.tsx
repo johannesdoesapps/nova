@@ -48,7 +48,7 @@ export function ChangesPanel({ projectId, sourceRepo, focusRun, onFilesChanged }
   useEffect(() => {
     if (!selected) return;
     let live = true;
-    api<{ changes: AgentChange[] }>(`/api/code/agent/${selected}?after=999999`)
+    api<{ changes: AgentChange[] }>(`/api/code/agent/${selected}?after=999999&changes=1`)
       .then((r) => live && setLoadedChanges({ runId: selected, list: r.changes }))
       .catch((e: CodeApiError) => live && setError(e));
     api<{ checkpoints: CheckpointInfo[] }>(`/api/code/agent/${selected}/checkpoints`)

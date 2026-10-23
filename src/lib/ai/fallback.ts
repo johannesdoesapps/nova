@@ -10,6 +10,14 @@ function retryable(err: unknown): err is ApiError {
   return err instanceof ApiError && (err.code === "upstream_error" || err.code === "timeout" || err.code === "rate_limited" || err.code === "provider_unavailable");
 }
 
+/** A fallback model is only tried with at least this long left; otherwise the first model's error is shown. */
+export const MIN_FALLBACK_MS = 10_000;
+
+/** Time a model call may take now: at most 50 s, and never past the request's deadline. */
+export function modelBudget(deadline: number, now = Date.now()): number {
+  return Math.max(1_000, Math.min(50_000, deadline - now));
+}
+
 /**
  * Stream from the chosen model, moving to the next model in `fallbacks` only
  * if it fails before sending any text. Callers build `fallbacks` with
@@ -20,6 +28,7 @@ export async function* streamWithFallback(
   fallbacks: ModelWithStatus[],
   params: Omit<GenerateParams, "model" | "signal">,
   signal: () => AbortSignal,
+  opts: { canFallBack?: () => boolean } = {},
   lookup: typeof getProvider = getProvider,
 ): AsyncGenerator<FallbackStreamEvent> {
   const chain = [primary, ...fallbacks];
@@ -34,7 +43,9 @@ export async function* streamWithFallback(
       return;
     } catch (err) {
       const next = chain[i + 1];
-      if (sentText || !next || !retryable(err)) throw err;
+      // Never after text was sent (that would duplicate the reply), never for errors another model won't fix,
+      // and only when there's time left for another model to answer.
+      if (sentText || !next || !retryable(err) || (opts.canFallBack && !opts.canFallBack())) throw err;
       yield { type: "fallback", from: model, to: next, reason: err.message };
     }
   }

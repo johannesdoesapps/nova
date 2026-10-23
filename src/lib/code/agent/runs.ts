@@ -95,6 +95,8 @@ export function toRunView(r: Omit<RunRow, "transcript"> & { transcript?: unknown
     report: r.report,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    version: runVersion(r),
+    stepStartedAt: r.locked_until && Date.parse(r.locked_until) > now ? new Date(Date.parse(r.locked_until) - STEP_LOCK_MS).toISOString() : null,
   };
 }
 
@@ -105,6 +107,31 @@ export async function createRun(auth: Authed, input: { projectId: string; reques
     .select(RUN_COLS)
     .single();
   if (error) throw dbError(error, "code.agent.create");
+  return data as RunRow;
+}
+
+/** A run's version for polling: it changes whenever the row is saved or a step takes or releases it. */
+export function runVersion(r: Pick<RunRow, "updated_at" | "locked_until">): string {
+  return `${r.updated_at}|${r.locked_until ?? ""}`;
+}
+
+/** Just what tells whether a run changed (a cheap read before the whole row). */
+export async function getRunVersion(auth: Authed, runId: string): Promise<{ version: string; busy: boolean; stepStartedAt: string | null } | null> {
+  requireUuid(runId);
+  const { data, error } = await auth.supabase.from("code_agent_runs").select("updated_at, locked_until").eq("id", runId).maybeSingle();
+  if (error) throw dbError(error, "code.agent.version");
+  if (!data) return null;
+  const r = data as Pick<RunRow, "updated_at" | "locked_until">;
+  const busy = !!r.locked_until && Date.parse(r.locked_until) > Date.now();
+  return { version: runVersion(r), busy, stepStartedAt: busy ? new Date(Date.parse(r.locked_until!) - STEP_LOCK_MS).toISOString() : null };
+}
+
+/** The run without its transcript (what the page shows). */
+export async function getRunForView(auth: Authed, runId: string): Promise<RunRow> {
+  requireUuid(runId);
+  const { data, error } = await auth.supabase.from("code_agent_runs").select(LIST_COLS).eq("id", runId).maybeSingle();
+  if (error) throw dbError(error, "code.agent.get");
+  if (!data) throw new ApiError("not_found", "Agent run not found.");
   return data as RunRow;
 }
 

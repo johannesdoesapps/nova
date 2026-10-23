@@ -1,5 +1,5 @@
 import { fallbackChain, resolveModelChoice, withTimeout } from "@/lib/ai";
-import { streamWithFallback } from "@/lib/ai/fallback";
+import { MIN_FALLBACK_MS, modelBudget, streamWithFallback } from "@/lib/ai/fallback";
 import { estimateCost, estimateTokens } from "@/lib/ai/cost";
 import { systemPromptFor } from "@/lib/ai/modes";
 import { addMemory, listMemories, memoryBlock, rememberRequest } from "@/lib/memory";
@@ -24,6 +24,8 @@ import { getProjectContext } from "@/lib/db/project-context";
 import { projectContextBlock } from "@/lib/projects/context";
 
 export const maxDuration = 60;
+/** The reply must be done within this (the route is stopped at 60 s): the model, and any fallback, share it. */
+const CHAT_BUDGET_MS = 55_000;
 
 function titleFrom(message: string): string {
   const t = message.replace(/\s+/g, " ").trim();
@@ -40,6 +42,7 @@ function escapeDoc(s: string) {
  */
 export async function POST(req: Request) {
   let caller: AuthContext | null = null;
+  const deadline = Date.now() + CHAT_BUDGET_MS;
   try {
     const body = await parseJsonBody(req, chatRequest, 220_000);
     const auth = await requireUserIfConfigured();
@@ -236,7 +239,7 @@ export async function POST(req: Request) {
       // The reply hit the output limit and was cut off.
       let truncated = false;
       try {
-        for await (const ev of streamWithFallback(model, fallbacks, { messages, maxOutputTokens }, () => withTimeout(50_000, signal))) {
+        for await (const ev of streamWithFallback(model, fallbacks, { messages, maxOutputTokens }, () => withTimeout(modelBudget(deadline), signal), { canFallBack: () => modelBudget(deadline) >= MIN_FALLBACK_MS })) {
           if (ev.type === "delta") {
             text += ev.text;
             send({ type: "delta", text: ev.text });

@@ -13,7 +13,7 @@ import { webSearch } from "@/lib/search/web";
 import { enforceLimits, planLimits, recordRunLater, releaseUsage } from "@/lib/usage";
 import type { FileChange, ProjectFile, ProjectSummary } from "../projects";
 import { summarizeCheck } from "../preview-check";
-import { describeStart, runPreviewCheck, startPreview } from "../preview";
+import { describeStart, PREVIEW_START_MS, runPreviewCheck, startPreview } from "../preview";
 import { applyFileChanges, getFiles, getProjectRow, optionalBox, setRunCommand, syncBack, type Authed } from "../server";
 import { claimSync, killJob, readJob, removeFromWorkspace, startJob, writeToWorkspace, type WorkspaceBox } from "../workspace";
 import {
@@ -81,6 +81,9 @@ import {
   type RunTests,
   type RunUsage,
   type RunView,
+  type AgentEvent,
+  type FailureKind,
+  type RunReport,
   type SkippedCheck,
   type VerifyState,
   type VerifyStep,
@@ -112,6 +115,21 @@ const MODEL_TIMEOUT_MS = 170_000;
 export const AGENT_OUTPUT_TOKENS = 16_000;
 /** One request keeps taking steps while it has been working for less than this. */
 const MULTI_STEP_MS = 45_000;
+/**
+ * The step route stops after 300 s (maxDuration). A request plans to finish
+ * its steps within this budget, leaving time to save; a step that would run
+ * past it gets a shorter model timeout, or isn't started.
+ */
+export const STEP_BUDGET_MS = 270_000;
+/** Time a step needs after its model call: one command (or a browser check), plus saving. */
+const AFTER_MODEL_MS = COMMAND_LIMIT_MS + 15_000;
+/** The least time worth giving a model call; with less left, the step waits for the next request. */
+const MIN_MODEL_MS = 45_000;
+
+/** How long the model may take this step, so the whole step ends before the route's limit. */
+export function modelTimeoutFor(deadline: number, now = Date.now()): number {
+  return Math.max(0, Math.min(MODEL_TIMEOUT_MS, deadline - now - AFTER_MODEL_MS));
+}
 const POLL_MS = 1_500;
 const MAX_OUTPUT_KEPT = 200_000;
 const TOKEN_BUDGET_INCREMENT = 300_000;
@@ -179,6 +197,8 @@ export function addChecks(prev: RunChecks, step: Partial<RunChecks>): RunChecks 
 interface EnvContext {
   auth: Authed;
   run: RunRow;
+  /** When this request must be done (the browser check and preview start fit their time to it). */
+  deadline?: number;
   project: ProjectSummary;
   docs: boolean;
   github: boolean;
@@ -320,13 +340,14 @@ function realEnv(c: EnvContext): AgentEnv {
       start: async (command) => {
         const box = await optionalBox(auth, project.id);
         if (!box) throw new ApiError("conflict", "The project's computer isn't running.", { scope: "workspace_stopped" });
-        const s = await startPreview(box, command, { signal: async () => (await runStatus(auth, run.id)) === "cancelled" });
+        const left = (c.deadline ?? Date.now() + STEP_BUDGET_MS) - Date.now() - 10_000;
+        const s = await startPreview(box, command, { signal: async () => (await runStatus(auth, run.id)) === "cancelled", timeoutMs: Math.max(10_000, Math.min(PREVIEW_START_MS, left)) });
         return { state: s.state, http: s.http, exitCode: s.exitCode, text: describeStart(s, command) };
       },
       check: async (path) => {
         const box = await optionalBox(auth, project.id);
         if (!box) throw new ApiError("conflict", "The project's computer isn't running.", { scope: "workspace_stopped" });
-        const check = summarizeCheck(await runPreviewCheck(box, path));
+        const check = summarizeCheck(await runPreviewCheck(box, path, undefined, undefined, { budgetMs: (c.deadline ?? Date.now() + STEP_BUDGET_MS) - Date.now() - 10_000 }));
         const shots = await addEvents(
           auth,
           run.id,
@@ -381,7 +402,7 @@ async function githubUsable(auth: Authed): Promise<boolean> {
 // ---------------------------------------------------------------- the report
 
 /** Build and store the run's final report from its records (best effort: a failure is logged, not shown). */
-async function finalize(auth: Authed, runId: string, unresolved: string[] = [], skipped: SkippedCheck[] = []): Promise<RunRow | null> {
+async function finalize(auth: Authed, runId: string, unresolved: string[] = [], skipped: SkippedCheck[] = [], failure?: FailureKind): Promise<RunRow | null> {
   try {
     const row = await getRun(auth, runId);
     const [changes, files, events, checkpoints] = await Promise.all([listChanges(auth, runId), getFiles(auth, row.project_id), listEvents(auth, runId), listCheckpoints(auth, runId)]);
@@ -403,11 +424,45 @@ async function finalize(auth: Authed, runId: string, unresolved: string[] = [], 
       web: !!runOptions(row).web,
       skipped,
     });
+    report.timing = runTiming(row, events);
+    if (failure) report.failure = failure;
+    logRunEnd(row, report);
     return await updateRun(auth, runId, { report });
   } catch (err) {
     reportError(err, { where: "code.agent.report" });
     return null;
   }
+}
+
+/** Real timings from the run's records: created → now, created → first progress, and the last verification's duration. */
+export function runTiming(row: Pick<RunRow, "created_at">, events: Pick<AgentEvent, "kind" | "title" | "detail" | "createdAt">[], now = Date.now()): NonNullable<RunReport["timing"]> {
+  const created = Date.parse(row.created_at);
+  const progress = events.find((e) => e.kind !== "status" && e.kind !== "error");
+  const verify = [...events].reverse().find((e) => typeof e.detail?.verifyMs === "number");
+  return {
+    totalMs: Number.isFinite(created) ? Math.max(0, now - created) : 0,
+    firstProgressMs: progress && Number.isFinite(created) ? Math.max(0, Date.parse(progress.createdAt) - created) : null,
+    verifyMs: verify ? (verify.detail!.verifyMs as number) : null,
+  };
+}
+
+/** One structured line per ended run, for the logs: outcome and timings only — never the request, code or output. */
+function logRunEnd(row: Pick<RunRow, "id" | "status" | "steps" | "active_ms">, report: RunReport) {
+  console.info(
+    JSON.stringify({
+      event: "agent_run_end",
+      runId: row.id,
+      status: row.status,
+      state: report.state ?? null,
+      failure: report.failure ?? null,
+      steps: row.steps,
+      activeMs: Number(row.active_ms),
+      ...report.timing,
+      retries: report.usage.retries ?? 0,
+      modelCalls: report.usage.modelCalls,
+      costUsd: report.usage.costUsd,
+    }),
+  );
 }
 
 // ---------------------------------------------------------------- steps
@@ -419,7 +474,7 @@ export interface StepResult {
 }
 
 /** Finish a step: save the run unless the user stopped it meanwhile, and write the report when it ended. */
-async function finishStep(auth: Authed, runId: string, patch: RunPatch, unresolved: string[] = [], skipped: SkippedCheck[] = []): Promise<RunRow> {
+async function finishStep(auth: Authed, runId: string, patch: RunPatch, unresolved: string[] = [], skipped: SkippedCheck[] = [], failure?: FailureKind): Promise<RunRow> {
   let row = await updateRunIfNotCancelled(auth, runId, { ...patch, locked_until: null });
   if (!row) {
     // The user's stop stands: the step's records are kept, its status, waiting state and summary aren't.
@@ -428,7 +483,7 @@ async function finishStep(auth: Authed, runId: string, patch: RunPatch, unresolv
     delete kept.summary;
     row = await updateRun(auth, runId, { ...kept, locked_until: null, pending: null });
   }
-  if (ENDED_STATUSES.includes(row.status)) return (await finalize(auth, runId, unresolved, skipped)) ?? row;
+  if (ENDED_STATUSES.includes(row.status)) return (await finalize(auth, runId, unresolved, skipped, row.status === "failed" ? (failure ?? "internal") : undefined)) ?? row;
   return row;
 }
 
@@ -441,10 +496,14 @@ const FORMAT_RETRY = "FORMAT PROBLEM:";
  * is young. `expectStep` is the step count the caller last saw: when the run
  * has moved on since (a retried request), nothing runs.
  */
-export async function stepRun(req: Request, auth: Authed, runId: string, opts: { expectStep?: number } = {}): Promise<StepResult> {
-  const started = Date.now();
+export async function stepRun(req: Request, auth: Authed, runId: string, opts: { expectStep?: number; now?: () => number } = {}): Promise<StepResult> {
+  const clock = opts.now ?? Date.now;
+  const started = clock();
+  const deadline = started + STEP_BUDGET_MS;
   let latest: RunView | null = null;
   for (let n = 0; ; n++) {
+    // Another step only when it can finish inside this request's time (the route is stopped at 300 s).
+    if (n > 0 && modelTimeoutFor(deadline, clock()) < MIN_MODEL_MS) return { run: latest! };
     const row = await lockRun(auth, runId, WORKING_STATUSES);
     if (!row) {
       const now = toRunView(await getRun(auth, runId));
@@ -456,20 +515,20 @@ export async function stepRun(req: Request, auth: Authed, runId: string, opts: {
       return { run: toRunView(released), skipped: "stale" };
     }
     try {
-      latest = toRunView(await step(req, auth, row));
+      latest = toRunView(await step(req, auth, row, deadline, clock));
     } catch (err) {
       await updateRun(auth, runId, { locked_until: null }).catch(() => {});
       // The first step's failure goes back to the caller; a later one has been logged, so report where the run is.
       if (n === 0) throw err;
       return { run: toRunView(await getRun(auth, runId)) };
     }
-    if (!WORKING_STATUSES.includes(latest.status) || Date.now() - started > MULTI_STEP_MS) return { run: latest };
+    if (!WORKING_STATUSES.includes(latest.status) || clock() - started > MULTI_STEP_MS) return { run: latest };
   }
 }
 
-async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
+async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now() + STEP_BUDGET_MS, clock: () => number = Date.now): Promise<RunRow> {
   // The agent has finished: Orbis runs the checks itself, one per step, before the run may end.
-  if (runChecks(row).verify) return verifyStep(auth, row);
+  if (runChecks(row).verify) return verifyStep(auth, row, deadline);
   const stepStarted = Date.now();
   const opts = runOptions(row);
   const project = await getProjectRow(auth, row.project_id);
@@ -501,7 +560,7 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
   if (model.provider === "demo") {
     const message = "No AI model is set up on this site, so the agent can't run.";
     await addEvents(auth, row.id, [{ kind: "error", title: message }]);
-    return finishStep(auth, row.id, { status: "failed", error: message, pending: null });
+    return finishStep(auth, row.id, { status: "failed", error: message, pending: null }, [], [], "no_model");
   }
 
   const e = serverEnv();
@@ -574,7 +633,7 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
   let stop: "tool_use" | "end_turn" | "max_tokens" | "refusal" | "other" | "json" = "json";
   try {
     if (native) {
-      const r = await getProvider(model.provider).toolTurn!({ model, system, messages: toToolMessages(history, await screenshots(auth, row.id, history), await attachedImages(auth, row.id, attached.images, model)), tools: toolSchemas(ctx), maxOutputTokens, signal: withTimeout(MODEL_TIMEOUT_MS) });
+      const r = await getProvider(model.provider).toolTurn!({ model, system, messages: toToolMessages(history, await screenshots(auth, row.id, history), await attachedImages(auth, row.id, attached.images, model)), tools: toolSchemas(ctx), maxOutputTokens, signal: withTimeout(modelTimeoutFor(deadline, clock())) });
       reply = { thought: clipText(r.text, 6_000), actions: r.calls.slice(0, 8).map((c) => ({ id: c.id, tool: c.name, args: c.args })) };
       raw = `${r.text}\n${JSON.stringify(r.calls)}`;
       callUsage = r.usage;
@@ -586,7 +645,7 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
         messages: [{ role: "system", content: system }, ...toJsonChat(history)],
         maxOutputTokens,
         temperature: 0.2,
-        signal: withTimeout(MODEL_TIMEOUT_MS),
+        signal: withTimeout(modelTimeoutFor(deadline, clock())),
       });
       raw = r.text;
       callUsage = r.usage;
@@ -604,12 +663,14 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
     // Provider messages from ApiError are already safe to show; anything else gets a generic one.
     const reason = err instanceof ApiError ? err.message : `${model.displayName} didn't answer.`;
     const failures = (usage.modelFailuresInRow ?? 0) + 1;
+    usage = { ...usage, retries: (usage.retries ?? 0) + 1 };
     // A rejected request (or a missing key) fails the same way every time; a busy or unreachable provider may recover.
     const permanent = err instanceof ApiError && (err.code === "bad_request" || err.code === "not_configured");
     if (permanent || failures >= MAX_MODEL_FAILURES) {
       const message = permanent ? `${reason} The run stopped; try another model.` : `${model.displayName} failed ${failures} times in a row (${reason}), so the run stopped. Try again later or with another model.`;
       await addEvents(auth, row.id, [{ kind: "error", title: message.slice(0, 380) }]);
-      return finishStep(auth, row.id, { status: "failed", error: message.slice(0, 2000), pending: null, usage: { ...usage, modelFailuresInRow: failures } });
+      const kind: FailureKind = !permanent ? "provider_unavailable" : (err as ApiError).code === "not_configured" ? "provider_not_configured" : "provider_rejected";
+      return finishStep(auth, row.id, { status: "failed", error: message.slice(0, 2000), pending: null, usage: { ...usage, modelFailuresInRow: failures } }, [], [], kind);
     }
     await updateRun(auth, row.id, { usage: { ...usage, modelFailuresInRow: failures } });
     await addEvents(auth, row.id, [{ kind: "error", title: `${reason} This step wasn't counted; it can be retried.`.slice(0, 380) }]);
@@ -638,7 +699,7 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
     record([]);
     const message = `${model.displayName} declined this request, so the run stopped. Try rephrasing it, or another model.`;
     await addEvents(auth, row.id, [{ kind: "error", title: message }]);
-    return finishStep(auth, row.id, { status: "failed", error: message, pending: null, usage, steps: row.steps + 1, active_ms: Number(row.active_ms) + (Date.now() - stepStarted) });
+    return finishStep(auth, row.id, { status: "failed", error: message, pending: null, usage, steps: row.steps + 1, active_ms: Number(row.active_ms) + (Date.now() - stepStarted) }, [], [], "refused");
   }
 
   const assistant: TranscriptMessage = { role: "assistant", content: reply.thought, ...(reply.actions.length ? { calls: reply.actions.map((a) => ({ id: a.id!, tool: a.tool, args: a.args })) } : {}) };
@@ -689,7 +750,7 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
   const withAssistant = [...transcript, assistant];
   await updateRun(auth, row.id, { transcript: capTranscript(withAssistant), usage, recent });
 
-  const env = realEnv({ auth, run: row, project, docs, github, webSearches });
+  const env = realEnv({ auth, run: row, project, docs, github, webSearches, deadline });
   if (reply.thought) await addEvents(auth, row.id, [{ kind: "note", title: clipText(reply.thought, 380) }]);
   const outcome = await runActions(reply, { planApproved, approvePlans: opts.approvePlans, reviewEdits: opts.reviewEdits, commands: ctx.commands, lastTests: row.tests?.last ?? null, readOnly }, env);
   record(webSearches.count ? ["web_search"] : []);
@@ -765,7 +826,7 @@ async function beginVerification(auth: Authed, row: RunRow, patch: RunPatch, env
 const describeQueue = (q: VerifyStep[]) => q.map((v) => (v.check === "tests" ? `the tests (${v.command})` : "a browser inspection of the page")).join(" and ");
 
 /** Run the next check in the verifying phase through the same tool code the agent uses, and record what happened. */
-async function verifyStep(auth: Authed, row: RunRow): Promise<RunRow> {
+async function verifyStep(auth: Authed, row: RunRow, deadline: number): Promise<RunRow> {
   const checks0 = runChecks(row);
   const v = checks0.verify!;
   const head = v.queue[0];
@@ -783,7 +844,7 @@ async function verifyStep(auth: Authed, row: RunRow): Promise<RunRow> {
   // Count the try before starting, so a step that dies mid-check still counts it.
   await updateRun(auth, row.id, { checks: { ...checks0, verify: { ...v, attempts: v.attempts + 1 } } });
   const project = await getProjectRow(auth, row.project_id);
-  const env = realEnv({ auth, run: row, project, docs: false, github: false, webSearches: { count: 0 } });
+  const env = realEnv({ auth, run: row, project, docs: false, github: false, webSearches: { count: 0 }, deadline });
   const reply: AgentReply = {
     thought: "",
     actions: [head.check === "tests" ? { id: "verify-tests", tool: "run_tests", args: { command: head.command } } : { id: "verify-browser", tool: "check_preview", args: { path: head.path } }],
@@ -809,7 +870,7 @@ async function verifyStep(auth: Authed, row: RunRow): Promise<RunRow> {
 }
 
 async function finishVerification(auth: Authed, row: RunRow, patch: RunPatch, v: VerifyState): Promise<RunRow> {
-  await addEvents(auth, row.id, [{ kind: "status", title: v.rerun ? "Checks re-run" : "Verification finished" }]);
+  await addEvents(auth, row.id, [{ kind: "status", title: v.rerun ? "Checks re-run" : "Verification finished", detail: { verifyMs: Math.max(0, Date.now() - Date.parse(v.startedAt)) } }]);
   return finishStep(auth, row.id, { ...patch, status: "completed", pending: null, summary: v.summary || row.summary, checks: { ...runChecks(row), ...patch.checks, verify: null } }, v.unresolved, v.skipped);
 }
 
@@ -867,7 +928,7 @@ async function formatProblem(auth: Authed, row: RunRow, transcript: TranscriptMe
   if (repeated) {
     const message = "The AI's replies couldn't be understood twice in a row, so the run stopped. Try again, perhaps with another model.";
     await addEvents(auth, row.id, [{ kind: "error", title: message }]);
-    return finishStep(auth, row.id, { ...base, status: "failed", error: message, pending: null });
+    return finishStep(auth, row.id, { ...base, status: "failed", error: message, pending: null }, [], [], "unreadable_replies");
   }
   await addEvents(auth, row.id, [{ kind: "note", title: "The AI's reply wasn't in the expected format; asking it again." }]);
   return finishStep(auth, row.id, base);
