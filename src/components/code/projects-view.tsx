@@ -7,6 +7,7 @@ import { useApp } from "@/components/layout/app-context";
 import { forgetPlace } from "@/components/studio/mode-switch";
 import { StudioHeader } from "@/components/studio/frame";
 import { Menu, MenuItem } from "@/components/studio/ui";
+import { SITE_EXAMPLES, siteExample } from "@/lib/code/site-examples";
 import { EXAMPLE_PROJECT, TEMPLATES, TEMPLATE_IDS, type ProjectSummary, type TemplateId } from "@/lib/code/projects";
 import { cn } from "@/lib/utils";
 import { api, CodeApiError, post, putBuildRequest, type Allowance } from "./api";
@@ -16,6 +17,8 @@ import { useCodeModel } from "./use-code-model";
 import { useCatalog } from "@/components/common/model-picker";
 import { ModelSelector } from "@/components/studio/model-selector";
 import { Greeting } from "@/components/studio/greeting";
+
+export { SITE_EXAMPLES };
 
 /**
  * Code's start screen: one prompt bar, front and centre. Starting a project
@@ -42,35 +45,6 @@ export function minutesLine(a: Allowance): string {
   if (a.limit === 0) return "Your plan doesn't include workspace computer time.";
   return `${a.left?.toLocaleString("en-US")} of ${a.limit.toLocaleString("en-US")} workspace minutes left this month`;
 }
-
-/** Example website prompts: each fills the box with a real request to edit or send. */
-export const SITE_EXAMPLES: { label: string; prompt: string }[] = [
-  {
-    label: "Premium SaaS landing page",
-    prompt:
-      "Build a premium SaaS landing page for an AI note-taking app called Lumen: a sticky navigation bar, a bold hero with a call to action, feature cards, three pricing plans, testimonials (clearly labelled sample content), an FAQ and a footer. Dark theme, responsive on mobile and desktop.",
-  },
-  {
-    label: "Designer portfolio",
-    prompt:
-      "Create an online portfolio for a product designer: an intro, a grid of six case studies with short descriptions, an about section, and a contact form that validates email addresses. Minimal, light, elegant typography.",
-  },
-  {
-    label: "E-commerce storefront",
-    prompt:
-      "Build an e-commerce storefront for a small coffee roaster: a product grid with filters, product cards with prices (sample data), a cart drawer that adds and removes items, and a checkout button that explains payments aren't connected yet.",
-  },
-  {
-    label: "Restaurant with reservations",
-    prompt:
-      "Create a restaurant website for a modern Italian trattoria: hero, menu with sections and prices (sample data), opening hours, location, and a reservation inquiry form with date, time, party size and validation.",
-  },
-  {
-    label: "Dashboard with charts",
-    prompt:
-      "Build a dashboard for a small online shop with a responsive sidebar that collapses on phones, summary cards, a sales line chart and a category bar chart (sample data, drawn with SVG or canvas), and a recent orders table.",
-  },
-];
 
 /** A short project name from a website request. */
 export function siteName(prompt: string): string {
@@ -102,7 +76,8 @@ export function CodeProjectsView() {
   const [repoNote, setRepoNote] = useState<string | null>(null);
   const [repo, setRepo] = useState("");
   const newRef = useRef<HTMLElement>(null);
-  const [site, setSite] = useState("");
+  // "?idea=<id>" (from the public site, carried through sign-up) fills the box with that example to edit or send.
+  const [site, setSite] = useState(() => siteExample(params.get("idea"))?.prompt ?? "");
   const catalog = useCatalog();
   const [modelId, setModelId] = useCodeModel(catalog);
   const [siteTarget, setSiteTarget] = useState<string>("new");

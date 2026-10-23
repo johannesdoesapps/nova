@@ -26,6 +26,16 @@ export interface RawMetrics {
   feedback_by_feature: { feature: string; helpful: number; total: number }[];
   projects_created: number;
   paid: { live_subscriptions: number; any_paid_ever: number };
+  /** From admin_code_funnel, added by the API; missing if it couldn't be loaded. */
+  code?: CodeFunnel | null;
+}
+
+/** What admin_code_funnel returns. */
+export interface CodeFunnel {
+  signups: number;
+  started: number;
+  completed: number;
+  minutes_to_first_run: number | null;
 }
 
 export interface MetricRow {
@@ -47,6 +57,17 @@ export function duration(minutes: number | null): string | null {
   if (minutes < 90) return `${Math.round(minutes)} min`;
   if (minutes < 48 * 60) return `${Math.round(minutes / 60)} h`;
   return `${Math.round(minutes / 1440)} days`;
+}
+
+function codeRow(c: CodeFunnel | null | undefined): MetricRow {
+  if (!c) return { id: "first_build", value: null, detail: "Coding agent runs", note: "Couldn't be loaded." };
+  const first = duration(c.minutes_to_first_run);
+  return {
+    id: "first_build",
+    value: c.signups ? pct(c.started, c.signups) : null,
+    detail: `${c.started} of ${c.signups} sign-ups started a coding agent run within 7 days · ${c.completed} had one finish${first ? ` · median ${first} to the first run` : ""}`,
+    note: c.signups ? small(c.signups) : "No sign-ups in this period.",
+  };
 }
 
 /** The measurement plan's figures, each with what it's based on and its caveats. Nothing is estimated or filled in. */
@@ -78,6 +99,7 @@ export function productReport(m: RawMetrics): MetricRow[] {
       detail: `${m.first_useful} of ${m.signups} sign-ups used a result (copied, saved, rated helpful, or finished a template, check or comparison)`,
       note: m.minutes_to_first_useful === null ? `No useful results recorded yet. ${eventsNote}` : eventsNote,
     },
+    codeRow(m.code),
     {
       id: "retention",
       value: m.retention.d7_cohort

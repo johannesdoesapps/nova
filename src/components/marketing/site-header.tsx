@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Logo } from "@/components/layout/logo";
 import { cn } from "@/lib/utils";
-import { NAV, SIGN_IN_HREF, SIGN_UP_HREF } from "./links";
+import { BUILD_HREF, NAV, SIGN_IN_HREF } from "./links";
+import { TrackedLink } from "./tracked-link";
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -60,9 +61,9 @@ export function SiteHeader() {
           <Link href={SIGN_IN_HREF} className="rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:text-fg">
             Sign in
           </Link>
-          <Link href={SIGN_UP_HREF} className="inline-flex h-9 items-center rounded-full bg-accent px-4 text-sm font-medium text-accent-fg transition hover:brightness-110">
-            Get started free
-          </Link>
+          <TrackedLink href={BUILD_HREF} event="landing_cta" where="header" className="inline-flex h-9 items-center rounded-full bg-accent px-4 text-sm font-medium text-accent-fg transition hover:brightness-110">
+            Start building free
+          </TrackedLink>
         </div>
         <button
           ref={button}
@@ -90,9 +91,9 @@ export function SiteHeader() {
           ))}
         </ul>
         <div className="grid gap-2">
-          <Link href={SIGN_UP_HREF} className="inline-flex h-11 items-center justify-center rounded-full bg-accent text-sm font-medium text-accent-fg">
-            Get started free
-          </Link>
+          <TrackedLink href={BUILD_HREF} event="landing_cta" where="header-menu" className="inline-flex h-11 items-center justify-center rounded-full bg-accent text-sm font-medium text-accent-fg">
+            Start building free
+          </TrackedLink>
           <Link href={SIGN_IN_HREF} className="inline-flex h-11 items-center justify-center rounded-full border border-border-strong text-sm text-fg">
             Sign in
           </Link>

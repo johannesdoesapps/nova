@@ -3,7 +3,7 @@
  * page, every image exists, guides and features reference each other, and
  * the pricing summary comes from the enforced plan settings.
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NAV, SIGN_IN_HREF, SIGN_UP_HREF } from "@/components/marketing/links";
@@ -107,25 +107,54 @@ describe("legal pages", () => {
 });
 
 describe("homepage content", () => {
-  it("links outcomes to real pages and real screenshots", async () => {
-    const { OUTCOMES } = await import("@/content/landing");
-    const appRoutes = new Set(["/templates", "/verify", "/arena"]);
-    for (const o of OUTCOMES) {
-      for (const l of o.links) expect(pages.has(l.href) || appRoutes.has(l.href), l.href).toBe(true);
-      if (o.image) expect(existsSync(join(PUBLIC, o.image.src)), o.image.src).toBe(true);
-    }
-    expect(OUTCOMES.map((o) => o.id)).toEqual(["models", "compare", "agents", "projects"]);
+  it("shows the real run's logged steps, each once and in order", async () => {
+    const { RUN_STAGES } = await import("@/content/landing");
+    const logged = DEMOS.find((d) => d.id === "code")!.steps!.map((st) => st.text);
+    expect(RUN_STAGES.flatMap((st) => st.steps)).toEqual(logged);
+    expect(RUN_STAGES.map((st) => st.id)).toEqual(["prompt", "work", "launch", "inspect", "report"]);
+    // The browser check is labelled as an inspection, never as a test result.
+    expect(RUN_STAGES.find((st) => st.id === "inspect")!.kind).toMatch(/not a test/i);
   });
 
-  it("takes plan figures and unit examples from the enforced settings", async () => {
-    const { PLAN_LIMITS, UNIT_EXAMPLES } = await import("@/content/landing");
-    const { DEFAULT_BILLING, chargeUsd } = await import("@/lib/plans");
+  it("links use cases and proof to real pages, real screenshots and real website ideas", async () => {
+    const { USE_CASES, PROOF_SHOTS } = await import("@/content/landing");
+    const { siteExample } = await import("@/lib/code/site-examples");
+    for (const u of USE_CASES) {
+      if (u.idea) expect(siteExample(u.idea), u.idea).toBeDefined();
+      else expect(pages.has(u.href!), u.href).toBe(true);
+    }
+    for (const p of PROOF_SHOTS) {
+      expect(existsSync(join(PUBLIC, p.image.src)), p.image.src).toBe(true);
+      expect(pages.has(p.href), p.href).toBe(true);
+    }
+  });
+
+  it("starts building after sign-up, with an example request only by id", async () => {
+    const { buildHref, BUILD_HREF } = await import("@/components/marketing/links");
+    const { afterSignIn } = await import("@/lib/auth-flow");
+    expect(BUILD_HREF).toBe("/login?mode=signup&next=%2Fcode");
+    const next = new URLSearchParams(buildHref("saas").split("?")[1]).get("next");
+    expect(afterSignIn(next)).toBe("/code?idea=saas");
+    const { siteExample } = await import("@/lib/code/site-examples");
+    expect(siteExample("saas")?.prompt).toMatch(/landing page/);
+    expect(siteExample("<script>")).toBeUndefined();
+    expect(siteExample(null)).toBeUndefined();
+  });
+
+  it("doesn't claim what isn't true about billing and limits", () => {
+    const page = readFileSync(join(process.cwd(), "src/app/(marketing)/page.tsx"), "utf8");
+    expect(page).not.toMatch(/rolling week/);
+    expect(page).not.toMatch(/Nothing is charged automatically and/);
+    expect(page).toMatch(/automatic top-ups/);
+  });
+
+  it("takes plan figures from the enforced settings", async () => {
+    const { PLAN_LIMITS } = await import("@/content/landing");
+    const { chargeUsd } = await import("@/lib/plans");
     for (const p of PLAN_LIMITS) {
       expect(p.price).toBe(PLANS[p.id].priceUsd);
       expect(p.yearly).toBe(p.price ? chargeUsd(PLANS[p.id], "year") : 0);
       expect(p.lines[0]).toContain(PLANS[p.id].windowUnits.toLocaleString("en-US"));
     }
-    const tu = DEFAULT_BILLING.tierUnits;
-    expect(UNIT_EXAMPLES.map((u) => u.units)).toEqual([`${tu.standard} unit`, `${tu.advanced} units`, `${tu.premium} units`, `${tu.standard * 4} units`, `${tu.standard * 3} units`]);
   });
 });

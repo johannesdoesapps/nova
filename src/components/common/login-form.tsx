@@ -3,6 +3,7 @@ import { GitHubLogo } from "./github-logo";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { track } from "@vercel/analytics";
 import { LEGAL } from "@/content/legal-meta";
 import { PENDING_COOKIE } from "@/lib/legal";
 import { browserSupabase } from "@/lib/supabase/client";
@@ -64,6 +65,15 @@ export function LoginForm({
   // redirect allow-list, even when signing in from a preview URL.
   const origin = () => (siteUrl.includes("localhost") && typeof window !== "undefined" ? window.location.origin : siteUrl);
 
+  // Sign-up funnel, counted anonymously by Vercel Web Analytics: no email address or other detail is sent.
+  const count = (event: "signup_started" | "signup_completed", props: Record<string, string>) => {
+    try {
+      track(event, props);
+    } catch {
+      /* not counted */
+    }
+  };
+
   const continueWithGoogle = () => continueWith("google");
   const continueWith = async (provider: "google" | "github") => {
     if (googleStarted.current || busy) return;
@@ -77,6 +87,7 @@ export function LoginForm({
     }
     googleStarted.current = true;
     setProviderBusy(true);
+    if (mode === "signup") count("signup_started", { method: provider });
     // Carried through the provider's sign-in, so the acceptance is recorded when the new account comes back.
     if (mode === "signup") document.cookie = `${PENDING_COOKIE}=${LEGAL.version}; Max-Age=1800; Path=/; SameSite=Lax; Secure`;
     try {
@@ -119,6 +130,7 @@ export function LoginForm({
         router.replace(next);
         router.refresh();
       } else {
+        count("signup_started", { method: "email" });
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -131,13 +143,17 @@ export function LoginForm({
         if (error) throw error;
         if (data.session) {
           // Email confirmation is off: the new account is signed in straight away.
+          count("signup_completed", { method: "email", confirm: "none" });
           router.replace(next);
           router.refresh();
         } else if (data.user && data.user.identities?.length === 0) {
           // Supabase hides whether an email is registered; an empty identity list means it already is.
           setMode("signin");
           setInfo("You already have an account with this email. Enter your password, or continue with Google if you used it before.");
-        } else setInfo("Check your inbox to confirm your email, then sign in.");
+        } else {
+          count("signup_completed", { method: "email", confirm: "email" });
+          setInfo("Check your inbox to confirm your email, then sign in.");
+        }
       }
     } catch (e) {
       setError(friendlyAuthError((e as Error).message, mode));

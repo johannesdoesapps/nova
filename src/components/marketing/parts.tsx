@@ -4,7 +4,7 @@ import { ArrowRight } from "lucide-react";
 import { Logo } from "@/components/layout/logo";
 import { FEATURES, GUIDES, STATUS_LABEL, type Status } from "@/content/site";
 import { cn } from "@/lib/utils";
-import { SIGN_IN_HREF, SIGN_UP_HREF } from "./links";
+import { BUILD_HREF, SIGN_IN_HREF, SIGN_UP_HREF } from "./links";
 import { TrackedLink } from "./tracked-link";
 
 const STATUS_DOT: Record<Status, string> = {
@@ -36,7 +36,7 @@ export function SectionHeading({ eyebrow, title, intro, id, center }: { eyebrow?
   );
 }
 
-export function PrimaryCta({ children = "Get started free", href = SIGN_UP_HREF, className, where }: { children?: ReactNode; href?: string; className?: string; where?: string }) {
+export function PrimaryCta({ children = "Start building free", href = BUILD_HREF, className, where }: { children?: ReactNode; href?: string; className?: string; where?: string }) {
   const cls = cn("inline-flex h-12 items-center gap-2 rounded-full bg-accent px-6 text-[15px] font-medium text-accent-fg shadow-[0_10px_30px_-12px_var(--accent)] transition hover:brightness-110", className);
   const inner = (
     <>
@@ -64,7 +64,7 @@ export function SecondaryCta({ children, href, className }: { children: ReactNod
   );
 }
 
-export function CtaBand({ title = "Start with Orbis today", text = "Create a free account in under a minute. No credit card needed.", where }: { title?: string; text?: string; where?: string }) {
+export function CtaBand({ title = "Start with Orbis today", text = "Create a free account in under a minute. No credit card required.", where = "band" }: { title?: string; text?: string; where?: string }) {
   return (
     <section aria-labelledby="cta-title" className="mx-auto max-w-6xl px-5 py-20 sm:px-8">
       <div className="lux-card rounded-[28px] px-6 py-14 text-center sm:px-12">
@@ -91,7 +91,7 @@ export function SiteFooter() {
             <Logo />
           </Link>
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted">
-            One workspace for AI chat, coding and agents — with every model named and every change reviewable.
+            An AI coding agent that builds, checks its work in a real browser and tells you what it verified — with Claude and GPT models.
           </p>
         </div>
         <FooterColumn title="Product" links={[{ href: "/features", label: "All features" }, ...FEATURES.map((f) => ({ href: `/features/${f.slug}`, label: f.name }))]} />

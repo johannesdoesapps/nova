@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight, Check, Info } from "lucide-react";
 import { Breadcrumbs, CtaBand, PrimaryCta, SecondaryCta, StatusBadge } from "@/components/marketing/parts";
+import { BUILD_HREF, SIGN_UP_HREF } from "@/components/marketing/links";
+import { RoutingDemo } from "@/components/marketing/routing-demo";
 import { FEATURES, featureBySlug, guideBySlug } from "@/content/site";
 import { absoluteUrl, jsonLd, pageMetadata } from "@/lib/seo";
 
@@ -24,6 +26,7 @@ export default async function FeaturePage({ params }: PageProps<"/features/[slug
   const guide = f.guide ? guideBySlug(f.guide) : undefined;
   const others = FEATURES.filter((x) => x.slug !== f.slug).slice(0, 3);
   const preview = f.status === "preview";
+  const coding = f.slug === "ai-coding-assistant";
   const crumbs = { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [
     { "@type": "ListItem", position: 1, name: "Features", item: absoluteUrl("/features") },
     { "@type": "ListItem", position: 2, name: f.name, item: absoluteUrl(`/features/${f.slug}`) },
@@ -44,7 +47,15 @@ export default async function FeaturePage({ params }: PageProps<"/features/[slug
             <span className="text-fg">Who it&rsquo;s for:</span> {f.audience}
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            {preview ? <SecondaryCta href={guide ? `/docs/${guide.slug}` : "/docs"}>Read how it works</SecondaryCta> : <PrimaryCta>Get started free</PrimaryCta>}
+            {preview ? (
+              <SecondaryCta href={guide ? `/docs/${guide.slug}` : "/docs"}>Read how it works</SecondaryCta>
+            ) : coding ? (
+              <PrimaryCta href={BUILD_HREF} where={`feature:${f.slug}`} />
+            ) : (
+              <PrimaryCta href={SIGN_UP_HREF} where={`feature:${f.slug}`}>
+                Start free
+              </PrimaryCta>
+            )}
             {!preview && guide && <SecondaryCta href={`/docs/${guide.slug}`}>Read the guide</SecondaryCta>}
           </div>
         </header>
@@ -55,6 +66,13 @@ export default async function FeaturePage({ params }: PageProps<"/features/[slug
               <Image src={f.image.src} alt={f.image.alt} width={f.image.width} height={f.image.height} sizes="(min-width: 1100px) 1024px, 100vw" className="h-auto w-full rounded-[14px]" />
             </div>
           </figure>
+        )}
+
+        {/* Chat's model routing, running for real in the browser (moved here from the homepage). */}
+        {f.slug === "ai-assistant" && (
+          <section aria-label="Try Auto model routing" className="mx-auto max-w-4xl px-5 py-10 sm:px-8">
+            <RoutingDemo />
+          </section>
         )}
 
         <section aria-labelledby="what" className="mx-auto max-w-4xl px-5 py-10 sm:px-8">

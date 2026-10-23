@@ -82,6 +82,12 @@ export const METRICS = [
     source: "Product events and feedback",
   },
   {
+    id: "first_build",
+    name: "First coding agent run",
+    definition: "Of people who signed up in the period, the share who started a coding agent run within 7 days, and the share whose run finished.",
+    source: "Coding agent runs",
+  },
+  {
     id: "retention",
     name: "7- and 30-day retention",
     definition: "Of people who signed up at least 7 (or 30) days ago, the share who used AI again on or after day 7 (or 30).",

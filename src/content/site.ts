@@ -430,12 +430,18 @@ export const PRICING = {
 };
 
 export const FAQ: { q: string; a: string }[] = [
-  { q: "What is Orbis?", a: "Orbis is a web workspace for working with AI: chat with several leading models, compare their answers, build and fix software with a coding agent that runs your tests, use specialised or custom agents, and turn goals into plans." },
+  { q: "What is Orbis?", a: "Orbis is an AI coding agent in a web workspace. It builds and fixes websites and applications on each project's own short-lived computer, runs your tests, checks websites in a real browser and reports what it changed and what it couldn't verify. The same account has chat with several leading models, side-by-side comparison of their answers, templates and project plans." },
   { q: "Which AI models does Orbis use?", a: "On tryorbis.app: Claude models from Anthropic and GPT models from OpenAI. Orbis can also use Gemini, Grok and DeepSeek when they're switched on. Every reply names the model that wrote it." },
   { q: "Is Orbis free?", a: `Yes. The Free plan includes ${PLANS.free.windowUnits} usage units per 5-hour window and ${PLANS.free.weeklyUnits} per week, with fast models. A typical message to a fast model uses 1 unit; larger models, longer messages and bigger files use more. Pro ($${PLANS.pro.priceUsd}/month) and Max ($${PLANS.max.priceUsd}/month) add usage and larger models. No plan is unlimited.` },
   { q: "Do I need a credit card to sign up?", a: "No. You sign up with an email address and password (or Google, where enabled) and start on the Free plan." },
   { q: "What happens to my conversations and code?", a: "They're saved to your account so you can come back to them, and only you can read them. Your messages are sent to the provider of the model that answers, which each reply names. See Security & data for details." },
   { q: "Can Orbis's agents take actions for me?", a: "Only within limits you can see. The coding agent edits your Orbis project and runs commands on that project's isolated computer — tests and builds on their own, anything else after you approve, and some never. Changes to connected apps (like drafting an email) always wait for your confirmation. Chat agents and Mission Control write, explain and plan; they don't act on their own." },
   { q: "Does the coding agent really run my tests?", a: "Yes — on the project's own short-lived computer. You see each command, its exit code and its output. If a command couldn't run, the agent says so instead of claiming it passed." },
+  {
+    q: "Can I build a whole website on the Free plan?",
+    a: `You can start one. A full site usually takes 10 to 20 agent steps, each counted like a message, plus a few minutes of computer time. Free allows ${PLANS.free.windowUnits} units per 5 hours and ${PLANS.free.workspaceMinutesPerPeriod} computer minutes a month, so a larger site may have to continue after your limit resets, or on Pro.`,
+  },
+  { q: "Does the coding agent deploy or publish anything?", a: "No. Pushing to GitHub, publishing packages and deploying are blocked for the agent, even if asked. You can push a project's changes to GitHub yourself from Changes, or download the project as a .zip." },
+  { q: "Are the screenshots and the run on this page real?", a: "Yes. They're captures of real sessions on tryorbis.app with a test account, and each caption says when it was taken. The steps of the run are copied from its activity log. Nothing on the page is a simulation." },
   { q: "What happens when I reach my limit?", a: "Orbis tells you which limit you reached and when it resets. The 5-hour window and weekly allowance reset on their own; nothing is charged automatically unless you turn on automatic top-ups yourself, and no plan is upgraded without you." },
 ]
