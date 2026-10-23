@@ -165,6 +165,7 @@ function SettingsBody({
             )
           )}
         </Row>
+        {historyKind === "server" && <MemorySettings on={settings.useMemory !== false} onToggle={(v) => onSettings({ useMemory: v })} />}
         <PrivacyAndData signedIn={historyKind === "server"} onOpenArchived={onOpenArchived} />
         <div className="py-4">
           <div className="mb-2.5 text-[13.5px] font-medium">Keyboard shortcuts</div>
@@ -183,6 +184,98 @@ function SettingsBody({
         </div>
       </div>
     </>
+  );
+}
+
+type MemoryItem = { id: string; content: string; source: "manual" | "chat"; created_at: string };
+
+/** Memory across chats: what Orbis remembers about you, with add, delete and an on/off switch. */
+function MemorySettings({ on, onToggle }: { on: boolean; onToggle: (v: boolean) => void }) {
+  const [items, setItems] = useState<MemoryItem[] | null>(null);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    jsonFetch<{ memories: MemoryItem[] }>("/api/memories")
+      .then((j) => alive && setItems(j.memories))
+      .catch(() => alive && setItems([]));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const add = async () => {
+    const content = draft.trim();
+    if (content.length < 2 || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const j = await jsonFetch<{ memory: MemoryItem }>("/api/memories", { method: "POST", body: JSON.stringify({ content }) });
+      setItems((xs) => [j.memory, ...(xs ?? [])]);
+      setDraft("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "That couldn't be saved.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async (id: string) => {
+    setError(null);
+    try {
+      await jsonFetch("/api/memories", { method: "DELETE", body: JSON.stringify({ id }) });
+      setItems((xs) => (xs ?? []).filter((m) => m.id !== id));
+    } catch {
+      setError("That memory couldn't be deleted. Try again.");
+    }
+  };
+  return (
+    <div className="py-4">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-[13.5px] font-medium">Memory</div>
+          <p className="mt-0.5 text-[12.5px] leading-relaxed text-s-ink-3">
+            Facts Orbis keeps about you across chats, such as your name, job or how you like answers. Add them here, or start a message with “Remember that…”. Only you can see them.
+          </p>
+        </div>
+        <Switch label="Use memory in replies" checked={on} onChange={onToggle} />
+      </div>
+      <form
+        className="mt-3 flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void add();
+        }}
+      >
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          maxLength={300}
+          placeholder="e.g. I'm a teacher in Leeds"
+          aria-label="Something to remember"
+          className="h-9 min-w-0 flex-1 rounded-xl border border-s-line-strong bg-transparent px-3 text-[13.5px] text-s-ink outline-none placeholder:text-s-ink-3 focus:border-s-accent"
+        />
+        <button type="submit" className={btnQuiet} disabled={busy || draft.trim().length < 2}>
+          <Plus /> Add
+        </button>
+      </form>
+      {error && <p className="mt-2 text-[12.5px] text-s-danger" role="alert">{error}</p>}
+      {items === null ? (
+        <div className="s-skeleton mt-3 h-4 w-2/3" role="status" aria-label="Loading" />
+      ) : items.length === 0 ? (
+        <p className="mt-3 text-[12.5px] text-s-ink-3">Nothing remembered yet.</p>
+      ) : (
+        <ul className="mt-3 space-y-1.5">
+          {items.map((m) => (
+            <li key={m.id} className="flex items-start gap-2 rounded-xl border border-s-line px-3 py-2 text-[13px]">
+              <span className="min-w-0 flex-1 break-words text-s-ink-2">{m.content}</span>
+              <IconButton label="Forget this" onClick={() => void remove(m.id)}>
+                <Trash2 />
+              </IconButton>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

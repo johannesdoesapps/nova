@@ -8,6 +8,7 @@ import { jsonFetch } from "@/hooks/use-ndjson";
 import { featureLabel, groupUsage, type UsageRow } from "@/lib/usage-labels";
 import { cn } from "@/lib/utils";
 import { StudioHeader, useStudio } from "./frame";
+import { BillingButton } from "@/components/common/billing-button";
 import { formatReset, UsageMeters, type PlanInfo, type UsageState } from "./usage";
 import { ExtraUsage } from "./extra-usage";
 
@@ -34,8 +35,28 @@ export function UsagePage() {
   const [view, setView] = useState<View>("requests");
   const [feature, setFeature] = useState("");
   const [reload, setReload] = useState(0);
-  // Back from Stripe Checkout after buying extra usage.
-  const creditsBought = useSearchParams().get("credits") === "bought";
+  // Back from Stripe Checkout after buying extra usage or a plan.
+  const params = useSearchParams();
+  const creditsBought = params.get("credits") === "bought";
+  const upgraded = params.get("upgraded");
+  const sessionId = params.get("session_id");
+  const [activation, setActivation] = useState<"working" | "done" | "later" | null>(sessionId ? "working" : null);
+
+  // Confirm the checkout with Stripe now, so the new plan or extra usage shows without waiting for Stripe's notification.
+  useEffect(() => {
+    if (!user || !sessionId) return;
+    let alive = true;
+    jsonFetch<{ applied: string }>("/api/billing/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId }) })
+      .then((j) => {
+        if (!alive) return;
+        setActivation(j.applied === "pending" ? "later" : "done");
+        setReload((n) => n + 1);
+      })
+      .catch(() => alive && setActivation("later"));
+    return () => {
+      alive = false;
+    };
+  }, [user, sessionId]);
 
   useEffect(() => {
     if (!user) return;
@@ -79,6 +100,19 @@ export function UsagePage() {
               How units work
             </Link>
           </p>
+
+          {activation && (upgraded || creditsBought) && (
+            <p role="status" className="glass mt-4 rounded-[16px] px-4 py-3 text-[13.5px] text-s-ink-2">
+              {activation === "working"
+                ? "Confirming your payment with Stripe…"
+                : activation === "done"
+                  ? upgraded
+                    ? "Payment confirmed. Your new plan is active now."
+                    : "Payment confirmed. Your extra usage has been added."
+                  : "Your payment is being confirmed. It usually appears within a minute; refresh this page if it doesn’t."}
+            </p>
+          )}
+          {overview && overview !== "error" && overview.plan?.paymentIssue && <PaymentIssue issue={overview.plan.paymentIssue} inGrace={overview.plan.id !== "free"} />}
 
           {!user ? (
             <section aria-label="Sign in to see your usage" className="glass mt-6 rounded-[22px] p-5 sm:p-6">
@@ -295,5 +329,32 @@ function Grouped({ rows, by }: { rows: ReturnType<typeof groupUsage>; by: "day" 
       ))}
       {by === "day" && <li className="px-2 pt-2 text-[12px] text-s-ink-3">Days with no requests aren’t listed.</li>}
     </ul>
+  );
+}
+
+function PaymentIssue({ issue, inGrace }: { issue: NonNullable<PlanInfo["paymentIssue"]>; inGrace: boolean }) {
+  // The server keeps the paid plan only during the grace period, so a paid plan here means it's still running.
+  const until = issue.kind === "past_due" && inGrace && issue.graceUntil ? formatReset(issue.graceUntil) : null;
+  return (
+    <section role="alert" className="mt-4 rounded-[16px] border border-warning/40 bg-warning/10 px-4 py-3 text-[13.5px] leading-relaxed text-s-ink">
+      {issue.kind === "past_due" ? (
+        <>
+          <p className="font-medium">Your last payment didn’t go through.</p>
+          <p className="mt-0.5 text-s-ink-2">
+            {until ? `Your plan keeps working until ${until} while we try your card again.` : "Your account is on the Free plan until the payment goes through."} Update your card to keep your plan.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="font-medium">A payment on your account is disputed.</p>
+          <p className="mt-0.5 text-s-ink-2">Paid features are paused while the dispute is open. If this is a mistake, contact your bank or reply to your Orbis receipt.</p>
+        </>
+      )}
+      <div className="mt-2">
+        <BillingButton action="manage" className="inline-flex h-9 items-center rounded-full bg-s-accent px-4 text-[13px] font-medium text-s-accent-ink transition hover:brightness-110">
+          Update payment details
+        </BillingButton>
+      </div>
+    </section>
   );
 }

@@ -10,6 +10,8 @@ export interface PlanInfo {
   unlimited: boolean;
   webSearchesLeft: number | null;
   upgradeTo: { id: "pro" | "max"; label: string; priceUsd: number } | null;
+  /** A payment the user should fix: a failed renewal (plan kept until graceUntil), or a disputed charge. */
+  paymentIssue?: { kind: "past_due"; graceUntil: number | null } | { kind: "disputed" } | null;
 }
 
 export interface UsageState {

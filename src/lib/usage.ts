@@ -14,6 +14,8 @@ import { LARGE_MODEL_UNITS, PLANS, WEEK_MS, WINDOW_MS, modelTier, modelUnits, pl
 import { limiter } from "./rate-limit";
 import { reportError } from "./observability";
 import { trackEvent } from "./analytics/server";
+import { alertOwner } from "./alerts";
+import { emailConfigured, sendCustomerEmail, type CustomerEmailKind } from "./email";
 
 /**
  * Usage accounting. Policy (see docs/USAGE.md):
@@ -50,6 +52,17 @@ export interface UsageTicket {
 
 const tickets = new WeakMap<object, UsageTicket>();
 const NO_LIMIT = 1_000_000_000;
+
+/** Email the user about a limit after the response, once per period (see email.ts). Never blocks or throws. */
+function emailLater(auth: AuthContext, kind: CustomerEmailKind, periodKey: string, data: { resetsAt?: number | null } = {}): void {
+  if (auth.mode !== "authenticated" || !emailConfigured()) return;
+  const send = () => sendCustomerEmail(auth.user.id, kind, periodKey, data).then(() => undefined);
+  try {
+    after(send);
+  } catch {
+    void send();
+  }
+}
 
 /** The reservation made for this request, if any (used to link runs to their request). */
 export function ticketFor(auth: AuthContext): UsageTicket | null {
@@ -251,11 +264,13 @@ async function enforceLimitsInner(
     if (r.reason === "budget") {
       if (r.scope === "site") {
         reportError(new Error("Site-wide monthly AI spending limit reached"), { where: "usage.site_cap" });
+        alertOwner("site_cap", "Orbis: the site-wide monthly AI cap was reached", "New AI requests are being refused because this month's AI spend reached the site-wide cap set in Admin → Plans (Spending protection). Raise the cap there to let requests through, or wait for next month.");
         throw new ApiError("quota_exceeded", "Orbis has reached its AI usage limit for this month. Please try again later.", { ...details, scope: "site" });
       }
       if (r.scope === "daily") {
         throw new ApiError("quota_exceeded", `You've used today's share of your ${plan.label} plan's AI allowance. It resets at midnight UTC.${upgradeHint}`, { ...details, scope: "daily", resetsAt: r.resets_at ? new Date(r.resets_at).toISOString() : null });
       }
+      if (r.scope === "exhausted") emailLater(auth, "budget_100", `budget:${period.start}`, { resetsAt: period.end });
       if (r.scope === "exhausted") throw new ApiError("quota_exceeded", `You've used this month's AI allowance on your ${plan.label} plan. It renews on ${renews}.${upgradeHint}${extra}`, { ...details, scope: "budget", state: "exhausted" });
       if (r.scope === "premium") {
         throw new ApiError(
@@ -276,6 +291,7 @@ async function enforceLimitsInner(
     const left = Math.max(0, Math.round((Number(r.limit ?? 0) - Number(r.used ?? 0)) * 100) / 100);
     const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
     if (r.scope === "top_week") {
+      emailLater(auth, "usage_top_100", `top:${resetsAt ?? "?"}`, { resetsAt: resetsAt ? Date.parse(resetsAt) : null });
       throw new ApiError(
         "quota_exceeded",
         // The browser adds when it resets, in the reader's time zone (resetsAt).
@@ -284,6 +300,7 @@ async function enforceLimitsInner(
       );
     }
     const scope = r.scope === "week" ? "weekly" : "5-hour";
+    if (r.scope === "week" && !(left > 0 && units > left)) emailLater(auth, "usage_week_100", `week:${resetsAt ?? "?"}`, { resetsAt: resetsAt ? Date.parse(resetsAt) : null });
     const message =
       left > 0 && units > left
         ? `${name ?? "This request"} uses about ${fmt(units)} units for a typical message, but only ${fmt(left)} of your ${plan.label} plan's ${scope} allowance ${left === 1 ? "is" : "are"} left. Auto or a lighter model uses less.${upgradeHint}${extra}`
@@ -470,6 +487,13 @@ async function recordRunUnsafe(auth: AuthContext & { mode: "authenticated" }, ru
   } else if (ticket?.units && !run.auxiliary) {
     const fin = await auth.supabase.rpc("usage_finish", { p_request_id: ticket.requestId, p_state: "settled" });
     if (fin.error) reportError(fin.error, { where: "usage_finish" });
+  }
+  // A heads-up at 80% of the weekly allowance, once a week (only when emails are set up: it costs one query).
+  if (units > 0 && entitlement?.kind === "plan" && emailConfigured()) {
+    const u = await planUsage(auth);
+    if (u && u.week.limit > 0 && u.week.used / u.week.limit >= 0.8 && u.week.used < u.week.limit) {
+      await sendCustomerEmail(auth.user.id, "usage_week_80", `week80:${u.week.resetsAt ?? "?"}`, { resetsAt: u.week.resetsAt });
+    }
   }
 }
 

@@ -2,6 +2,7 @@ import { fallbackChain, resolveModelChoice, withTimeout } from "@/lib/ai";
 import { streamWithFallback } from "@/lib/ai/fallback";
 import { estimateCost, estimateTokens } from "@/lib/ai/cost";
 import { systemPromptFor } from "@/lib/ai/modes";
+import { addMemory, listMemories, memoryBlock, rememberRequest } from "@/lib/memory";
 import { omittedNote, trimHistory } from "@/lib/ai/trim";
 import { isAutoId } from "@/lib/ai/platform";
 import type { ChatMessage, Usage } from "@/lib/ai/types";
@@ -134,6 +135,30 @@ export async function POST(req: Request) {
         } catch (err) {
           reportError(err, { where: "chat.project-context" });
           send({ type: "notice", level: "warning", message: "This project's saved instructions couldn't be loaded, so this answer doesn't use them." });
+        }
+      }
+
+      // Memory across chats: "Remember that…" saves a fact; saved facts are background for replies (unless turned off).
+      if (auth.mode === "authenticated") {
+        try {
+          const fact = rememberRequest(body.message);
+          if (fact) {
+            const saved = await addMemory(auth.supabase, auth.user.id, fact, "chat");
+            const tool = { name: "memory", label: "Memory", status: "ok" as const, detail: saved.ok ? `Saved: ${fact}` : saved.reason === "full" ? "Memory is full; nothing saved" : "Already remembered" };
+            send({ type: "tool", tool });
+            turnTools.push("memory");
+            system += saved.ok
+              ? `\n\nThe user just asked you to remember: "${fact}". It has been saved to their memory (they can see and delete it in Settings → Memory). Confirm briefly.`
+              : saved.reason === "full"
+                ? "\n\nThe user asked you to remember something, but their memory is full (50 items). Tell them to delete some in Settings → Memory."
+                : "\n\nThe user asked you to remember something that is already in their memory. Say so briefly.";
+          }
+          if (body.useMemory !== false) {
+            const block = memoryBlock(await listMemories(auth.supabase, auth.user.id));
+            if (block) system += `\n\n${block}`;
+          }
+        } catch (err) {
+          reportError(err, { where: "chat.memory" });
         }
       }
 

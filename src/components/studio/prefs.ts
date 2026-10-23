@@ -77,6 +77,8 @@ export interface StudioSettings {
   replyStyle?: ReplyStyle;
   /** Show the moving Orbis logo while replies are on their way (on unless turned off). Named showMascot for settings saved earlier. */
   showMascot?: boolean;
+  /** Use the facts the user asked Orbis to remember in new replies (on unless turned off). */
+  useMemory?: boolean;
 }
 
 const DEFAULT_SETTINGS: StudioSettings = { enterToSend: true, defaultMode: "research", allowFallback: false };

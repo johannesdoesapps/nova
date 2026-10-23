@@ -29,7 +29,7 @@ export async function POST(req: Request) {
       metadata: { user_id: user.id },
       subscription_data: { metadata: { user_id: user.id, orbis_plan: plan } },
       allow_promotion_codes: true,
-      success_url: `${site}/chat?upgraded=${plan}`,
+      success_url: `${site}/usage?upgraded=${plan}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${site}/pricing`,
     });
     if (!session.url) throw new ApiError("upstream_error", "Stripe didn't return a checkout page.");

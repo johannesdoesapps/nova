@@ -93,6 +93,10 @@ export const billingSettingsSchema = z.object({
   workspaceSiteConcurrent: z.number().int().min(0).max(10_000).default(6),
   /** Emergency stop: no new AI requests for anyone except administrators. */
   aiPaused: z.boolean().default(false),
+  /** Cost switch: premium-tier models (the most expensive) refused for everyone except administrators. */
+  premiumPaused: z.boolean().default(false),
+  /** Days a paid plan keeps working after a renewal payment fails, while Stripe retries the card; 0 = none. */
+  paymentGraceDays: z.number().int().min(0).max(30).default(3),
   /** Planning assumptions for the usage calculator (replaced by real averages once there's usage). */
   scenario: z
     .object({
@@ -204,6 +208,8 @@ export const DEFAULT_BILLING: BillingSettings = {
   workspaceSiteMonthlyMinutes: 3000,
   workspaceSiteConcurrent: 6,
   aiPaused: false,
+  premiumPaused: false,
+  paymentGraceDays: 3,
   scenario: { inputTokens: 2000, outputTokens: 800, callsPerMessage: 1.05, cachedInputPct: 0 },
   tierUnits: { standard: 1, advanced: 20, premium: 40 },
   modelTiers: {},

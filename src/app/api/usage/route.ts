@@ -49,6 +49,7 @@ export async function GET() {
           webSearchesLeft: limits.webSearchesLeft,
           maxOutputTokens: limits.maxOutputTokens,
           tiers: limits.tiers,
+          paymentIssue: entitlement.paymentIssue,
           upgradeTo: next ? { id: next, label: entitlement.billing.plans[next].label, priceUsd: entitlement.billing.plans[next].priceUsd } : null,
         },
       },

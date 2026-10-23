@@ -70,9 +70,25 @@ async function sendEmail(subject: string, text: string): Promise<void> {
   if (!res.ok) throw new Error(`Resend answered ${res.status}`);
 }
 
+const ownerSent = new Map<string, number>();
+
+/**
+ * One-off alert to the owner about something that needs action (a provider stopped by billing, a dispute,
+ * unusual spend). The same key sends at most once an hour from each server. Off until email is configured.
+ */
+export function alertOwner(key: string, subject: string, text: string, now = Date.now(), send: (subject: string, text: string) => Promise<void> = sendEmail): boolean {
+  console.warn("[orbis] alert", key, subject);
+  if (!alertsConfigured()) return false;
+  if (now - (ownerSent.get(key) ?? Number.NEGATIVE_INFINITY) < QUIET_MS) return false;
+  ownerSent.set(key, now);
+  void send(subject, text).catch((e) => console.error("[orbis] alert email failed", safeMessage(e)));
+  return true;
+}
+
 /** For tests. */
 export function resetAlerts(): void {
   recent = [];
   lastSent = Number.NEGATIVE_INFINITY;
   sending = false;
+  ownerSent.clear();
 }

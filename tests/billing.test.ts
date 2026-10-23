@@ -224,7 +224,7 @@ describe("POST /api/billing/checkout", () => {
         customer_email: "pat@example.com",
         client_reference_id: "user-1",
         subscription_data: { metadata: { user_id: "user-1", orbis_plan: "pro" } },
-        success_url: "https://orbis.example/chat?upgraded=pro",
+        success_url: "https://orbis.example/usage?upgraded=pro&session_id={CHECKOUT_SESSION_ID}",
       }),
     );
   });

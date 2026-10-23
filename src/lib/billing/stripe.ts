@@ -1,7 +1,7 @@
 import "server-only";
 import Stripe from "stripe";
 import { serverEnv } from "../env";
-import { chargeUsd, planOf, type BillingInterval, type BillingSettings } from "../plans";
+import { chargeUsd, planOf, resolveBilling, type BillingInterval, type BillingSettings } from "../plans";
 import { serviceSupabase } from "../supabase/admin";
 
 /**
@@ -206,4 +206,68 @@ export async function addCredits(session: Stripe.Checkout.Session): Promise<void
   if (!db) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
   const { error } = await db.rpc("usage_credit_add", { p_user: userId, p_units: units, p_amount_usd: (session.amount_total ?? 0) / 100, p_session: session.id });
   if (error) throw new Error(`Could not add credits: ${error.message}`);
+}
+
+/** Dispute statuses after which the customer keeps no claim on the money: Orbis won, or the inquiry closed. */
+const DISPUTE_SETTLED_FOR_US = new Set(["won", "warning_closed"]);
+
+/**
+ * Record a dispute (chargeback) and pause or restore paid access: while a charge is disputed the user's
+ * subscription gives no paid plan (see paidStatus), so unpaid usage can't keep running. Idempotent.
+ */
+export async function recordDispute(stripe: Stripe, dispute: Stripe.Dispute): Promise<{ userId: string | null; disputed: boolean }> {
+  const db = serviceSupabase();
+  if (!db) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
+  const chargeId = typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id;
+  const charge = chargeId ? await stripe.charges.retrieve(chargeId) : null;
+  const userId = await userForCustomer(charge?.customer as string | null);
+  const disputed = !DISPUTE_SETTLED_FOR_US.has(dispute.status);
+  const { error } = await db.from("billing_disputes").upsert(
+    { id: dispute.id, user_id: userId, charge_id: chargeId ?? null, amount_usd: (dispute.amount ?? 0) / 100, reason: dispute.reason ?? null, status: dispute.status, updated_at: new Date().toISOString() },
+    { onConflict: "id" },
+  );
+  if (error) throw new Error(`Could not record dispute: ${error.message}`);
+  if (userId) {
+    // Any other open dispute for this user keeps access paused.
+    const { data: open } = await db.from("billing_disputes").select("id, status").eq("user_id", userId);
+    const stillOpen = (open ?? []).some((d) => d.id !== dispute.id && !DISPUTE_SETTLED_FOR_US.has(d.status as string));
+    const { error: e2 } = await db.from("subscriptions").update({ disputed: disputed || stillOpen }).eq("user_id", userId);
+    if (e2) throw new Error(`Could not update subscription: ${e2.message}`);
+  }
+  return { userId, disputed };
+}
+
+/** Grace days and plan label for emails, read with the service role (the webhook has no user session). */
+export async function graceInfo(userId: string): Promise<{ plan: string; graceUntil: number | null }> {
+  const db = serviceSupabase();
+  if (!db) return { plan: "Orbis", graceUntil: null };
+  const [{ data: sub }, { data: settings }] = await Promise.all([
+    db.from("subscriptions").select("plan, current_period_start").eq("user_id", userId).maybeSingle(),
+    db.from("app_settings").select("settings").eq("id", 1).maybeSingle(),
+  ]);
+  const billing = resolveBilling((settings?.settings as { billing?: unknown } | null)?.billing);
+  const plan = sub?.plan === "max" || sub?.plan === "pro" ? billing.plans[sub.plan as "pro" | "max"].label : "Orbis";
+  const start = sub?.current_period_start ? Date.parse(sub.current_period_start as string) : null;
+  return { plan, graceUntil: start !== null && billing.paymentGraceDays > 0 ? start + billing.paymentGraceDays * 86_400_000 : null };
+}
+
+/**
+ * Apply a finished Checkout Session for its own user right away (the return page calls this), so a new plan or
+ * bought extra usage shows without waiting for the webhook. Reads everything from Stripe; the webhook does the same
+ * later and nothing is applied twice.
+ */
+export async function applyCheckoutSession(stripe: Stripe, sessionId: string, userId: string): Promise<"subscription" | "credits" | "pending"> {
+  const s = await stripe.checkout.sessions.retrieve(sessionId);
+  const owner = s.client_reference_id ?? s.metadata?.user_id ?? null;
+  if (owner !== userId) throw new Error("This checkout belongs to another account.");
+  const subId = typeof s.subscription === "string" ? s.subscription : s.subscription?.id;
+  if (s.mode === "subscription" && subId && s.status === "complete") {
+    await syncSubscription(stripe, subId, userId);
+    return "subscription";
+  }
+  if (s.mode === "payment" && s.metadata?.kind === "credits" && s.payment_status === "paid") {
+    await addCredits(s);
+    return "credits";
+  }
+  return "pending";
 }

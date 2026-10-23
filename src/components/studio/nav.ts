@@ -1,4 +1,22 @@
-import { Bot, Code2, Compass, Flag, Gauge, FolderKanban, House, LayoutTemplate, MessagesSquare, Plug, ShieldCheck, SlidersHorizontal, Swords, Users, Workflow, type LucideIcon } from "lucide-react";
+import {
+  Bot,
+  Code2,
+  Compass,
+  Flag,
+  Gauge,
+  FolderKanban,
+  House,
+  ImageIcon,
+  LayoutTemplate,
+  MessagesSquare,
+  Plug,
+  ShieldCheck,
+  SlidersHorizontal,
+  Swords,
+  Users,
+  Workflow,
+  type LucideIcon,
+} from "lucide-react";
 
 /**
  * The app's one navigation list: the sidebar (desktop, collapsed and the
@@ -6,7 +24,23 @@ import { Bot, Code2, Compass, Flag, Gauge, FolderKanban, House, LayoutTemplate, 
  * destination appears once, with one label and one icon everywhere.
  */
 
-export type Section = "home" | "chat" | "code" | "projects" | "templates" | "agents" | "discover" | "missions" | "council" | "arena" | "verify" | "connectors" | "usage" | "workforce" | "admin";
+export type Section =
+  | "home"
+  | "chat"
+  | "code"
+  | "projects"
+  | "templates"
+  | "agents"
+  | "discover"
+  | "missions"
+  | "council"
+  | "arena"
+  | "images"
+  | "verify"
+  | "connectors"
+  | "usage"
+  | "workforce"
+  | "admin";
 
 export interface NavEntry {
   id: Section;
@@ -32,6 +66,7 @@ export const NAV_ENTRIES: NavEntry[] = [
   { id: "missions", label: "Missions", href: "/missions", icon: Flag, group: "main", hint: "Plan projects and track tasks", parent: "projects" },
   { id: "council", label: "Council", href: "/council", icon: Users, group: "tools", hint: "Several models answer; one combined reply" },
   { id: "arena", label: "Arena", href: "/arena", icon: Swords, group: "tools", hint: "Compare models side by side, blind if you like" },
+  { id: "images", label: "Images", href: "/images", icon: ImageIcon, group: "tools", hint: "Create an image from a description" },
   { id: "verify", label: "Verify", href: "/verify", icon: ShieldCheck, group: "tools", hint: "Check claims against sources" },
   { id: "connectors", label: "Connectors", href: "/connectors", icon: Plug, group: "tools", hint: "Connect Gmail, GitHub, Drive and more" },
   { id: "usage", label: "Usage", href: "/usage", icon: Gauge, group: "main", hint: "Your allowance, resets and usage history", parent: "home" },

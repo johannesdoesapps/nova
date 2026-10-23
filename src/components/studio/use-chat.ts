@@ -30,6 +30,7 @@ export function useStudioChat({
   transport = chatTransport,
   replyLength,
   replyStyle,
+  useMemory = true,
 }: {
   store: HistoryStore;
   defaultMode: ChatMode;
@@ -41,6 +42,8 @@ export function useStudioChat({
   transport?: ChatTransport;
   replyLength?: ReplyLength;
   replyStyle?: ReplyStyle;
+  /** Signed in: replies may use the facts the user asked Orbis to remember. */
+  useMemory?: boolean;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -194,6 +197,7 @@ export function useStudioChat({
             editOf: opts.editOf && !local ? opts.editOf : undefined,
             replyLength,
             replyStyle,
+            useMemory,
           },
           ac.signal,
         )) {
@@ -240,7 +244,7 @@ export function useStudioChat({
       }
       return true;
     },
-    [busy, mode, messages, store, conversationId, title, router, modelId, allowFallback, useWeb, onHistoryChanged, setId, basePath, transport, replyLength, replyStyle, projectId],
+    [busy, mode, messages, store, conversationId, title, router, modelId, allowFallback, useWeb, onHistoryChanged, setId, basePath, transport, replyLength, replyStyle, projectId, useMemory],
   );
 
   const stop = useCallback(() => abortRef.current?.abort(), []);

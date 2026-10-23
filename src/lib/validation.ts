@@ -42,6 +42,8 @@ export const chatRequest = z.object({
   /** Reply settings from the user's preferences. */
   replyLength: z.enum(REPLY_LENGTHS).optional(),
   replyStyle: z.enum(REPLY_STYLES).optional(),
+  /** Signed in: whether replies may use the facts the user asked Orbis to remember (default yes). */
+  useMemory: z.boolean().optional(),
   attachments: z
     .array(
       z.object({

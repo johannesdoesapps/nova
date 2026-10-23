@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ApiError } from "../../http";
 import { reportError } from "../../observability";
-import { providerErrorMessage } from "./errors";
+import { billingStop, billingStopError, providerErrorMessage } from "./errors";
 import type { AIProvider, ChatMessage, GenerateParams, GenerateResult, StreamEvent, ToolMessage, ToolTurnParams, ToolTurnResult, Usage } from "../types";
 
 /**
@@ -229,6 +229,14 @@ function toApiError(err: unknown, params: Pick<GenerateParams, "model">): Error 
   const name = params.model.displayName;
   if (err instanceof Anthropic.APIUserAbortError || err instanceof Anthropic.APIConnectionTimeoutError) {
     return new ApiError("timeout", `${name} did not respond in time.`);
+  }
+  if (err instanceof Anthropic.APIError) {
+    const body = err.error as { error?: { type?: string; message?: string; details?: { error_code?: string } } } | undefined;
+    const stop = billingStop(err.status ?? 0, body?.error?.details?.error_code, body?.error?.message ?? err.message);
+    if (stop) {
+      reportError(new Error(`${params.model.id} stopped by provider billing (${stop}): ${err.status}`), { where: "provider.billing" });
+      return billingStopError("anthropic", name, stop);
+    }
   }
   if (err instanceof Anthropic.RateLimitError) return new ApiError("rate_limited", `${name} is busy right now. Try again shortly.`);
   if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {

@@ -167,6 +167,13 @@ export async function budgetStatus(auth: AuthContext, entitlement: Entitlement |
  */
 export function checkModelAccess(entitlement: Entitlement | null, requested: ModelInfo[] | undefined, available: ModelWithStatus[]): void {
   if (!entitlement || entitlement.kind === "unlimited" || !requested?.length) return;
+  if (entitlement.billing.premiumPaused) {
+    const premium = requested.find((m) => modelTier(m) === "premium");
+    if (premium) {
+      const others = available.filter((x) => x.available && x.provider !== "demo" && modelTier(x) !== "premium" && entitlement.limits.tiers.includes(modelTier(x)));
+      throw new ApiError("plan_required", `${premium.displayName} is switched off on Orbis for the moment. Choose another model or Auto.`, { scope: "premium_paused", modelId: premium.id, alternatives: others.map((x) => x.id) });
+    }
+  }
   const allowed = new Set<ModelTier>(entitlement.limits.tiers);
   const blocked = requested.filter((m) => !allowed.has(modelTier(m)));
   if (!blocked.length) return;

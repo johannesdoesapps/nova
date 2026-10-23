@@ -1,6 +1,6 @@
 import { ApiError } from "../../http";
 import { reportError } from "../../observability";
-import { providerErrorMessage } from "./errors";
+import { billingStop, billingStopError, providerErrorMessage } from "./errors";
 import type { AIProvider, GenerateParams, GenerateResult, ProviderId, StreamEvent, ToolMessage, ToolTurnParams, ToolTurnResult, Usage } from "../types";
 
 /**
@@ -71,11 +71,18 @@ export class OpenAICompatibleProvider implements AIProvider {
     }
     if (!res.ok) {
       let detail = "";
+      let errCode: string | null = null;
       try {
-        const j = (await res.json()) as { error?: { message?: string } | string };
+        const j = (await res.json()) as { error?: { message?: string; code?: string | null; type?: string } | string };
         detail = typeof j.error === "string" ? j.error : (j.error?.message ?? "");
+        errCode = typeof j.error === "object" ? (j.error?.code ?? j.error?.type ?? null) : null;
       } catch {
         /* ignore */
+      }
+      const stop = billingStop(res.status, errCode, detail);
+      if (stop) {
+        reportError(new Error(`${params.model.id} stopped by provider billing (${stop}): ${res.status}`), { where: "provider.billing" });
+        throw billingStopError(this.id, params.model.displayName, stop);
       }
       const code = res.status === 429 ? "rate_limited" : res.status === 401 || res.status === 403 ? "not_configured" : res.status >= 500 ? "upstream_error" : "bad_request";
       // Provider details (which can echo parts of keys or internal settings) are logged, never shown to users.

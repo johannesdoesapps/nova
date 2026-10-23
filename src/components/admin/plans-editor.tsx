@@ -217,6 +217,16 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
           <span className="block text-[12px] text-s-ink-3">Pause all new AI requests for everyone except administrators. Users see that AI is paused for a moment.</span>
         </span>
       </label>
+      <label className="mt-2 flex items-start gap-2 text-[13px]">
+        <input type="checkbox" checked={b.premiumPaused} onChange={(e) => set({ premiumPaused: e.target.checked })} className="mt-0.5" />
+        <span>
+          <span className="font-medium">Premium models off</span>
+          <span className="block text-[12px] text-s-ink-3">Turn off the most expensive models for everyone except administrators; other models keep working.</span>
+        </span>
+      </label>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Num label="Grace days after a failed payment" value={b.paymentGraceDays} onChange={(v) => set({ paymentGraceDays: v })} hint="0–30; the plan keeps working while Stripe retries the card" />
+      </div>
 
       <h3 className="mt-5 text-[13.5px] font-semibold">Usage units per message, by tier</h3>
       <div className="mt-2 grid grid-cols-3 gap-2 sm:max-w-md">

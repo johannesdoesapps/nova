@@ -72,6 +72,7 @@ export function Studio({ home = false }: { home?: boolean }) {
     basePath: home ? "/home" : "/chat",
     replyLength: studio.settings.replyLength,
     replyStyle: studio.settings.replyStyle,
+    useMemory: studio.settings.useMemory !== false,
   });
 
   const [input, setInput] = useState(() => studio.takePendingPrompt() ?? "");

@@ -7,7 +7,7 @@ export type FallbackStreamEvent = StreamEvent | { type: "fallback"; from: ModelW
 
 /** Errors worth trying another model for. Bad requests and missing keys are not. */
 function retryable(err: unknown): err is ApiError {
-  return err instanceof ApiError && (err.code === "upstream_error" || err.code === "timeout" || err.code === "rate_limited");
+  return err instanceof ApiError && (err.code === "upstream_error" || err.code === "timeout" || err.code === "rate_limited" || err.code === "provider_unavailable");
 }
 
 /**

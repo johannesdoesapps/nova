@@ -29,6 +29,8 @@ export type Entitlement = {
   billing: BillingSettings;
   /** Start of the current paid billing period (epoch ms), if any. */
   periodStart: number | null;
+  /** A payment problem the user should fix: a failed renewal (plan kept until `graceUntil`), or a disputed charge. */
+  paymentIssue: { kind: "past_due"; graceUntil: number | null } | { kind: "disputed" } | null;
 } & ({ kind: "unlimited"; reason: "admin"; label: "admin_unlimited" } | { kind: "plan"; label: `plan:${PlanId}` });
 
 const cache = new WeakMap<object, Promise<Entitlement | null>>();
@@ -51,20 +53,46 @@ export async function getBilling(): Promise<BillingSettings> {
 
 async function resolve(auth: AuthContext & { mode: "authenticated" }): Promise<Entitlement> {
   const [admin, sub, billing] = await Promise.all([isAdmin(auth), subscriptionOf(auth), getBilling()]);
-  const base = { plan: sub.plan, interval: sub.interval, limits: planOf(billing, sub.plan), billing, periodStart: sub.periodStart };
+  const s = paidStatus(sub.row, billing.paymentGraceDays);
+  const base = { plan: s.plan, interval: s.interval, limits: planOf(billing, s.plan), billing, periodStart: s.periodStart, paymentIssue: s.issue };
   if (admin && serverEnv().adminsUnlimited) return { ...base, kind: "unlimited", reason: "admin", label: "admin_unlimited" };
-  return { ...base, kind: "plan", label: `plan:${sub.plan}` };
+  return { ...base, kind: "plan", label: `plan:${s.plan}` };
 }
 
-/** The user's plan: Pro or Max only while that subscription is active or trialing; everyone else is Free. */
+/** The user's plan: Pro or Max while that subscription is active or trialing (or in its grace period); everyone else is Free. */
 export async function userPlan(auth: AuthContext & { mode: "authenticated" }): Promise<PlanId> {
-  return (await subscriptionOf(auth)).plan;
+  const [sub, billing] = await Promise.all([subscriptionOf(auth), getBilling()]);
+  return paidStatus(sub.row, billing.paymentGraceDays).plan;
 }
 
-async function subscriptionOf(auth: AuthContext & { mode: "authenticated" }): Promise<{ plan: PlanId; interval: BillingInterval; periodStart: number | null }> {
+export type SubscriptionStatusRow = { plan: PlanId; status: string; billing_interval?: string | null; current_period_start?: string | null; disputed?: boolean | null };
+
+const DAY = 86_400_000;
+
+/**
+ * The plan a subscription row gives. Active or trialing: the paid plan. Past due (a renewal payment failed and
+ * Stripe is retrying the card): the paid plan for `graceDays` days from the start of the unpaid period, then Free.
+ * A charge under dispute: Free until the dispute is settled in Orbis's favour.
+ */
+export function paidStatus(
+  row: SubscriptionStatusRow | null,
+  graceDays: number,
+  now = Date.now(),
+): { plan: PlanId; interval: BillingInterval; periodStart: number | null; issue: Entitlement["paymentIssue"] } {
+  const free = { plan: "free" as PlanId, interval: "month" as BillingInterval, periodStart: null };
+  if (!row || (row.plan !== "pro" && row.plan !== "max")) return { ...free, issue: null };
+  if (row.disputed) return { ...free, issue: { kind: "disputed" } };
+  const periodStart = row.current_period_start ? Date.parse(row.current_period_start) : null;
+  const paid = { plan: row.plan, interval: (row.billing_interval === "year" ? "year" : "month") as BillingInterval, periodStart };
+  if (["active", "trialing"].includes(row.status)) return { ...paid, issue: null };
+  if (row.status === "past_due") {
+    const graceUntil = periodStart !== null && graceDays > 0 ? periodStart + graceDays * DAY : null;
+    return graceUntil !== null && now < graceUntil ? { ...paid, issue: { kind: "past_due", graceUntil } } : { ...free, issue: { kind: "past_due", graceUntil } };
+  }
+  return { ...free, issue: null };
+}
+
+async function subscriptionOf(auth: AuthContext & { mode: "authenticated" }): Promise<{ row: SubscriptionStatusRow | null }> {
   const { data } = await auth.supabase.from("subscriptions").select("*").eq("user_id", auth.user.id).maybeSingle();
-  const row = data as { plan: PlanId; status: string; billing_interval?: string; current_period_start?: string | null } | null;
-  const paid = !!row && (row.plan === "pro" || row.plan === "max") && ["active", "trialing"].includes(row.status);
-  if (!paid) return { plan: "free", interval: "month", periodStart: null };
-  return { plan: row.plan, interval: row.billing_interval === "year" ? "year" : "month", periodStart: row.current_period_start ? Date.parse(row.current_period_start) : null };
+  return { row: (data as SubscriptionStatusRow | null) ?? null };
 }

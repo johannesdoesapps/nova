@@ -16,6 +16,7 @@ export type ApiErrorCode =
   | "quota_exceeded"
   | "not_configured"
   | "upstream_error"
+  | "provider_unavailable"
   | "timeout"
   | "internal";
 
@@ -32,6 +33,7 @@ const STATUS: Record<ApiErrorCode, number> = {
   quota_exceeded: 429,
   not_configured: 503,
   upstream_error: 502,
+  provider_unavailable: 503,
   timeout: 504,
   internal: 500,
 };

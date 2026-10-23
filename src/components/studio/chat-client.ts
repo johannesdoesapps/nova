@@ -96,6 +96,8 @@ export interface TurnRequest {
   editOf?: string;
   replyLength?: ReplyLength;
   replyStyle?: ReplyStyle;
+  /** Signed in: replies may use the facts the user asked Orbis to remember. */
+  useMemory?: boolean;
   /** The general chat only: a new conversation starts in this project. */
   projectId?: string | null;
 }

@@ -55,7 +55,7 @@ export async function POST(req: Request) {
       client_reference_id: auth.user.id,
       metadata: { kind: "credits", user_id: auth.user.id, units: String(units) },
       payment_intent_data: { metadata: { kind: "credits", user_id: auth.user.id, units: String(units) } },
-      success_url: `${site}/usage?credits=bought`,
+      success_url: `${site}/usage?credits=bought&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${site}/usage`,
     });
     if (!session.url) throw new ApiError("upstream_error", "Stripe didn't return a checkout page.");
