@@ -11,6 +11,7 @@ import {
   Eye,
   FileCode2,
   FileText,
+  History,
   ImageIcon,
   Lightbulb,
   FlaskConical,
@@ -43,6 +44,7 @@ import { useAttachments } from "./attachments";
 import { PromptBar } from "./prompt-bar";
 import { useCodeModel } from "./use-code-model";
 import { api, CodeApiError, post } from "./api";
+import { taskTitle } from "@/lib/code/agent/history";
 import { FileDiff } from "./diff-view";
 import { InfinityMark } from "@/components/brand/infinity";
 import { WorkingStatus } from "@/components/studio/generating";
@@ -282,6 +284,8 @@ export interface AgentPanelProps {
   autoModel?: string;
   /** Start the project's computer without asking when the run needs it (the user asked for a build). */
   autoComputer?: boolean;
+  /** A finished task to continue (from History): the next task started here is given its record. */
+  continueFrom?: string | null;
 }
 
 export function AgentPanel({
@@ -301,6 +305,7 @@ export function AgentPanel({
   autoAttachments,
   autoModel,
   autoComputer,
+  continueFrom: continueFromId,
 }: AgentPanelProps) {
   const animated = useAnimatedLogo();
   const { user } = useApp();
@@ -316,6 +321,18 @@ export function AgentPanel({
   const attachments = useAttachments(projectId);
   const catalog = useCatalog();
   const [text, setText] = useState(initialRequest ?? "");
+  // The finished task the next request continues (shown above the box until a task starts or it's removed).
+  const [continuing, setContinuing] = useState<{ id: string; title: string } | null>(null);
+  useEffect(() => {
+    if (!continueFromId) return;
+    let ok = true;
+    api<{ run: RunView }>(`/api/code/agent/${continueFromId}?after=999999`)
+      .then(({ run: r }) => ok && setContinuing(r.projectId === projectId && ENDED_STATUSES.includes(r.status) ? { id: r.id, title: taskTitle(r.request) } : null))
+      .catch(() => ok && setError(new CodeApiError("The task to continue wasn't found. It may have been deleted; you can still start a new task here.", 404, null, null)));
+    return () => {
+      ok = false;
+    };
+  }, [continueFromId, projectId]);
   // The remembered mode is read after hydration (the server can't know it), so the first render matches.
   const savedMode = useSyncExternalStore(noSubscribe, readMode, () => "plan" as ModeId);
   const [chosenMode, setModeState] = useState<ModeId | null>(null);
@@ -464,7 +481,13 @@ export function AgentPanel({
     setError(null);
     try {
       const preset = MODES.find((m) => m.id === mode)!;
-      const r = await post<{ run: RunView; attachments?: AttachmentMeta[] }>(`/api/code/projects/${projectId}/agent`, { request, options: { modelId, ...preset.options }, ...(attachments.length ? { attachments } : {}) });
+      const r = await post<{ run: RunView; attachments?: AttachmentMeta[] }>(`/api/code/projects/${projectId}/agent`, {
+        request,
+        options: { modelId, ...preset.options },
+        ...(attachments.length ? { attachments } : {}),
+        ...(continuing ? { continueFrom: continuing.id } : {}),
+      });
+      setContinuing(null);
       lastSeq.current = 0;
       setEvents([]);
       setRunAttachments(r.attachments ?? []);
@@ -811,6 +834,18 @@ export function AgentPanel({
       <div className="shrink-0 px-3 pb-2 pt-1 sm:px-6">
         <div className="mx-auto w-full max-w-[780px]">
           {!inProgress && <FirstTip />}
+          {continuing && !inProgress && (
+            <div className="mb-2 flex items-start gap-2 rounded-xl border border-s-line px-3 py-2 text-[12.5px] text-s-ink-2" role="status">
+              <History className="mt-0.5 h-3.5 w-3.5 shrink-0 text-s-ink-3" aria-hidden />
+              <p className="min-w-0 flex-1">
+                <span className="text-s-ink-3">Continues:</span> <span className="text-s-ink">{continuing.title}</span>
+                <span className="block text-[12px] text-s-ink-3">The agent gets that task&apos;s request, summary, changed files and check results. Nothing it did is run again.</span>
+              </p>
+              <button type="button" onClick={() => setContinuing(null)} aria-label="Don't continue that task" className="shrink-0 text-s-ink-3 hover:text-s-ink">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
           {queued && (
             <div className="mb-2 flex items-start gap-2 rounded-xl border border-dashed border-s-line px-3 py-2 text-[12.5px] text-s-ink-2" role="status">
               <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-s-ink-3" aria-hidden />

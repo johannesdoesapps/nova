@@ -171,7 +171,16 @@ export interface EarlierRun {
 export function initialMessage(
   request: string,
   files: ProjectFile[],
-  meta: { projectName: string; runCommand: string; computer: boolean; earlier?: EarlierRun[]; memory?: string; attachments?: string },
+  meta: {
+    projectName: string;
+    runCommand: string;
+    computer: boolean;
+    earlier?: EarlierRun[];
+    memory?: string;
+    attachments?: string;
+    /** The finished task this one continues (null: it was asked for but no longer exists). */
+    continuing?: EarlierRun | null;
+  },
   budgetChars = 12_000,
 ): string {
   const key = files.filter((f) => KEY_FILES.test(f.path.split("/").pop()!) && f.path.split("/").length <= 2).sort((a, b) => a.content.length - b.content.length);
@@ -188,6 +197,11 @@ export function initialMessage(
     `Project: ${meta.projectName}. Its Run command (used by the Run button and the preview): ${meta.runCommand || "(none)"}.`,
     `The project's computer is ${meta.computer ? "running" : "not running yet (it starts when a command needs it, with the user's go-ahead)"}.`,
     meta.memory ?? "",
+    meta.continuing
+      ? `This task continues an earlier one the user picked. Its working memory isn't carried over and none of its actions will be repeated; the files now reflect its changes and anything since. Check the current files before relying on it.\nAsked: ${clipText(meta.continuing.request, 1_500)}\nResult (${meta.continuing.status}): ${clipText(meta.continuing.summary ?? "(no summary)", 1_500)}${meta.continuing.files.length ? `\nFiles it changed: ${meta.continuing.files.slice(0, 40).join(", ")}` : ""}${meta.continuing.checks ? `\n${clipText(meta.continuing.checks, 1_200)}` : ""}`
+      : meta.continuing === null
+        ? "The user asked to continue an earlier task, but that task's record no longer exists (it was deleted). Work from the project's files as they are now, and say so if the request depends on it."
+        : "",
     meta.earlier?.length
       ? `Earlier work in this project (newest first; the files now reflect it):\n${meta.earlier
           .map(

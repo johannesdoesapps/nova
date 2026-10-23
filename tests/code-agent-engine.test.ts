@@ -1265,3 +1265,42 @@ describe("website workflow: from a request to a tested site, and changes after",
     expect(change.after).toContain('style="max-width:100%"');
   });
 });
+
+describe("continuing a finished task", () => {
+  const working = (o: Partial<RunRow> = {}) => newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true }, ...o });
+
+  it("gives the new task the chosen task's record, even when it's older than the recent ones, and replays nothing", async () => {
+    const old = newRun({
+      project_id: "cont-p",
+      status: "completed",
+      request: "Build the bakery landing page",
+      summary: "Built the page with a menu and opening hours.",
+      report: { outcome: "completed", summary: "Built the page with a menu and opening hours.", unresolved: [], files: [{ path: "index.html", change: "created", added: 80, removed: 0 }], commands: [], tests: null, verification: "not_run", usage: { inputTokens: 0, outputTokens: 0, costUsd: 0, modelCalls: 1, models: [], steps: 3, activeMs: 1 }, checkpoints: 0, createdAt: "" } as never,
+      transcript: [{ role: "assistant", content: "Deleting.", calls: [{ id: "t1", tool: "run_command", args: { command: "rm -rf dist" } }] }] as never,
+    });
+    const id = working({ project_id: "cont-p", request: "Add a gallery section", options: { approvePlans: false, reviewEdits: false, commands: "safe", modelId: null, continueFrom: old } });
+    script.turns.push((p) => {
+      const opening = p.messages[0]!.role === "user" ? p.messages[0]!.text : "";
+      expect(opening).toContain("This task continues an earlier one the user picked");
+      expect(opening).toContain("Asked: Build the bakery landing page");
+      expect(opening).toContain("Built the page with a menu and opening hours.");
+      expect(opening).toContain("Files it changed: index.html");
+      // The earlier task's tool calls aren't carried over or repeated.
+      expect(JSON.stringify(p.messages)).not.toContain("rm -rf dist");
+      return turn("Done.", call("finish", { summary: "ok" }));
+    });
+    await stepRun(req(), auth, id);
+    expect(commands).toEqual([]);
+    expect(events(id).some((e) => e.title === "Continues an earlier task: Build the bakery landing page")).toBe(true);
+  });
+
+  it("says so plainly when the task to continue was deleted in the meantime", async () => {
+    const id = working({ project_id: "cont-q", options: { approvePlans: false, reviewEdits: false, commands: "safe", modelId: null, continueFrom: "00000000-0000-4000-8000-0000deadbeef" } });
+    script.turns.push((p) => {
+      expect(p.messages[0]!.role === "user" && p.messages[0]!.text).toContain("that task's record no longer exists");
+      return turn("Done.", call("finish", { summary: "ok" }));
+    });
+    await stepRun(req(), auth, id);
+    expect(events(id).some((e) => e.title.startsWith("The task this was meant to continue no longer exists"))).toBe(true);
+  });
+});

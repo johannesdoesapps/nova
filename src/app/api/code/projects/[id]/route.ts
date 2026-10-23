@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { codeContext, dbError, getFiles, getProjectRow, liveSession, optionalBox, previewUrl, stopSession, toSummary } from "@/lib/code/server";
+import { codeContext, dbError, getFiles, getProjectRow, liveSession, optionalBox, previewUrl, PROJECT_COLS, stopSession, toSummary } from "@/lib/code/server";
 import { ApiError, errorResponse, parseJsonBody, requireUuid } from "@/lib/http";
 
 type Ctx = RouteContext<"/api/code/projects/[id]">;
@@ -19,18 +19,24 @@ export async function GET(_req: Request, ctx: Ctx) {
   }
 }
 
-const patch = z.object({ name: z.string().trim().min(1).max(80).optional(), runCommand: z.string().max(500).optional() });
+const patch = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  /** Empty clears it. */
+  description: z.string().trim().max(500).optional(),
+  runCommand: z.string().max(500).optional(),
+});
 
-/** PATCH /api/code/projects/[id] — rename, or change the Run command. */
+/** PATCH /api/code/projects/[id] — rename, describe, or change the Run command. */
 export async function PATCH(req: Request, ctx: Ctx) {
   try {
     const id = requireUuid((await ctx.params).id);
     const body = await parseJsonBody(req, patch, 4_000);
     const auth = await codeContext();
-    const update: Record<string, string> = {};
+    const update: Record<string, string | null> = {};
     if (body.name !== undefined) update.name = body.name;
+    if (body.description !== undefined) update.description = body.description || null;
     if (body.runCommand !== undefined) update.run_command = body.runCommand;
-    const { data, error } = await auth.supabase.from("code_projects").update(update).eq("id", id).select("id, name, template, run_command, source_repo, updated_at").maybeSingle();
+    const { data, error } = await auth.supabase.from("code_projects").update(update).eq("id", id).select(PROJECT_COLS).maybeSingle();
     if (error) throw dbError(error, "code.projects.patch");
     if (!data) throw new ApiError("not_found", "Project not found.");
     return NextResponse.json({ project: toSummary(data) });

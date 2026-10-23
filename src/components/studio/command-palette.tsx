@@ -22,6 +22,7 @@ import {
   SquarePen,
   Sun,
   TextCursorInput,
+  History,
 } from "lucide-react";
 import { useCatalog } from "@/components/common/model-picker";
 import { jsonFetch } from "@/hooks/use-ndjson";
@@ -180,6 +181,15 @@ function Palette({ onClose, conversations, isAdmin, signedIn, mac, actions, page
         return { id: `go-${e.id}`, group: "Go to", label: e.label, hint: e.hint, icon: <Icon />, keywords: GO_KEYWORDS[e.id] ?? "", run: go(e.href) };
       }),
       { id: "history", group: "Go to", label: "All conversations", icon: <MessageSquare />, keywords: "history chats", run: go("/history") },
+      {
+        id: "task-history",
+        group: "Go to",
+        label: "Task history",
+        hint: "Every coding task: resume or continue it",
+        icon: <History />,
+        keywords: "history tasks runs coding agent resume continue",
+        run: go("/history?tab=tasks"),
+      },
       { id: "prompts", group: "Go to", label: "Saved prompts", icon: <Bookmark />, keywords: "reuse prompt library", run: actions.onOpenPrompts },
       { id: "settings", group: "Settings", label: "Settings", icon: <Settings2 />, keywords: "preferences privacy data reply length style", run: actions.onOpenSettings },
       { id: "sidebar", group: "Settings", label: "Show or hide the sidebar", icon: <PanelLeft />, keys: keys("sidebar"), run: actions.onToggleSidebar },

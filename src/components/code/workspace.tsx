@@ -9,6 +9,7 @@ import {
   Eye,
   File as FileIcon,
   FilePlus2,
+  FileText,
   Folder,
   History,
   ListChecks,
@@ -245,10 +246,14 @@ export function CodeWorkspace({ id }: { id: string }) {
   const [rightW, setRightW] = useStoredSize("orbis.code.right2", 520, 320, 900);
   const [pane, setPane] = useState<Pane>("agent");
   // Coding sessions (agent runs): which one is open, and a counter so the list refreshes.
-  const [select, setSelect] = useState<{ runId: string | null; n: number } | null>(null);
+  const params = useSearchParams();
+  // From History: "?run=<id>" opens that task; "?continue=<id>" opens a new task that continues a finished one.
+  const [select, setSelect] = useState<{ runId: string | null; n: number } | null>(() =>
+    params.get("run") ? { runId: params.get("run"), n: 0 } : params.get("continue") ? { runId: null, n: 0 } : null,
+  );
+  const [continueFrom] = useState(() => params.get("continue"));
   const [activeRun, setActiveRun] = useState<RunView | null>(null);
   const [sessionsVersion, setSessionsVersion] = useState(0);
-  const params = useSearchParams();
   // A workflow from project memory fills the next session's request.
   const [draftRequest, setDraftRequest] = useState<string | null>(null);
   const initialRequest = draftRequest ?? (params.get("task") === "example" ? EXAMPLE_PROJECT.task : undefined);
@@ -620,6 +625,18 @@ export function CodeWorkspace({ id }: { id: string }) {
     if (!next || next === project.name) return;
     try {
       const r = await api<{ project: ProjectSummary }>(`/api/code/projects/${id}`, { method: "PATCH", body: JSON.stringify({ name: next }) });
+      setProject(r.project);
+    } catch (e) {
+      setError(e as CodeApiError);
+    }
+  };
+
+  const describeProject = async () => {
+    if (!project) return;
+    const next = prompt("What is this project for? (shown in Projects and History; leave empty to remove)", project.description ?? "");
+    if (next === null || next.trim() === (project.description ?? "")) return;
+    try {
+      const r = await api<{ project: ProjectSummary }>(`/api/code/projects/${id}`, { method: "PATCH", body: JSON.stringify({ description: next.trim().slice(0, 500) }) });
       setProject(r.project);
     } catch (e) {
       setError(e as CodeApiError);
@@ -1060,6 +1077,7 @@ export function CodeWorkspace({ id }: { id: string }) {
       autoAttachments={buildRequest?.attachments}
       autoModel={buildRequest?.modelId}
       autoComputer={!!buildRequest}
+      continueFrom={select?.n === 0 ? continueFrom : null}
     />
   );
   const sessionsView = <SessionsList projectId={id} activeId={activeRun?.id ?? null} version={sessionsVersion} onOpen={(runId) => openSession(runId)} onNew={() => openSession(null)} />;
@@ -1171,6 +1189,8 @@ export function CodeWorkspace({ id }: { id: string }) {
           projectId={id}
           unsaved={Object.keys(drafts).length > 0}
           onRename={() => void renameProject()}
+          onDescribe={() => void describeProject()}
+          described={!!project?.description}
           onRunCommand={() => void editRunCommand()}
           onMemory={() => (wide ? setRight("memory") : setPane("memory"))}
         />
@@ -1424,6 +1444,8 @@ function ProjectMenu({
   projectId,
   unsaved,
   onRename,
+  onDescribe,
+  described,
   onRunCommand,
   onMemory,
 }: {
@@ -1432,6 +1454,8 @@ function ProjectMenu({
   /** Edits not saved yet: the download has only saved files. */
   unsaved: boolean;
   onRename: () => void;
+  onDescribe: () => void;
+  described: boolean;
   onRunCommand: () => void;
   onMemory: () => void;
 }) {
@@ -1462,6 +1486,12 @@ function ProjectMenu({
     >
       <MenuItem icon={<Pencil />} onClick={onRename}>
         Rename project…
+      </MenuItem>
+      <MenuItem icon={<FileText />} onClick={onDescribe}>
+        {described ? "Edit description…" : "Add a description…"}
+      </MenuItem>
+      <MenuItem icon={<History />} hint="Every task in this project" onClick={() => router.push(`/history?tab=tasks&project=${projectId}`)}>
+        Task history
       </MenuItem>
       <MenuItem icon={<BookMarked />} hint="Notes and workflows for the agent" onClick={onMemory}>
         Project memory

@@ -3,8 +3,8 @@ import { MAX_ATTACHMENTS } from "@/lib/code/attachments";
 import { linkAttachments, pendingAttachments } from "@/lib/code/attachments-store";
 import { z } from "zod";
 import { isWebTask } from "@/lib/code/agent/protocol";
-import { changeCounts, createRun, listRuns, openRun, toRunView } from "@/lib/code/agent/runs";
-import { DEFAULT_STEP_LIMIT, MAX_STEP_LIMIT } from "@/lib/code/agent/types";
+import { changeCounts, createRun, getRun, listRuns, openRun, toRunView } from "@/lib/code/agent/runs";
+import { DEFAULT_STEP_LIMIT, ENDED_STATUSES, MAX_STEP_LIMIT } from "@/lib/code/agent/types";
 import { codeContext, getFiles, getProjectRow } from "@/lib/code/server";
 import { ApiError, errorResponse, parseJsonBody, requireUuid } from "@/lib/http";
 
@@ -38,6 +38,8 @@ const body = z.object({
   stepLimit: z.number().int().min(3).max(MAX_STEP_LIMIT).optional(),
   /** Files and images uploaded for this task (POST …/attachments first). */
   attachments: z.array(z.string().uuid()).max(MAX_ATTACHMENTS).optional(),
+  /** A finished task in this project to continue: the new task is given its record (nothing is replayed). */
+  continueFrom: z.string().uuid().optional(),
 });
 
 /**
@@ -52,6 +54,13 @@ export async function POST(req: Request, ctx: Ctx) {
     const project = await getProjectRow(auth, id);
     const open = await openRun(auth, id);
     if (open) throw new ApiError("conflict", "The agent is already working on this project. Stop that run or let it finish first.", { runId: open.id });
+    // The task to continue must be the user's (row-level security), in this project, and finished.
+    if (input.continueFrom) {
+      const prior = await getRun(auth, input.continueFrom);
+      if (prior.project_id !== id) throw new ApiError("bad_request", "That task belongs to another project.");
+      if (!ENDED_STATUSES.includes(prior.status)) throw new ApiError("conflict", "That task is still open: resume it instead.", { runId: prior.id });
+    }
+    const continueFrom = input.continueFrom ? { continueFrom: input.continueFrom } : {};
     const o = input.options ?? {};
     // A website task gets the website guidance and the preview tools' instructions for the whole run.
     const web = isWebTask(input.request, await getFiles(auth, id), project.template);
@@ -63,8 +72,8 @@ export async function POST(req: Request, ctx: Ctx) {
       request: input.request,
       // A read-only run never plans, edits or runs anything, so its other switches are fixed.
       options: o.readOnly
-        ? { modelId: o.modelId ?? null, approvePlans: false, reviewEdits: false, commands: "off", readOnly: true, web, attachments }
-        : { modelId: o.modelId ?? null, approvePlans: o.approvePlans ?? true, reviewEdits: o.reviewEdits ?? false, commands: o.commands ?? "safe", readOnly: false, web, attachments },
+        ? { modelId: o.modelId ?? null, approvePlans: false, reviewEdits: false, commands: "off", readOnly: true, web, attachments, ...continueFrom }
+        : { modelId: o.modelId ?? null, approvePlans: o.approvePlans ?? true, reviewEdits: o.reviewEdits ?? false, commands: o.commands ?? "safe", readOnly: false, web, attachments, ...continueFrom },
       stepLimit: input.stepLimit ?? DEFAULT_STEP_LIMIT,
     });
     const linked = pending.length ? await linkAttachments(auth, id, row.id, pending.map((a) => a.id)) : [];

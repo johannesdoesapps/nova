@@ -90,7 +90,7 @@ function fakeBackend() {
   return { backend, boxes };
 }
 
-const project = { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "Site", template: "website", runCommand: "", sourceRepo: null, updatedAt: "" };
+const project = { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "Site", description: null, template: "website", runCommand: "", sourceRepo: null, updatedAt: "" };
 
 beforeEach(() => {
   process.env.ORBIS_SANDBOX_TOKEN = "test";

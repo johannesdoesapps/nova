@@ -1,9 +1,11 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Code2, Flag, Globe, Plus, RefreshCw, Search } from "lucide-react";
+import { Code2, Flag, Globe, History, Plus, RefreshCw, Search } from "lucide-react";
 import { useApp } from "@/components/layout/app-context";
 import { jsonFetch } from "@/hooks/use-ndjson";
+import type { TaskSummary } from "@/lib/code/agent/history";
+import { TASK_STATE_INFO } from "@/lib/code/agent/verdict";
 import { ago } from "@/lib/home";
 import { cn } from "@/lib/utils";
 import { StudioHeader } from "./frame";
@@ -12,6 +14,7 @@ import { Segmented } from "./ui";
 interface CodeProject {
   id: string;
   name: string;
+  description: string | null;
   template: string;
   sourceRepo: string | null;
   updatedAt: string;
@@ -31,6 +34,9 @@ interface Row {
   detail: string;
   href: string;
   updatedAt: string;
+  description?: string | null;
+  /** The project's latest coding task, when it's among the recent ones. */
+  lastTask?: TaskSummary;
 }
 
 const TEMPLATE: Record<string, string> = { website: "Website", node: "Node.js", python: "Python", blank: "Project" };
@@ -44,6 +50,8 @@ export function ProjectsHub() {
   const [attempt, setAttempt] = useState(0);
   const [kind, setKind] = useState<"all" | "code" | "mission">("all");
   const [query, setQuery] = useState("");
+  // The most recent coding tasks across projects: each project's latest one, and whether it's still open.
+  const [tasks, setTasks] = useState<TaskSummary[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -51,6 +59,9 @@ export function ProjectsHub() {
     jsonFetch<{ projects: CodeProject[] }>("/api/code/projects")
       .then((r) => alive && setCode({ status: "ready", items: r.projects }))
       .catch((e: Error) => alive && setCode({ status: "error", message: e.message }));
+    jsonFetch<{ tasks: TaskSummary[] }>("/api/code/tasks?sort=activity")
+      .then((r) => alive && setTasks(r.tasks))
+      .catch(() => alive && setTasks([]));
     jsonFetch<{ missions: Mission[] }>("/api/missions")
       .then((r) => alive && setMissions({ status: "ready", items: r.missions }))
       .catch((e: Error) => alive && setMissions({ status: "error", message: e.message }));
@@ -61,9 +72,13 @@ export function ProjectsHub() {
 
   const rows = useMemo(() => {
     const out: Row[] = [];
+    const latest = new Map<string, TaskSummary>();
+    for (const t of tasks) if (!latest.has(t.projectId)) latest.set(t.projectId, t);
     if (code.status === "ready")
       for (const p of code.items)
         out.push({
+          description: p.description,
+          lastTask: latest.get(p.id),
           key: `c:${p.id}`,
           kind: "code",
           name: p.name,
@@ -86,8 +101,10 @@ export function ProjectsHub() {
         });
       }
     const q = query.trim().toLowerCase();
-    return out.filter((r) => (kind === "all" || r.kind === kind) && (!q || r.name.toLowerCase().includes(q))).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  }, [code, missions, kind, query]);
+    return out
+      .filter((r) => (kind === "all" || r.kind === kind) && (!q || r.name.toLowerCase().includes(q) || !!r.description?.toLowerCase().includes(q)))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }, [code, missions, kind, query, tasks]);
 
   const loading = code.status === "loading" || missions.status === "loading";
   const errors = [code.status === "error" && `Code projects: ${code.message}`, missions.status === "error" && `Missions: ${missions.message}`].filter(Boolean) as string[];
@@ -134,6 +151,12 @@ export function ProjectsHub() {
                 { value: "mission", label: "Missions" },
               ]}
             />
+            <Link
+              href="/history?tab=tasks"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-s-line px-3 text-[13px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink"
+            >
+              <History className="h-3.5 w-3.5" aria-hidden /> Task history
+            </Link>
             <div className="relative ml-auto w-full sm:w-64">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-s-ink-3" />
               <input
@@ -191,7 +214,7 @@ export function ProjectsHub() {
             ) : (
               <ul className="flex flex-col gap-1">
                 {rows.map((r) => (
-                  <li key={r.key}>
+                  <li key={r.key} className="relative">
                     <Link href={r.href} className="flex items-center gap-3 rounded-2xl px-3 py-2.5 transition hover:bg-s-hover">
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-s-line text-s-ink-2 [&_svg]:h-4 [&_svg]:w-4">{r.kind === "code" ? <Code2 /> : <Flag />}</span>
                       <span className="min-w-0 flex-1">
@@ -200,7 +223,16 @@ export function ProjectsHub() {
                           <span className={cn("mr-1.5")}>{r.kind === "code" ? "Code" : "Mission"} ·</span>
                           {r.detail}
                         </span>
+                        {r.description && <span className="mt-0.5 line-clamp-2 block text-[12.5px] text-s-ink-2">{r.description}</span>}
+                        {r.lastTask && (
+                          <span className="mt-0.5 block truncate text-[12px] text-s-ink-3">
+                            Last task: {r.lastTask.title} — {TASK_STATE_INFO[r.lastTask.state].label}
+                          </span>
+                        )}
                       </span>
+                      {r.lastTask?.continuation.kind === "resume" && (
+                        <span className="shrink-0 rounded-full border border-amber-500/50 px-2 py-0.5 text-[11.5px] text-amber-700 dark:text-amber-300">Unfinished</span>
+                      )}
                       <time dateTime={r.updatedAt} className="shrink-0 text-[12px] text-s-ink-3" suppressHydrationWarning>
                         {ago(r.updatedAt)}
                       </time>

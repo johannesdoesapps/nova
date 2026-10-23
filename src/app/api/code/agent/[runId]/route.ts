@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getRunForView, getRunVersion, listChanges, listEvents, runOptions, toRunView } from "@/lib/code/agent/runs";
+import { deleteRun, getRunForView, getRunVersion, listChanges, listEvents, runOptions, toRunView } from "@/lib/code/agent/runs";
 import { runAttachments } from "@/lib/code/attachments-store";
 import { codeContext } from "@/lib/code/server";
 import { ApiError, errorResponse, requireUuid } from "@/lib/http";
@@ -33,6 +33,21 @@ export async function GET(req: Request, ctx: RouteContext<"/api/code/agent/[runI
     const withAttachments = after === 0 && !!runOptions(row).attachments;
     const [events, ch, attachments] = await Promise.all([listEvents(auth, runId, after), changes, withAttachments ? runAttachments(auth, runId) : Promise.resolve(undefined)]);
     return NextResponse.json({ run: toRunView(row), events, ...(ch ? { changes: ch } : {}), ...(attachments ? { attachments } : {}) });
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
+/**
+ * DELETE /api/code/agent/[runId] — delete a finished task's record (its activity, change records,
+ * checkpoints and attachments). The project's files aren't touched.
+ */
+export async function DELETE(_req: Request, ctx: RouteContext<"/api/code/agent/[runId]">) {
+  try {
+    const runId = requireUuid((await ctx.params).runId);
+    const auth = await codeContext("code-agent", 20);
+    await deleteRun(auth, runId);
+    return NextResponse.json({ ok: true });
   } catch (err) {
     return errorResponse(err);
   }

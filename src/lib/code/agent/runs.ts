@@ -143,10 +143,54 @@ export async function getRun(auth: Authed, runId: string): Promise<RunRow> {
   return data as RunRow;
 }
 
+const ENDED: RunStatus[] = ["completed", "failed", "cancelled"];
+
 export async function listRuns(auth: Authed, projectId: string, limit = 30): Promise<RunView[]> {
   const { data, error } = await auth.supabase.from("code_agent_runs").select(LIST_COLS).eq("project_id", projectId).order("created_at", { ascending: false }).limit(limit);
   if (error) throw dbError(error, "code.agent.list");
   return (data as RunRow[]).map((r) => toRunView(r));
+}
+
+/**
+ * The user's tasks across all their projects (History): newest activity first by default, filtered by
+ * status or recorded outcome, searched in the request and the agent's summary. Always limited to the
+ * signed-in user here as well as by row-level security. One more row than asked for says whether there
+ * are more.
+ */
+export async function listTasks(
+  auth: Authed,
+  o: { statuses?: RunStatus[]; states?: string[]; pattern?: string | null; projectId?: string | null; sort: "activity" | "newest" | "oldest"; offset: number; limit: number },
+): Promise<{ rows: (RunRow & { project: { name: string } | null })[]; more: boolean }> {
+  let q = auth.supabase.from("code_agent_runs").select(`${LIST_COLS}, project:code_projects(name)`).eq("user_id", auth.user.id);
+  if (o.projectId) q = q.eq("project_id", requireUuid(o.projectId));
+  if (o.statuses?.length) q = q.in("status", o.statuses);
+  if (o.states?.length) q = q.in("report->>state", o.states);
+  if (o.pattern) q = q.or(`request.ilike.${o.pattern},summary.ilike.${o.pattern}`);
+  q = o.sort === "activity" ? q.order("updated_at", { ascending: false }) : q.order("created_at", { ascending: o.sort === "oldest" });
+  const { data, error } = await q.order("id").range(o.offset, o.offset + o.limit);
+  if (error) throw dbError(error, "code.agent.tasks");
+  const rows = data as unknown as (RunRow & { project: { name: string } | null })[];
+  return { rows: rows.slice(0, o.limit), more: rows.length > o.limit };
+}
+
+/**
+ * Delete a finished task's record: its activity, change records, checkpoints and attachments go with it
+ * (the database cascades). The project's files stay as they are, so the task's changes can't be undone
+ * afterwards. An open task, or one a step or re-check holds right now, isn't deleted.
+ */
+export async function deleteRun(auth: Authed, runId: string, now = Date.now()): Promise<void> {
+  const run = await getRun(auth, runId);
+  if (!ENDED.includes(run.status)) throw new ApiError("conflict", "This task is still open. Stop it first, then delete it.");
+  const { data, error } = await auth.supabase
+    .from("code_agent_runs")
+    .delete()
+    .eq("id", runId)
+    .eq("user_id", auth.user.id)
+    .in("status", ENDED)
+    .or(`locked_until.is.null,locked_until.lt.${new Date(now).toISOString()}`)
+    .select("id");
+  if (error) throw dbError(error, "code.agent.delete");
+  if (!data?.length) throw new ApiError("conflict", "This task is busy right now (its checks may be running). Try again in a moment.");
 }
 
 /** The project's run that is still going (working or waiting for the user), if any. */

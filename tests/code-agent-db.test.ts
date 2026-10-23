@@ -181,3 +181,53 @@ describe("agent checkpoints and run budgets", () => {
     expect(await q("select * from public.code_agent_checkpoints")).toEqual([]);
   });
 });
+
+describe("task history, deleting a task's record, and project descriptions", () => {
+  const finish = (user: string, run: string, state = "verified") =>
+    as(user, () => q(`update public.code_agent_runs set status = 'completed', report = jsonb_build_object('state', $2::text) where id = $1`, [run, state]));
+
+  it("lists only the signed-in user's tasks across projects, newest activity first, filtered by the recorded outcome", async () => {
+    const a1 = await newProject(ALICE, "Site");
+    const a2 = await newProject(ALICE, "API");
+    const b1 = await newProject(BOB, "Bob's");
+    const r1 = await newRun(ALICE, a1);
+    const r2 = await newRun(ALICE, a2);
+    await newRun(BOB, b1);
+    await finish(ALICE, r1, "warnings");
+    // The query History runs, as each user: Bob's task never shows for Alice, even without the user filter.
+    const list = (user: string, extra = "") =>
+      as(user, () => q<{ id: string; name: string }>(`select r.id, p.name from public.code_agent_runs r join public.code_projects p on p.id = r.project_id where true ${extra} order by r.updated_at desc, r.id`));
+    expect((await list(ALICE)).map((x) => x.name).sort()).toEqual(["API", "Site"]);
+    expect(await list(BOB, `and r.user_id = '${ALICE}'`)).toEqual([]);
+    expect(await list(ALICE, "and r.status = 'completed' and r.report->>'state' in ('warnings')")).toEqual([{ id: r1, name: "Site" }]);
+    expect(await list(ALICE, "and r.status in ('planning', 'running')")).toEqual([{ id: r2, name: "API" }]);
+    expect(await q("select indexname from pg_indexes where indexname = 'code_agent_runs_user_updated'")).toEqual([{ indexname: "code_agent_runs_user_updated" }]);
+  });
+
+  it("lets the owner delete a task's record with its activity, changes, checkpoints and attachments, and nobody else", async () => {
+    const p = await newProject(ALICE);
+    const r = await newRun(ALICE, p);
+    await as(ALICE, async () => {
+      await q("insert into public.code_agent_events (run_id, seq, kind, title) values ($1, 1, 'status', 'Started')", [r]);
+      await q("insert into public.code_agent_changes (run_id, path, before, after) values ($1, 'a.js', 'v1', 'v2')", [r]);
+      await q("insert into public.code_agent_checkpoints (run_id, label) values ($1, 'before')", [r]);
+    });
+    await finish(ALICE, r);
+    expect(await as(BOB, () => q("delete from public.code_agent_runs where id = $1 returning id", [r]))).toEqual([]);
+    expect(await as(ALICE, () => q("select count(*)::int as n from public.code_agent_events"))).toEqual([{ n: 1 }]);
+    expect(await as(ALICE, () => q("delete from public.code_agent_runs where id = $1 returning id", [r]))).toEqual([{ id: r }]);
+    for (const t of ["code_agent_events", "code_agent_changes", "code_agent_checkpoints"]) expect(await q(`select count(*)::int as n from public.${t}`)).toEqual([{ n: 0 }]);
+    // The project and its files aren't touched.
+    expect(await as(ALICE, () => q("select count(*)::int as n from public.code_projects where id = $1", [p]))).toEqual([{ n: 1 }]);
+  });
+
+  it("gives a code project an optional description that only its owner can change, up to 500 characters", async () => {
+    const p = await newProject(ALICE);
+    await as(ALICE, () => q("update public.code_projects set description = 'Landing page for the bakery' where id = $1", [p]));
+    expect(await as(BOB, () => q("update public.code_projects set description = 'mine now' where id = $1 returning id", [p]))).toEqual([]);
+    expect(await as(BOB, () => q("select description from public.code_projects"))).toEqual([]);
+    expect(await as(ALICE, () => q("select description from public.code_projects where id = $1", [p]))).toEqual([{ description: "Landing page for the bakery" }]);
+    await expect(as(ALICE, () => q("update public.code_projects set description = $2 where id = $1", [p, "x".repeat(501)]))).rejects.toThrow(/check constraint/);
+    await as(ALICE, () => q("update public.code_projects set description = null where id = $1", [p]));
+  });
+});

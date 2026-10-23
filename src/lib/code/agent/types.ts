@@ -42,6 +42,8 @@ export interface RunOptions {
   web?: boolean;
   /** Files and images the user attached to the task (set when the run starts). */
   attachments?: { texts: number; images: number };
+  /** A finished task in the same project this one continues (its record is given to the agent; nothing is replayed). */
+  continueFrom?: string;
 }
 
 export const DEFAULT_OPTIONS: RunOptions = { modelId: null, approvePlans: true, reviewEdits: false, commands: "safe", readOnly: false };

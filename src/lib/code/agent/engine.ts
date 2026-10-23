@@ -14,6 +14,7 @@ import { enforceLimits, planLimits, recordRunLater, releaseUsage } from "@/lib/u
 import type { FileChange, ProjectFile, ProjectSummary } from "../projects";
 import { summarizeCheck } from "../preview-check";
 import { checksSummary } from "./verdict";
+import { taskTitle } from "./history";
 import { describeStart, PREVIEW_START_MS, runPreviewCheck, startPreview } from "../preview";
 import { applyFileChanges, getFiles, getProjectRow, optionalBox, setRunCommand, syncBack, type Authed } from "../server";
 import { claimSync, killJob, readJob, removeFromWorkspace, startJob, writeToWorkspace, type WorkspaceBox } from "../workspace";
@@ -571,17 +572,24 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
   if (!transcript.length) {
     const files = await getFiles(auth, project.id);
     const computer = Boolean(await optionalBox(auth, project.id));
+    const record = (r: Pick<RunView, "request" | "status" | "summary" | "report">) => ({
+      request: r.request,
+      status: r.status,
+      summary: r.report?.summary ?? r.summary,
+      files: (r.report?.files ?? []).map((f) => f.path),
+      checks: r.report && r.status === "completed" ? checksSummary(r.report) : null,
+    });
+    // The finished task this one continues (chosen in History), read again here: it must still exist, be the user's and be in this project.
+    const continueFrom = opts.continueFrom
+      ? await getRun(auth, opts.continueFrom)
+          .then((r) => (r.project_id === project.id && ENDED_STATUSES.includes(r.status) ? r : null))
+          .catch(() => null)
+      : null;
     // Earlier finished runs in this project, so a follow-up ("make it blue") needn't explain the whole site again.
     const earlier = (await listRuns(auth, project.id, 8).catch(() => []))
-      .filter((r) => r.id !== row.id && ENDED_STATUSES.includes(r.status))
+      .filter((r) => r.id !== row.id && r.id !== continueFrom?.id && ENDED_STATUSES.includes(r.status))
       .slice(0, 3)
-      .map((r) => ({
-        request: r.request,
-        status: r.status,
-        summary: r.report?.summary ?? r.summary,
-        files: (r.report?.files ?? []).map((f) => f.path),
-        checks: r.report && r.status === "completed" ? checksSummary(r.report) : null,
-      }));
+      .map(record);
     // What the user attached: text in the first message, images shown with it when the model can see them.
     const atts = attached.texts + attached.images ? await runAttachments(auth, row.id, true) : [];
     const canSee = seesImages(model);
@@ -589,9 +597,29 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
     const notes = await listMemory(auth, project.id).catch(() => [] as MemoryEntry[]);
     const active = notes.filter((n) => n.status === "active");
     const used = selectMemory(active, row.request);
-    transcript = [{ role: "user", content: initialMessage(row.request, files, { projectName: project.name, runCommand: project.runCommand, computer, earlier, memory: memoryBlock(used, active.length), attachments: attachmentsBlock(atts, canSee) }) }];
+    transcript = [
+      {
+        role: "user",
+        content: initialMessage(row.request, files, {
+          projectName: project.name,
+          runCommand: project.runCommand,
+          computer,
+          earlier,
+          memory: memoryBlock(used, active.length),
+          attachments: attachmentsBlock(atts, canSee),
+          ...(opts.continueFrom ? { continuing: continueFrom ? record(continueFrom) : null } : {}),
+        }),
+      },
+    ];
     await addEvents(auth, row.id, [
       { kind: "status", title: `Started with ${model.displayName}`, detail: { model: model.displayName, routing: choice.routing?.reason ?? null } },
+      ...(opts.continueFrom
+        ? [
+            continueFrom
+              ? { kind: "inspect" as const, title: `Continues an earlier task: ${taskTitle(continueFrom.request).slice(0, 300)}`, detail: { continueFrom: continueFrom.id } }
+              : { kind: "note" as const, title: "The task this was meant to continue no longer exists, so the agent works from the project's files as they are." },
+          ]
+        : []),
       ...attachmentEvents(atts, canSee, model.displayName),
       ...(used.length
         ? [{ kind: "inspect" as const, title: `Using ${used.length} note${used.length === 1 ? "" : "s"} from project memory: ${used.map((n) => n.title).join(", ").slice(0, 300)}`, detail: { memory: used.map((n) => ({ id: n.id, kind: n.kind, title: n.title })) } }]

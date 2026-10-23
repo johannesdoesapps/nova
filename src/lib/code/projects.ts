@@ -165,6 +165,8 @@ export const newProjectBody = z.object({
 export interface ProjectSummary {
   id: string;
   name: string;
+  /** What the project is for, in the owner's words (optional). */
+  description: string | null;
   template: string;
   runCommand: string;
   sourceRepo: string | null;

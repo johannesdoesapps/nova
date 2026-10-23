@@ -27,11 +27,11 @@ export async function codeContext(bucket = "code-ws", perMinute = 120): Promise<
   return auth;
 }
 
-type ProjectRow = { id: string; name: string; template: string; run_command: string; source_repo: string | null; updated_at: string };
-const PROJECT_COLS = "id, name, template, run_command, source_repo, updated_at";
+type ProjectRow = { id: string; name: string; description?: string | null; template: string; run_command: string; source_repo: string | null; updated_at: string };
+export const PROJECT_COLS = "id, name, description, template, run_command, source_repo, updated_at";
 
 export function toSummary(r: ProjectRow): ProjectSummary {
-  return { id: r.id, name: r.name, template: r.template, runCommand: r.run_command, sourceRepo: r.source_repo, updatedAt: r.updated_at };
+  return { id: r.id, name: r.name, description: r.description ?? null, template: r.template, runCommand: r.run_command, sourceRepo: r.source_repo, updatedAt: r.updated_at };
 }
 
 /** Database errors as user-facing messages: limit messages from the database pass through, the rest are generic. */
