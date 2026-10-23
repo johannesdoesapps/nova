@@ -25,6 +25,7 @@ import { CONTINUE_PROMPT, useStudioChat } from "./use-chat";
 import type { StarterEnv } from "./task-starter";
 import { Welcome } from "./welcome";
 import { isCodeRequest } from "./generating";
+import { countFirstTask } from "@/lib/first-task";
 
 /** The most recently active chat (pinned chats are listed first, so not always the first). */
 // Home is its own screen: its code loads when it's opened, not with every chat.
@@ -74,6 +75,16 @@ export function Studio({ home = false }: { home?: boolean }) {
     replyStyle: studio.settings.replyStyle,
     useMemory: studio.settings.useMemory !== false,
   });
+
+  // A new account's first chat: counted (anonymously, kind and outcome only) as the activation funnel's first task.
+  const finalMsg = chat.messages[chat.messages.length - 1];
+  const lastStatus = finalMsg?.role === "assistant" ? finalMsg.status : null;
+  useEffect(() => {
+    if (!user?.firstRun || !lastStatus) return;
+    if (lastStatus === "streaming") countFirstTask("started", { kind: "chat" });
+    else if (lastStatus === "done") countFirstTask("succeeded", { kind: "chat" });
+    else if (lastStatus === "error") countFirstTask("failed", { kind: "chat" });
+  }, [user?.firstRun, lastStatus]);
 
   const [input, setInput] = useState(() => studio.takePendingPrompt() ?? "");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);

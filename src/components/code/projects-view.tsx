@@ -394,6 +394,10 @@ export function CodeProjectsView() {
                   <button type="button" onClick={() => setOpen("new")} className="text-s-ink-2 underline underline-offset-2 hover:text-s-ink">
                     Start from a template
                   </button>
+                  {" · "}
+                  <Link href="/home?welcome=1" className="text-s-ink-2 underline underline-offset-2 hover:text-s-ink">
+                    All ways to start
+                  </Link>
                 </p>
               </section>
             )}

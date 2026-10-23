@@ -47,6 +47,8 @@ import { FileDiff } from "./diff-view";
 import { InfinityMark } from "@/components/brand/infinity";
 import { WorkingStatus } from "@/components/studio/generating";
 import { useAnimatedLogo } from "@/components/studio/prefs";
+import { useApp } from "@/components/layout/app-context";
+import { countFirstTask } from "@/lib/first-task";
 
 /**
  * The coding agent, the main view of a Code project: describe a task, follow
@@ -301,6 +303,7 @@ export function AgentPanel({
   autoComputer,
 }: AgentPanelProps) {
   const animated = useAnimatedLogo();
+  const { user } = useApp();
   const [run, setRun] = useState<RunView | null>(null);
   const [runAttachments, setRunAttachments] = useState<AttachmentMeta[]>([]);
   const [events, setEvents] = useState<AgentEvent[]>([]);
@@ -575,6 +578,15 @@ export function AgentPanel({
 
   const ended = !!run && ENDED_STATUSES.includes(run.status);
   const working = !!run && WORKING_STATUSES.includes(run.status);
+
+  // A new account's first coding task: counted (anonymously, outcome only) as the activation funnel's first task.
+  const firstState = run && user?.firstRun ? taskState(run) : null;
+  useEffect(() => {
+    if (!firstState) return;
+    if (firstState === "running" || firstState === "verifying") countFirstTask("started", { kind: "code" });
+    else if (firstState === "verified" || firstState === "warnings" || firstState === "unverified") countFirstTask("succeeded", { kind: "code", state: firstState });
+    else if (firstState === "failed") countFirstTask("failed", { kind: "code" });
+  }, [firstState]);
   const busy = driving || answering || !!run?.busy;
   const blocks = useMemo(() => groupStages(events), [events]);
   const readOnly = !!run && (!!run.options.readOnly || (run.options.approvePlans && !run.plan?.approved && !ended));

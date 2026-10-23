@@ -15,6 +15,8 @@ const legalTable = {
   insert: async (rows: unknown) => (inserted.push(rows), { error: null }),
 };
 vi.mock("@/lib/supabase/server", () => ({ createServerSupabase: async () => ({ auth: { exchangeCodeForSession: exchange }, from: () => legalTable }) }));
+const serverTrack = vi.fn(async () => {});
+vi.mock("@vercel/analytics/server", () => ({ track: (...a: unknown[]) => serverTrack(...(a as [])) }));
 vi.mock("@/lib/env", async (orig) => ({
   ...(await orig<typeof import("@/lib/env")>()),
   isSupabaseConfigured: () => configured,
@@ -115,9 +117,13 @@ describe("OAuth callback", () => {
     const r = await callback("code=abc&via=google", `other=1; orbis_terms_pending=${LEGAL.version}`);
     expect(inserted).toEqual([[expect.objectContaining({ document: "terms", version: LEGAL.version, method: "signup" }), expect.objectContaining({ document: "privacy", method: "signup" })]]);
     expect(r.setCookie).toMatch(/orbis_terms_pending=;/);
+    // A new account counts as a completed sign-up, with the method only.
+    expect(serverTrack).toHaveBeenCalledWith("signup_completed", { method: "google" }, expect.anything());
+    serverTrack.mockClear();
     // Plain sign-in, or a stale version from an older form: nothing recorded.
     inserted.length = 0;
     await callback("code=abc&via=google");
+    expect(serverTrack).not.toHaveBeenCalled();
     await callback("code=abc&via=google", "orbis_terms_pending=1999-01-01");
     expect(inserted).toEqual([]);
   });

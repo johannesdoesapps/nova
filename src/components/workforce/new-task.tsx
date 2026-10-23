@@ -52,7 +52,7 @@ export function NewTaskDialog({ open, onClose, projects, maxAutonomy, defaultBud
   return (
     <Dialog open={open} onClose={onClose} title="New engineering task" description="Orbis Commander plans it, the specialist agents build and check it in an isolated workspace, and nothing ships without you." width={620}>
       {projects.length === 0 ? (
-        <p className="text-[14px] text-s-ink-2">Register a project first (Projects tab).</p>
+        <p className="text-[14px] leading-relaxed text-s-ink-2">Register a project first, in the Projects tab: a task needs to know which code the agents work on and how to check it.</p>
       ) : (
         <form
           className="space-y-4"

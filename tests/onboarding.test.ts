@@ -113,3 +113,20 @@ describe("the welcome on Home", () => {
     search.value = "";
   });
 });
+
+describe("first-task counts", () => {
+  it("counts each step of a new account's first task once, with the kind and outcome only", async () => {
+    const { track } = await import("@vercel/analytics");
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) });
+    const { countFirstTask } = await import("@/lib/first-task");
+    countFirstTask("started", { kind: "code" });
+    countFirstTask("started", { kind: "chat" });
+    countFirstTask("succeeded", { kind: "code", state: "verified" });
+    expect(vi.mocked(track).mock.calls).toEqual([
+      ["first_task_started", { kind: "code" }],
+      ["first_task_succeeded", { kind: "code", state: "verified" }],
+    ]);
+    vi.unstubAllGlobals();
+  });
+});

@@ -248,8 +248,20 @@ function TaskList({ tasks, projects, empty }: { tasks: TaskRow[]; projects: Proj
   if (!tasks.length)
     return (
       <div className="rounded-[20px] border border-dashed border-s-line-strong px-6 py-10 text-center">
-        <p className="text-[14px] text-s-ink-2">No tasks yet.{projects.length ? "" : " Register a project first, then create a task."}</p>
+        <p className="text-[14.5px] font-medium text-s-ink">No tasks yet</p>
+        <p className="mx-auto mt-1 max-w-lg text-[13.5px] leading-relaxed text-s-ink-2">
+          Workforce is for bigger engineering tasks: Orbis Commander plans the work, specialist agents build and check it in an isolated workspace, and nothing ships without your
+          approval.{" "}
+          {projects.length ? "Create a task to start." : "First register a project in the Projects tab, so the agents know which code to work on."}
+        </p>
         {empty && projects.length > 0 && <div className="mt-4 flex justify-center">{empty}</div>}
+        <p className="mt-3 text-[12.5px] text-s-ink-3">
+          For a single change or a new website,{" "}
+          <Link href="/code" className="text-s-ink-2 underline underline-offset-2 hover:text-s-ink">
+            Code
+          </Link>{" "}
+          is quicker.
+        </p>
       </div>
     );
   return (

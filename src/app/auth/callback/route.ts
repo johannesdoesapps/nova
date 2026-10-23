@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { track } from "@vercel/analytics/server";
 import { LEGAL } from "@/content/legal-meta";
 import { hasAccepted, PENDING_COOKIE, recordAcceptance } from "@/lib/legal";
 import { afterSignIn, exchangeFailureCode, oauthErrorCode, safeNext, type LoginMessageCode } from "@/lib/auth-flow";
@@ -48,7 +49,11 @@ export async function GET(req: Request) {
       // Signed up with Google or GitHub after ticking both boxes: record the acceptance now.
       const pending = readCookie(req, PENDING_COOKIE);
       if (pending) {
-        if (pending === LEGAL.version && (await hasAccepted(supabase)) === false) await recordAcceptance(supabase, "signup");
+        if (pending === LEGAL.version && (await hasAccepted(supabase)) === false) {
+          await recordAcceptance(supabase, "signup");
+          // A new account made with Google or GitHub: counted anonymously, like email sign-ups (no address or name is sent).
+          await track("signup_completed", { method: via === "github" ? "github" : "google" }, { request: req }).catch(() => {});
+        }
         res.cookies.set(PENDING_COOKIE, "", { path: "/", maxAge: 0 });
       }
       return res;
