@@ -18,6 +18,9 @@ import {
   Download,
   FolderOpen,
   FolderPlus,
+  Maximize2,
+  Minimize2,
+  Monitor,
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
@@ -27,8 +30,10 @@ import {
   RotateCw,
   Search,
   Settings2,
+  Smartphone,
   Sparkles,
   BookMarked,
+  Tablet,
   Square,
   SquareArrowOutUpRight,
   Terminal as TerminalIcon,
@@ -51,6 +56,14 @@ import { FileDiff } from "./diff-view";
 import { minutesLine } from "./projects-view";
 
 const CodeEditor = dynamic(() => import("./editor"), { ssr: false, loading: () => <div className="s-skeleton m-4 h-6 w-1/2" /> });
+
+type PreviewSize = "full" | "tablet" | "phone";
+/** The same widths the browser check uses for tablet and phone. */
+const PREVIEW_SIZES: { id: PreviewSize; label: string; width: number | null; icon: ReactNode }[] = [
+  { id: "full", label: "Full width", width: null, icon: <Monitor /> },
+  { id: "tablet", label: "Tablet width (768px)", width: 768, icon: <Tablet /> },
+  { id: "phone", label: "Phone width (390px)", width: 390, icon: <Smartphone /> },
+];
 
 const OPEN_FIRST = ["index.html", "main.py", "index.js", "app.py", "src/index.js", "src/main.ts", "README.md"];
 const TERMINAL_KEEP = 200_000;
@@ -248,6 +261,16 @@ export function CodeWorkspace({ id }: { id: string }) {
   const [newFile, setNewFile] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [previewKey, setPreviewKey] = useState(0);
+  /** The preview's width: the panel's, or a tablet's or phone's (to see the site as those screens do). */
+  const [previewSize, setPreviewSize] = useState<PreviewSize>("full");
+  /** The preview fills the window (the same frame, so the page isn't reloaded). */
+  const [previewLarge, setPreviewLarge] = useState(false);
+  useEffect(() => {
+    if (!previewLarge) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setPreviewLarge(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [previewLarge]);
   // AI
   const [instruction, setInstruction] = useState("");
   const [modelId, setModelId] = useState("auto:coding");
@@ -847,7 +870,10 @@ export function CodeWorkspace({ id }: { id: string }) {
   );
 
   const previewView = (
-    <div className="flex h-full min-h-0 flex-col">
+    <div
+      className={cn("flex h-full min-h-0 flex-col", previewLarge && "fixed inset-0 z-50 h-auto bg-s-bg")}
+      {...(previewLarge ? { role: "dialog", "aria-modal": true, "aria-label": "Preview, large view" } : {})}
+    >
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-s-line px-3">
         <Eye className="h-3.5 w-3.5 text-s-ink-3" />
         <span className="min-w-0 flex-1 truncate text-[12px] text-s-ink-3">{running && session?.previewUrl ? session.previewUrl.replace(/^https?:\/\//, "") : "Preview"}</span>
@@ -872,6 +898,30 @@ export function CodeWorkspace({ id }: { id: string }) {
             >
               <RotateCw className="h-3.5 w-3.5" />
             </button>
+            <div role="group" aria-label="Preview width" className="flex shrink-0 items-center rounded-lg border border-s-line">
+              {PREVIEW_SIZES.map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => setPreviewSize(v.id)}
+                  aria-pressed={previewSize === v.id}
+                  aria-label={v.label}
+                  title={v.label}
+                  className={cn("grid h-6 w-7 place-items-center text-s-ink-3 first:rounded-l-lg last:rounded-r-lg hover:text-s-ink [&_svg]:h-3.5 [&_svg]:w-3.5", previewSize === v.id && "bg-s-hover text-s-ink")}
+                >
+                  {v.icon}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setPreviewLarge((x) => !x)}
+              aria-label={previewLarge ? "Close the large view" : "Open a large view of the preview"}
+              title={previewLarge ? "Close the large view (Esc)" : "Large view"}
+              className="grid h-7 w-7 place-items-center rounded-lg text-s-ink-2 hover:bg-s-hover"
+            >
+              {previewLarge ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </button>
             <a href={session.previewUrl} target="_blank" rel="noreferrer" aria-label="Open preview in a new tab" className="grid h-7 w-7 place-items-center rounded-lg text-s-ink-2 hover:bg-s-hover">
               <SquareArrowOutUpRight className="h-3.5 w-3.5" />
             </a>
@@ -879,7 +929,16 @@ export function CodeWorkspace({ id }: { id: string }) {
         )}
       </div>
       {running && session?.previewUrl && (site === null || site.http > 0 || siteWaiting) ? (
-        <iframe key={previewKey} src={session.previewUrl} title="Live preview" className="min-h-0 w-full flex-1 bg-white" sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-modals" />
+        <div className={cn("flex min-h-0 flex-1 justify-center overflow-auto", previewSize !== "full" && "bg-s-hover/60 p-3")}>
+          <iframe
+            key={previewKey}
+            src={session.previewUrl}
+            title="Live preview"
+            style={previewSize === "full" ? undefined : { width: PREVIEW_SIZES.find((v) => v.id === previewSize)!.width ?? undefined, flex: "none" }}
+            className={cn("h-full min-h-0 bg-white", previewSize === "full" ? "w-full" : "rounded-lg border border-s-line shadow-sm")}
+            sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-modals"
+          />
+        </div>
       ) : (
         <div className="grid flex-1 place-items-center p-6 text-center text-[13px] leading-relaxed text-s-ink-3">
           <div>

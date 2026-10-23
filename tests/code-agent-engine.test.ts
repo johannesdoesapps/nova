@@ -111,16 +111,27 @@ vi.mock("@/lib/code/workspace", () => ({
 }));
 
 // The live preview: the server and the browser check, scripted.
-const preview = { starts: [] as string[], checks: [] as string[], problems: [["Phone: the page scrolls sideways by 120px."]] as string[][] };
+const preview = {
+  starts: [] as string[],
+  checks: [] as string[],
+  problems: [["Phone: the page scrolls sideways by 120px."]] as string[][],
+  /** Set to make the server exit at once with this output (a missing dependency, say). */
+  exitWith: null as string | null,
+  /** Set to make the browser fail to run. */
+  checkError: null as string | null,
+};
 vi.mock("@/lib/code/preview", () => ({
   PREVIEW_START_MS: 90_000,
   startPreview: async (_b: unknown, cmd: string) => {
     preview.starts.push(cmd);
+    if (preview.exitWith) return { state: "exited", http: 0, exitCode: 127, log: preview.exitWith, waitedMs: 300, otherPorts: [] };
     return { state: "running", http: 200, exitCode: null, log: "Serving HTTP on 0.0.0.0 port 3000", waitedMs: 1500, otherPorts: [] };
   },
-  describeStart: (s: { http: number }, cmd: string) => `The preview server is running: \`${cmd}\` answered with HTTP ${s.http}.`,
+  describeStart: (s: { http: number; state: string; log: string }, cmd: string) =>
+    s.state === "running" ? `The preview server is running: \`${cmd}\` answered with HTTP ${s.http}.` : `The preview server stopped: \`${cmd}\` exited.\nServer output (end):\n${s.log}`,
   runPreviewCheck: async (_b: unknown, path: string) => {
     preview.checks.push(path);
+    if (preview.checkError) return { url: path, viewports: [], links: [], error: preview.checkError };
     const problems = preview.problems.shift() ?? [];
     return {
       url: path,
@@ -139,7 +150,20 @@ vi.mock("@/lib/code/preview", () => ({
           wide: [],
           page: { headings: ["h1: Nova"], nav: [], buttons: [], images: 0, imagesWithoutAlt: 0, brokenImages: [], brokenAnchors: [], placeholders: [], forms: [], height: 900, textLength: 900, viewportMeta: true, lang: "en" },
         },
-        { name: "phone", width: 390, height: 844, status: 200, title: "Nova", consoleErrors: [], pageErrors: [], failedRequests: [], external: [], overflowX: problems.length ? 120 : 0, wide: problems.length ? ["div.hero"] : [], page: null },
+        {
+          name: "phone",
+          width: 390,
+          height: 844,
+          status: 200,
+          title: "Nova",
+          consoleErrors: [],
+          pageErrors: [],
+          failedRequests: [],
+          external: [],
+          overflowX: problems.length ? 120 : 0,
+          wide: problems.length ? ["div.hero"] : [],
+          page: { headings: ["h1: Nova"], nav: [], buttons: [], images: 0, imagesWithoutAlt: 0, brokenImages: [], brokenAnchors: [], placeholders: [], forms: [], height: 1400, textLength: 900, viewportMeta: true, lang: "en" },
+        },
       ],
       links: [],
       shots: [{ name: "phone", data: "SU1H", caption: "phone, first screen" }],
@@ -156,6 +180,8 @@ const db = {
   checkpoints: [] as { id: string; runId: string; label: string; files: Record<string, string | null>; createdAt: string }[],
   /** Set to make the user's Stop land just before the next write to a run (between the engine's read and its write). */
   stopBeforeNextWrite: false,
+  /** Earlier sessions are listed (for follow-ups) only in tests that turn this on, so other tests' runs don't leak in. */
+  history: false,
 };
 vi.mock("@/lib/code/agent/runs", async (orig) => {
   const real = await orig<typeof import("@/lib/code/agent/runs")>();
@@ -216,6 +242,7 @@ vi.mock("@/lib/code/agent/runs", async (orig) => {
       }
     },
     markReverted: async () => {},
+    listRuns: async (_a: unknown, projectId: string, limit = 8) => (db.history ? [...db.runs.values()].filter((r) => r.project_id === projectId).reverse().slice(0, limit).map((r) => structuredClone(r)) : []),
     openRun: async (_a: unknown, projectId: string) => {
       const open = [...db.runs.values()].find((r) => r.project_id === projectId && !["completed", "failed", "cancelled"].includes(r.status));
       return open ? real.toRunView(open) : null;
@@ -244,7 +271,7 @@ vi.mock("@/lib/code/memory-store", () => ({
 }));
 
 const { stepRun, respondToRun, cancelRun, addUsage, reverifyRun } = await import("@/lib/code/agent/engine");
-const { taskState } = await import("@/lib/code/agent/verdict");
+const { taskState, checklistOf, fixRequest } = await import("@/lib/code/agent/verdict");
 const { toRunView } = await import("@/lib/code/agent/runs");
 const { scrub } = await import("@/lib/code/agent/runs");
 const real = await vi.importActual<typeof import("@/lib/code/agent/runs")>("@/lib/code/agent/runs");
@@ -304,6 +331,9 @@ beforeEach(() => {
   releaseUsage.mockClear();
   recordRunLater.mockClear();
   db.stopBeforeNextWrite = false;
+  db.history = false;
+  preview.exitWith = null;
+  preview.checkError = null;
   files = new Map([
     ["package.json", '{"name":"calc","scripts":{"test":"vitest run"}}'],
     ["sum.js", "export const sum = (a, b) => a - b;\n"],
@@ -1050,5 +1080,188 @@ describe("verification: the task's state comes from checks that ran, not from th
     await expect(reverifyRun(auth, id)).rejects.toMatchObject({ code: "conflict" });
     const done = newRun({ project_id: "p-open", status: "completed", report: null });
     await expect(reverifyRun(auth, done)).rejects.toMatchObject({ code: "conflict" });
+  });
+});
+
+describe("website workflow: from a request to a tested site, and changes after", () => {
+  const site = (o: Partial<RunRow> = {}) =>
+    newRun({ status: "running", request: "Build a landing page for a yoga studio", options: { approvePlans: false, reviewEdits: false, commands: "safe", modelId: null, web: true }, ...o });
+  const finishAll = async (id: string) => {
+    for (let i = 0; i < 12 && !["completed", "failed", "cancelled"].includes(run(id).status); i++) await stepRun(req(), auth, id);
+    return toRunView(run(id));
+  };
+  const PAGE = '<!doctype html>\n<html lang="en"><head><meta name="viewport" content="width=device-width"></head><body><h1>Still Point Yoga</h1></body></html>\n';
+  const lastResultText = (p: ToolTurnParams) => {
+    const m = p.messages[p.messages.length - 1]!;
+    return m.role === "user" ? (m.results ?? []).map((r) => r.text).join("\n") : "";
+  };
+
+  beforeEach(() => {
+    files = new Map([["index.html", "<h1>Hello from Orbis</h1>\n"]]);
+    preview.starts.length = 0;
+    preview.checks.length = 0;
+    preview.problems = [[], [], []];
+  });
+
+  it("builds a new static site: writes it, runs it, checks it at each size, and calls it checked in a browser, not verified", async () => {
+    const id = site();
+    script.turns.push(
+      turn("Writing the page.", call("write_file", { path: "index.html", content: PAGE }), call("start_preview", { command: "python3 -m http.server 3000" })),
+      turn("Looking at it.", call("check_preview", {})),
+      turn("Done.", call("finish", { summary: "Built the yoga studio page." })),
+    );
+    const v = await finishAll(id);
+    expect(v.status).toBe("completed");
+    expect(preview.starts).toEqual(["python3 -m http.server 3000"]);
+    expect(preview.checks).toEqual(["/"]);
+    const items = checklistOf(v.report!);
+    expect(items.map((c) => [c.id, c.status])).toEqual([
+      ["tests", "not_run"],
+      ["build", "not_run"],
+      ["server", "passed"],
+      ["browser", "passed"],
+    ]);
+    expect(items.find((c) => c.id === "browser")!.summary).toBe("/ loaded at desktop 1280px, phone 390px with no problems found");
+    // Started and checked in the same step as the write: both cover it (the run's last edit is when the file was saved).
+    expect(v.report!.checks).toMatchObject({ server: { freshness: "current" }, preview: { freshness: "current" } });
+    // Appearing in a browser isn't "fully tested".
+    expect(taskState(v)).toBe("checked");
+    expect(fixRequest(v.report!)).toBeNull();
+    expect(v.report!.files).toEqual([expect.objectContaining({ path: "index.html", change: "modified" })]);
+  });
+
+  it("changes an existing project in its own stack: builds it with its build script and is verified only with that build", async () => {
+    const pkg = '{"name":"shop","scripts":{"dev":"vite --port 3000 --host 0.0.0.0","build":"vite build"}}';
+    files = new Map([
+      ["package.json", pkg],
+      ["index.html", '<div id="app"></div><script type="module" src="/src/main.js"></script>\n'],
+      ["src/main.js", "document.querySelector('#app').innerHTML = '<h1>Shop</h1>';\n"],
+    ]);
+    const id = site({ request: "Add a pricing section under the heading" });
+    script.turns.push(
+      turn("Reading the project.", call("read_files", { paths: ["package.json", "src/main.js"] })),
+      turn(
+        "Adding pricing.",
+        call("edit_file", { path: "src/main.js", search: "<h1>Shop</h1>", replace: "<h1>Shop</h1><section id=\"pricing\"><h2>Pricing</h2></section>" }),
+        call("run_command", { command: "npm run build" }),
+      ),
+      turn("Running it.", call("start_preview", { command: "npm run dev" })),
+      turn("Looking at it.", call("check_preview", {})),
+      turn("Done.", call("finish", { summary: "Added a pricing section." })),
+    );
+    const v = await finishAll(id);
+    expect(commands).toEqual(["npm run build"]);
+    expect(preview.starts).toEqual(["npm run dev"]);
+    // Only the file the request needed changed: no new scaffold, the project's stack and scripts are kept.
+    expect(v.report!.files.map((f) => f.path)).toEqual(["src/main.js"]);
+    expect(files.get("package.json")).toBe(pkg);
+    expect(checklistOf(v.report!).find((c) => c.id === "build")).toMatchObject({ status: "passed", command: "npm run build" });
+    expect(taskState(v)).toBe("verified");
+  });
+
+  it("reports a failed build with its likely cause (a missing dependency), separately from the browser, and offers a fix request", async () => {
+    files = new Map([
+      ["package.json", '{"scripts":{"build":"vite build"}}'],
+      ["index.html", PAGE],
+    ]);
+    commandOutput = (cmd) => (cmd === "npm run build" ? { output: "Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'vite' imported from /vercel/sandbox/vite.config.js", exitCode: 1 } : { output: "", exitCode: 0 });
+    const id = site();
+    script.turns.push(
+      turn("Tweaking and building.", call("edit_file", { path: "index.html", search: "Still Point Yoga", replace: "Still Point Yoga Studio" }), call("run_command", { command: "npm run build" })),
+      (p) => {
+        expect(lastResultText(p)).toContain("Likely cause: A dependency is missing (vite)");
+        return turn("I couldn't make the build work.", call("finish", { summary: "Changed the heading; the build fails." }));
+      },
+    );
+    const v = await finishAll(id);
+    const items = checklistOf(v.report!);
+    expect(items.find((c) => c.id === "build")).toMatchObject({ status: "failed", summary: expect.stringContaining("A dependency is missing (vite): install the project's dependencies (npm install)") });
+    // The browser check is reported on its own: it couldn't run (no server), and it says why — never "passed".
+    expect(items.find((c) => c.id === "browser")).toMatchObject({ status: "not_run", summary: expect.stringContaining("preview server wasn't running") });
+    expect(taskState(v)).toBe("warnings");
+    expect(fixRequest(v.report!)).toContain("- Production build (npm run build): Failed (exit code 1). A dependency is missing (vite)");
+  });
+
+  it("says why the site's server didn't start (a missing dependency) and doesn't pretend the page was checked", async () => {
+    files = new Map([
+      ["package.json", '{"scripts":{"dev":"vite --port 3000"}}'],
+      ["index.html", PAGE],
+    ]);
+    preview.exitWith = "> dev\n> vite --port 3000\n\nsh: 1: vite: not found";
+    const id = site();
+    script.turns.push(turn("Running it.", call("start_preview", { command: "npm run dev" })), (p) => {
+      expect(lastResultText(p)).toContain("Likely cause: A dependency is missing (vite)");
+      return turn("It won't start.", call("finish", { summary: "The server didn't start." }));
+    });
+    const v = await finishAll(id);
+    expect(run(id).checks?.server).toMatchObject({ state: "exited", note: expect.stringContaining("(vite)") });
+    const items = checklistOf(v.report!);
+    expect(items.find((c) => c.id === "server")).toMatchObject({ status: "failed", summary: expect.stringContaining("Didn't start: the command exited. A dependency is missing (vite)") });
+    expect(items.find((c) => c.id === "browser")).toMatchObject({ status: "not_run" });
+    expect(preview.checks).toEqual([]);
+    expect(taskState(v)).toBe("warnings");
+  });
+
+  it("reports a browser check that couldn't run as not completed, never as passed", async () => {
+    preview.checkError = "Failed to launch the browser process!";
+    const id = site();
+    script.turns.push(
+      turn("Writing.", call("write_file", { path: "index.html", content: PAGE }), call("start_preview", { command: "python3 -m http.server 3000" })),
+      turn("Looking.", call("check_preview", {})),
+      (p) => {
+        expect(lastResultText(p)).toContain("The check couldn't run: Failed to launch the browser process!");
+        return turn("The browser didn't start; finishing.", call("finish", { summary: "Built the page." }));
+      },
+    );
+    const v = await finishAll(id);
+    expect(checklistOf(v.report!).find((c) => c.id === "browser")).toMatchObject({ status: "error", summary: "Couldn't load / in the browser" });
+    expect(taskState(v)).toBe("warnings");
+    expect(fixRequest(v.report!)).toContain("Browser inspection");
+  });
+
+  it("is not verified when the agent stops before running the site: nothing confirms it works", async () => {
+    const id = site();
+    script.turns.push(turn("Writing.", call("write_file", { path: "index.html", content: PAGE })), turn("Done.", call("finish", { summary: "Built the page." })));
+    const v = await finishAll(id);
+    expect(preview.starts).toEqual([]);
+    expect(checklistOf(v.report!).find((c) => c.id === "browser")).toMatchObject({ status: "not_run", applicable: true });
+    expect(taskState(v)).toBe("unverified");
+  });
+
+  it("takes a follow-up in the same project with what the last session did and what its checks found, and keeps each change undoable", async () => {
+    db.history = true;
+    preview.problems = [["overflow"], [], []];
+    const first = site({ project_id: "site-g" });
+    script.turns.push(
+      turn("Writing.", call("write_file", { path: "index.html", content: PAGE.replace("<h1>", '<div class="hero"><h1>') }), call("start_preview", { command: "python3 -m http.server 3000" })),
+      turn("Looking.", call("check_preview", {})),
+      turn("Done; the phone layout still scrolls.", call("finish", { summary: "Built the page; the hero is too wide on phones." })),
+    );
+    const v1 = await finishAll(first);
+    expect(taskState(v1)).toBe("warnings");
+    const followUp = fixRequest(v1.report!)!;
+    expect(followUp).toContain("scrolls sideways by 120px");
+
+    const afterFirst = files.get("index.html")!;
+    const second = site({ project_id: "site-g", request: followUp });
+    script.turns.push(
+      (p) => {
+        const opening = p.messages[0]!.role === "user" ? p.messages[0]!.text : "";
+        expect(opening).toContain("Earlier work in this project");
+        expect(opening).toContain("Build a landing page for a yoga studio");
+        expect(opening).toContain("Built the page; the hero is too wide on phones.");
+        expect(opening).toContain("Checks: Done, with warnings");
+        expect(opening).toContain("scrolls sideways by 120px");
+        return turn("Fixing the hero.", call("edit_file", { path: "index.html", search: '<div class="hero">', replace: '<div class="hero" style="max-width:100%">' }));
+      },
+      turn("Checking again.", call("check_preview", {})),
+      turn("Done.", call("finish", { summary: "The hero fits on phones now." })),
+    );
+    const v2 = await finishAll(second);
+    expect(taskState(v2)).toBe("checked");
+    // The second session's change is recorded against the first session's result, so undoing it puts that back.
+    const change = db.changes.find((c) => c.runId === second && c.path === "index.html")!;
+    expect(change.before).toBe(afterFirst);
+    expect(change.after).toContain('style="max-width:100%"');
   });
 });

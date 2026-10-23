@@ -598,7 +598,7 @@ export function AgentPanel({
   useEffect(() => {
     if (!firstState) return;
     if (firstState === "running" || firstState === "verifying") countFirstTask("started", { kind: "code" });
-    else if (firstState === "verified" || firstState === "warnings" || firstState === "unverified") countFirstTask("succeeded", { kind: "code", state: firstState });
+    else if (firstState === "verified" || firstState === "checked" || firstState === "warnings" || firstState === "unverified") countFirstTask("succeeded", { kind: "code", state: firstState });
     else if (firstState === "failed") countFirstTask("failed", { kind: "code" });
   }, [firstState]);
   const busy = driving || answering || !!run?.busy;
@@ -761,6 +761,10 @@ export function AgentPanel({
                   onUndo={undoAll}
                   onOpenPreview={onOpenPreview}
                   onRetry={() => void start(run.request, modeOf(run.options)?.id ?? mode, run.options.modelId ?? modelId)}
+                  onAskFix={(request) => {
+                    setText(request);
+                    requestAnimationFrame(() => box.current?.focus());
+                  }}
                 />
               )}
               {ended && (

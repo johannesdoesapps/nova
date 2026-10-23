@@ -9,7 +9,7 @@
 export const CHECK_TOOLS = ["@sparticuz/chromium@131.0.1", "puppeteer-core@23.11.1"];
 
 export interface CheckViewport {
-  name: "desktop" | "phone";
+  name: "desktop" | "tablet" | "phone";
   width: number;
   height: number;
   status: number | null;
@@ -66,6 +66,8 @@ export interface PreviewCheck {
   warnings: string[];
   /** The full report, as the agent reads it. */
   text: string;
+  /** The sizes it was opened at, e.g. "desktop 1280px". */
+  sizes: string[];
   shots: CheckShot[];
   checkedAt: string;
 }
@@ -76,7 +78,8 @@ const unique = (xs: string[]) => [...new Set(xs)];
 export function summarizeCheck(raw: PreviewCheckRaw, now = new Date()): PreviewCheck {
   const problems: string[] = [];
   const warnings: string[] = [];
-  const lines: string[] = [`Browser check of ${raw.url} (headless Chromium in the project's computer, at a desktop and a phone size):`];
+  const sizes = raw.viewports.map((v) => `${v.name} ${v.width}px`);
+  const lines: string[] = [`Browser check of ${raw.url} (headless Chromium in the project's computer, at ${sizes.length ? sizes.join(", ") : "desktop, tablet and phone sizes"}):`];
   if (raw.error || !raw.viewports.length) {
     const why = raw.error ?? "no results";
     return {
@@ -85,12 +88,13 @@ export function summarizeCheck(raw: PreviewCheckRaw, now = new Date()): PreviewC
       problems: [`The check couldn't run: ${why}`],
       warnings: [],
       text: `${lines[0]}\nThe check couldn't run: ${why}`,
+      sizes: [],
       shots: [],
       checkedAt: now.toISOString(),
     };
   }
   for (const v of raw.viewports) {
-    const label = `${v.name === "desktop" ? "Desktop" : "Phone"} ${v.width}×${v.height}`;
+    const label = `${v.name === "desktop" ? "Desktop" : v.name === "tablet" ? "Tablet" : "Phone"} ${v.width}×${v.height}`;
     const p = v.page;
     if (!v.status || v.status >= 400) problems.push(`${label}: the page answered ${v.status ? `HTTP ${v.status}` : "nothing"}.`);
     lines.push(`${label}: ${v.status ? `HTTP ${v.status}` : "no answer"}, title "${v.title || "(none)"}"${p ? `, page ${p.height.toLocaleString("en-US")}px tall` : ""}.`);
@@ -154,7 +158,7 @@ export function summarizeCheck(raw: PreviewCheckRaw, now = new Date()): PreviewC
   if (w2.length) lines.push(`Worth fixing:\n${w2.map((x) => `- ${x}`).join("\n")}`);
   const shots = raw.shots ?? [];
   if (shots.length) lines.push(`Screenshots: ${shots.map((s) => s.caption).join("; ")}.`);
-  return { path: raw.url, verdict: p2.length ? "problems" : "passed", problems: p2, warnings: w2, text: lines.join("\n"), shots, checkedAt: now.toISOString() };
+  return { path: raw.url, verdict: p2.length ? "problems" : "passed", problems: p2, warnings: w2, text: lines.join("\n"), sizes, shots, checkedAt: now.toISOString() };
 }
 
 /**
@@ -172,6 +176,7 @@ const origin = new URL(base).origin;
 const local = (u) => u.startsWith(origin) || u.startsWith("data:") || u.startsWith("blob:");
 const VIEWPORTS = [
   { name: "desktop", width: 1280, height: 800, scale: 0.5 },
+  { name: "tablet", width: 768, height: 1024, scale: 0.5, mobile: true },
   { name: "phone", width: 390, height: 844, scale: 0.6, mobile: true },
 ];
 const MAX_SHOT = 45000;
@@ -289,14 +294,14 @@ try {
           await page.setViewport({ width: vp.width, height: vp.height, deviceScaleFactor: 0.25 });
           await shoot(page, "overview", "desktop, whole page (scaled down)", { fullPage: (r.page?.height ?? 0) <= 14000 });
         }
-      } else {
+      } else if (vp.name === "phone") {
         await shoot(page, "phone", "phone, first screen (390px wide)", {});
       }
     } catch (e) {
       r.pageErrors.push("Screenshot failed: " + String(e.message).slice(0, 120));
     }
     // A phone menu: a visible button that controls something or reports aria-expanded. Press it and see whether links appear.
-    if (vp.mobile) {
+    if (vp.name === "phone") {
       r.menu = await page
         .evaluate(async () => {
           const shown = (el) => {

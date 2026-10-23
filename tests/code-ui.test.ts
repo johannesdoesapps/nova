@@ -136,7 +136,10 @@ describe("website building", () => {
       ["server", "passed", "process"],
       ["browser", "passed", "inspection"],
     ]);
-    expect(assessReport(report(passed)).state).toBe("verified");
+    // A page that loads and looks right in a browser is "checked", never "verified": no automated check ran.
+    expect(assessReport(report(passed))).toMatchObject({ state: "checked", reasons: [expect.stringContaining("not that its features work")] });
+    const built = { ...passed, build: { command: "npm run build", exitCode: 0, passed: true, ranAt: "", freshness: "current" as const } };
+    expect(assessReport(report(built)).state).toBe("verified");
     const stale = { ...passed, preview: { ...passed.preview, freshness: "stale" as const } };
     expect(checklistOf(report(stale)).find((c) => c.id === "browser")).toMatchObject({ status: "stale", summary: "Checked before the last change" });
     expect(assessReport(report(stale)).state).toBe("warnings");

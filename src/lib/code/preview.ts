@@ -9,7 +9,7 @@ import { CHECK_SCRIPT, CHECK_TOOLS, type PreviewCheckRaw } from "./preview-check
  * and starting it again replaces the old one), on port 3000 — the only port
  * the computer exposes. Whether it's up is checked by asking it, never
  * assumed. The browser check loads the site in headless Chromium inside the
- * same computer, at a desktop and a phone size.
+ * same computer, at desktop, tablet and phone sizes.
  */
 
 export const PREVIEW_JOB = "orbispreview";

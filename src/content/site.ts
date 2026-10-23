@@ -108,7 +108,7 @@ export const FEATURES: Feature[] = [
       { title: "A coding agent", text: "It reads the code, proposes a plan for you to approve, edits files, runs tests and builds, reads the errors and tries again — then summarises what it did and what's left." },
       {
         title: "Websites from a prompt",
-        text: "Describe a site and press Build website. The agent writes it, starts it on the project's computer and opens it in a real browser at desktop and phone sizes — errors, broken links, sideways scrolling and the phone menu are checked — then fixes what it finds. Ask for changes and watch the preview update.",
+        text: "Describe a site and press Build website. The agent writes it, starts it on the project's computer and opens it in a real browser at desktop, tablet and phone sizes — errors, broken links, sideways scrolling and the phone menu are checked — then fixes what it finds. Ask for changes and watch the preview update.",
       },
       { title: "You stay in control", text: "Tests, builds and installs run on their own; other commands ask you first; a few (like deleting everything, deploying or git push) never run. You can review each set of edits before it's saved, and Stop at any time." },
       { title: "Every change reviewable", text: "The Changes panel shows each run's edits as diffs. Revert a whole run or one file. Push the project to a new GitHub branch when you're ready." },

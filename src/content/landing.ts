@@ -63,7 +63,7 @@ export const DIFFERENTIATORS: Differentiator[] = [
   {
     id: "inspectable",
     title: "You can see what it did and what it checked",
-    text: "Every step is in the activity log, with each command, its exit code and its output. Websites get a browser check at desktop and phone sizes, and the final report says what it couldn't verify.",
+    text: "Every step is in the activity log, with each command, its exit code and its output. Websites get a browser check at desktop, tablet and phone sizes, and the final report says what it couldn't verify.",
   },
   {
     id: "control",
@@ -91,7 +91,7 @@ export const USE_CASES: UseCase[] = [
   {
     id: "landing",
     title: "Launch a landing page",
-    text: "Describe the product and what the page needs. The agent builds it, starts it and checks it in a browser at desktop and phone sizes.",
+    text: "Describe the product and what the page needs. The agent builds it, starts it and checks it in a browser at desktop, tablet and phone sizes.",
     idea: "saas",
     cta: "Start from this idea",
   },

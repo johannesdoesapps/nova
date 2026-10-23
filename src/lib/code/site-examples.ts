@@ -41,3 +41,25 @@ export const SITE_EXAMPLES: { id: string; label: string; prompt: string }[] = [
 export function siteExample(id: string | null | undefined) {
   return id ? SITE_EXAMPLES.find((x) => x.id === id) : undefined;
 }
+
+/** Optional details for a website request; each is free text and may be empty. */
+export interface SiteDetails {
+  purpose: string;
+  audience: string;
+  style: string;
+  sections: string;
+}
+
+export const SITE_DETAIL_FIELDS: { key: keyof SiteDetails; label: string; placeholder: string }[] = [
+  { key: "purpose", label: "Purpose", placeholder: "e.g. get bookings for a yoga studio" },
+  { key: "audience", label: "Who it's for", placeholder: "e.g. busy professionals nearby" },
+  { key: "style", label: "Look and feel", placeholder: "e.g. calm, light, lots of white space" },
+  { key: "sections", label: "Key sections", placeholder: "e.g. classes, prices, teachers, contact" },
+];
+
+/** The request with the details that were filled in, as plain lines the agent reads with it. Nothing is added when none were. */
+export function withSiteDetails(request: string, d: Partial<SiteDetails>): string {
+  const lines = SITE_DETAIL_FIELDS.map((f) => [f.label, (d[f.key] ?? "").trim().replace(/\s+/g, " ").slice(0, 300)] as const).filter(([, v]) => v);
+  if (!lines.length) return request.trim();
+  return `${request.trim()}\n\nDetails:\n${lines.map(([k, v]) => `- ${k}: ${v}`).join("\n")}`;
+}

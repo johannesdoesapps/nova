@@ -258,7 +258,8 @@ describe("the preview tools", () => {
     expect(out.results[1]).toMatchObject({ tool: "check_preview", ok: true, shots: [41] });
     expect(out.checks.server).toMatchObject({ command: "python3 -m http.server 3000", state: "running", http: 200 });
     expect(out.checks.preview).toMatchObject({ path: "/", verdict: "passed" });
-    expect(out.events.map((x) => x.title)).toEqual(["Started the preview: python3 -m http.server 3000", "Checked / in a browser (desktop and phone): no problems found"]);
+    expect(out.events.map((x) => x.title)).toEqual(["Started the preview: python3 -m http.server 3000", "Checked / in a browser (desktop): no problems found"]);
+    expect(out.checks.preview).toMatchObject({ sizes: ["desktop 1280px"] });
   });
 
   it("makes a new server command the project's Run command", async () => {

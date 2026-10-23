@@ -84,7 +84,7 @@ export function webGuidance(o: Pick<PromptOptions, "commands" | "replyChars">): 
   const verify =
     o.commands === "off"
       ? "- Commands are off for this run, so you can't start or check the preview. Say in your summary that the user should press Run and look at the preview."
-      : `- Verify it like a person would: start_preview starts the site's server in the background and waits until it answers; check_preview then opens the page in a real browser (headless Chromium) at a desktop and a phone size and returns the problems it found plus screenshots. Fix every problem it reports, look at the screenshots critically (layout, alignment, spacing, contrast, anything broken or empty), and check again. After edits to a static site the running server serves the new files; restart it (start_preview with restart) when you change its config or dependencies.
+      : `- Verify it like a person would: start_preview starts the site's server in the background and waits until it answers; check_preview then opens the page in a real browser (headless Chromium) at desktop, tablet and phone sizes and returns the problems it found plus screenshots. Fix every problem it reports, look at the screenshots critically (layout, alignment, spacing, contrast, anything broken or empty), and check again. After edits to a static site the running server serves the new files; restart it (start_preview with restart) when you change its config or dependencies.
 - Don't install or script your own browser (Playwright, Puppeteer, Selenium): check_preview is the browser, and the computer can't download browsers.
 - If package.json has a build script, run it (run_command "npm run build") and fix what fails. Don't finish while a check you ran still shows problems you can fix.`;
   return `Building or changing a website:
@@ -164,6 +164,8 @@ export interface EarlierRun {
   status: string;
   summary: string | null;
   files: string[];
+  /** What Orbis's checks found at its end (verdict.ts checksSummary), so a follow-up can act on it. */
+  checks?: string | null;
 }
 
 export function initialMessage(
@@ -190,7 +192,7 @@ export function initialMessage(
       ? `Earlier work in this project (newest first; the files now reflect it):\n${meta.earlier
           .map(
             (r, i) =>
-              `${i + 1}. Asked: ${clipText(r.request, 600)}\n   Result (${r.status}): ${clipText(r.summary ?? "(no summary)", 900)}${r.files.length ? `\n   Files changed: ${r.files.slice(0, 20).join(", ")}` : ""}`,
+              `${i + 1}. Asked: ${clipText(r.request, 600)}\n   Result (${r.status}): ${clipText(r.summary ?? "(no summary)", 900)}${r.files.length ? `\n   Files changed: ${r.files.slice(0, 20).join(", ")}` : ""}${r.checks ? `\n   ${clipText(r.checks, 900)}` : ""}`,
           )
           .join("\n")}`
       : "",

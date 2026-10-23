@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { diagnoseOutput } from "./diagnose";
 import { applyAiEdits, type AiEdits } from "../ai-edits";
 import { diffStats, unifiedDiff } from "../diff";
 import { MEMORY_KIND_LABELS, type MemoryEntry, type MemoryKind } from "../memory";
@@ -108,6 +109,11 @@ export interface StepOutcome {
   tests: TestResult[];
   /** Files were saved this step. */
   edited: boolean;
+  /**
+   * When the step's last change to the files was saved. Checks that ran later in the same step cover it, so the
+   * run's last edit is this time, not the end of the step (which would make them look out of date).
+   */
+  editedAt: string | null;
   /** Website checks that ran this step (the latest of each). */
   checks: { server?: ServerCheck; preview?: PreviewCheckRecord; build?: BuildCheck };
 }
@@ -269,6 +275,7 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
   let plan: AgentPlan | null = null;
   let proposedNotes = 0;
   let edited = false;
+  let editedAt: string | null = null;
   let files: ProjectFile[] | null = null;
   const current = async () => (files ??= await env.files());
   let commandRan = false;
@@ -276,7 +283,7 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
   let proposed: FileChange[] = [];
   const checks: StepOutcome["checks"] = {};
   let checked = false;
-  const done = (pause: StepOutcome["pause"], summary: string | null = null, unresolved: string[] = []): StepOutcome => ({ results, events, pause, plan, summary, unresolved, tests, edited, checks });
+  const done = (pause: StepOutcome["pause"], summary: string | null = null, unresolved: string[] = []): StepOutcome => ({ results, events, pause, plan, summary, unresolved, tests, edited, editedAt, checks });
   const log = async (...e: NewEvent[]) => {
     events.push(...e);
     if (env.emit) await env.emit(e);
@@ -290,6 +297,7 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
   const save = async (changes: FileChange[]) => {
     await env.save(changes);
     edited = true;
+    editedAt = new Date().toISOString();
     files = applyProposed(await current(), changes);
   };
 
@@ -336,6 +344,7 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
     if (out.changed.length) {
       files = null;
       edited = true;
+      editedAt = new Date().toISOString();
     }
     const t = isTestCommand(cmd) || tool === "run_tests" ? testResult({ command: cmd, ...out }) : null;
     if (t) tests.push(t);
@@ -611,13 +620,14 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
           await log({ kind: "status", title: `Set the project's Run command to ${cmd.slice(0, 200)}`, detail: { runCommand: cmd } });
         }
         const s = await env.preview.start(cmd);
-        checks.server = { command: cmd.slice(0, 300), state: s.state, http: s.http, at: new Date().toISOString() };
+        const cause = s.state === "running" ? null : diagnoseOutput(s.text);
+        checks.server = { command: cmd.slice(0, 300), state: s.state, http: s.http, at: new Date().toISOString(), ...(cause ? { note: cause.hint } : {}) };
         await log({
           kind: "command",
           title: s.state === "running" ? `Started the preview: ${cmd.slice(0, 200)}` : `The preview didn't start: ${cmd.slice(0, 200)}`,
           detail: { command: cmd, preview: true, state: s.state, http: s.http, exitCode: s.exitCode, output: tailText(s.text, OUTPUT_FOR_LOG) },
         });
-        result(id, tool, s.state === "running", s.text);
+        result(id, tool, s.state === "running", cause ? `${s.text}\nLikely cause: ${cause.hint}` : s.text);
         break;
       }
       case "check_preview": {
@@ -632,12 +642,12 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
         checked = true;
         const path = (a.path as string | undefined) ?? "/";
         const { check: c, shots } = await env.preview.check(path);
-        checks.preview = { path, verdict: c.verdict, problems: c.problems.slice(0, 30), warnings: c.warnings.slice(0, 15), checkedAt: c.checkedAt };
+        checks.preview = { path, verdict: c.verdict, problems: c.problems.slice(0, 30), warnings: c.warnings.slice(0, 15), checkedAt: c.checkedAt, sizes: c.sizes };
         await log({
           kind: "inspect",
           title:
             c.verdict === "passed"
-              ? `Checked ${path} in a browser (desktop and phone): no problems found`
+              ? `Checked ${path} in a browser (${c.sizes.length ? c.sizes.map((x) => x.split(" ")[0]).join(", ") : "desktop and phone"}): no problems found`
               : c.verdict === "failed"
                 ? `Couldn't check ${path} in a browser`
                 : `Checked ${path} in a browser: ${c.problems.length} problem${c.problems.length === 1 ? "" : "s"} found`,
@@ -795,7 +805,8 @@ export function commandResultText(command: string, out: CommandOutcome, test: Te
     : "";
   const skipped = out.skipped.length ? `\nNot copied back (binary, too large or over the project's limits): ${out.skipped.slice(0, 20).join(", ")}` : "";
   const parsed = test ? `\n${describeTestResult(test)}${test.failures.length ? `\nFailing: ${test.failures.join("; ")}` : ""}` : "";
-  return `$ ${command}\n${status} after ${(out.durationMs / 1000).toFixed(1)}s${parsed}${files}${skipped}\nOutput:\n${tailText(out.output, OUTPUT_FOR_MODEL) || "(no output)"}`;
+  const cause = !out.cancelled && out.exitCode !== 0 ? diagnoseOutput(out.output) : null;
+  return `$ ${command}\n${status} after ${(out.durationMs / 1000).toFixed(1)}s${parsed}${files}${skipped}${cause ? `\nLikely cause: ${cause.hint}` : ""}\nOutput:\n${tailText(out.output, OUTPUT_FOR_MODEL) || "(no output)"}`;
 }
 
 export function commandEvent(command: string, out: CommandOutcome, test: TestResult | null = null): NewEvent {

@@ -7,7 +7,7 @@ import { useApp } from "@/components/layout/app-context";
 import { forgetPlace } from "@/components/studio/mode-switch";
 import { StudioHeader } from "@/components/studio/frame";
 import { Menu, MenuItem } from "@/components/studio/ui";
-import { SITE_EXAMPLES, siteExample } from "@/lib/code/site-examples";
+import { SITE_DETAIL_FIELDS, SITE_EXAMPLES, siteExample, withSiteDetails, type SiteDetails } from "@/lib/code/site-examples";
 import { EXAMPLE_PROJECT, TEMPLATES, TEMPLATE_IDS, type ProjectSummary, type TemplateId } from "@/lib/code/projects";
 import { cn } from "@/lib/utils";
 import { api, CodeApiError, post, putBuildRequest, type Allowance } from "./api";
@@ -84,6 +84,9 @@ export function CodeProjectsView() {
   const catalog = useCatalog();
   const [modelId, setModelId] = useCodeModel(catalog);
   const [siteTarget, setSiteTarget] = useState<string>("new");
+  /** Optional details for a new site; closed unless asked for, since most requests say enough. */
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [details, setDetails] = useState<SiteDetails>({ purpose: "", audience: "", style: "", sections: "" });
   const siteBox = useRef<HTMLTextAreaElement>(null);
   const [showAll, setShowAll] = useState(false);
   // Files and images for the build, uploaded once its project exists.
@@ -129,14 +132,14 @@ export function CodeProjectsView() {
    * once, working on its own; it changes only that project.
    */
   const buildSite = async () => {
-    const text = site.trim();
-    if (!text) return siteBox.current?.focus();
+    const text = siteTarget === "new" ? withSiteDetails(site, details) : site.trim();
+    if (!site.trim()) return siteBox.current?.focus();
     if (attachments.busy || busy || (siteTarget === "new" && full)) return;
     setBusy("build");
     setError(null);
     try {
       let pid = siteTarget;
-      if (pid === "new") pid = created.current ??= (await post<{ project: ProjectSummary }>("/api/code/projects", { name: siteName(text), template: "website" })).project.id;
+      if (pid === "new") pid = created.current ??= (await post<{ project: ProjectSummary }>("/api/code/projects", { name: siteName(site.trim()), template: "website" })).project.id;
       const ids = await attachments.uploadTo(pid);
       putBuildRequest(pid, text, ids, modelId);
       router.push(`/code/${pid}?build=1`);
@@ -358,11 +361,42 @@ export function CodeProjectsView() {
               />
             </section>
 
+            {siteTarget === "new" && (
+              <div className="mt-2 px-1">
+                <button
+                  type="button"
+                  onClick={() => setDetailsOpen((x) => !x)}
+                  aria-expanded={detailsOpen}
+                  aria-controls="site-details"
+                  className="text-[12.5px] text-s-ink-3 underline-offset-4 hover:text-s-ink hover:underline"
+                >
+                  {detailsOpen ? "Hide details" : "Add details (optional): purpose, audience, look, sections"}
+                </button>
+                {detailsOpen && (
+                  <div id="site-details" className="s-in mt-2 grid gap-2 sm:grid-cols-2">
+                    {SITE_DETAIL_FIELDS.map((f) => (
+                      <label key={f.key} className="block text-[12px] text-s-ink-3">
+                        {f.label}
+                        <input
+                          value={details[f.key]}
+                          onChange={(e) => setDetails((d) => ({ ...d, [f.key]: e.target.value }))}
+                          placeholder={f.placeholder}
+                          maxLength={300}
+                          className="mt-1 h-9 w-full rounded-xl border border-s-line bg-transparent px-3 text-[13px] text-s-ink placeholder:text-s-ink-3 focus:border-s-line-strong focus:outline-none"
+                        />
+                      </label>
+                    ))}
+                    <p className="text-[12px] text-s-ink-3 sm:col-span-2">Anything you fill in is added to your request; leave the rest empty.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {guided && !site.trim() && !busy && (
               <section aria-label="How building a website works" className="s-in mt-4 rounded-2xl border border-s-line p-4 text-[13px] leading-relaxed">
                 <p className="text-s-ink-2">
                   Say what the site is for, the sections you want and the look. The agent writes the files, starts the site on this project&apos;s private computer, opens it in a real browser at
-                  desktop and phone sizes, fixes what it finds, and reports what it checked. You can watch each step and stop it at any time; nothing is published.
+                  desktop, tablet and phone sizes, fixes what it finds, and reports what it checked. You can watch each step and stop it at any time; nothing is published.
                 </p>
                 <p className="mt-3 text-[12px] text-s-ink-3">Start from an example and edit it:</p>
                 <ul className="mt-1.5 flex flex-wrap gap-1.5">

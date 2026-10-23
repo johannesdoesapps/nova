@@ -89,7 +89,7 @@ export const TOOL_DEFS = {
   },
   check_preview: {
     description:
-      "Open the running preview in a real browser (headless Chromium in the project's computer) at a desktop (1280px) and a phone (390px) size, and report what a visitor would hit: HTTP status, JavaScript and console errors, files that fail to load, sideways scrolling, links to missing sections or pages, placeholder links, images without alt text, forms, whether the phone menu opens; with screenshots. Start the preview first.",
+      "Open the running preview in a real browser (headless Chromium in the project's computer) at desktop (1280px), tablet (768px) and phone (390px) sizes, and report what a visitor would hit: HTTP status, JavaScript and console errors, files that fail to load, sideways scrolling, links to missing sections or pages, placeholder links, images without alt text, forms, whether the phone menu opens; with screenshots. Start the preview first.",
     schema: z.object({
       path: z
         .string()

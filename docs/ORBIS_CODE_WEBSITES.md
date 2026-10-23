@@ -30,6 +30,19 @@ Traced live on 21 October 2026 with the Nova landing-page prompt on a new websit
 | Report | Separate lines: development server, checked in a browser, production build, tests — each as it really ended; screenshots and the full check report under Details; Open preview. | `agent-panel.tsx` |
 | APIs | `POST /api/code/projects/[id]/exec` takes `preview: true` (the project's server job); `GET /api/code/projects/[id]/preview` asks the computer whether the site answers. | `src/app/api/code/projects/[id]/…` |
 
+## 2b. Additions (23 October 2026)
+
+| Area | Change | Files |
+|---|---|---|
+| Honest state | A site that only started and passed the browser inspection is **"Done, checked in a browser"**, not "Done and verified": the page loading and laying out correctly isn't tested behaviour. "Verified" needs an automated check (tests or a production build) that passed after the last change. | `src/lib/code/agent/verdict.ts`, `types.ts` (`TASK_STATES`) |
+| Three sizes | The browser check opens the page at desktop 1280px, **tablet 768px** and phone 390px (screenshots at desktop and phone; the phone menu test at phone width). The report names the sizes that were actually checked. | `src/lib/code/preview-check.ts`, `tools.ts`, `verdict.ts` |
+| Likely cause | A failed command, a server that didn't start, or a failed build is read for a recognised cause — a missing dependency (Node, bundler, shell "not found", Python), a blocked download (the computer only reaches npm and PyPI), a port in use — and the cause is given to the agent ("Likely cause: …") and shown in the report. Unrecognised output gets no guess. | `src/lib/code/agent/diagnose.ts`, `tools.ts`, `verdict.ts` |
+| Edit time | A step's last edit is recorded when the file was saved, not when the step ended, so a server, build or browser check run later in the same step counts as covering the change (before, it could show as "out of date" and be re-run). | `tools.ts` (`editedAt`), `engine.ts` |
+| Optional details | Build a website has "Add details (optional)": purpose, who it's for, look and feel, key sections. Closed by default; what's filled in is added to the request as plain lines. | `src/lib/code/site-examples.ts` (`withSiteDetails`), `projects-view.tsx` |
+| Preview | Width buttons (full, tablet 768px, phone 390px) and a large view (fills the window, Esc closes; the same frame, so the page isn't reloaded), besides reload and open in a new tab. | `src/components/code/workspace.tsx` |
+| Refinement | "Ask the agent to fix these" in the report fills the prompt box with what failed (build, server, tests, browser problems) to edit and send. A follow-up session is told how the previous session's checks ended and what didn't pass, with its request, summary and files. | `verdict.ts` (`fixRequest`, `checksSummary`), `verification-panel.tsx`, `engine.ts`, `protocol.ts` |
+| Tests | Engine scenarios: new static site, existing Vite project (build + dev server, nothing else changed), failed build with a missing dependency, server that won't start, browser that can't run, agent stopping before running the site, follow-up with the last session's checks and undoable changes. Unit tests for the pieces above. | `tests/code-agent-engine.test.ts` ("website workflow"), `tests/website-workflow.test.ts` |
+
 ## 3. The workflow
 
 1. **Start**: Code → Build a website → describe it → Build website. A new project is created from the website template (named from the request, e.g. "Website: Nova"), or the chosen existing project is used. The request is handed to the project page (session storage, not the URL).
@@ -37,9 +50,9 @@ Traced live on 21 October 2026 with the Nova landing-page prompt on a new websit
 3. **Decide**: in an empty or template project it builds a static site (HTML, CSS, JavaScript) served by `python3 -m http.server 3000`; in a project with a framework it works inside it. It asks before replacing a project or switching its stack.
 4. **Build**: complete files, one per write; design system, sections, interactions, forms with validation and an honest note when there's no backend; sample content labelled.
 5. **Run**: `start_preview` — the server starts in the background; Orbis waits until port 3000 answers (or reports that it exited, with its output, or that something listens on another port).
-6. **Look**: `check_preview` — a real browser at desktop and phone sizes; problems and screenshots go back to the agent and into the activity log.
+6. **Look**: `check_preview` — a real browser at desktop, tablet and phone sizes; problems and screenshots go back to the agent and into the activity log.
 7. **Fix and re-check** until the check passes or the agent explains what it couldn't fix; it runs `npm run build` when the project has one.
-8. **Report**: what the agent says it built (labelled as its words), files changed, and each check as it ended: server running, browser check (current or stale), production build (passed, failed, or not run), tests.
+8. **Report**: what the agent says it built (labelled as its words), files changed, and each check as it ended: server running, browser check (current or stale), production build (passed, failed, or not run), tests. A site checked only in a browser is "Done, checked in a browser"; "Done and verified" needs tests or a build that passed.
 9. **Change it**: ask for changes; the agent edits the existing files, the preview reloads, and the checks run again. Every session's changes can be reviewed as diffs and undone.
 
 ## 4. Preview and execution architecture
@@ -63,7 +76,8 @@ No new environment variables or secrets. It uses what Code already needs: Vercel
 
 - **Runs need an open page.** The agent advances while the project page asks for steps (no background worker).
 - **External resources aren't checked** (web fonts, CDNs, external images): the computer can only reach npm and PyPI.
-- **No reference images yet**: the Build box takes text only.
+- **No published or shareable preview**: the preview exists only while the project's computer is on, at an address shown to the owner. Sharing would need hosting on a separate domain (serving generated sites from tryorbis.app would run their scripts next to users' sessions). Download as .zip and Push to GitHub are the ways to take a site elsewhere.
+- **The browser check doesn't click through the site**: it loads pages, follows in-page and same-site links, and presses the phone menu; it doesn't fill forms or test flows.
 - **Forms don't send anywhere** unless the user connects a backend; the agent says so on the page and in its summary.
 - **Static sites have no production build step**; the report says "Production build: Not run". Projects with a build script are built and the result is reported.
 - **Model quality varies**: Auto uses Claude Haiku 5.5 for coding on most plans; larger models (Pro and Max) produce more polished designs. The checks report problems; they don't judge taste.

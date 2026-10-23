@@ -13,6 +13,7 @@ import { webSearch } from "@/lib/search/web";
 import { enforceLimits, planLimits, recordRunLater, releaseUsage } from "@/lib/usage";
 import type { FileChange, ProjectFile, ProjectSummary } from "../projects";
 import { summarizeCheck } from "../preview-check";
+import { checksSummary } from "./verdict";
 import { describeStart, PREVIEW_START_MS, runPreviewCheck, startPreview } from "../preview";
 import { applyFileChanges, getFiles, getProjectRow, optionalBox, setRunCommand, syncBack, type Authed } from "../server";
 import { claimSync, killJob, readJob, removeFromWorkspace, startJob, writeToWorkspace, type WorkspaceBox } from "../workspace";
@@ -574,7 +575,13 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
     const earlier = (await listRuns(auth, project.id, 8).catch(() => []))
       .filter((r) => r.id !== row.id && ENDED_STATUSES.includes(r.status))
       .slice(0, 3)
-      .map((r) => ({ request: r.request, status: r.status, summary: r.report?.summary ?? r.summary, files: (r.report?.files ?? []).map((f) => f.path) }));
+      .map((r) => ({
+        request: r.request,
+        status: r.status,
+        summary: r.report?.summary ?? r.summary,
+        files: (r.report?.files ?? []).map((f) => f.path),
+        checks: r.report && r.status === "completed" ? checksSummary(r.report) : null,
+      }));
     // What the user attached: text in the first message, images shown with it when the model can see them.
     const atts = attached.texts + attached.images ? await runAttachments(auth, row.id, true) : [];
     const canSee = seesImages(model);
@@ -768,7 +775,7 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
     plan,
     pending: null,
     status: workingStatus({ options: row.options, plan }),
-    ...(outcome.edited ? { last_edit_at: new Date().toISOString() } : {}),
+    ...(outcome.edited ? { last_edit_at: outcome.editedAt ?? new Date().toISOString() } : {}),
   };
   if (outcome.pause) {
     patch.status = outcome.pause.status;
@@ -866,7 +873,7 @@ async function verifyStep(auth: Authed, row: RunRow, deadline: number): Promise<
   }
   const tests = outcome.tests.length ? addTests(row.tests, outcome.tests) : row.tests;
   const checks = { ...addChecks(checks0, outcome.checks), verify: null };
-  return proceed({ tests, checks, ...(outcome.edited ? { last_edit_at: new Date().toISOString() } : {}) }, next(skipped));
+  return proceed({ tests, checks, ...(outcome.edited ? { last_edit_at: outcome.editedAt ?? new Date().toISOString() } : {}) }, next(skipped));
 }
 
 async function finishVerification(auth: Authed, row: RunRow, patch: RunPatch, v: VerifyState): Promise<RunRow> {

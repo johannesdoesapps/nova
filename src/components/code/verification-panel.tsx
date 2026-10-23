@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { AlertTriangle, CircleCheck, CircleDashed, CircleX, Clock3, FileCode2, Globe, Loader2, RotateCcw, ShieldAlert, ShieldCheck, Square, Undo2 } from "lucide-react";
-import { assessReport, CHECK_STATUS_LABEL, checklistOf, nextActions, TASK_STATE_INFO, taskState } from "@/lib/code/agent/verdict";
+import { AlertTriangle, CircleCheck, Wrench, CircleDashed, CircleX, Clock3, FileCode2, Globe, Loader2, RotateCcw, ShieldAlert, ShieldCheck, Square, Undo2 } from "lucide-react";
+import { assessReport, CHECK_STATUS_LABEL, checklistOf, fixRequest, nextActions, TASK_STATE_INFO, taskState } from "@/lib/code/agent/verdict";
 import type { CheckItem, CheckStatus, RunReport, RunView, TaskState } from "@/lib/code/agent/types";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +18,7 @@ const usd = (n: number) => `$${n < 0.01 ? n.toFixed(4) : n.toFixed(2)}`;
 
 const STATE_STYLE: Record<TaskState, { icon: typeof ShieldCheck; tone: string; border: string }> = {
   verified: { icon: ShieldCheck, tone: "text-emerald-600 dark:text-emerald-400", border: "border-emerald-500/40" },
+  checked: { icon: ShieldCheck, tone: "text-s-ink", border: "border-s-line-strong" },
   warnings: { icon: AlertTriangle, tone: "text-amber-600 dark:text-amber-400", border: "border-amber-500/50" },
   unverified: { icon: ShieldAlert, tone: "text-s-ink-2", border: "border-s-line-strong" },
   failed: { icon: CircleX, tone: "text-s-danger", border: "border-s-danger/40" },
@@ -58,6 +59,7 @@ export function VerificationPanel({
   onUndo,
   onOpenPreview,
   onRetry,
+  onAskFix,
 }: {
   run: RunView;
   onShowChanges: () => void;
@@ -67,6 +69,8 @@ export function VerificationPanel({
   onOpenPreview?: () => void;
   /** Start the same request again as a new session (offered when the run failed or was stopped). */
   onRetry?: () => void;
+  /** Put a request to fix what the checks found in the prompt box, to edit and send. */
+  onAskFix?: (request: string) => void;
 }) {
   const [rerunning, setRerunning] = useState(false);
   const r = run.report;
@@ -78,6 +82,7 @@ export function VerificationPanel({
   const ran = items.filter((c) => c.status !== "not_run");
   const notRun = items.filter((c) => c.status === "not_run");
   const actions = r ? nextActions(r, state) : [];
+  const fix = r && run.status === "completed" && onAskFix ? fixRequest(r) : null;
   const secondary = "inline-flex h-8 items-center gap-1.5 rounded-full border border-s-line px-3 text-[12.5px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink disabled:opacity-50";
   const heading = "text-[11px] font-medium uppercase tracking-[0.08em] text-s-ink-3";
 
@@ -147,11 +152,16 @@ export function VerificationPanel({
           </ul>
           {items.some((c) => c.id === "browser") && (
             <p className="mt-2 text-[12px] text-s-ink-3">
-              The browser inspection opens the page at desktop and phone sizes and looks for errors, broken links and images, and layout problems. It doesn&apos;t click through the site or test what
-              it does.
+              The browser inspection opens the page at desktop, tablet and phone sizes and looks for errors, broken links and images, and layout problems. It doesn&apos;t click through the site or
+              test what it does.
             </p>
           )}
           {notRun.length > 0 && ran.length === 0 && <p className="mt-2 text-[13px] text-s-ink-2">No checks ran, so nothing confirms these changes work.</p>}
+          {fix && (
+            <button type="button" onClick={() => onAskFix!(fix)} className={cn(secondary, "mt-2")} title="Fills the prompt box with what the checks found, for you to edit and send">
+              <Wrench className="h-3.5 w-3.5" aria-hidden /> Ask the agent to fix these
+            </button>
+          )}
         </div>
       )}
 

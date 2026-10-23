@@ -103,6 +103,8 @@ export interface ServerCheck {
   state: "running" | "exited" | "timeout";
   http: number;
   at: string;
+  /** The likely cause when it didn't start (a missing dependency, a blocked download, a port in use). */
+  note?: string;
 }
 
 /** The latest browser check of the running site. */
@@ -112,6 +114,8 @@ export interface PreviewCheckRecord {
   problems: string[];
   warnings: string[];
   checkedAt: string;
+  /** The sizes it was opened at, e.g. "desktop 1280px". Older records don't have them (desktop and phone). */
+  sizes?: string[];
 }
 
 /** The latest production build (a build script, type check or linter run as a command). */
@@ -227,7 +231,7 @@ export interface CheckItem {
  * What people see a task as, worked out from its status and its evidence —
  * never from the agent's own words. See taskState for the exact rules.
  */
-export const TASK_STATES = ["queued", "running", "waiting", "verifying", "verified", "warnings", "unverified", "failed", "cancelled"] as const;
+export const TASK_STATES = ["queued", "running", "waiting", "verifying", "verified", "checked", "warnings", "unverified", "failed", "cancelled"] as const;
 export type TaskState = (typeof TASK_STATES)[number];
 
 export interface RunView {
