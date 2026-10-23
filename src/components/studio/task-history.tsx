@@ -27,8 +27,10 @@ const STATE_ICON: Record<TaskState, { icon: typeof ShieldCheck; tone: string }> 
 const usd = (n: number) => (n < 0.01 ? "under $0.01" : `$${n.toFixed(2)}`);
 
 /** Where a task's buttons go: its record in the project, or a new task there that continues it. */
-export function taskLinks(t: Pick<TaskSummary, "id" | "projectId" | "continuation">): { open: string; next: string } {
-  return { open: `/code/${t.projectId}?run=${t.id}`, next: t.continuation.kind === "resume" ? `/code/${t.projectId}?run=${t.id}` : `/code/${t.projectId}?continue=${t.id}` };
+export function taskLinks(t: Pick<TaskSummary, "id" | "projectId" | "continuation"> & { pair?: boolean }): { open: string; next: string } {
+  const base = `/${t.pair ? "pair" : "code"}/${t.projectId}`;
+  // A pair task is continued from its own panel ("Request revisions"), which starts a new pair task with its record.
+  return { open: `${base}?run=${t.id}`, next: t.continuation.kind === "resume" || t.pair ? `${base}?run=${t.id}` : `${base}?continue=${t.id}` };
 }
 
 type Page = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; tasks: TaskSummary[]; nextOffset: number | null; loadingMore?: boolean };
@@ -254,6 +256,7 @@ export function TaskRow({ task: t, onDelete }: { task: TaskSummary; onDelete: ()
             {t.title}
           </Link>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12.5px] text-s-ink-3">
+            {t.pair && <span className="rounded-full border border-s-line px-1.5 text-[11px] text-s-ink-2">Pair</span>}
             <span className={cn("font-medium", style.tone)}>{info.label}</span>
             <span aria-hidden>·</span>
             <span className="max-w-[220px] truncate" title={`Project: ${t.projectName}`}>

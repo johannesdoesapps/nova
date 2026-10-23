@@ -1176,7 +1176,7 @@ const LIMIT_TEXT: Record<LimitReason, { title: (p: { steps: number }) => string;
   repeat: { title: () => "The agent is repeating itself", body: "It asked for the same actions three times in a row. Let it carry on with a different approach, or stop.", go: "Let it carry on" },
 };
 
-function PendingCard({
+export function PendingCard({
   run,
   computerOn,
   onRespond,

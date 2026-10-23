@@ -2,6 +2,7 @@ import "server-only";
 import { ApiError, requireUuid } from "@/lib/http";
 import { redactSecrets } from "@/lib/usage";
 import { dbError, type Authed } from "../server";
+import type { PairState } from "../pair/protocol";
 import type { TranscriptMessage } from "./protocol";
 import type { Checkpoint } from "./tools";
 import {
@@ -51,12 +52,14 @@ export interface RunRow {
   recent: string[] | null;
   last_edit_at: string | null;
   report: RunReport | null;
+  /** Pair coding (two agents): its state; null for an ordinary task. */
+  pair?: PairState | null;
   created_at: string;
   updated_at: string;
 }
 
 const COMMON_COLS =
-  "id, project_id, request, status, options, plan, pending, summary, error, steps, step_limit, locked_until, token_budget, usage, active_ms, time_limit_ms, tests, checks, recent, last_edit_at, report, created_at, updated_at";
+  "id, project_id, request, status, options, plan, pending, summary, error, steps, step_limit, locked_until, token_budget, usage, active_ms, time_limit_ms, tests, checks, recent, last_edit_at, report, pair, created_at, updated_at";
 const RUN_COLS = `${COMMON_COLS}, transcript`;
 const LIST_COLS = COMMON_COLS;
 
@@ -93,6 +96,7 @@ export function toRunView(r: Omit<RunRow, "transcript"> & { transcript?: unknown
     tests: r.tests,
     checks: runChecks(r),
     report: r.report,
+    pair: r.pair ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     version: runVersion(r),
@@ -100,10 +104,17 @@ export function toRunView(r: Omit<RunRow, "transcript"> & { transcript?: unknown
   };
 }
 
-export async function createRun(auth: Authed, input: { projectId: string; request: string; options: RunOptions; stepLimit: number }): Promise<RunRow> {
+export async function createRun(auth: Authed, input: { projectId: string; request: string; options: RunOptions; stepLimit: number; pair?: PairState }): Promise<RunRow> {
   const { data, error } = await auth.supabase
     .from("code_agent_runs")
-    .insert({ project_id: input.projectId, request: input.request, status: input.options.approvePlans ? "planning" : "running", options: input.options, step_limit: input.stepLimit })
+    .insert({
+      project_id: input.projectId,
+      request: input.request,
+      status: input.options.approvePlans || input.pair ? "planning" : "running",
+      options: input.options,
+      step_limit: input.stepLimit,
+      ...(input.pair ? { pair: input.pair } : {}),
+    })
     .select(RUN_COLS)
     .single();
   if (error) throw dbError(error, "code.agent.create");
@@ -159,10 +170,11 @@ export async function listRuns(auth: Authed, projectId: string, limit = 30): Pro
  */
 export async function listTasks(
   auth: Authed,
-  o: { statuses?: RunStatus[]; states?: string[]; pattern?: string | null; projectId?: string | null; sort: "activity" | "newest" | "oldest"; offset: number; limit: number },
+  o: { statuses?: RunStatus[]; states?: string[]; pattern?: string | null; projectId?: string | null; pairOnly?: boolean; sort: "activity" | "newest" | "oldest"; offset: number; limit: number },
 ): Promise<{ rows: (RunRow & { project: { name: string } | null })[]; more: boolean }> {
   let q = auth.supabase.from("code_agent_runs").select(`${LIST_COLS}, project:code_projects(name)`).eq("user_id", auth.user.id);
   if (o.projectId) q = q.eq("project_id", requireUuid(o.projectId));
+  if (o.pairOnly) q = q.not("pair", "is", null);
   if (o.statuses?.length) q = q.in("status", o.statuses);
   if (o.states?.length) q = q.in("report->>state", o.states);
   if (o.pattern) q = q.or(`request.ilike.${o.pattern},summary.ilike.${o.pattern}`);
@@ -228,6 +240,7 @@ export type RunPatch = Partial<
     | "recent"
     | "last_edit_at"
     | "report"
+    | "pair"
   >
 >;
 

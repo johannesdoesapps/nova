@@ -44,6 +44,8 @@ export interface RunOptions {
   attachments?: { texts: number; images: number };
   /** A finished task in the same project this one continues (its record is given to the agent; nothing is replayed). */
   continueFrom?: string;
+  /** Pair coding: two agents (an Architect and a Reviewer) with these settings. */
+  pair?: import("../pair/protocol").PairSettings;
 }
 
 export const DEFAULT_OPTIONS: RunOptions = { modelId: null, approvePlans: true, reviewEdits: false, commands: "safe", readOnly: false };
@@ -257,6 +259,8 @@ export interface RunView {
   tests: RunTests | null;
   checks: RunChecks;
   report: RunReport | null;
+  /** Pair coding (an Architect and a Reviewer): its state; null for an ordinary task. */
+  pair: import("../pair/protocol").PairState | null;
   createdAt: string;
   updatedAt: string;
   /** Changes whenever the run is saved or a step takes or releases it; the page sends it back so an unchanged run isn't sent again. */

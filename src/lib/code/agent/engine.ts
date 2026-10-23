@@ -15,6 +15,7 @@ import type { FileChange, ProjectFile, ProjectSummary } from "../projects";
 import { summarizeCheck } from "../preview-check";
 import { checksSummary } from "./verdict";
 import { taskTitle } from "./history";
+import { pairRespond, pairStep } from "../pair/engine";
 import { describeStart, PREVIEW_START_MS, runPreviewCheck, startPreview } from "../preview";
 import { applyFileChanges, getFiles, getProjectRow, optionalBox, setRunCommand, syncBack, type Authed } from "../server";
 import { claimSync, killJob, readJob, removeFromWorkspace, startJob, writeToWorkspace, type WorkspaceBox } from "../workspace";
@@ -138,7 +139,7 @@ const TOKEN_BUDGET_INCREMENT = 300_000;
 const TIME_LIMIT_INCREMENT = 15 * 60_000;
 const TEST_ATTEMPT_INCREMENT = 2;
 /** Model calls that fail in a row (busy, timed out, unreachable) before the run stops. */
-const MAX_MODEL_FAILURES = 3;
+export const MAX_MODEL_FAILURES = 3;
 /** Identical steps in a row before the run stops to ask. */
 const REPEAT_LIMIT = 3;
 
@@ -224,7 +225,7 @@ async function mirror(box: WorkspaceBox | null, changes: FileChange[]) {
 }
 
 /** Save changes to the project, copy them to the running computer, and record them for the run. */
-async function saveChanges(auth: Authed, runId: string, projectId: string, changes: FileChange[]) {
+export async function saveChanges(auth: Authed, runId: string, projectId: string, changes: FileChange[]) {
   if (!changes.length) return;
   await applyFileChanges(
     auth,
@@ -236,7 +237,7 @@ async function saveChanges(auth: Authed, runId: string, projectId: string, chang
 }
 
 /** Run a command in the project's computer, wait for it, and copy back the files it changed. */
-async function execCommand(auth: Authed, runId: string, projectId: string, command: string): Promise<CommandOutcome> {
+export async function execCommand(auth: Authed, runId: string, projectId: string, command: string): Promise<CommandOutcome> {
   const box = await optionalBox(auth, projectId);
   if (!box) throw new ApiError("conflict", "The project's computer isn't running.", { scope: "workspace_stopped" });
   const before = await getFiles(auth, projectId);
@@ -476,7 +477,7 @@ export interface StepResult {
 }
 
 /** Finish a step: save the run unless the user stopped it meanwhile, and write the report when it ended. */
-async function finishStep(auth: Authed, runId: string, patch: RunPatch, unresolved: string[] = [], skipped: SkippedCheck[] = [], failure?: FailureKind): Promise<RunRow> {
+export async function finishStep(auth: Authed, runId: string, patch: RunPatch, unresolved: string[] = [], skipped: SkippedCheck[] = [], failure?: FailureKind): Promise<RunRow> {
   let row = await updateRunIfNotCancelled(auth, runId, { ...patch, locked_until: null });
   if (!row) {
     // The user's stop stands: the step's records are kept, its status, waiting state and summary aren't.
@@ -489,7 +490,7 @@ async function finishStep(auth: Authed, runId: string, patch: RunPatch, unresolv
   return row;
 }
 
-const pauseFor = (reason: LimitReason, steps: number, detail: string): RunPatch => ({ status: "needs_input", pending: { kind: "limit", steps, reason, detail } });
+export const pauseFor = (reason: LimitReason, steps: number, detail: string): RunPatch => ({ status: "needs_input", pending: { kind: "limit", steps, reason, detail } });
 
 const FORMAT_RETRY = "FORMAT PROBLEM:";
 
@@ -529,6 +530,8 @@ export async function stepRun(req: Request, auth: Authed, runId: string, opts: {
 }
 
 async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now() + STEP_BUDGET_MS, clock: () => number = Date.now): Promise<RunRow> {
+  // Pair coding: two agents take turns (pair/engine.ts).
+  if (runOptions(row).pair) return pairStep(req, auth, row, deadline, clock);
   // The agent has finished: Orbis runs the checks itself, one per step, before the run may end.
   if (runChecks(row).verify) return verifyStep(auth, row, deadline);
   const stepStarted = Date.now();
@@ -995,6 +998,7 @@ async function respond(auth: Authed, row: RunRow, input: RespondInput): Promise<
   const pending = row.pending;
   const text = input.text?.trim() ?? "";
   if (input.decision === "stop") return cancelLocked(auth, row);
+  if (row.pair) return pairRespond(auth, row, input);
   if (!pending) throw new ApiError("conflict", "This run isn't waiting for an answer.");
   let transcript = row.transcript ?? [];
   const working = workingStatus(row);

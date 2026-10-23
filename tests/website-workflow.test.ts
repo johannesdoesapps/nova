@@ -142,6 +142,7 @@ const view = (r: RunReport): RunView =>
     updatedAt: AT,
     version: `${AT}|`,
     stepStartedAt: null,
+    pair: null,
   }) as RunView;
 const props = { onShowChanges: () => {}, onOpenFile: () => {}, onRerun: async () => {}, onUndo: async () => {} };
 

@@ -30,7 +30,26 @@ const MODEL: ModelInfo = {
 const JSON_MODEL: ModelInfo = { ...MODEL, id: "deepseek-flash", provider: "deepseek", providerModelId: "deepseek-flash", displayName: "DeepSeek Flash", inputPrice: null, outputPrice: null };
 
 type Turn = Partial<ToolTurnResult> | ((p: ToolTurnParams) => Partial<ToolTurnResult> | Promise<Partial<ToolTurnResult>>);
-const script: { turns: Turn[]; seen: ToolTurnParams[]; json: string[]; model: ModelInfo; needs?: string[] } = { turns: [], seen: [], json: [], model: MODEL };
+const script: { turns: Turn[]; seen: ToolTurnParams[]; json: string[]; model: ModelInfo; needs?: string[]; requested: string[]; streamed: { messages: { role: string; content: string }[] }[]; replies: (string | Error | ((p: { messages: { role: string; content: string }[] }) => string))[] } = {
+  turns: [],
+  seen: [],
+  json: [],
+  model: MODEL,
+  requested: [],
+  streamed: [],
+  replies: [],
+};
+/** Pair coding's streamed replies, in order (an Error is thrown instead). */
+async function* stream(p: { messages: { role: string; content: string }[] }) {
+  script.streamed.push(structuredClone(p));
+  const next = script.replies.shift();
+  if (next === undefined) throw new Error("the script ran out of pair replies");
+  if (next instanceof Error) throw next;
+  const text = typeof next === "function" ? next(p) : next;
+  yield { type: "delta" as const, text: text.slice(0, Math.ceil(text.length / 2)) };
+  yield { type: "delta" as const, text: text.slice(Math.ceil(text.length / 2)) };
+  yield { type: "usage" as const, usage: { inputTokens: 800, outputTokens: 200, estimated: false } };
+}
 const call = (name: string, args: Record<string, unknown> = {}, id = `toolu_${Math.random().toString(36).slice(2, 8)}`) => ({ id, name, args });
 const turn = (text: string, ...calls: ReturnType<typeof call>[]): Partial<ToolTurnResult> => ({ text, calls, stop: calls.length ? "tool_use" : "end_turn" });
 
@@ -46,9 +65,10 @@ const toolTurn = vi.fn(async (p: ToolTurnParams): Promise<ToolTurnResult> => {
 const generate = vi.fn(async () => ({ text: script.json.shift() ?? "", usage: { inputTokens: 500, outputTokens: 50, estimated: false }, simulated: false }));
 
 vi.mock("@/lib/ai", () => ({
-  getProvider: (id: string) => (id === "anthropic" ? { id, toolTurn, generate } : { id, generate }),
-  resolveModelChoice: async (_id: string, ctx: { needs?: string[] }) => {
+  getProvider: (id: string) => (id === "anthropic" ? { id, toolTurn, generate, stream } : { id, generate, stream }),
+  resolveModelChoice: async (id: string, ctx: { needs?: string[] }) => {
     script.needs = ctx.needs ?? [];
+    script.requested.push(id);
     return { model: script.model, routing: null };
   },
   withTimeout: (ms: number) => {
@@ -271,7 +291,7 @@ vi.mock("@/lib/code/memory-store", () => ({
 }));
 
 const { stepRun, respondToRun, cancelRun, addUsage, reverifyRun } = await import("@/lib/code/agent/engine");
-const { taskState, checklistOf, fixRequest } = await import("@/lib/code/agent/verdict");
+const { taskState, checklistOf, fixRequest, assessReport } = await import("@/lib/code/agent/verdict");
 const { toRunView } = await import("@/lib/code/agent/runs");
 const { scrub } = await import("@/lib/code/agent/runs");
 const real = await vi.importActual<typeof import("@/lib/code/agent/runs")>("@/lib/code/agent/runs");
@@ -325,6 +345,9 @@ beforeEach(() => {
   script.seen = [];
   script.json = [];
   script.model = MODEL;
+  script.requested = [];
+  script.streamed = [];
+  script.replies = [];
   toolTurn.mockClear();
   timeouts.length = 0;
   generate.mockClear();
@@ -1302,5 +1325,216 @@ describe("continuing a finished task", () => {
     });
     await stepRun(req(), auth, id);
     expect(events(id).some((e) => e.title.startsWith("The task this was meant to continue no longer exists"))).toBe(true);
+  });
+});
+
+const { newPairState } = await import("@/lib/code/pair/protocol");
+const { addPairNote } = await import("@/lib/code/pair/engine");
+
+describe("pair coding: an Architect and a Reviewer", () => {
+  const settings = { architect: "model-a", reviewer: "model-b", maxRounds: 3, approvePlan: false, runTests: true };
+  const pairRun = (o: Partial<typeof settings> = {}) =>
+    newRun({
+      status: "planning",
+      request: "Write sum(a, b) in sum.js that adds two numbers, with tests",
+      options: { approvePlans: false, reviewEdits: false, commands: "safe", modelId: null, pair: { ...settings, ...o } },
+      pair: newPairState({ ...settings, ...o }),
+      step_limit: 30,
+    });
+  const until = async (id: string, stop = (s: string) => ["completed", "failed", "cancelled", "awaiting_approval", "needs_input"].includes(s)) => {
+    for (let i = 0; i < 25 && !stop(run(id).status); i++) await stepRun(req(), auth, id);
+    return run(id);
+  };
+  const J = (o: unknown) => JSON.stringify(o);
+  const plan = (o: Record<string, unknown> = {}) => J({ summary: "A sum function with tests", architecture: "One module and a test", files: [{ path: "sum.js", purpose: "the function" }], tasks: ["Write sum", "Test it"], decisions: [{ decision: "Plain ES modules", why: "No build step needed" }], testCommand: "npm test", runCommand: null, ...o });
+  const code = (content: string, o: Record<string, unknown> = {}) => J({ notes: "Wrote sum.", files: [{ path: "sum.js", content }], delete: [], responses: [], ...o });
+  const review = (o: Record<string, unknown>) => J({ verdict: "changes_requested", summary: "See findings.", findings: [], resolved: [], stillOpen: [], testAssessment: "", ...o });
+  const F1 = { severity: "critical", category: "correctness", file: "sum.js", line: 1, title: "sum subtracts", evidence: "sum.js line 1: `return a - b`, and npm test fails: 1 failed", suggestion: "return a + b" };
+  const final = (o: Record<string, unknown> = {}) => J({ summary: "sum adds two numbers; tests pass.", howItWorks: "One function.", setup: ["npm install"], runCommand: null, testCommand: "npm test", knownIssues: [], ...o });
+
+  it("plans, implements, tests, reviews with evidence, revises, verifies, and finishes with the tests passing", async () => {
+    const id = pairRun();
+    script.replies.push(
+      plan(),
+      code("export function sum(a, b) {\n  return a - b;\n}\n"),
+      (p) => {
+        expect(p.messages[0]!.content).toContain("You are the Reviewer");
+        expect(p.messages[1]!.content).toContain("failed (exit code 1)");
+        return review({ findings: [F1] });
+      },
+      (p) => {
+        expect(p.messages[0]!.content).toContain("You are the Architect");
+        expect(p.messages[1]!.content).toContain("F1 [critical, correctness] sum subtracts");
+        return code("export const sum = (a, b) => a + b;\n", { responses: [{ id: "F1", decision: "accept", reason: "Right: the operator was wrong." }] });
+      },
+      review({ verdict: "approve", resolved: ["F1"], testAssessment: "npm test passes." }),
+      final(),
+    );
+    const r = await until(id);
+    expect(r.status).toBe("completed");
+    expect(files.get("sum.js")).toBe("export const sum = (a, b) => a + b;\n");
+    // Each agent asked for its own model.
+    expect(script.requested.filter((x) => x === "model-a").length).toBeGreaterThanOrEqual(4);
+    expect(script.requested).toContain("model-b");
+    // Tests ran in the project's computer after each version: failed, then passed.
+    expect(commands).toEqual(["npm test", "npm test"]);
+    expect(r.pair!.tests.map((t) => t.passed)).toEqual([false, true]);
+    expect(r.pair!.findings).toMatchObject([{ id: "F1", status: "fixed", response: { decision: "accept" }, closedRound: 2 }]);
+    expect(r.pair!.rounds.map((x) => x.verdict)).toEqual(["changes_requested", "approve"]);
+    // Every change is recorded for review and undo, with a checkpoint before each version.
+    expect(db.changes.filter((c) => c.runId === id).map((c) => c.path)).toEqual(["sum.js"]);
+    expect(db.checkpoints.filter((c) => c.runId === id)).toHaveLength(2);
+    // The report comes from the records: tests passed after the last change.
+    expect(taskState(toRunView(r))).toBe("verified");
+    expect(r.report).toMatchObject({ summary: "sum adds two numbers; tests pass.", unresolved: [] });
+    const titles = events(id).map((e) => e.title);
+    expect(titles[0]).toContain("Pair session started");
+    expect(titles.some((t) => t.startsWith("Reviewer, round 1: changes requested — 1 new finding"))).toBe(true);
+    expect(titles.some((t) => t.startsWith("Architect answered the review: 1 accepted, 0 rejected"))).toBe(true);
+    expect(r.pair!.live).toBeNull();
+  });
+
+  it("lets the Architect reject a finding with a reason, and keeps it open when the Reviewer disputes it", async () => {
+    const id = pairRun({ runTests: false, maxRounds: 3 });
+    const style = { ...F1, severity: "major", category: "readability", title: "use a function declaration", evidence: "sum.js line 1 uses an arrow function" };
+    script.replies.push(
+      plan(),
+      code("export const sum = (a, b) => a + b;\n"),
+      review({ findings: [style] }),
+      code("export const sum = (a, b) => a + b;\n", { responses: [{ id: "F1", decision: "reject", reason: "Arrow functions are this project's style; behaviour is identical." }] }),
+      (p) => {
+        expect(p.messages[1]!.content).toContain("Architect rejected: Arrow functions are this project's style");
+        return review({ verdict: "approve", stillOpen: [], resolved: [] });
+      },
+      final(),
+    );
+    const r = await until(id);
+    expect(r.status).toBe("completed");
+    expect(r.pair!.findings[0]).toMatchObject({ status: "rejected", response: { decision: "reject" } });
+    expect(commands).toEqual([]);
+  });
+
+  it("stops repeating unsuccessful revisions and lets the user accept the result with the issue still open", async () => {
+    const id = pairRun({ runTests: false, maxRounds: 5 });
+    const same = review({ findings: [], stillOpen: ["F1"] });
+    script.replies.push(
+      plan(),
+      code("export const sum = (a, b) => a - b;\n"),
+      review({ findings: [F1] }),
+      code("export const sum = (a, b) => a - b; // fixed\n", { responses: [{ id: "F1", decision: "accept", reason: "Fixed." }] }),
+      same,
+      code("export const sum = (a, b) => a - b; // fixed again\n", { responses: [{ id: "F1", decision: "accept", reason: "Fixed now." }] }),
+      same,
+    );
+    let r = await until(id);
+    expect(r.status).toBe("needs_input");
+    expect(r.pending).toMatchObject({ kind: "question", options: ["Accept the result as it is", "One more round"] });
+    expect(r.pending && r.pending.kind === "question" && r.pending.question).toContain("stopped instead of trying the same thing again");
+    expect(r.pair!.rounds).toHaveLength(3);
+    await respondToRun(auth, id, { decision: "answer", text: "Accept the result as it is" });
+    script.replies.push((p) => {
+      expect(p.messages[1]!.content).toContain("Findings still open");
+      return final({ knownIssues: ["F1: sum still subtracts"] });
+    });
+    r = await until(id);
+    expect(r.status).toBe("completed");
+    expect(r.report!.unresolved).toEqual(["F1 [critical] sum subtracts"]);
+    // No checks ran (tests were off), so it isn't verified, and the open problem is listed.
+    expect(taskState(toRunView(r))).toBe("unverified");
+    expect(assessReport(r.report!).reasons).toContain("The agent left 1 problem open.");
+  });
+
+  it("waits for the user to approve the plan, and plans again with their changes", async () => {
+    const id = pairRun({ approvePlan: true, runTests: false });
+    script.replies.push(plan());
+    let r = await until(id);
+    expect(r).toMatchObject({ status: "awaiting_approval", pending: { kind: "plan" } });
+    expect(files.get("sum.js")).toContain("a - b");
+    await respondToRun(auth, id, { decision: "reject", text: "Use TypeScript" });
+    script.replies.push((p) => {
+      expect(p.messages[1]!.content).toContain("Change the plan: Use TypeScript");
+      return plan({ files: [{ path: "sum.ts", purpose: "the function" }] });
+    });
+    r = await until(id);
+    expect(r.status).toBe("awaiting_approval");
+    await respondToRun(auth, id, { decision: "approve" });
+    expect(run(id).status).toBe("running");
+    expect(run(id).pair!.phase).toBe("implement");
+  });
+
+  it("gives the user's instructions to the next agent once", async () => {
+    const id = pairRun({ runTests: false, approvePlan: true });
+    script.replies.push(plan());
+    await until(id);
+    await addPairNote(auth, run(id), "Add JSDoc comments");
+    await respondToRun(auth, id, { decision: "approve" });
+    script.replies.push((p) => {
+      expect(p.messages[1]!.content).toContain("New instructions from the user (follow them):\n- Add JSDoc comments");
+      return code("/** Adds. */\nexport const sum = (a, b) => a + b;\n");
+    });
+    script.replies.push((p) => {
+      expect(p.messages[1]!.content).not.toContain("Add JSDoc comments");
+      return review({ verdict: "approve" });
+    });
+    script.replies.push(final());
+    expect((await until(id)).status).toBe("completed");
+  });
+
+  it("never writes outside the project or secret files", async () => {
+    const id = pairRun({ runTests: false });
+    script.replies.push(
+      plan(),
+      J({ notes: "", files: [{ path: "../escape.js", content: "x" }, { path: ".env", content: "KEY=1" }, { path: "ok.js", content: "ok" }], delete: ["/etc/passwd"], responses: [] }),
+      review({ verdict: "approve" }),
+      final(),
+    );
+    const r = await until(id);
+    expect(r.status).toBe("completed");
+    expect([...files.keys()].sort()).toEqual(["ok.js", "package.json", "sum.js", "sum.test.js"]);
+    const errors = events(id).filter((e) => e.kind === "error").map((e) => e.title);
+    expect(errors).toEqual(["Not written: ../escape.js — not a plain path inside the project", "Not written: .env — secret files (like .env) can't be written by the agents", "Not written: /etc/passwd — not a plain path inside the project"]);
+  });
+
+  it("asks again after one unreadable reply, and stops after two", async () => {
+    const id = pairRun({ runTests: false });
+    script.replies.push("not json", plan(), "still not json", "{bad");
+    const r = await until(id);
+    expect(r.status).toBe("failed");
+    expect(r.error).toContain("Architect's replies couldn't be used twice in a row");
+    expect(r.report).toMatchObject({ failure: "unreadable_replies" });
+  });
+
+  it("stops the task when the user presses Stop while an agent is answering, without writing its files", async () => {
+    const id = pairRun({ runTests: false });
+    script.replies.push(plan(), () => {
+      db.runs.get(id)!.status = "cancelled";
+      return code("export const sum = () => 'changed';\n");
+    });
+    await until(id);
+    expect(run(id).status).toBe("cancelled");
+    expect(files.get("sum.js")).toContain("a - b");
+  });
+
+  it("asks before running a test command that isn't clearly safe, and runs it once approved", async () => {
+    const id = pairRun();
+    script.replies.push(plan({ testCommand: "make check" }), code("export const sum = (a, b) => a + b;\n"));
+    let r = await until(id);
+    expect(r).toMatchObject({ status: "awaiting_approval", pending: { kind: "command", command: "make check" } });
+    expect(commands).toEqual([]);
+    script.replies.push(review({ verdict: "approve" }), final());
+    await respondToRun(auth, id, { decision: "approve" });
+    expect(commands).toEqual(["make check"]);
+    r = await until(id);
+    expect(r.status).toBe("completed");
+  });
+
+  it("stops after an agent's provider fails three times in a row, and says which agent", async () => {
+    const id = pairRun({ runTests: false });
+    script.replies.push(new Error("529 overloaded"), new Error("529 overloaded"), new Error("529 overloaded"));
+    await expect(stepRun(req(), auth, id)).rejects.toMatchObject({ code: "upstream_error" });
+    await expect(stepRun(req(), auth, id)).rejects.toMatchObject({ code: "upstream_error" });
+    const r = await stepRun(req(), auth, id);
+    expect(r.run.status).toBe("failed");
+    expect(r.run.error).toContain("The Architect (Claude Haiku 5.5) failed 3 times in a row");
   });
 });

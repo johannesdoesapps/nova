@@ -116,6 +116,8 @@ export interface TaskSummary {
   costUsd: number | null;
   filesChanged: number;
   continuation: Continuation;
+  /** Pair coding (an Architect and a Reviewer): opened in Pair Coding rather than Code. */
+  pair: boolean;
 }
 
 export function toTaskSummary(run: RunView, projectName: string, filesChanged: number): TaskSummary {
@@ -136,5 +138,6 @@ export function toTaskSummary(run: RunView, projectName: string, filesChanged: n
     costUsd: run.report?.usage.costUsd ?? run.usage.costUsd ?? null,
     filesChanged,
     continuation: continuation(run.status),
+    pair: !!run.options.pair,
   };
 }

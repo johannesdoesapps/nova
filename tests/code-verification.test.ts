@@ -73,6 +73,7 @@ function view(o: Partial<RunView> = {}): RunView {
     updatedAt: AFTER,
     version: `${AFTER}|`,
     stepStartedAt: null,
+    pair: null,
     ...o,
   };
 }

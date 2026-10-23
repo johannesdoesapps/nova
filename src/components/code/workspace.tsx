@@ -50,6 +50,7 @@ import type { RunView } from "@/lib/code/agent/types";
 import { EXAMPLE_PROJECT, validProjectPath, type FileChange, type ProjectSummary } from "@/lib/code/projects";
 import { cn } from "@/lib/utils";
 import { AgentPanel, SessionsList } from "./agent-panel";
+import { PairPanel } from "./pair-panel";
 import { api, CodeApiError, plainText, post, takeBuildRequest, type AiResult, type BuildRequest, type Allowance, type JobRead, type ProjectData, type Session } from "./api";
 import { ChangesPanel } from "./changes-panel";
 import { MemoryPanel } from "./memory-panel";
@@ -213,7 +214,8 @@ function buildTree(paths: string[]): Node[] {
   return sort(root.children!);
 }
 
-export function CodeWorkspace({ id }: { id: string }) {
+/** A code project: files, editor, terminal, preview and changes, with the coding agent — or, with `pair`, two agents (pair coding). */
+export function CodeWorkspace({ id, pair = false }: { id: string; pair?: boolean }) {
   const { theme } = useStudio();
   const catalog = useCatalog();
   const wide = useWide();
@@ -1055,7 +1057,23 @@ export function CodeWorkspace({ id }: { id: string }) {
     </div>
   );
 
-  const agentView = (
+  const agentView = pair ? (
+    <PairPanel
+      key={select?.n ?? 0}
+      projectId={id}
+      initialRunId={select ? select.runId : undefined}
+      computerOn={running}
+      startComputer={startComputer}
+      onFilesChanged={reloadFiles}
+      onShowChanges={showChanges}
+      onOpenFile={openFile}
+      onOpenPreview={() => {
+        showPreview();
+        void checkSite();
+      }}
+      onRunChange={onRunChange}
+    />
+  ) : (
     <AgentPanel
       key={select?.n ?? 0}
       projectId={id}
@@ -1099,7 +1117,7 @@ export function CodeWorkspace({ id }: { id: string }) {
     { id: "terminal", label: "Terminal", icon: <TerminalIcon className="h-4 w-4" />, hint: "Run commands on the project's computer" },
     { id: "ai", label: "Quick edit", icon: <Sparkles className="h-4 w-4" />, hint: "One-shot AI edit you accept or reject (advanced)" },
   ];
-  const PANES: { id: Pane; label: string }[] = [{ id: "agent", label: "Agent" }, { id: "sessions", label: "Sessions" }, { id: "files", label: "Files" }, ...SIDES.map((x) => ({ id: x.id as Pane, label: x.label }))];
+  const PANES: { id: Pane; label: string }[] = [{ id: "agent", label: pair ? "Pair" : "Agent" }, { id: "sessions", label: "Sessions" }, { id: "files", label: "Files" }, ...SIDES.map((x) => ({ id: x.id as Pane, label: x.label }))];
 
   const leftPanel = (
     <div className="flex h-full min-h-0 flex-col">

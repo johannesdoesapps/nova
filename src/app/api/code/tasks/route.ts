@@ -21,7 +21,7 @@ export async function GET(req: Request) {
     const project = projectParam ? requireUuid(projectParam) : null;
     const offset = Math.min(10_000, Math.max(0, Number(sp.get("offset") ?? 0) || 0));
     const auth = await codeContext("code-tasks", 120);
-    const { rows, more } = await listTasks(auth, { ...filterQuery(filter), pattern: searchPattern(sp.get("q")), projectId: project, sort, offset, limit: PAGE });
+    const { rows, more } = await listTasks(auth, { ...filterQuery(filter), pattern: searchPattern(sp.get("q")), projectId: project, pairOnly: sp.get("kind") === "pair", sort, offset, limit: PAGE });
     const counts = await changeCounts(
       auth,
       rows.map((r) => r.id),
