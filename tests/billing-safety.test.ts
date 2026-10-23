@@ -116,3 +116,49 @@ describe("owner alerts", () => {
     }
   });
 });
+
+import { fitsMonthlyCap, topupConsentText } from "@/lib/billing/topup";
+import { bestStatus } from "@/lib/entitlements";
+import { hashInviteToken, newInviteToken, teamErrorMessage } from "@/lib/team";
+
+describe("automatic top-ups", () => {
+  it("never go past the monthly limit, and need one", () => {
+    expect(fitsMonthlyCap(0, 10, 30)).toBe(true);
+    expect(fitsMonthlyCap(20, 10, 30)).toBe(true);
+    expect(fitsMonthlyCap(25, 10, 30)).toBe(false);
+    expect(fitsMonthlyCap(0, 10, 0)).toBe(false);
+  });
+  it("state the amount, the trigger, the monthly limit and how to stop", () => {
+    const t = topupConsentText({ units: 500, priceUsd: 10, belowUnits: 100, monthlyCapUsd: 30 });
+    expect(t).toContain("$10.00");
+    expect(t).toContain("500 units");
+    expect(t).toContain("below 100 units");
+    expect(t).toContain("$30.00 per calendar month");
+    expect(t).toMatch(/turn this off at any time/);
+  });
+});
+
+describe("team plan", () => {
+  const team = { plan: "max" as const, status: "active", billing_interval: "month", current_period_start: "2026-10-01T00:00:00Z" };
+  it("gives members the team's plan when they have no paid plan of their own", () => {
+    expect(bestStatus(null, team, 3).plan).toBe("max");
+    expect(bestStatus({ plan: "pro", status: "canceled" }, team, 3).plan).toBe("max");
+  });
+  it("prefers the member's own paid plan", () => {
+    expect(bestStatus({ plan: "pro", status: "active" }, team, 3).plan).toBe("pro");
+  });
+  it("gives nothing when the team's subscription isn't active or is disputed", () => {
+    expect(bestStatus(null, { ...team, status: "canceled" }, 3).plan).toBe("free");
+    expect(bestStatus(null, { ...team, disputed: true }, 3).plan).toBe("free");
+  });
+  it("stores only a hash of invite codes", () => {
+    const { token, hash } = newInviteToken();
+    expect(token).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    expect(hash).toBe(hashInviteToken(token));
+    expect(hash).not.toContain(token);
+  });
+  it("passes on the database's own explanations only", () => {
+    expect(teamErrorMessage({ message: "All seats are in use. Add seats or remove someone first." }, "x")).toBe("All seats are in use. Add seats or remove someone first.");
+    expect(teamErrorMessage({ message: "duplicate key value violates unique constraint" }, "The team couldn't be created.")).toBe("The team couldn't be created.");
+  });
+});

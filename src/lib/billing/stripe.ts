@@ -119,6 +119,7 @@ export async function syncSubscription(stripe: Stripe, subscriptionId: string, u
   const db = serviceSupabase();
   if (!db) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
   const sub = await stripe.subscriptions.retrieve(subscriptionId);
+  if (sub.metadata?.kind === "team") return syncTeamSubscription(sub);
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
   let userId = (sub.metadata?.user_id as string | undefined) || userHint || null;
   if (!userId && customerId) {
@@ -136,13 +137,45 @@ export async function syncSubscription(stripe: Stripe, subscriptionId: string, u
   return "saved";
 }
 
-/** The Orbis user for a Stripe customer, from the stored subscription. */
+/** The Orbis user for a Stripe customer, from the stored subscription (for a team, its owner). */
 export async function userForCustomer(customer: string | { id: string } | null | undefined): Promise<string | null> {
   const id = typeof customer === "string" ? customer : customer?.id;
   const db = serviceSupabase();
   if (!id || !db) return null;
   const { data } = await db.from("subscriptions").select("user_id").eq("stripe_customer_id", id).maybeSingle();
-  return (data?.user_id as string | undefined) ?? null;
+  if (data?.user_id) return data.user_id as string;
+  const { data: team } = await db.from("teams").select("owner_id").eq("stripe_customer_id", id).limit(1).maybeSingle();
+  return (team?.owner_id as string | undefined) ?? null;
+}
+
+/**
+ * Store a team subscription on its team row: the plan, seats (the subscription's quantity), status and
+ * billing period. The team comes from the subscription's metadata, set at checkout. Idempotent.
+ */
+export async function syncTeamSubscription(sub: Stripe.Subscription): Promise<"saved" | "skipped"> {
+  const db = serviceSupabase();
+  if (!db) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
+  const teamId = sub.metadata?.team_id as string | undefined;
+  if (!teamId) return "skipped";
+  const base = subscriptionRow(sub, sub.metadata?.owner_id as string);
+  const item = sub.items?.data?.[0];
+  const { error } = await db
+    .from("teams")
+    .update({
+      plan: base.plan,
+      billing_interval: base.billing_interval,
+      seats: item?.quantity ?? 0,
+      status: base.status,
+      price_usd: base.price_usd,
+      current_period_start: base.current_period_start,
+      current_period_end: base.current_period_end,
+      cancel_at_period_end: base.cancel_at_period_end,
+      stripe_customer_id: base.stripe_customer_id,
+      stripe_subscription_id: sub.id,
+    })
+    .eq("id", teamId);
+  if (error) throw new Error(`Could not save team subscription: ${error.message}`);
+  return "saved";
 }
 
 export interface LedgerEntry {
@@ -233,6 +266,8 @@ export async function recordDispute(stripe: Stripe, dispute: Stripe.Dispute): Pr
     const stillOpen = (open ?? []).some((d) => d.id !== dispute.id && !DISPUTE_SETTLED_FOR_US.has(d.status as string));
     const { error: e2 } = await db.from("subscriptions").update({ disputed: disputed || stillOpen }).eq("user_id", userId);
     if (e2) throw new Error(`Could not update subscription: ${e2.message}`);
+    const customer = charge?.customer ? (typeof charge.customer === "string" ? charge.customer : charge.customer.id) : null;
+    if (customer) await db.from("teams").update({ disputed: disputed || stillOpen }).eq("stripe_customer_id", customer);
   }
   return { userId, disputed };
 }
@@ -256,7 +291,7 @@ export async function graceInfo(userId: string): Promise<{ plan: string; graceUn
  * bought extra usage shows without waiting for the webhook. Reads everything from Stripe; the webhook does the same
  * later and nothing is applied twice.
  */
-export async function applyCheckoutSession(stripe: Stripe, sessionId: string, userId: string): Promise<"subscription" | "credits" | "pending"> {
+export async function applyCheckoutSession(stripe: Stripe, sessionId: string, userId: string): Promise<"subscription" | "credits" | "topup" | "pending"> {
   const s = await stripe.checkout.sessions.retrieve(sessionId);
   const owner = s.client_reference_id ?? s.metadata?.user_id ?? null;
   if (owner !== userId) throw new Error("This checkout belongs to another account.");
@@ -268,6 +303,10 @@ export async function applyCheckoutSession(stripe: Stripe, sessionId: string, us
   if (s.mode === "payment" && s.metadata?.kind === "credits" && s.payment_status === "paid") {
     await addCredits(s);
     return "credits";
+  }
+  if (s.mode === "setup" && s.metadata?.kind === "topup_setup") {
+    const { completeTopupSetup } = await import("./topup");
+    return (await completeTopupSetup(stripe, s)) ? "topup" : "pending";
   }
   return "pending";
 }

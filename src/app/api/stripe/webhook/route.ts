@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { alertOwner } from "@/lib/alerts";
 import { addCredits, eventSeen, graceInfo, invoiceLedger, markEvent, recordDispute, recordLedger, refundLedger, stripeClient, syncSubscription, userForCustomer } from "@/lib/billing/stripe";
+import { completeTopupSetup, failTopup, grantTopup } from "@/lib/billing/topup";
 import { sendCustomerEmail } from "@/lib/email";
 import { serverEnv } from "@/lib/env";
 import { reportError } from "@/lib/observability";
@@ -44,6 +45,8 @@ export async function POST(req: Request) {
           if (user) await sendCustomerEmail(user, "welcome", subId, { plan: (await graceInfo(user)).plan });
         }
         // Extra usage: added once the payment has gone through (each session counts once).
+        // A card saved for automatic top-ups.
+        if (s.mode === "setup") await completeTopupSetup(stripe, s);
         if (s.mode === "payment" && s.metadata?.kind === "credits" && s.payment_status === "paid") await addCredits(s);
         break;
       }
@@ -67,6 +70,16 @@ export async function POST(req: Request) {
         const inv = event.data.object;
         const user = await userForCustomer(inv.customer as string | null);
         if (user && inv.id) await sendCustomerEmail(user, "payment_action_required", inv.id, { plan: (await graceInfo(user)).plan, url: inv.hosted_invoice_url ?? null });
+        break;
+      }
+      case "payment_intent.succeeded":
+      case "payment_intent.payment_failed": {
+        // Automatic top-ups are charged off-session; the result is applied here too (once per PaymentIntent).
+        const pi = event.data.object;
+        if (pi.metadata?.kind === "topup") {
+          if (event.type === "payment_intent.succeeded") await grantTopup(pi);
+          else await failTopup(pi);
+        }
         break;
       }
       case "charge.dispute.created":

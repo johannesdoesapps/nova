@@ -53,7 +53,7 @@ export async function getBilling(): Promise<BillingSettings> {
 
 async function resolve(auth: AuthContext & { mode: "authenticated" }): Promise<Entitlement> {
   const [admin, sub, billing] = await Promise.all([isAdmin(auth), subscriptionOf(auth), getBilling()]);
-  const s = paidStatus(sub.row, billing.paymentGraceDays);
+  const s = bestStatus(sub.own, sub.team, billing.paymentGraceDays);
   const base = { plan: s.plan, interval: s.interval, limits: planOf(billing, s.plan), billing, periodStart: s.periodStart, paymentIssue: s.issue };
   if (admin && serverEnv().adminsUnlimited) return { ...base, kind: "unlimited", reason: "admin", label: "admin_unlimited" };
   return { ...base, kind: "plan", label: `plan:${s.plan}` };
@@ -62,7 +62,7 @@ async function resolve(auth: AuthContext & { mode: "authenticated" }): Promise<E
 /** The user's plan: Pro or Max while that subscription is active or trialing (or in its grace period); everyone else is Free. */
 export async function userPlan(auth: AuthContext & { mode: "authenticated" }): Promise<PlanId> {
   const [sub, billing] = await Promise.all([subscriptionOf(auth), getBilling()]);
-  return paidStatus(sub.row, billing.paymentGraceDays).plan;
+  return bestStatus(sub.own, sub.team, billing.paymentGraceDays).plan;
 }
 
 export type SubscriptionStatusRow = { plan: PlanId; status: string; billing_interval?: string | null; current_period_start?: string | null; disputed?: boolean | null };
@@ -92,7 +92,25 @@ export function paidStatus(
   return { ...free, issue: null };
 }
 
-async function subscriptionOf(auth: AuthContext & { mode: "authenticated" }): Promise<{ row: SubscriptionStatusRow | null }> {
-  const { data } = await auth.supabase.from("subscriptions").select("*").eq("user_id", auth.user.id).maybeSingle();
-  return { row: (data as SubscriptionStatusRow | null) ?? null };
+/**
+ * The subscription that gives this user a plan: their own, or else their team's (each team member gets the
+ * team's plan with their own allowance). Their own wins when it is paid.
+ */
+async function subscriptionOf(auth: AuthContext & { mode: "authenticated" }): Promise<{ own: SubscriptionStatusRow | null; team: SubscriptionStatusRow | null }> {
+  const [{ data }, { data: membership }] = await Promise.all([
+    auth.supabase.from("subscriptions").select("*").eq("user_id", auth.user.id).maybeSingle(),
+    auth.supabase.from("team_members").select("team_id, teams(plan, status, billing_interval, current_period_start, disputed)").eq("user_id", auth.user.id).maybeSingle(),
+  ]);
+  const own = (data as SubscriptionStatusRow | null) ?? null;
+  const t = (membership as { teams?: SubscriptionStatusRow | SubscriptionStatusRow[] | null } | null)?.teams;
+  const team = (Array.isArray(t) ? t[0] : t) ?? null;
+  return { own, team };
+}
+
+/** The plan from the user's own subscription if it is paid, else from their team's; own payment issues show first. */
+export function bestStatus(own: SubscriptionStatusRow | null, team: SubscriptionStatusRow | null, graceDays: number, now = Date.now()): ReturnType<typeof paidStatus> {
+  const mine = paidStatus(own, graceDays, now);
+  if (mine.plan !== "free" || !team) return mine;
+  const theirs = paidStatus(team, graceDays, now);
+  return theirs.plan !== "free" ? theirs : mine.issue ? mine : theirs;
 }

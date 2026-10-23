@@ -19,7 +19,17 @@ export function emailConfigured(env: Record<string, string | undefined> = proces
 
 const site = () => (process.env.NEXT_PUBLIC_SITE_URL ?? "https://tryorbis.app").replace(/\/$/, "");
 
-export type CustomerEmailKind = "welcome" | "payment_failed" | "payment_action_required" | "usage_week_80" | "usage_week_100" | "usage_top_100" | "budget_100";
+export type CustomerEmailKind =
+  | "welcome"
+  | "payment_failed"
+  | "payment_action_required"
+  | "usage_week_80"
+  | "usage_week_100"
+  | "usage_top_100"
+  | "budget_100"
+  | "topup_charged"
+  | "topup_failed"
+  | "topup_cap_reached";
 
 export interface CustomerEmail {
   subject: string;
@@ -27,7 +37,10 @@ export interface CustomerEmail {
 }
 
 /** The words of each email. Pure, so it can be tested. */
-export function customerEmail(kind: CustomerEmailKind, data: { plan?: string; resetsAt?: number | null; graceUntil?: number | null; url?: string | null } = {}): CustomerEmail {
+export function customerEmail(
+  kind: CustomerEmailKind,
+  data: { plan?: string; resetsAt?: number | null; graceUntil?: number | null; url?: string | null; amountUsd?: number; units?: number } = {},
+): CustomerEmail {
   const when = (t: number | null | undefined) => (t ? new Date(t).toUTCString().replace(/:\d\d GMT$/, " UTC") : null);
   const usage = `${site()}/usage`;
   const sign = "\n\n— Orbis";
@@ -63,6 +76,21 @@ export function customerEmail(kind: CustomerEmailKind, data: { plan?: string; re
       return {
         subject: "You've reached this week's limit for premium models",
         text: `You've used this week's allowance for premium models. Other models still work.${when(data.resetsAt) ? ` It resets ${when(data.resetsAt)}.` : ""}\n\nDetails at ${usage}.${sign}`,
+      };
+    case "topup_charged":
+      return {
+        subject: "Orbis topped up your extra usage",
+        text: `Your extra usage was low, so we charged your saved card $${(data.amountUsd ?? 0).toFixed(2)} for ${(data.units ?? 0).toLocaleString("en-US")} units, as you set up. Stripe sends the receipt.\n\nChange or turn off automatic top-ups at ${usage}.${sign}`,
+      };
+    case "topup_failed":
+      return {
+        subject: "Automatic top-up didn't work",
+        text: `We couldn't charge your saved card for an automatic top-up, so automatic top-ups are now off. Nothing was charged.\n\nYou can buy extra usage or turn automatic top-ups back on at ${usage}.${sign}`,
+      };
+    case "topup_cap_reached":
+      return {
+        subject: "Your monthly top-up limit is reached",
+        text: `Automatic top-ups have reached the $${(data.amountUsd ?? 0).toFixed(2)} monthly limit you set, so no more will be charged this month. You can raise the limit at ${usage}.${sign}`,
       };
     case "budget_100":
       return {

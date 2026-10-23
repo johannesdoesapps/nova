@@ -39,6 +39,7 @@ export type Section =
   | "verify"
   | "connectors"
   | "usage"
+  | "team"
   | "workforce"
   | "admin";
 
@@ -69,6 +70,7 @@ export const NAV_ENTRIES: NavEntry[] = [
   { id: "images", label: "Images", href: "/images", icon: ImageIcon, group: "tools", hint: "Create an image from a description" },
   { id: "verify", label: "Verify", href: "/verify", icon: ShieldCheck, group: "tools", hint: "Check claims against sources" },
   { id: "connectors", label: "Connectors", href: "/connectors", icon: Plug, group: "tools", hint: "Connect Gmail, GitHub, Drive and more" },
+  { id: "team", label: "Team", href: "/team", icon: Users, group: "main", hint: "One subscription for your team: seats and members", parent: "home" },
   { id: "usage", label: "Usage", href: "/usage", icon: Gauge, group: "main", hint: "Your allowance, resets and usage history", parent: "home" },
   { id: "workforce", label: "Workforce", href: "/workforce", icon: Workflow, group: "admin", hint: "Internal AI engineers" },
   { id: "admin", label: "Admin", href: "/admin", icon: SlidersHorizontal, group: "admin", hint: "Models, plans and finance" },

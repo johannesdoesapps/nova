@@ -16,6 +16,7 @@ import { reportError } from "./observability";
 import { trackEvent } from "./analytics/server";
 import { alertOwner } from "./alerts";
 import { emailConfigured, sendCustomerEmail, type CustomerEmailKind } from "./email";
+import { maybeTopUp } from "./billing/topup";
 
 /**
  * Usage accounting. Policy (see docs/USAGE.md):
@@ -484,6 +485,8 @@ async function recordRunUnsafe(auth: AuthContext & { mode: "authenticated" }, ru
   if (credit) {
     const fin = await auth.supabase.rpc("usage_credit_settle", { p_request_id: ticket!.requestId, p_units: units });
     if (fin.error) reportError(fin.error, { where: "usage_credit_settle" });
+    // Extra usage went down: top it up if this person turned automatic top-ups on and it's below their level.
+    else if (units > 0) await maybeTopUp(auth.user.id);
   } else if (ticket?.units && !run.auxiliary) {
     const fin = await auth.supabase.rpc("usage_finish", { p_request_id: ticket.requestId, p_state: "settled" });
     if (fin.error) reportError(fin.error, { where: "usage_finish" });

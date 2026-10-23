@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CtaBand } from "@/components/marketing/parts";
 import { PricingPlans, type PricingPlan } from "@/components/marketing/pricing-plans";
 import { getModels } from "@/lib/ai";
@@ -108,6 +109,21 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
         </p>
       </section>
 
+      <section aria-labelledby="teams" className="mx-auto max-w-6xl px-5 pb-4 sm:px-8">
+        <div className="rounded-2xl border border-border bg-panel px-6 py-5 sm:flex sm:items-center sm:gap-6">
+          <div className="min-w-0 flex-1">
+            <h2 id="teams" className="text-lg font-medium text-fg">For teams</h2>
+            <p className="mt-1 text-[14.5px] leading-relaxed text-muted">
+              One subscription for 2 to 150 people. Each seat costs the same as {P.pro.label} or {P.max.label} and gets that plan, with its own allowance (allowances aren&rsquo;t shared). The owner pays,
+              invites people by email and adds or removes seats; changes are pro-rated.
+            </p>
+          </div>
+          <Link href="/team" className="mt-4 inline-flex h-10 shrink-0 items-center rounded-full border border-border-strong px-5 text-[14px] font-medium text-fg transition hover:bg-panel sm:mt-0">
+            Start a team
+          </Link>
+        </div>
+      </section>
+
       <section aria-labelledby="compare" className="mx-auto max-w-6xl px-5 py-14 sm:px-8">
         <h2 id="compare" className="text-2xl font-medium text-fg">Compare plans</h2>
         <p className="mt-2 text-[15px] text-muted">Read from the same settings Orbis uses to enforce limits, so this table always matches what you get.</p>
@@ -197,7 +213,10 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
           )}
           <li>Each plan&rsquo;s monthly AI allowance has a part reserved for advanced models. If that part runs out, Auto and the fast models keep working.</li>
           <li>When the whole monthly allowance is used, Orbis pauses until your billing month renews.</li>
-          <li>Nothing is charged automatically and your plan never changes without you. You can cancel or switch plans at any time from your account.</li>
+          <li>
+            Nothing is charged automatically unless you turn on automatic top-ups yourself (with a monthly limit you set), and your plan never changes without you. You can cancel or switch plans at any time
+            from your account.
+          </li>
           <li>Upgrades are charged pro-rata right away; downgrades are credited to your next invoice.</li>
         </ul>
       </section>

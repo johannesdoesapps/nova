@@ -39,6 +39,7 @@ export function UsagePage() {
   const params = useSearchParams();
   const creditsBought = params.get("credits") === "bought";
   const upgraded = params.get("upgraded");
+  const topupOn = params.get("topup") === "on";
   const sessionId = params.get("session_id");
   const [activation, setActivation] = useState<"working" | "done" | "later" | null>(sessionId ? "working" : null);
 
@@ -101,14 +102,16 @@ export function UsagePage() {
             </Link>
           </p>
 
-          {activation && (upgraded || creditsBought) && (
+          {activation && (upgraded || creditsBought || topupOn) && (
             <p role="status" className="glass mt-4 rounded-[16px] px-4 py-3 text-[13.5px] text-s-ink-2">
               {activation === "working"
                 ? "Confirming your payment with Stripe…"
                 : activation === "done"
                   ? upgraded
                     ? "Payment confirmed. Your new plan is active now."
-                    : "Payment confirmed. Your extra usage has been added."
+                    : topupOn
+                      ? "Card saved. Automatic top-up is on."
+                      : "Payment confirmed. Your extra usage has been added."
                   : "Your payment is being confirmed. It usually appears within a minute; refresh this page if it doesn’t."}
             </p>
           )}
