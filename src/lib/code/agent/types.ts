@@ -116,11 +116,41 @@ export interface BuildCheck {
   ranAt: string;
 }
 
+/** A check Orbis runs itself once the agent says it has finished. */
+export type VerifyStep = { check: "tests"; command: string } | { check: "browser"; path: string };
+
+/** A check that applied but couldn't run, and why (shown in the report as "not run"). */
+export interface SkippedCheck {
+  check: "tests" | "browser";
+  reason: string;
+}
+
+/**
+ * The verification phase: the agent called finish, and Orbis is now running
+ * the checks that apply (one per step) before the run may end. Kept with the
+ * checks (not in `pending`, which a running command uses), so it survives
+ * an interrupted step.
+ */
+export interface VerifyState {
+  /** The agent's own summary and open points, held until the checks are done. */
+  summary: string;
+  unresolved: string[];
+  queue: VerifyStep[];
+  /** Tries at the check at the head of the queue (an interrupted step counts). */
+  attempts: number;
+  skipped: SkippedCheck[];
+  startedAt: string;
+  /** Started by the user's "Re-run checks" rather than by the agent finishing. */
+  rerun?: boolean;
+}
+
 /** Website checks, each recorded from what actually ran. */
 export interface RunChecks {
   server: ServerCheck | null;
   preview: PreviewCheckRecord | null;
   build: BuildCheck | null;
+  /** Set while Orbis is verifying the agent's work (see VerifyState). */
+  verify?: VerifyState | null;
 }
 
 export const EMPTY_CHECKS: RunChecks = { server: null, preview: null, build: null };
@@ -147,7 +177,48 @@ export interface RunReport {
   usage: RunUsage & { steps: number; activeMs: number };
   checkpoints: number;
   createdAt: string;
+  /** Every check that applies or ran, with its status and evidence (reports from before this field: see checklistOf). */
+  checklist?: CheckItem[];
+  /** The task's state when the report was written, from the checklist (see taskState). */
+  state?: TaskState;
+  /** The project's test command when the run ended, or null when it has no test setup. */
+  testSetup?: string | null;
+  /** A website task. */
+  web?: boolean;
 }
+
+/** How a check ended. "not_run" is never shown as success; "stale" ran before the last change; "error" couldn't complete. */
+export type CheckStatus = "passed" | "failed" | "stale" | "error" | "not_run";
+
+/**
+ * One line of the verification checklist. `kind` keeps a browser inspection
+ * (did the page load and look right) apart from automated tests (does the
+ * code do what its tests say) and from process checks (did the server start).
+ */
+export interface CheckItem {
+  id: "tests" | "build" | "server" | "browser";
+  label: string;
+  kind: "automated" | "inspection" | "process";
+  status: CheckStatus;
+  /** It should have run for this task (a missing applicable check means the work isn't fully verified). */
+  applicable: boolean;
+  /** When it ran (ISO), or null. */
+  at: string | null;
+  command: string | null;
+  /** One line: the result, or why it didn't run. */
+  summary: string;
+  /** Failing tests, problems found, warnings. */
+  details: string[];
+  /** The end of the output, for failures. */
+  output: string | null;
+}
+
+/**
+ * What people see a task as, worked out from its status and its evidence —
+ * never from the agent's own words. See taskState for the exact rules.
+ */
+export const TASK_STATES = ["queued", "running", "waiting", "verifying", "verified", "warnings", "unverified", "failed", "cancelled"] as const;
+export type TaskState = (typeof TASK_STATES)[number];
 
 export interface RunView {
   id: string;

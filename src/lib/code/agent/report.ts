@@ -1,13 +1,16 @@
 import { diffStats } from "../diff";
 import type { RunChange } from "./tools";
-import type { AgentEvent, Freshness, RunChecks, RunReport, RunStatus, RunTests, RunUsage, Verification } from "./types";
+import type { AgentEvent, Freshness, RunChecks, RunReport, RunStatus, RunTests, RunUsage, SkippedCheck, Verification } from "./types";
+import { assessReport, buildChecklist } from "./verdict";
 
 /**
  * The final report of a run, built from its records: the files it changed
  * (as they are now compared with before the run), the commands it actually
  * ran with their exit codes, and the latest test run. The verification
  * status comes only from test runs that happened; the agent's own summary is
- * kept, labelled as its words.
+ * kept, labelled as its words. The checklist lists every check that applies
+ * or ran (tests, build, server, browser inspection) with its evidence, and
+ * the task's state is worked out from it (verdict.ts).
  */
 export function buildReport(input: {
   status: RunStatus;
@@ -23,6 +26,11 @@ export function buildReport(input: {
   steps: number;
   activeMs: number;
   checkpoints: number;
+  /** The project's test command now, or null when it has no test setup. */
+  testSetup?: string | null;
+  web?: boolean;
+  /** Checks that applied but couldn't run, with why. */
+  skipped?: SkippedCheck[];
   now?: Date;
 }): RunReport {
   const lines = (s: string | null) => (s ? s.replace(/\n$/, "").split("\n").length : 0);
@@ -69,7 +77,24 @@ export function buildReport(input: {
         }
       : undefined;
 
-  return {
+  // The failed build's output, from the activity log.
+  let buildOutput: string | null = null;
+  if (checks?.build && !checks.build.passed) {
+    for (const e of input.events) {
+      const d = e.detail as { command?: string; output?: string } | null;
+      if (e.kind === "command" && d?.command?.slice(0, 300) === checks.build.command && typeof d.output === "string") buildOutput = d.output;
+    }
+  }
+  const checklist = buildChecklist({
+    tests: tests && last ? { ...tests, outputTail: last.outputTail } : null,
+    checks,
+    testSetup: input.testSetup ?? null,
+    web: !!input.web,
+    skipped: input.skipped,
+    buildOutput,
+  });
+
+  const report: RunReport = {
     outcome: input.status,
     summary: input.summary,
     unresolved: input.unresolved,
@@ -81,7 +106,13 @@ export function buildReport(input: {
     usage: { ...input.usage, steps: input.steps, activeMs: input.activeMs },
     checkpoints: input.checkpoints,
     createdAt: (input.now ?? new Date()).toISOString(),
+    checklist,
+    testSetup: input.testSetup ?? null,
+    web: !!input.web,
   };
+  if (input.status === "completed") report.state = assessReport(report).state;
+  else if (input.status === "failed" || input.status === "cancelled") report.state = input.status;
+  return report;
 }
 
 export const VERIFICATION_LABEL: Record<Verification, string> = {

@@ -33,9 +33,10 @@ import {
 import { useCatalog } from "@/components/common/model-picker";
 import { ModelSelector } from "@/components/studio/model-selector";
 import { Menu, MenuItem } from "@/components/studio/ui";
-import { VERIFICATION_LABEL } from "@/lib/code/agent/report";
+import { isOlderView, TASK_STATE_INFO, taskState } from "@/lib/code/agent/verdict";
+import { VerificationPanel } from "./verification-panel";
 import type { ModelWithStatus } from "@/lib/ai/types";
-import { DEFAULT_STEP_LIMIT, ENDED_STATUSES, STATUS_LABEL, STEP_LIMIT_INCREMENT, WORKING_STATUSES, type AgentEvent, type Decision, type LimitReason, type RunOptions, type RunReport, type RunView } from "@/lib/code/agent/types";
+import { DEFAULT_STEP_LIMIT, ENDED_STATUSES, STEP_LIMIT_INCREMENT, WORKING_STATUSES, type AgentEvent, type Decision, type LimitReason, type RunOptions, type RunView } from "@/lib/code/agent/types";
 import { formatBytes, type AttachmentMeta } from "@/lib/code/attachments";
 import { cn } from "@/lib/utils";
 import { useAttachments } from "./attachments";
@@ -266,8 +267,6 @@ export interface AgentPanelProps {
   initialRequest?: string;
   onOpenFile: (path: string) => void;
   /** The project's test command, when it has one. */
-  testCommand: string | null;
-  onRunTests: () => void;
   /** A website project: website examples and wording. */
   web?: boolean;
   /** The agent started the preview, checked it, or changed files the preview shows. */
@@ -293,8 +292,6 @@ export function AgentPanel({
   onRunChange,
   initialRequest,
   onOpenFile,
-  testCommand,
-  onRunTests,
   web,
   onPreview,
   onOpenPreview,
@@ -328,6 +325,9 @@ export function AgentPanel({
 
   const alive = useRef(true);
   const lastSeq = useRef(0);
+  const latestView = useRef<RunView | null>(null);
+  /** The run this page was stepping when the connection dropped (stepped again when it's back). */
+  const interrupted = useRef<string | null>(null);
   const driveId = useRef(0);
   const feedEnd = useRef<HTMLDivElement>(null);
   const filesChanged = useRef(onFilesChanged);
@@ -344,8 +344,12 @@ export function AgentPanel({
     const r = await api<RunDetail>(`/api/code/agent/${runId}?after=${lastSeq.current}`);
     if (!alive.current) return r.run;
     if (r.attachments) setRunAttachments(r.attachments);
-    setRun(r.run);
-    runChanged.current(r.run);
+    // A slower, older response never replaces a newer state of the same run (the page shows what the server last said).
+    if (!isOlderView(latestView.current, r.run)) {
+      latestView.current = r.run;
+      setRun(r.run);
+      runChanged.current(r.run);
+    }
     const fresh = r.events.filter((e) => e.seq > lastSeq.current);
     if (fresh.length) {
       lastSeq.current = Math.max(...fresh.map((e) => e.seq));
@@ -362,6 +366,7 @@ export function AgentPanel({
   const open = useCallback(
     async (runId: string) => {
       lastSeq.current = 0;
+      latestView.current = null;
       setEvents([]);
       return refresh(runId);
     },
@@ -392,7 +397,10 @@ export function AgentPanel({
           if (res.skipped === "busy") await sleep(3000);
         }
       } catch (e) {
-        if (driveId.current === me) setError(e as CodeApiError);
+        if (driveId.current === me) {
+          setError(e as CodeApiError);
+          if (typeof navigator !== "undefined" && !navigator.onLine) interrupted.current = runId;
+        }
         await refresh(runId).catch(() => {});
       } finally {
         if (driveId.current === me) setDriving(false);
@@ -443,6 +451,7 @@ export function AgentPanel({
       lastSeq.current = 0;
       setEvents([]);
       setRunAttachments(r.attachments ?? []);
+      latestView.current = r.run;
       setRun(r.run);
       runChanged.current(r.run);
       void drive(r.run.id);
@@ -526,6 +535,43 @@ export function AgentPanel({
       setError(e as CodeApiError);
     }
   };
+
+  /** "Re-run checks": the server queues the checks, then this page steps the run through them like any other step. */
+  const rerun = async () => {
+    if (!run) return;
+    setError(null);
+    try {
+      const r = await post<{ run: RunView }>(`/api/code/agent/${run.id}/verify`, {});
+      await refresh(r.run.id);
+      void drive(r.run.id);
+    } catch (e) {
+      setError(e as CodeApiError);
+    }
+  };
+
+  // Verification needs no decisions and no AI, so a run left verifying (a reload, a dropped step) carries on by itself;
+  // a run this page was stepping when the connection dropped carries on when it's back.
+  const verifying = !!run && taskState(run) === "verifying";
+  useEffect(() => {
+    if (!run || driving || answering || run.busy || !WORKING_STATUSES.includes(run.status)) return;
+    if (verifying) {
+      const t = setTimeout(() => void drive(run.id), 0);
+      return () => clearTimeout(t);
+    }
+    const resume = () => {
+      if (interrupted.current === run.id && navigator.onLine && document.visibilityState === "visible") {
+        interrupted.current = null;
+        setError(null);
+        void drive(run.id);
+      }
+    };
+    window.addEventListener("online", resume);
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      window.removeEventListener("online", resume);
+      document.removeEventListener("visibilitychange", resume);
+    };
+  }, [run, verifying, driving, answering, drive]);
 
   const ended = !!run && ENDED_STATUSES.includes(run.status);
   const working = !!run && WORKING_STATUSES.includes(run.status);
@@ -611,7 +657,7 @@ export function AgentPanel({
                     )}
                   >
                     {(busy || working) && !ended && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
-                    {STATUS_LABEL[run.status]}
+                    {TASK_STATE_INFO[taskState(run)].label}
                   </span>
                   {readOnly && (
                     <span
@@ -679,17 +725,7 @@ export function AgentPanel({
                 </div>
               )}
 
-              {ended && (
-                <ReportCard
-                  run={run}
-                  onShowChanges={() => onShowChanges(run.id)}
-                  onOpenFile={onOpenFile}
-                  testCommand={testCommand}
-                  onRunTests={onRunTests}
-                  onUndo={undoAll}
-                  onOpenPreview={onOpenPreview}
-                />
-              )}
+              {ended && <VerificationPanel run={run} onShowChanges={() => onShowChanges(run.id)} onOpenFile={onOpenFile} onRerun={rerun} onUndo={undoAll} onOpenPreview={onOpenPreview} />}
               {ended && (
                 <button
                   type="button"
@@ -1034,253 +1070,6 @@ function UsageLine({ run }: { run: RunView }) {
   );
 }
 
-const VERIFY_STYLE: Record<RunReport["verification"], string> = {
-  passed: "border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
-  failed: "border-s-danger/50 text-s-danger",
-  not_run: "border-s-line text-s-ink-2",
-  stale: "border-amber-500/50 text-amber-600 dark:text-amber-400",
-};
-
-type Checks = NonNullable<RunReport["checks"]>;
-type Tone = "good" | "bad" | "warn" | "plain";
-const TONE: Record<Tone, string> = { good: "text-emerald-600 dark:text-emerald-400", bad: "text-s-danger", warn: "text-amber-600 dark:text-amber-400", plain: "text-s-ink-3" };
-
-/** Each website check on its own line, as it actually ended: server running, preview checked in a browser, production build. */
-export function checkLines(c: Checks | undefined): { label: string; value: string; tone: Tone; detail?: string[] }[] {
-  if (!c) return [];
-  const out: ReturnType<typeof checkLines> = [];
-  if (c.server) {
-    out.push({
-      label: "Development server",
-      value: c.server.state === "running" ? `Running (answered HTTP ${c.server.http})` : c.server.state === "exited" ? "Didn't start (it exited)" : "Didn't answer in time",
-      tone: c.server.state === "running" ? "good" : "bad",
-    });
-  }
-  if (c.preview) {
-    const p = c.preview;
-    out.push({
-      label: "Checked in a browser",
-      value:
-        p.freshness === "stale"
-          ? "Not re-checked after the last change"
-          : p.verdict === "passed"
-            ? "No problems at desktop and phone sizes"
-            : p.verdict === "failed"
-              ? "The check couldn't run"
-              : `${p.problems.length} problem${p.problems.length === 1 ? "" : "s"} found`,
-      tone: p.freshness === "stale" ? "warn" : p.verdict === "passed" ? "good" : p.verdict === "failed" ? "plain" : "bad",
-      detail: p.verdict === "problems" ? p.problems.slice(0, 6) : undefined,
-    });
-  } else if (c.server) out.push({ label: "Checked in a browser", value: "Not checked", tone: "plain" });
-  out.push(
-    c.build
-      ? {
-          label: "Production build",
-          value:
-            c.build.freshness === "stale"
-              ? `Not re-run after the last change (${c.build.command})`
-              : c.build.passed
-                ? `Passed (${c.build.command})`
-                : `Failed (${c.build.command}, exit ${c.build.exitCode ?? "none"})`,
-          tone: c.build.freshness === "stale" ? "warn" : c.build.passed ? "good" : "bad",
-        }
-      : { label: "Production build", value: "Not run", tone: "plain" },
-  );
-  return out;
-}
-
-/** The headline badge: tests when they ran, else the browser check, else not verified. */
-export function reportBadge(r: RunReport): { label: string; style: string } {
-  const p = r.checks?.preview;
-  if (r.tests || !p) return { label: VERIFICATION_LABEL[r.verification], style: VERIFY_STYLE[r.verification] };
-  if (p.freshness === "stale") return { label: "Not re-checked after the last change", style: VERIFY_STYLE.stale };
-  if (p.verdict === "passed") return { label: "Checked in a browser: no problems", style: VERIFY_STYLE.passed };
-  if (p.verdict === "problems") return { label: "Browser check found problems", style: VERIFY_STYLE.failed };
-  return { label: "Browser check couldn't run", style: VERIFY_STYLE.not_run };
-}
-
-/** The end of a session: built by the server from what actually ran and changed; the agent's own words are labelled as such. */
-function ReportCard({
-  run,
-  onShowChanges,
-  onOpenFile,
-  testCommand,
-  onRunTests,
-  onUndo,
-  onOpenPreview,
-}: {
-  run: RunView;
-  onShowChanges: () => void;
-  onOpenFile: (path: string) => void;
-  testCommand: string | null;
-  onRunTests: () => void;
-  onUndo: () => Promise<void>;
-  onOpenPreview?: () => void;
-}) {
-  const r = run.report;
-  const lines = checkLines(r?.checks);
-  const badge = r ? reportBadge(r) : null;
-  const title = run.status === "completed" ? "Done" : run.status === "failed" ? "Stopped with an error" : "Stopped";
-  const changed = r ? r.files.filter((f) => f.change !== "deleted") : [];
-  const secondary = "inline-flex h-8 items-center gap-1.5 rounded-full border border-s-line px-3 text-[12.5px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink";
-  return (
-    <section aria-label="Run report" className={cn("rounded-2xl border p-4 text-[13.5px] leading-relaxed", run.status === "failed" ? "border-s-danger/40" : "border-s-line-strong")}>
-      <div className="flex flex-wrap items-center gap-2 text-[15px] font-medium text-s-ink">
-        {run.status === "completed" ? (
-          <Check className="h-4 w-4 text-emerald-500" aria-hidden />
-        ) : run.status === "failed" ? (
-          <AlertTriangle className="h-4 w-4 text-s-danger" aria-hidden />
-        ) : (
-          <Square className="h-3.5 w-3.5" aria-hidden />
-        )}
-        {title}
-        {badge && <span className={cn("rounded-full border px-2 py-px text-[12px] font-normal", badge.style)}>{badge.label}</span>}
-      </div>
-      {run.error && <p className="mt-1 text-s-danger">{run.error}</p>}
-
-      {run.summary && (
-        <div className="mt-3">
-          <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-s-ink-3">What the agent says it did</h3>
-          <p className="mt-1 whitespace-pre-wrap text-s-ink-2">{run.summary}</p>
-        </div>
-      )}
-
-      {r?.tests && (
-        <div className="mt-3">
-          <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-s-ink-3">Checks that ran</h3>
-          <p className="mt-1 text-s-ink-2">
-            <code className="font-mono text-[12.5px]">{r.tests.command}</code> —{" "}
-            {r.tests.passed !== null || r.tests.failed !== null ? `${r.tests.passed ?? 0} passed, ${r.tests.failed ?? 0} failed` : `exit code ${r.tests.exitCode ?? "none"}`}
-            {!r.tests.afterLastEdit && <span className="text-amber-600 dark:text-amber-400"> (before the last change)</span>}
-          </p>
-          {r.tests.failures.length > 0 && <p className="text-s-danger">Failing: {r.tests.failures.join("; ")}</p>}
-        </div>
-      )}
-      {lines.length > 0 && (
-        <div className="mt-3">
-          <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-s-ink-3">Website checks</h3>
-          <dl className="mt-1 space-y-1">
-            {lines.map((l) => (
-              <div key={l.label}>
-                <div className="flex flex-wrap gap-x-2">
-                  <dt className="text-s-ink-2">{l.label}:</dt>
-                  <dd className={TONE[l.tone]}>{l.value}</dd>
-                </div>
-                {l.detail && (
-                  <ul className="mt-0.5 list-disc space-y-0.5 pl-5 text-[12.5px] text-s-ink-2">
-                    {l.detail.map((d, i) => (
-                      <li key={i}>{d}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
-      {r && !r.tests && !r.checks?.preview && r.files.length > 0 && (
-        <p className="mt-3 text-[13px] text-s-ink-3">No tests or browser checks ran in this session, so the changes aren&apos;t verified.</p>
-      )}
-
-      {r && (
-        <div className="mt-3">
-          <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-s-ink-3">Files changed</h3>
-          {r.files.length === 0 ? (
-            <p className="mt-1 text-[13px] text-s-ink-3">No files were changed.</p>
-          ) : (
-            <ul className="mt-1 space-y-0.5 font-mono text-[12.5px]">
-              {r.files.map((f) => (
-                <li key={f.path} className="flex items-center gap-2">
-                  {f.change === "deleted" ? (
-                    <span className="min-w-0 flex-1 truncate text-s-ink-3 line-through">{f.path}</span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => onOpenFile(f.path)}
-                      title={`Open ${f.path}`}
-                      className="min-w-0 flex-1 truncate text-left text-s-ink-2 underline-offset-2 hover:text-s-ink hover:underline"
-                    >
-                      {f.path}
-                    </button>
-                  )}
-                  <span className="shrink-0 text-[11.5px] text-s-ink-3">{f.change === "created" ? "new" : f.change === "deleted" ? "deleted" : ""}</span>
-                  <span className="shrink-0 text-emerald-600 dark:text-emerald-400">+{f.added}</span>
-                  <span className="shrink-0 text-s-danger">−{f.removed}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
-      {r && r.unresolved.length > 0 && (
-        <div className="mt-3">
-          <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-s-ink-3">Still open</h3>
-          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-s-ink-2">
-            {r.unresolved.map((u, i) => (
-              <li key={i}>{u}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {r && r.commands.length > 0 && (
-        <details className="mt-3">
-          <summary className="cursor-pointer text-[12.5px] text-s-ink-3">
-            {r.commands.length} command{r.commands.length === 1 ? "" : "s"} ran
-          </summary>
-          <ul className="mt-1 space-y-0.5 font-mono text-[11.5px] text-s-ink-2">
-            {r.commands.map((c, i) => (
-              <li key={i}>
-                $ {c.command} <span className={c.exitCode === 0 ? "text-emerald-600 dark:text-emerald-400" : "text-s-danger"}>— {c.result}</span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={onShowChanges}
-          className="inline-flex h-8 items-center gap-1.5 rounded-full bg-s-accent px-3.5 text-[12.5px] font-medium text-s-accent-ink transition hover:brightness-110"
-        >
-          <FileCode2 className="h-3.5 w-3.5" aria-hidden /> Review changes
-        </button>
-        {onOpenPreview && r?.checks?.server && (
-          <button type="button" onClick={onOpenPreview} className={secondary}>
-            <Globe className="h-3.5 w-3.5" aria-hidden /> Open preview
-          </button>
-        )}
-        {changed.length > 0 && (
-          <button type="button" onClick={() => onOpenFile(changed[0]!.path)} className={secondary}>
-            Open {changed.length === 1 ? changed[0]!.path.split("/").pop() : "changed files"}
-          </button>
-        )}
-        {testCommand && (
-          <button type="button" onClick={onRunTests} title={`Runs ${testCommand} in the terminal`} className={secondary}>
-            <FlaskConical className="h-3.5 w-3.5" aria-hidden /> Run tests
-          </button>
-        )}
-        {r && r.files.length > 0 && (
-          <button type="button" onClick={() => void onUndo()} title="Put every file this session changed back as it was" className={cn(secondary, "hover:border-s-danger hover:text-s-danger")}>
-            <Undo2 className="h-3.5 w-3.5" aria-hidden /> Undo all changes
-          </button>
-        )}
-      </div>
-
-      {r && (
-        <p className="mt-3 text-[11.5px] text-s-ink-3">
-          {r.usage.steps} step{r.usage.steps === 1 ? "" : "s"} · {(r.usage.inputTokens + r.usage.outputTokens).toLocaleString()} tokens ·{" "}
-          {r.usage.costUsd === null ? "cost not known" : `about ${usd(r.usage.costUsd)}`}
-          {r.usage.models.length > 0 && ` · ${r.usage.models.join(", ")}`}
-          {r.checkpoints > 0 && ` · ${r.checkpoints} checkpoint${r.checkpoints === 1 ? "" : "s"} (in Changes)`}
-        </p>
-      )}
-    </section>
-  );
-}
-
 /** Ask for a change to what was just built: a new session on the same project, in the same mode and model, with the earlier work as context. */
 // ---------------------------------------------------------------- waiting for you
 
@@ -1509,7 +1298,7 @@ export function SessionsList({ projectId, activeId, version, onOpen, onNew }: { 
               >
                 <span className="line-clamp-2 text-[12.5px] text-s-ink">{r.request}</span>
                 <span className="mt-0.5 block text-[11px] text-s-ink-3">
-                  {STATUS_LABEL[r.status]} · {new Date(r.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                  {TASK_STATE_INFO[taskState(r)].label} · {new Date(r.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                   {r.changedFiles > 0 && ` · ${r.changedFiles} file${r.changedFiles === 1 ? "" : "s"}`}
                 </span>
               </button>

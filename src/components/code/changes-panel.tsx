@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, Bookmark, CloudDownload, ExternalLink, GitBranch, History, Loader2, Undo2, X } from "lucide-react";
 import { VERIFICATION_LABEL } from "@/lib/code/agent/report";
-import { STATUS_LABEL, type AgentChange, type RunView } from "@/lib/code/agent/types";
+import { type AgentChange, type RunView } from "@/lib/code/agent/types";
+import { TASK_STATE_INFO, taskState } from "@/lib/code/agent/verdict";
 import { cn } from "@/lib/utils";
 import { api, CodeApiError, post } from "./api";
 import { FileDiff } from "./diff-view";
@@ -167,7 +168,7 @@ export function ChangesPanel({ projectId, sourceRepo, focusRun, onFilesChanged }
                   <button type="button" onClick={() => setSelected(r.id)} className="w-full rounded-xl border border-s-line px-3 py-2 text-left hover:border-s-line-strong">
                     <p className="line-clamp-2 text-[13px] text-s-ink">{r.request}</p>
                     <p className="mt-0.5 text-[11.5px] text-s-ink-3">
-                      {when(r.createdAt)} · {STATUS_LABEL[r.status]} · {r.changedFiles} file{r.changedFiles === 1 ? "" : "s"} changed
+                      {when(r.createdAt)} · {TASK_STATE_INFO[taskState(r)].label} · {r.changedFiles} file{r.changedFiles === 1 ? "" : "s"} changed
                       {r.report && ` · ${VERIFICATION_LABEL[r.report.verification]}`}
                     </p>
                   </button>
@@ -186,7 +187,7 @@ export function ChangesPanel({ projectId, sourceRepo, focusRun, onFilesChanged }
               <div className="rounded-xl border border-s-line bg-s-hover/40 px-3 py-2 text-[13px]">
                 <p className="whitespace-pre-wrap text-s-ink">{run.request}</p>
                 <p className="mt-0.5 text-[11.5px] text-s-ink-3">
-                  {when(run.createdAt)} · {STATUS_LABEL[run.status]}
+                  {when(run.createdAt)} · {TASK_STATE_INFO[taskState(run)].label}
                 </p>
                 {run.summary && <p className="mt-1.5 whitespace-pre-wrap text-[12.5px] text-s-ink-2">{run.summary}</p>}
               </div>

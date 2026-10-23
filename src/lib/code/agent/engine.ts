@@ -44,6 +44,7 @@ import {
   listEvents,
   listRuns,
   lockRun,
+  openRun,
   markReverted,
   recordChanges,
   runChecks,
@@ -57,7 +58,8 @@ import {
   type RunRow,
   updateRunIfNotCancelled,
 } from "./runs";
-import { isTestCommand, testResult, type TestResult } from "./test-results";
+import { detectTestCommand, isTestCommand, testResult, type TestResult } from "./test-results";
+import { planVerification } from "./verify";
 import { attachmentsBlock } from "./protocol";
 import { toolSchemas, type ToolContext } from "./tool-specs";
 import { memoryBlock, searchMemory, selectMemory, type MemoryEntry } from "../memory";
@@ -79,6 +81,9 @@ import {
   type RunTests,
   type RunUsage,
   type RunView,
+  type SkippedCheck,
+  type VerifyState,
+  type VerifyStep,
 } from "./types";
 
 /**
@@ -166,7 +171,7 @@ export function actionSignature(reply: Pick<AgentReply, "actions">): string {
 
 /** Add a step's website checks to the run's. */
 export function addChecks(prev: RunChecks, step: Partial<RunChecks>): RunChecks {
-  return { server: step.server ?? prev.server, preview: step.preview ?? prev.preview, build: step.build ?? prev.build };
+  return { ...prev, server: step.server ?? prev.server, preview: step.preview ?? prev.preview, build: step.build ?? prev.build };
 }
 
 // ---------------------------------------------------------------- the real environment
@@ -376,7 +381,7 @@ async function githubUsable(auth: Authed): Promise<boolean> {
 // ---------------------------------------------------------------- the report
 
 /** Build and store the run's final report from its records (best effort: a failure is logged, not shown). */
-async function finalize(auth: Authed, runId: string, unresolved: string[] = []): Promise<RunRow | null> {
+async function finalize(auth: Authed, runId: string, unresolved: string[] = [], skipped: SkippedCheck[] = []): Promise<RunRow | null> {
   try {
     const row = await getRun(auth, runId);
     const [changes, files, events, checkpoints] = await Promise.all([listChanges(auth, runId), getFiles(auth, row.project_id), listEvents(auth, runId), listCheckpoints(auth, runId)]);
@@ -394,6 +399,9 @@ async function finalize(auth: Authed, runId: string, unresolved: string[] = []):
       steps: row.steps,
       activeMs: Number(row.active_ms),
       checkpoints: checkpoints.length,
+      testSetup: detectTestCommand(files),
+      web: !!runOptions(row).web,
+      skipped,
     });
     return await updateRun(auth, runId, { report });
   } catch (err) {
@@ -411,7 +419,7 @@ export interface StepResult {
 }
 
 /** Finish a step: save the run unless the user stopped it meanwhile, and write the report when it ended. */
-async function finishStep(auth: Authed, runId: string, patch: RunPatch, unresolved: string[] = []): Promise<RunRow> {
+async function finishStep(auth: Authed, runId: string, patch: RunPatch, unresolved: string[] = [], skipped: SkippedCheck[] = []): Promise<RunRow> {
   let row = await updateRunIfNotCancelled(auth, runId, { ...patch, locked_until: null });
   if (!row) {
     // The user's stop stands: the step's records are kept, its status, waiting state and summary aren't.
@@ -420,7 +428,7 @@ async function finishStep(auth: Authed, runId: string, patch: RunPatch, unresolv
     delete kept.summary;
     row = await updateRun(auth, runId, { ...kept, locked_until: null, pending: null });
   }
-  if (ENDED_STATUSES.includes(row.status)) return (await finalize(auth, runId, unresolved)) ?? row;
+  if (ENDED_STATUSES.includes(row.status)) return (await finalize(auth, runId, unresolved, skipped)) ?? row;
   return row;
 }
 
@@ -460,6 +468,8 @@ export async function stepRun(req: Request, auth: Authed, runId: string, opts: {
 }
 
 async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
+  // The agent has finished: Orbis runs the checks itself, one per step, before the run may end.
+  if (runChecks(row).verify) return verifyStep(auth, row);
   const stepStarted = Date.now();
   const opts = runOptions(row);
   const project = await getProjectRow(auth, row.project_id);
@@ -718,7 +728,119 @@ async function step(req: Request, auth: Authed, row: RunRow): Promise<RunRow> {
     }
   }
   if (outcome.summary) patch.summary = outcome.summary;
+  if (patch.status === "completed") return beginVerification(auth, row, patch, env, outcome.unresolved);
   return finishStep(auth, row.id, patch, outcome.unresolved);
+}
+
+// ---------------------------------------------------------------- verification
+
+/** Tries at one check (an interrupted step counts) before it's reported as not finished. */
+const VERIFY_ATTEMPTS = 2;
+
+/**
+ * The agent says it's done. Work out which checks apply and haven't run since
+ * its last change; with any to run, the run stays working in the verifying
+ * phase (checks.verify) and the next steps run them. Otherwise it ends now,
+ * and the report says which checks didn't run and why.
+ */
+async function beginVerification(auth: Authed, row: RunRow, patch: RunPatch, env: AgentEnv, unresolved: string[]): Promise<RunRow> {
+  const checks = runChecks({ checks: patch.checks ?? row.checks });
+  const [files, changes, computer] = await Promise.all([env.files(), listChanges(auth, row.id), env.computer()]);
+  const now = new Map(files.map((f) => [f.path, f.content]));
+  const plan = planVerification({
+    options: runOptions(row),
+    files,
+    tests: patch.tests ?? row.tests,
+    checks,
+    lastEditAt: patch.last_edit_at ?? row.last_edit_at,
+    changedFiles: changes.filter((c) => (now.get(c.path) ?? null) !== c.before).length,
+    computer,
+  });
+  if (!plan.queue.length) return finishStep(auth, row.id, patch, unresolved, plan.skipped);
+  const verify: VerifyState = { summary: patch.summary ?? row.summary ?? "", unresolved, queue: plan.queue, attempts: 0, skipped: plan.skipped, startedAt: new Date().toISOString() };
+  await addEvents(auth, row.id, [{ kind: "status", title: `Verifying: Orbis is running ${describeQueue(plan.queue)} before calling this done`, detail: { verify: plan.queue } }]);
+  return finishStep(auth, row.id, { ...patch, status: "running", summary: patch.summary ?? row.summary, checks: { ...checks, verify } }, unresolved);
+}
+
+const describeQueue = (q: VerifyStep[]) => q.map((v) => (v.check === "tests" ? `the tests (${v.command})` : "a browser inspection of the page")).join(" and ");
+
+/** Run the next check in the verifying phase through the same tool code the agent uses, and record what happened. */
+async function verifyStep(auth: Authed, row: RunRow): Promise<RunRow> {
+  const checks0 = runChecks(row);
+  const v = checks0.verify!;
+  const head = v.queue[0];
+  const next = (skipped: SkippedCheck[]): VerifyState => ({ ...v, queue: v.queue.slice(1), attempts: 0, skipped });
+  const proceed = (patch: RunPatch, state: VerifyState): Promise<RunRow> =>
+    state.queue.length
+      ? finishStep(auth, row.id, { ...patch, pending: null, status: "running", checks: { ...checks0, ...patch.checks, verify: state } })
+      : finishVerification(auth, row, patch, state);
+  if (!head) return proceed({}, v);
+  if (v.attempts >= VERIFY_ATTEMPTS) {
+    const label = head.check === "tests" ? "The tests" : "The browser inspection";
+    await addEvents(auth, row.id, [{ kind: "error", title: `${label} didn't finish after ${VERIFY_ATTEMPTS} tries` }]);
+    return proceed({}, next([...v.skipped, { check: head.check, reason: `Not finished: the check was interrupted ${VERIFY_ATTEMPTS} times without a result.` }]));
+  }
+  // Count the try before starting, so a step that dies mid-check still counts it.
+  await updateRun(auth, row.id, { checks: { ...checks0, verify: { ...v, attempts: v.attempts + 1 } } });
+  const project = await getProjectRow(auth, row.project_id);
+  const env = realEnv({ auth, run: row, project, docs: false, github: false, webSearches: { count: 0 } });
+  const reply: AgentReply = {
+    thought: "",
+    actions: [head.check === "tests" ? { id: "verify-tests", tool: "run_tests", args: { command: head.command } } : { id: "verify-browser", tool: "check_preview", args: { path: head.path } }],
+  };
+  const outcome = await runActions(reply, { planApproved: true, approvePlans: false, reviewEdits: false, commands: "safe", approvedCommand: head.check === "tests" ? head.command : null, lastTests: row.tests?.last ?? null }, env);
+  if (outcome.pause?.status === "cancelled") return finishStep(auth, row.id, { status: "cancelled", pending: null });
+
+  let skipped = v.skipped;
+  const ran = head.check === "tests" ? outcome.tests.length > 0 : !!outcome.checks.preview;
+  if (!ran) {
+    const why =
+      outcome.pause?.pending?.kind === "computer"
+        ? "Not run: the project's computer had stopped."
+        : outcome.pause
+          ? "Not run: it needed your approval."
+          : `Not run: ${clipText(outcome.results[0]?.text ?? "the check couldn't start.", 200)}`;
+    skipped = [...skipped, { check: head.check, reason: why }];
+    await addEvents(auth, row.id, [{ kind: "status", title: `Verification: ${head.check === "tests" ? "the tests" : "the browser inspection"} couldn't run`, detail: { reason: why } }]);
+  }
+  const tests = outcome.tests.length ? addTests(row.tests, outcome.tests) : row.tests;
+  const checks = { ...addChecks(checks0, outcome.checks), verify: null };
+  return proceed({ tests, checks, ...(outcome.edited ? { last_edit_at: new Date().toISOString() } : {}) }, next(skipped));
+}
+
+async function finishVerification(auth: Authed, row: RunRow, patch: RunPatch, v: VerifyState): Promise<RunRow> {
+  await addEvents(auth, row.id, [{ kind: "status", title: v.rerun ? "Checks re-run" : "Verification finished" }]);
+  return finishStep(auth, row.id, { ...patch, status: "completed", pending: null, summary: v.summary || row.summary, checks: { ...runChecks(row), ...patch.checks, verify: null } }, v.unresolved, v.skipped);
+}
+
+/**
+ * "Re-run checks" on a finished run: every check that applies runs again
+ * (the click is the approval), then the report is rebuilt from the results.
+ */
+export async function reverifyRun(auth: Authed, runId: string): Promise<RunView> {
+  const row = await getRun(auth, runId);
+  if (row.status !== "completed") throw new ApiError("conflict", "Checks can be re-run once the agent has finished.");
+  const open = await openRun(auth, row.project_id);
+  if (open && open.id !== row.id) throw new ApiError("conflict", "Another session is working on this project. Wait for it to finish first.", { runId: open.id });
+  const [files, changes, box] = await Promise.all([getFiles(auth, row.project_id), listChanges(auth, runId), optionalBox(auth, row.project_id)]);
+  const checks = runChecks(row);
+  const now = new Map(files.map((f) => [f.path, f.content]));
+  const plan = planVerification({
+    options: runOptions(row),
+    files,
+    tests: row.tests,
+    checks,
+    lastEditAt: row.last_edit_at,
+    changedFiles: changes.filter((c) => (now.get(c.path) ?? null) !== c.before).length,
+    computer: !!box,
+    rerun: true,
+  });
+  if (!plan.queue.length) {
+    throw new ApiError("conflict", plan.skipped[0]?.reason.replace(/^Not run: /, "") ?? "There's nothing Orbis can check here: the project has no tests and isn't a website.");
+  }
+  const verify: VerifyState = { summary: row.summary ?? "", unresolved: row.report?.unresolved ?? [], queue: plan.queue, attempts: 0, skipped: plan.skipped, startedAt: new Date().toISOString(), rerun: true };
+  await addEvents(auth, runId, [{ kind: "status", title: `You asked Orbis to re-run the checks: ${describeQueue(plan.queue)}` }]);
+  return toRunView(await updateRun(auth, runId, { status: "running", pending: null, locked_until: null, checks: { ...checks, verify } }));
 }
 
 /** The screenshots the model is shown with its latest results (loaded from the activity log). */

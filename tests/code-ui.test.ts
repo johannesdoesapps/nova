@@ -5,7 +5,8 @@
  * and every first-use example is a real task.
  */
 import { describe, expect, it, vi } from "vitest";
-import { checkLines, EXAMPLES, groupStages, MODES, modeOf, reportBadge, stageSummary, WEB_EXAMPLES } from "@/components/code/agent-panel";
+import { EXAMPLES, groupStages, MODES, modeOf, stageSummary, WEB_EXAMPLES } from "@/components/code/agent-panel";
+import { assessReport, checklistOf } from "@/lib/code/agent/verdict";
 import { siteName, SITE_EXAMPLES } from "@/components/code/projects-view";
 import type { AgentEvent, RunReport } from "@/lib/code/agent/types";
 
@@ -128,25 +129,28 @@ describe("website building", () => {
       preview: { path: "/", verdict: "passed" as const, problems: [], warnings: [], checkedAt: "", freshness: "current" as const },
       build: null,
     };
-    expect(checkLines(passed)).toEqual([
-      { label: "Development server", value: "Running (answered HTTP 200)", tone: "good" },
-      { label: "Checked in a browser", value: "No problems at desktop and phone sizes", tone: "good", detail: undefined },
-      { label: "Production build", value: "Not run", tone: "plain" },
+    // Each check on its own line as it really ended; the server is a process check, the browser an inspection.
+    expect(checklistOf(report(passed)).map((c) => [c.id, c.status, c.kind])).toEqual([
+      ["tests", "not_run", "automated"],
+      ["build", "not_run", "automated"],
+      ["server", "passed", "process"],
+      ["browser", "passed", "inspection"],
     ]);
-    expect(reportBadge(report(passed)).label).toBe("Checked in a browser: no problems");
+    expect(assessReport(report(passed)).state).toBe("verified");
     const stale = { ...passed, preview: { ...passed.preview, freshness: "stale" as const } };
-    expect(reportBadge(report(stale)).label).toBe("Not re-checked after the last change");
+    expect(checklistOf(report(stale)).find((c) => c.id === "browser")).toMatchObject({ status: "stale", summary: "Checked before the last change" });
+    expect(assessReport(report(stale)).state).toBe("warnings");
     const broken = {
       ...passed,
       preview: { ...passed.preview, verdict: "problems" as const, problems: ["JavaScript error: x is not defined"] },
       build: { command: "npm run build", exitCode: 1, passed: false, ranAt: "", freshness: "current" as const },
     };
-    expect(checkLines(broken)[1]).toMatchObject({ value: "1 problem found", tone: "bad", detail: ["JavaScript error: x is not defined"] });
-    expect(checkLines(broken)[2]).toMatchObject({ value: "Failed (npm run build, exit 1)", tone: "bad" });
-    expect(reportBadge(report(broken)).label).toBe("Browser check found problems");
-    // Tests that ran lead the badge; no checks at all means not verified.
-    expect(reportBadge(report(passed, { command: "npm test", verdict: "passed" } as never)).label).toBe("Tests passed after the last change");
-    expect(reportBadge(report(undefined)).label).toBe("Not verified: no tests ran");
+    const items = checklistOf(report(broken));
+    expect(items.find((c) => c.id === "browser")).toMatchObject({ status: "failed", summary: "1 problem found on /", details: ["JavaScript error: x is not defined"] });
+    expect(items.find((c) => c.id === "build")).toMatchObject({ status: "failed", summary: "Failed (exit code 1)" });
+    expect(assessReport(report(broken)).state).toBe("warnings");
+    // No checks at all: not verified.
+    expect(assessReport(report(undefined)).state).toBe("unverified");
   });
 
   it("names a new website project from its request", () => {

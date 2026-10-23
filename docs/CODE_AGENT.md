@@ -40,8 +40,26 @@ Screens: `src/components/code/agent-panel.tsx` and `changes-panel.tsx`.
 - **Pauses.** A run stops and waits for the user to approve a plan, approve a command, review edits (when that option is on), answer a question, start the computer, or decide whether to go on after a limit: 20 steps, 600,000 tokens, 30 minutes of work, 3 failed test runs in a row, or the same actions three steps running.
   - The user answers with `POST …/respond`, using `approve`, `reject`, `answer`, `continue` or `stop`. Approving a command runs it right away; `continue` after a limit raises that limit.
 - **Recovery.** The model's request for actions is stored before they run. If a step is cut off, the next one tells the model which actions may or may not have run, so it checks before repeating them.
-- **Report.** When a run ends, the server builds a report from its records: files changed, commands and exit codes, the latest test run, and whether the work is verified (tests passed after the last change).
+- **Verification.** The agent calling `finish` ends its work, not the verification. Orbis then runs the checks that apply and haven't run since the agent's last change, through the same tool code: the project's tests (when it has a test setup) and a browser inspection (for a website whose preview is running). This is the *verifying* phase (`checks.verify`, one check per step, at most 2 tries per check; it survives an interrupted step). A check that applies but can't run — commands off, "Review every change" mode, the computer off, no preview server — is recorded as *not run* with the reason. `POST …/verify` re-runs every check that applies on a finished run (the click counts as approval).
+- **Report.** When a run ends, the server builds a report from its records: files changed, commands and exit codes, the latest test run, and a checklist of every check that applies or ran (tests, build, server, browser inspection) with status (passed, failed, out of date, couldn't complete, not run), time, command, details and failing output.
 - **Stop.** `POST …/cancel` stops the run. If a command is running, it is killed. A step that's in progress notices within seconds and ends.
+
+## Task states
+
+Worked out in `src/lib/code/agent/verdict.ts` from the run's status and its checklist — never from the agent's summary:
+
+| State | Meaning |
+| --- | --- |
+| Queued | Created; no step taken yet |
+| Working | Planning or working |
+| Waiting for you | Paused for an approval, an answer, the computer or a limit |
+| Verifying | The agent finished; Orbis is running the checks |
+| Done and verified | Checks ran after the last change and every check that applies passed |
+| Done, with warnings | A check failed, went out of date, couldn't complete or didn't run, or the agent left problems open |
+| Done, not verified | No checks ran (or the record of checks is missing) |
+| Failed / Stopped | The run ended with an error / the user stopped it |
+
+A browser inspection (the page loads at desktop and phone sizes without errors, broken links or layout problems) is labelled as an inspection, separate from automated tests; it never stands in for tests the project has.
 
 ## Permission modes
 
@@ -56,7 +74,7 @@ The task box offers four presets of the run's options (the server enforces each)
 
 ## What the page shows
 
-Progress is grouped into plain-English stages built only from the run's events: *Understanding your request* (the run started), *Exploring the project* (inspections), *Planning the changes* (a plan), *Editing files* (edits, restores), *Running checks* (commands and tests, blocked commands in red), *Reviewing the results* (finished). A stage appears only once an event of that kind exists. Each stage shows the agent's own notes and a one-line summary; **Details** lists the underlying events and command output. When a session ends, the report offers **Review changes**, **Open** a changed file, **Run tests** (the detected test command, in the terminal) and **Undo all changes**.
+Progress is grouped into plain-English stages built only from the run's events: *Understanding your request* (the run started), *Exploring the project* (inspections), *Planning the changes* (a plan), *Editing files* (edits, restores), *Running checks* (commands and tests, blocked commands in red), *Reviewing the results* (finished). A stage appears only once an event of that kind exists. Each stage shows the agent's own notes and a one-line summary; **Details** lists the underlying events and command output. When a session ends, the verification panel shows the overall state and why, the task, the agent's summary (labelled as its words), each check with its status in words and an icon, the checks that didn't run and why, the files changed (each opens the file; a deleted one opens the changes), the commands run, open points and next steps, with **Review changes**, **Re-run checks**, **Open preview** and **Undo all changes**. The page ignores a response older than the state it already shows, carries on a run left verifying, and steps a run again when the connection it lost comes back.
 
 ## Safety
 

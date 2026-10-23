@@ -210,6 +210,10 @@ vi.mock("@/lib/code/agent/runs", async (orig) => {
       }
     },
     markReverted: async () => {},
+    openRun: async (_a: unknown, projectId: string) => {
+      const open = [...db.runs.values()].find((r) => r.project_id === projectId && !["completed", "failed", "cancelled"].includes(r.status));
+      return open ? real.toRunView(open) : null;
+    },
     listCheckpoints: async (_a: unknown, runId: string) => db.checkpoints.filter((c) => c.runId === runId),
     createCheckpoint: async (_a: unknown, runId: string, label: string, f: Record<string, string | null>) => {
       const cp = { id: `cp${db.checkpoints.length + 1}`, runId, label, files: f, createdAt: new Date().toISOString() };
@@ -233,7 +237,9 @@ vi.mock("@/lib/code/memory-store", () => ({
   },
 }));
 
-const { stepRun, respondToRun, cancelRun, addUsage } = await import("@/lib/code/agent/engine");
+const { stepRun, respondToRun, cancelRun, addUsage, reverifyRun } = await import("@/lib/code/agent/engine");
+const { taskState } = await import("@/lib/code/agent/verdict");
+const { toRunView } = await import("@/lib/code/agent/runs");
 const { scrub } = await import("@/lib/code/agent/runs");
 
 const auth = { mode: "authenticated", userId: "u1" } as never;
@@ -767,5 +773,172 @@ describe("attachments", () => {
     await stepRun(req(), auth, id);
     expect(script.seen[0]!.tools.map((t) => t.name)).not.toContain("read_attachment");
     expect(script.needs).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------- verification
+
+describe("verification: the task's state comes from checks that ran, not from the agent saying it's done", () => {
+  const working = (o: Partial<RunRow> = {}) => newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true }, ...o });
+  const state = (id: string) => taskState(toRunView(run(id)));
+  const item = (id: string, check: string) => run(id).report!.checklist!.find((c) => c.id === check)!;
+
+  it("runs the tests itself when the agent finishes without running them, and only then reports verified", async () => {
+    const id = working();
+    script.turns.push(turn("Fixing.", call("edit_file", { path: "sum.js", search: "a - b", replace: "a + b" })), turn("Done.", call("finish", { summary: "Fixed sum; it works now." })));
+    const r = await stepRun(req(), auth, id);
+    expect(r.run.status).toBe("completed");
+    // The agent never ran the tests; Orbis did, after its last change.
+    expect(commands).toEqual(["npm test"]);
+    expect(events(id).map((e) => e.title)).toEqual(expect.arrayContaining(["Verifying: Orbis is running the tests (npm test) before calling this done", "Verification finished"]));
+    expect(item(id, "tests")).toMatchObject({ status: "passed", command: "npm test", summary: "2 passed, 0 failed", applicable: true });
+    expect(run(id).report!.state).toBe("verified");
+    expect(state(id)).toBe("verified");
+    expect(run(id).summary).toBe("Fixed sum; it works now.");
+    expect(run(id).checks?.verify).toBeNull();
+  });
+
+  it("reports failing tests as a failed check with their output, even when the agent says everything works", async () => {
+    const id = working();
+    script.turns.push(turn("Fixing.", call("edit_file", { path: "sum.js", search: "a - b", replace: "a * b" })), turn("Done.", call("finish", { summary: "All fixed and working." })));
+    await stepRun(req(), auth, id);
+    expect(run(id).status).toBe("completed");
+    expect(item(id, "tests")).toMatchObject({ status: "failed", summary: "1 passed, 1 failed" });
+    expect(item(id, "tests").output).toContain("1 failed");
+    expect(state(id)).toBe("warnings");
+  });
+
+  it("shows a failed production build with its error output", async () => {
+    commandOutput = (cmd) =>
+      cmd === "npm run build" ? { output: "src/sum.ts(1,7): error TS2322: Type 'string' is not assignable to type 'number'.\n", exitCode: 2 } : cmd === "npm test" ? { output: PASSING, exitCode: 0 } : { output: "", exitCode: 0 };
+    const id = working();
+    script.turns.push(
+      turn("Fixing.", call("edit_file", { path: "sum.js", search: "a - b", replace: "a + b" })),
+      turn("Testing.", call("run_tests")),
+      turn("Building.", call("run_command", { command: "npm run build" })),
+      turn("Done.", call("finish", { summary: "Fixed and built." })),
+    );
+    await stepRun(req(), auth, id);
+    // The tests already ran after the last change, so nothing is repeated.
+    expect(commands).toEqual(["npm test", "npm run build"]);
+    expect(item(id, "build")).toMatchObject({ status: "failed", command: "npm run build", summary: "Failed (exit code 2)" });
+    expect(item(id, "build").output).toContain("TS2322");
+    expect(item(id, "tests").status).toBe("passed");
+    expect(state(id)).toBe("warnings");
+  });
+
+  it("is partial when a check that applies can't run: the browser inspection of a site whose preview isn't running", async () => {
+    files.set("index.html", "<h1>Nova</h1>\n");
+    const id = working({ options: { approvePlans: true, reviewEdits: false, commands: "safe", modelId: null, web: true } });
+    const checksBefore = preview.checks.length;
+    script.turns.push(turn("Fixing.", call("edit_file", { path: "sum.js", search: "a - b", replace: "a + b" })), turn("Done.", call("finish", { summary: "Done." })));
+    await stepRun(req(), auth, id);
+    expect(commands).toEqual(["npm test"]);
+    expect(preview.checks.length).toBe(checksBefore);
+    expect(item(id, "tests").status).toBe("passed");
+    expect(item(id, "browser")).toMatchObject({ status: "not_run", applicable: true });
+    expect(item(id, "browser").summary).toContain("the preview server wasn't running");
+    expect(state(id)).toBe("warnings");
+  });
+
+  it("says plainly that nothing was verified when no checks could run", async () => {
+    files = new Map([["index.js", "console.log('hi')\n"]]);
+    const id = working();
+    script.turns.push(turn("Editing.", call("write_file", { path: "index.js", content: "console.log('hello')\n" })), turn("Done.", call("finish", { summary: "Changed the greeting; tested and working." })));
+    await stepRun(req(), auth, id);
+    expect(commands).toEqual([]);
+    expect(item(id, "tests")).toMatchObject({ status: "not_run", applicable: false, summary: "Not run: the project has no test setup" });
+    expect(run(id).report!.state).toBe("unverified");
+    expect(state(id)).toBe("unverified");
+  });
+
+  it("doesn't run checks without the computer, and says why", async () => {
+    computerOn = false;
+    const id = working();
+    script.turns.push(turn("Fixing.", call("edit_file", { path: "sum.js", search: "a - b", replace: "a + b" })), turn("Done.", call("finish", { summary: "Done." })));
+    await stepRun(req(), auth, id);
+    expect(commands).toEqual([]);
+    expect(item(id, "tests")).toMatchObject({ status: "not_run", summary: "Not run: the project's computer was off. Start it, then use Re-run checks." });
+    expect(state(id)).toBe("unverified");
+  });
+
+  it("marks a run that failed as failed, never as done", async () => {
+    script.model = { ...MODEL, provider: "demo" };
+    const id = working();
+    await stepRun(req(), auth, id);
+    expect(run(id).status).toBe("failed");
+    expect(state(id)).toBe("failed");
+    expect(run(id).report!.state).toBe("failed");
+  });
+
+  it("stops during verification when the user presses Stop, and isn't verified", async () => {
+    const id = working({ checks: { server: null, preview: null, build: null, verify: { summary: "Done.", unresolved: [], queue: [{ check: "tests", command: "npm test" }], attempts: 0, skipped: [], startedAt: "" } } });
+    db.stopBeforeNextWrite = true;
+    await stepRun(req(), auth, id);
+    expect(run(id).status).toBe("cancelled");
+    expect(commands).toEqual([]);
+    expect(state(id)).toBe("cancelled");
+    expect(run(id).report?.state).toBe("cancelled");
+  });
+
+  it("gives up on a check interrupted twice without a result, and doesn't call the work verified", async () => {
+    const id = working({ checks: { server: null, preview: null, build: null, verify: { summary: "Done.", unresolved: [], queue: [{ check: "tests", command: "npm test" }], attempts: 2, skipped: [], startedAt: "" } } });
+    db.changes.push({ runId: id, id: "cx", path: "sum.js", before: "old", after: files.get("sum.js")!, revertedAt: null, updatedAt: "" });
+    await stepRun(req(), auth, id);
+    expect(commands).toEqual([]);
+    expect(run(id).status).toBe("completed");
+    expect(item(id, "tests")).toMatchObject({ status: "not_run", summary: "Not finished: the check was interrupted 2 times without a result." });
+    expect(state(id)).toBe("unverified");
+  });
+
+  it("picks verification up again after an interrupted step (the lock ran out) and finishes it", async () => {
+    files.set("sum.js", "export const sum = (a, b) => a + b;\n");
+    const id = working({
+      locked_until: new Date(Date.now() - 1_000).toISOString(),
+      pending: { kind: "job", jobId: "gone", command: "npm test" },
+      checks: { server: null, preview: null, build: null, verify: { summary: "Done.", unresolved: [], queue: [{ check: "tests", command: "npm test" }], attempts: 1, skipped: [], startedAt: "" } },
+    });
+    expect(state(id)).toBe("verifying");
+    const r = await stepRun(req(), auth, id);
+    expect(r.run.status).toBe("completed");
+    expect(commands).toEqual(["npm test"]);
+    expect(toolTurn).not.toHaveBeenCalled();
+    expect(item(id, "tests").status).toBe("passed");
+    expect(state(id)).toBe("verified");
+  });
+
+  it("doesn't verify while another request holds the run, and keeps showing it as verifying", async () => {
+    const id = working({
+      locked_until: new Date(Date.now() + 60_000).toISOString(),
+      checks: { server: null, preview: null, build: null, verify: { summary: "Done.", unresolved: [], queue: [{ check: "tests", command: "npm test" }], attempts: 1, skipped: [], startedAt: "" } },
+    });
+    expect((await stepRun(req(), auth, id)).skipped).toBe("busy");
+    expect(commands).toEqual([]);
+    expect(state(id)).toBe("verifying");
+  });
+
+  it("re-runs the checks on request and rebuilds the report from the new results", async () => {
+    const id = working({ project_id: "p-rerun" });
+    script.turns.push(turn("Fixing.", call("edit_file", { path: "sum.js", search: "a - b", replace: "a * b" })), turn("Done.", call("finish", { summary: "Done." })));
+    await stepRun(req(), auth, id);
+    expect(state(id)).toBe("warnings");
+    // The user fixes it by hand, then asks Orbis to check again.
+    files.set("sum.js", "export const sum = (a, b) => a + b;\n");
+    const v = await reverifyRun(auth, id);
+    expect(v.status).toBe("running");
+    expect(taskState(v)).toBe("verifying");
+    await stepRun(req(), auth, id);
+    expect(run(id).status).toBe("completed");
+    expect(commands).toEqual(["npm test", "npm test"]);
+    expect(item(id, "tests").status).toBe("passed");
+    expect(state(id)).toBe("verified");
+    expect(events(id).map((e) => e.title)).toContain("Checks re-run");
+  });
+
+  it("refuses to re-run checks while the run is still working or another session is open", async () => {
+    const id = working({ project_id: "p-open" });
+    await expect(reverifyRun(auth, id)).rejects.toMatchObject({ code: "conflict" });
+    const done = newRun({ project_id: "p-open", status: "completed", report: null });
+    await expect(reverifyRun(auth, done)).rejects.toMatchObject({ code: "conflict" });
   });
 });

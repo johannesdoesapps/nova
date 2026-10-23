@@ -40,7 +40,6 @@ import { StudioHeader, useStudio } from "@/components/studio/frame";
 import { ModelSelector } from "@/components/studio/model-selector";
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/studio/ui";
 import { isWebTask } from "@/lib/code/agent/protocol";
-import { detectTestCommand } from "@/lib/code/agent/test-results";
 import type { RunView } from "@/lib/code/agent/types";
 import { EXAMPLE_PROJECT, validProjectPath, type FileChange, type ProjectSummary } from "@/lib/code/projects";
 import { cn } from "@/lib/utils";
@@ -648,7 +647,6 @@ export function CodeWorkspace({ id }: { id: string }) {
     setPane("editor");
     setRight("editor");
   };
-  const testCommand = useMemo(() => detectTestCommand(paths.map((path) => ({ path, content: saved[path] ?? "" }))), [paths, saved]);
   const onRunChange = useCallback((r: RunView | null) => {
     if (r && !filesTouched.current) setFilesOpenState(true);
     setActiveRun((prev) => {
@@ -993,8 +991,6 @@ export function CodeWorkspace({ id }: { id: string }) {
       onRunChange={onRunChange}
       initialRequest={initialRequest}
       onOpenFile={openFile}
-      testCommand={testCommand}
-      onRunTests={() => testCommand && void run(testCommand)}
       web={web}
       onPreview={onPreview}
       onOpenPreview={() => {
