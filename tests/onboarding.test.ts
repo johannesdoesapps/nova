@@ -11,7 +11,7 @@ const search = { value: "" };
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), useSearchParams: () => new URLSearchParams(search.value) }));
 vi.mock("@vercel/analytics", () => ({ track: vi.fn() }));
 
-const { START, isFirstRun, onboardingPatch, readOnboarding, startPath } = await import("@/lib/onboarding");
+const { START, isFirstRun, onboardingPatch, readOnboarding, startPath, startPathsFor } = await import("@/lib/onboarding");
 const { siteExample } = await import("@/lib/code/site-examples");
 const { afterSignIn } = await import("@/lib/auth-flow");
 const { FirstRun } = await import("@/components/studio/first-run");
@@ -59,6 +59,15 @@ describe("starting points", () => {
     expect(START.map((p) => p.title)).toEqual(["Build a website", "Improve an existing project", "Investigate a bug", "Ask Orbis a question"]);
   });
 
+  it("offers GitHub import only on a site where GitHub is set up", () => {
+    expect(startPathsFor({ github: false }).map((p) => p.id)).toEqual(["website", "bug", "question"]);
+    expect(startPathsFor({ github: true }).map((p) => p.id)).toEqual(["website", "project", "bug", "question"]);
+    const without = renderToStaticMarkup(createElement(FirstRun, { name: null, onAction: () => {}, onClose: () => {} }));
+    expect(without).not.toContain("Improve an existing project");
+    const withGithub = renderToStaticMarkup(createElement(FirstRun, { name: null, onAction: () => {}, onClose: () => {}, github: true }));
+    expect(withGithub).toContain("Improve an existing project");
+  });
+
   it("leads only to real pages, real example requests and the real example project", () => {
     const pages = new Set(["/code", "/chat", "/home"]);
     for (const p of START) {
@@ -89,7 +98,7 @@ describe("starting points", () => {
 
 describe("the welcome on Home", () => {
   it("greets a new account with the four starting points, a way to skip, and the prompt box", () => {
-    const html = renderToStaticMarkup(createElement(FirstRun, { name: "Sam", onAction: () => {}, onClose: () => {} }));
+    const html = renderToStaticMarkup(createElement(FirstRun, { name: "Sam", onAction: () => {}, onClose: () => {}, github: true }));
     expect(html).toContain("Welcome to Orbis, Sam");
     for (const p of START) expect(html).toContain(p.title);
     expect(html).toContain("Skip, I&#x27;ll explore on my own");

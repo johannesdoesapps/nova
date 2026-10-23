@@ -89,6 +89,11 @@ export const START: StartPathInfo[] = [
   },
 ];
 
+/** The starting points that work on this site: importing a project needs GitHub set up here. */
+export function startPathsFor(site: { github: boolean }): StartPathInfo[] {
+  return START.filter((p) => p.id !== "project" || site.github);
+}
+
 export function startPath(id: string | null | undefined): StartPathInfo | undefined {
   return START.find((p) => p.id === id);
 }

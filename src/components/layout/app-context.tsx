@@ -32,6 +32,8 @@ export interface IntegrationFlags {
   search: boolean;
   /** Stripe payments are set up (Pro can be bought). */
   billing: boolean;
+  /** GitHub import is set up on this site (the GitHub App is configured). */
+  github?: boolean;
 }
 
 interface AppState {

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { track } from "@vercel/analytics";
 import { ArrowRight, Bug, FolderGit2, Globe, Info, MessageCircle, PenLine } from "lucide-react";
 import type { HomeAction } from "@/lib/home";
-import { START, type StartOption, type StartPath } from "@/lib/onboarding";
+import { START, startPathsFor, type StartOption, type StartPath } from "@/lib/onboarding";
 import { cn } from "@/lib/utils";
 
 const ICONS: Record<StartPath, ReactNode> = { website: <Globe />, project: <FolderGit2 />, bug: <Bug />, question: <MessageCircle /> };
@@ -33,7 +33,8 @@ const count = (event: string, props: Record<string, string> = {}) => {
  * picking anything, is saved on the account. Counted anonymously: which
  * starting point, never what anyone types.
  */
-export function FirstRun({ name, onAction, onClose }: { name: string | null; onAction: (a: HomeAction) => void; onClose: () => void }) {
+export function FirstRun({ name, onAction, onClose, github = false }: { name: string | null; onAction: (a: HomeAction) => void; onClose: () => void; github?: boolean }) {
+  const paths = startPathsFor({ github });
   const router = useRouter();
   const [open, setOpen] = useState<StartPath | null>(null);
   const counted = useRef(false);
@@ -57,8 +58,8 @@ export function FirstRun({ name, onAction, onClose }: { name: string | null; onA
     onClose();
   };
 
-  const current = START.find((p) => p.id === open);
-  const openIndex = START.findIndex((p) => p.id === open);
+  const current = paths.find((p) => p.id === open);
+  const openIndex = paths.findIndex((p) => p.id === open);
 
   /** What the chosen starting point needs, and its actions. Shown under the card on phones, under its row on wider screens. */
   const detail = (c: (typeof START)[number], id: string) => (
@@ -103,7 +104,7 @@ export function FirstRun({ name, onAction, onClose }: { name: string | null; onA
       </p>
 
       <ul role="list" className="mt-6 grid gap-2 sm:grid-cols-2">
-        {START.map((p, i) => [
+        {paths.map((p, i) => [
           <li key={p.id}>
             <button
               type="button"
@@ -127,7 +128,8 @@ export function FirstRun({ name, onAction, onClose }: { name: string | null; onA
               {detail(current, "first-run-detail-m")}
             </li>
           ),
-          current && (openIndex | 1) === i && (
+          // Under the chosen card's row: the second card of the row, or the chosen card when it ends the list alone.
+          current && ((openIndex | 1) === i || (openIndex === i && i === paths.length - 1)) && (
             <li key="detail-d" className="hidden sm:col-span-2 sm:block">
               {detail(current, "first-run-detail-d")}
             </li>

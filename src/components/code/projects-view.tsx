@@ -66,7 +66,7 @@ export function siteName(prompt: string): string {
 const edited = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 
 export function CodeProjectsView() {
-  const { user } = useApp();
+  const { user, integrations } = useApp();
   const router = useRouter();
   const params = useSearchParams();
   const [data, setData] = useState<ListData | null>(null);
@@ -386,10 +386,14 @@ export function CodeProjectsView() {
                   <button type="button" onClick={() => void tryExample()} className="text-s-ink-2 underline underline-offset-2 hover:text-s-ink">
                     Fix a bug in an example project
                   </button>
-                  {" · "}
-                  <button type="button" onClick={() => void loadRepos()} className="text-s-ink-2 underline underline-offset-2 hover:text-s-ink">
-                    Import from GitHub
-                  </button>
+                  {integrations.github && (
+                    <>
+                      {" · "}
+                      <button type="button" onClick={() => void loadRepos()} className="text-s-ink-2 underline underline-offset-2 hover:text-s-ink">
+                        Import from GitHub
+                      </button>
+                    </>
+                  )}
                   {" · "}
                   <button type="button" onClick={() => setOpen("new")} className="text-s-ink-2 underline underline-offset-2 hover:text-s-ink">
                     Start from a template

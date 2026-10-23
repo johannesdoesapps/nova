@@ -41,10 +41,12 @@ export interface HomeProps {
   /** A new account (see lib/onboarding): show the guided start instead of the usual start screen. */
   firstRun?: boolean;
   signedIn?: boolean;
+  /** GitHub import is set up on this site (otherwise onboarding doesn't offer it). */
+  github?: boolean;
 }
 
 /** The start page: the logo, a greeting with today's date, one question, the prompt box and the task starter. */
-export function Home({ name, composer, onAction, notice, starter, firstRun = false, signedIn = false }: HomeProps) {
+export function Home({ name, composer, onAction, notice, starter, firstRun = false, signedIn = false, github = false }: HomeProps) {
   const router = useRouter();
   const params = useSearchParams();
   // First-run onboarding: new accounts, or anyone who opens "Getting started" (/home?welcome=1).
@@ -86,7 +88,7 @@ export function Home({ name, composer, onAction, notice, starter, firstRun = fal
       <div className="mx-auto flex min-h-full w-full max-w-[1080px] flex-col justify-center px-4 pb-24 pt-6 sm:px-6 sm:pt-10 lg:pt-14">
         <div className="mx-auto flex w-full max-w-[760px] flex-col items-center">
           <OrbisMark className="s-in mb-6 h-9 w-9" />
-          <FirstRun name={name} onAction={runAction} onClose={() => setWelcome(false)} />
+          <FirstRun name={name} onAction={runAction} onClose={() => setWelcome(false)} github={github} />
           <p className="mt-8 w-full text-left text-[12.5px] font-medium text-s-ink-3">Or ask anything</p>
           <div className="mt-2 w-full text-left">{composer}</div>
           {notice && <div className="mt-5 text-center text-[12.5px] text-s-ink-3">{notice}</div>}

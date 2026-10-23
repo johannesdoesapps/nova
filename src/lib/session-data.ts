@@ -5,6 +5,7 @@ import { getAuth } from "./auth";
 import { listConversations, listProjects } from "./db";
 import { integrationStatus, isSupabaseConfigured, publicEnv } from "./env";
 import { isFirstRun, readOnboarding, type OnboardingState } from "./onboarding";
+import { githubAppConfig } from "./github/app";
 
 /** Everything the app chrome needs, loaded once per request on the server. */
 export const loadShellData = cache(async function loadShellData() {
@@ -46,6 +47,8 @@ export const loadShellData = cache(async function loadShellData() {
       huggingface: flag("huggingface"),
       search: flag("search"),
       billing: flag("billing"),
+      // GitHub import needs the GitHub App configured; onboarding only offers it when it is.
+      github: !!githubAppConfig(),
     },
     recents: { conversations, projects },
     supabasePublic:

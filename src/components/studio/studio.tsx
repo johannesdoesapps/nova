@@ -325,6 +325,7 @@ export function Studio({ home = false }: { home?: boolean }) {
             starter={{ active: starterId, onChoose: applyTask, env: starterEnv }}
             firstRun={!!user?.firstRun}
             signedIn={!!user}
+            github={!!integrations.github}
           />
         </div>
       ) : empty ? (
