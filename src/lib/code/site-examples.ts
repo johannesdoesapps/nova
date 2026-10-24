@@ -77,3 +77,43 @@ export function siteName(prompt: string): string {
   const name = words ? words[0]!.toUpperCase() + words.slice(1) : "New website";
   return name.length > 60 ? `${name.slice(0, 57)}…` : name;
 }
+
+/** Example requests that aren't websites, so Code's start screen shows the whole range. */
+export const CODE_EXAMPLES: { id: string; label: string; prompt: string }[] = [
+  {
+    id: "python-photos",
+    label: "Python: sort photos by date",
+    prompt:
+      "Write a Python script that sorts the photos in a folder into subfolders by year and month, using the date the photo was taken (EXIF) and falling back to the file date. Add a --dry-run option that only prints what it would do, and tests for the date logic.",
+  },
+  {
+    id: "node-api",
+    label: "Node.js API for a to-do list",
+    prompt:
+      "Build a small Node.js API for a to-do list with Express: create, list, complete and delete tasks, stored in a JSON file. Validate the input, return clear errors, and add tests for each endpoint.",
+  },
+  {
+    id: "cli-budget",
+    label: "Command-line budget tracker",
+    prompt:
+      "Create a command-line budget tracker in Node.js: add an expense with an amount, category and date, list this month's expenses, and show totals per category. Store the data in a local file and include tests.",
+  },
+];
+
+const PYTHON = /\b(python|django|flask|fastapi|pandas|numpy|jupyter|pytest|pip|[\w-]+\.py)\b/i;
+const NODE = /\b(node(\.?js)?|express|javascript|typescript|npm|discord bot|telegram bot|bot|cli|command[- ]line|terminal|api|rest|server|back-?end|scraper|script)\b/i;
+const WEB =
+  /\b(web ?sites?|web ?pages?|landing ?page|home ?page|portfolio|storefront|e-?commerce|online store|shop|web ?app|dashboard|html|css|front-?end|navbar|hero|responsive|tailwind|react|vue|svelte|next\.?js|vite|blog|restaurant|game|calculator|quiz|timer|app)\b/i;
+
+/**
+ * The kind of project a request needs when Code starts a new one: Python or Node.js when it says so, a website
+ * for anything with pages or a visual app, otherwise a blank project the agent sets up itself.
+ */
+export function projectTypeFor(request: string): "website" | "node" | "python" | "blank" {
+  if (PYTHON.test(request)) return "python";
+  // "A React dashboard" or "a Node.js API": the more specific words win.
+  if (WEB.test(request) && !/\b(api|cli|command[- ]line|bot|scraper)\b/i.test(request)) return "website";
+  if (NODE.test(request)) return "node";
+  if (WEB.test(request)) return "website";
+  return "blank";
+}

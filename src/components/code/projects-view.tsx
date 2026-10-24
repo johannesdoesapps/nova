@@ -7,7 +7,7 @@ import { useApp } from "@/components/layout/app-context";
 import { forgetPlace } from "@/components/studio/mode-switch";
 import { StudioHeader } from "@/components/studio/frame";
 import { Menu, MenuItem } from "@/components/studio/ui";
-import { SITE_DETAIL_FIELDS, SITE_EXAMPLES, siteExample, siteName, withSiteDetails, type SiteDetails } from "@/lib/code/site-examples";
+import { CODE_EXAMPLES, projectTypeFor, SITE_DETAIL_FIELDS, SITE_EXAMPLES, siteExample, siteName, withSiteDetails, type SiteDetails } from "@/lib/code/site-examples";
 import { EXAMPLE_PROJECT, TEMPLATES, TEMPLATE_IDS, type ProjectSummary, type TemplateId } from "@/lib/code/projects";
 import { cn } from "@/lib/utils";
 import { api, CodeApiError, post, putBuildRequest, type Allowance } from "./api";
@@ -25,6 +25,9 @@ export { SITE_EXAMPLES, siteName };
  * another way (template, GitHub, the example) is in the New menu, ideas are
  * behind the bulb, and the user's projects behind "Your projects".
  */
+
+/** The project types as they read in a sentence ("a new Python project"). */
+const TYPE_NAME: Record<TemplateId, string> = { website: "website", node: "Node.js", python: "Python", blank: "blank" };
 
 const ICON: Record<TemplateId, typeof Globe> = { website: Globe, node: Server, python: Terminal, blank: Code2 };
 
@@ -69,6 +72,7 @@ export function CodeProjectsView() {
   const [site, setSite] = useState(() => siteExample(params.get("idea"))?.prompt ?? "");
   const catalog = useCatalog();
   const [modelId, setModelId] = useCodeModel(catalog);
+  /** Where the request goes: "new" (a new project, its type taken from the request), "new:<type>", or a project id. */
   const [siteTarget, setSiteTarget] = useState<string>("new");
   /** Optional details for a new site; closed unless asked for, since most requests say enough. */
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -99,6 +103,9 @@ export function CodeProjectsView() {
   }, [wantsNew]);
 
   const full = !!data && data.maxProjects !== null && data.projects.length >= data.maxProjects;
+  const isNew = siteTarget === "new" || siteTarget.startsWith("new:");
+  // The new project's type: chosen, or taken from what the request describes (shown under the box).
+  const newType: TemplateId = siteTarget.startsWith("new:") ? (siteTarget.slice(4) as TemplateId) : projectTypeFor(site);
 
   const create = async () => {
     setBusy("new");
@@ -113,19 +120,19 @@ export function CodeProjectsView() {
   };
 
   /**
-   * "Build website": a new project from the website template (or the chosen
-   * existing one), then its page, where the agent starts on the request at
-   * once, working on its own; it changes only that project.
+   * Start: a new project of the right type (chosen, or taken from the request: a website, Node.js, Python or
+   * blank) or the chosen existing one, then its page, where the agent starts on the request at once, working
+   * on its own; it changes only that project.
    */
   const buildSite = async () => {
-    const text = siteTarget === "new" ? withSiteDetails(site, details) : site.trim();
+    const text = isNew && newType === "website" ? withSiteDetails(site, details) : site.trim();
     if (!site.trim()) return siteBox.current?.focus();
-    if (attachments.busy || busy || (siteTarget === "new" && full)) return;
+    if (attachments.busy || busy || (isNew && full)) return;
     setBusy("build");
     setError(null);
     try {
       let pid = siteTarget;
-      if (pid === "new") pid = created.current ??= (await post<{ project: ProjectSummary }>("/api/code/projects", { name: siteName(site.trim()), template: "website" })).project.id;
+      if (isNew) pid = created.current ??= (await post<{ project: ProjectSummary }>("/api/code/projects", { name: siteName(site.trim()), template: newType })).project.id;
       const ids = await attachments.uploadTo(pid);
       putBuildRequest(pid, text, ids, modelId);
       router.push(`/code/${pid}?build=1`);
@@ -286,14 +293,14 @@ export function CodeProjectsView() {
             <section className="mt-7" aria-label="Describe what to build">
               <PromptBar
                 id="build-site"
-                label={target ? `Describe the change to ${target.name}` : "Describe the website you want to build"}
+                label={target ? `Describe the change to ${target.name}` : "Describe what you want to build"}
                 inputRef={siteBox}
                 value={site}
                 onChange={setSite}
                 onSubmit={() => void buildSite()}
                 sending={busy === "build"}
                 attachments={attachments}
-                placeholder={target ? `Describe the change to “${target.name}”…` : "Describe the website you want to build…"}
+                placeholder={target ? `Describe the change to “${target.name}”…` : "Describe a website, an app, a script or a bot…"}
                 working={busy === "build"}
                 footerLeft={
                   <>
@@ -304,10 +311,15 @@ export function CodeProjectsView() {
                       id="build-target"
                       value={siteTarget}
                       onChange={(e) => setSiteTarget(e.target.value)}
-                      title="Where the agent works: a new website project, or one of yours. It writes the files, runs the site on the project's private computer (this uses workspace minutes), checks it in a real browser and fixes what it finds. Every change can be undone."
+                      title="Where the agent works: a new project (a website, Node.js, Python or blank), or one of yours. It writes the files, runs them on the project's private computer (this uses workspace minutes), tests what it can, opens websites in a real browser, and fixes what it finds. Every change can be undone."
                       className="h-8 min-w-0 max-w-[230px] truncate rounded-full bg-transparent px-2 text-[12.5px] text-s-ink-2 hover:bg-s-hover hover:text-s-ink"
                     >
-                      <option value="new">New website project</option>
+                      <option value="new">New project (type from your request)</option>
+                      {(["website", "node", "python", "blank"] as const).map((t) => (
+                        <option key={t} value={`new:${t}`}>
+                          New {TYPE_NAME[t]} project
+                        </option>
+                      ))}
                       {(data?.projects ?? []).map((p) => (
                         <option key={p.id} value={p.id}>
                           Change “{p.name}”
@@ -318,7 +330,7 @@ export function CodeProjectsView() {
                 }
                 footerRight={
                   <>
-                    {siteTarget === "new" && full && <span className="text-[12.5px] text-s-danger">Project limit reached</span>}
+                    {isNew && full && <span className="text-[12.5px] text-s-danger">Project limit reached</span>}
                     <Menu
                       label="Ideas"
                       align="end"
@@ -329,7 +341,7 @@ export function CodeProjectsView() {
                       buttonClassName="grid h-8 w-8 shrink-0 place-items-center rounded-full text-s-ink-3 transition hover:bg-s-hover hover:text-s-ink [&_svg]:h-4 [&_svg]:w-4"
                       button={<Lightbulb />}
                     >
-                      {SITE_EXAMPLES.map((x) => (
+                      {[...SITE_EXAMPLES, ...CODE_EXAMPLES].map((x) => (
                         <MenuItem
                           key={x.label}
                           onClick={() => {
@@ -347,7 +359,17 @@ export function CodeProjectsView() {
               />
             </section>
 
-            {siteTarget === "new" && (
+            {isNew && (
+              <p className="mt-2 px-1 text-[12.5px] text-s-ink-3" aria-live="polite">
+                {siteTarget === "new"
+                  ? site.trim()
+                    ? `Starts a new ${TYPE_NAME[newType]} project, picked from what you describe. Choose another type in the menu below the box.`
+                    : "Starts a new project of the right kind for what you describe: a website, Node.js, Python or blank."
+                  : `Starts a new ${TYPE_NAME[newType]} project.`}
+              </p>
+            )}
+
+            {isNew && newType === "website" && (
               <div className="mt-2 px-1">
                 <button
                   type="button"
@@ -379,14 +401,15 @@ export function CodeProjectsView() {
             )}
 
             {guided && !site.trim() && !busy && (
-              <section aria-label="How building a website works" className="s-in mt-4 rounded-2xl border border-s-line p-4 text-[13px] leading-relaxed">
+              <section aria-label="How Orbis Code works" className="s-in mt-4 rounded-2xl border border-s-line p-4 text-[13px] leading-relaxed">
                 <p className="text-s-ink-2">
-                  Say what the site is for, the sections you want and the look. The agent writes the files, starts the site on this project&apos;s private computer, opens it in a real browser at
-                  desktop, tablet and phone sizes, fixes what it finds, and reports what it checked. You can watch each step and stop it at any time; nothing is published.
+                  Describe what you want: a website, an app, a script or a bot, or a change to one of your projects. The agent writes the files, runs them on the project&apos;s private computer, runs
+                  the tests, opens websites in a real browser at desktop, tablet and phone sizes, fixes what it finds, and reports what it checked. You can watch each step and stop it at any time;
+                  nothing is published.
                 </p>
                 <p className="mt-3 text-[12px] text-s-ink-3">Start from an example and edit it:</p>
                 <ul className="mt-1.5 flex flex-wrap gap-1.5">
-                  {SITE_EXAMPLES.map((x) => (
+                  {[...SITE_EXAMPLES.slice(0, 3), ...CODE_EXAMPLES].map((x) => (
                     <li key={x.id}>
                       <button
                         type="button"
@@ -402,7 +425,11 @@ export function CodeProjectsView() {
                   ))}
                 </ul>
                 <p className="mt-3 text-[12.5px] text-s-ink-3">
-                  Not a website?{" "}
+                  Other ways to start:{" "}
+                  <Link href="/code/website" className="text-s-ink-2 underline underline-offset-2 hover:text-s-ink">
+                    Website templates
+                  </Link>
+                  {" · "}
                   <button type="button" onClick={() => void tryExample()} className="text-s-ink-2 underline underline-offset-2 hover:text-s-ink">
                     Fix a bug in an example project
                   </button>
