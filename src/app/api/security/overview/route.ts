@@ -14,7 +14,7 @@ export async function GET() {
       securityTools(auth),
       listTargets(auth.supabase, auth.user.id),
       listRuns(auth.supabase, auth.user.id, 60),
-      listFindings(auth.supabase, auth.user.id, { sort: "recent" }),
+      listFindings(auth.supabase, auth.user.id, { sort: "recent", scope: "security" }),
     ]);
     const active = findings.filter((f) => !["fixed", "verified", "accepted_risk", "false_positive"].includes(f.status));
     const counts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 } as Record<string, number>;

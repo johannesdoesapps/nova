@@ -9,6 +9,8 @@
  *  - investigation(): the nine investigation steps with what was done for each, and what wasn't.
  */
 
+import { defectRuleById } from "./guardian/defects";
+
 export const CLASSIFICATIONS = ["confirmed", "likely", "needs_verification", "informational", "false_positive"] as const;
 export type Classification = (typeof CLASSIFICATIONS)[number];
 
@@ -377,6 +379,42 @@ const KB: [RegExp, Kb][] = [
       privileges: "Whatever access reaches this code path.",
       rootCause: "Unsafe API use with values that may be untrusted.",
       verify: () => ["Add a unit test with a hostile input value that must be rejected or neutralised.", reaudit],
+      cvss: null,
+    },
+  ],
+  [
+    /^quality\./,
+    {
+      reproduce: (f) => [`Open ${f.location ?? "the file in the evidence"} and read the flagged line with its surrounding function.`, defectRuleById(f.rule_id)?.test ?? "Write a test that exercises the failure scenario in the description."],
+      expected: "The code behaves correctly in the scenario the description gives (including the edge case).",
+      impact: "A correctness or reliability defect: wrong results, crashes or flaky behaviour for the users who hit that path.",
+      privileges: "None — this is a code defect, not an attack.",
+      rootCause: "A code pattern that's wrong in the situation described (see the finding).",
+      verify: () => ["Run the reproducing test: it fails before the fix and passes after.", "Re-run Code Guardian on the fixed repository; the finding should be marked “not detected”."],
+      cvss: null,
+    },
+  ],
+  [
+    /^compat\./,
+    {
+      reproduce: () => ["On a clean checkout, run the install the way CI does (`npm ci`), then the build and tests, and note any error or warning about the packages named in the finding."],
+      expected: "package.json, the lockfile and the installed packages agree, and every package supports the Node and framework versions you run.",
+      impact: "Builds or installs that fail (or differ) between machines, CI and production; runtime errors in code paths that use an incompatible package.",
+      privileges: "None — this is a compatibility issue.",
+      rootCause: "Dependency declarations, the lockfile and the versions in use have drifted apart.",
+      verify: () => ["`npm ci` succeeds on a clean checkout, followed by the build and full test suite.", "Re-run Code Guardian; the finding should be marked “not detected”."],
+      cvss: null,
+    },
+  ],
+  [
+    /^arch\./,
+    {
+      reproduce: (f) => [`Open ${f.location ?? "the files in the evidence"} and the other locations listed.`],
+      expected: "Modules with clear responsibilities, no import cycles and no copies of the same logic.",
+      impact: "Not a defect by itself: it makes changes riskier and bugs easier to introduce. Fix it when you next work in this code, not as an emergency.",
+      privileges: "None.",
+      rootCause: "Structure that grew without a refactor (see the description).",
+      verify: () => ["Run the full test suite after the refactor.", "Re-run Code Guardian; the finding should be marked “not detected”."],
       cvss: null,
     },
   ],

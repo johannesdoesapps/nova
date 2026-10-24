@@ -205,6 +205,11 @@ export function SecurityView() {
                             Open investigations and detection lab
                           </Link>
                         )}
+                        {a.id === "code_guardian" && (
+                          <Link href="/agents/security/guardian" className="mt-2 inline-flex h-9 w-full items-center justify-center rounded-xl text-[13px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink">
+                            Open code health, impact analysis and repairs
+                          </Link>
+                        )}
                       </div>
                     </article>
                   );

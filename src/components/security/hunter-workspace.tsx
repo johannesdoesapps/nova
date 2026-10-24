@@ -92,7 +92,7 @@ export function HunterWorkspace() {
         <ArrowLeft className="h-4 w-4" /> Security
       </Link>
       <span className="text-s-ink-3">/</span>
-      <span className="text-[14px] font-medium">Threat Hunter</span>
+      <span className="whitespace-nowrap text-[14px] font-medium">Threat Hunter</span>
     </StudioHeader>
   );
 

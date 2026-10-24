@@ -437,7 +437,7 @@ const BASE: Omit<AgentDef, keyof AgentRole>[] = [
     name: "Security Team",
     tagline: "Website checks, log investigations and secure code audits",
     description:
-      "Three agents: Sentinel audits websites you've proved you own (site mapping, header and configuration checks, attack paths, coverage and a release gate), Threat Hunter investigates log exports you upload (detections, investigations with ATT&CK stages and response plans you approve), Code Guardian maps and audits code with rules, an application map and OSV dependency checks. Scanners produce the findings; AI only explains them and proposes fixes.",
+      "Three agents: Sentinel audits websites you've proved you own (site mapping, header and configuration checks, attack paths, coverage and a release gate), Threat Hunter investigates log exports you upload (detections, investigations with ATT&CK stages and response plans you approve), Code Guardian maps and audits code (security rules, an application map, OSV checks, plus engineering analysis: defects, dependency compatibility, module graph and change impact, with repairs handed to the coding agent). Scanners produce the findings; AI only explains them and proposes fixes.",
     category: "Security",
     icon: "shield",
     runtime: "security",

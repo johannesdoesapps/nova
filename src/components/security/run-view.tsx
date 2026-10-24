@@ -10,6 +10,7 @@ import type { CompactCodeMap } from "@/lib/security/code-map";
 import type { EndpointResult } from "@/lib/security/crawl";
 import { classify, type FindingLike } from "@/lib/security/details";
 import type { Surface } from "@/lib/security/surface";
+import { engineeringKind, isEngineering, KIND_LABEL } from "@/lib/security/guardian/categories";
 import type { FileInventory } from "@/lib/security/hunt/events";
 import type { IndicatorRecord } from "@/lib/security/hunt/intel";
 import type { Investigation } from "@/lib/security/hunt/investigate";
@@ -53,7 +54,7 @@ interface Run {
 interface Detail {
   run: Run;
   children: Run[];
-  findings: (FindingSummary & { run_id: string | null; last_run_id: string | null })[];
+  findings: (FindingSummary & { run_id: string | null; last_run_id: string | null; rule_id: string })[];
   history: { id: number; action: string; created_at: string }[];
 }
 
@@ -103,7 +104,10 @@ export function RunView({ id }: { id: string }) {
     );
 
   const { run, children } = data;
-  const findings = [...data.findings].sort((a, b) => SEV_RANK[a.severity]! - SEV_RANK[b.severity]!);
+  const sorted = [...data.findings].sort((a, b) => SEV_RANK[a.severity]! - SEV_RANK[b.severity]!);
+  // Code Guardian's engineering findings (defects, dependencies, maintainability) are listed apart from security ones.
+  const findings = sorted.filter((f) => !isEngineering(f.rule_id));
+  const engineering = sorted.filter((f) => isEngineering(f.rule_id));
   const allRuns = [run, ...children];
   const auditMode = run.stats.audit?.mode;
   // Present once the audit's report step has run (the analysis is stored with the parent run).
@@ -272,6 +276,32 @@ export function RunView({ id }: { id: string }) {
               </ul>
             )}
           </section>
+
+          {engineering.length > 0 && (
+            <section className="glass rounded-[20px] p-5">
+              <h2 className="mb-1 text-[15px] font-semibold">Engineering findings ({engineering.length})</h2>
+              <p className="mb-3 text-[12.5px] text-s-ink-3">
+                {(["defect", "dependency", "maintainability"] as const)
+                  .map((k) => `${engineering.filter((f) => engineeringKind(f.rule_id) === k).length} ${KIND_LABEL[k].toLowerCase()}`)
+                  .join(" · ")}{" "}
+                — not security issues; not counted in the security totals.{" "}
+                <Link href="/agents/security/guardian" className="underline underline-offset-2">
+                  Open the Code Guardian workspace
+                </Link>
+              </p>
+              <ul className="divide-y divide-s-line">
+                {engineering.slice(0, 12).map((f) => (
+                  <li key={f.id} className="flex items-center gap-3 py-2">
+                    <Link href={`/agents/security/findings/${f.id}`} className="min-w-0 flex-1 truncate text-[13.5px] hover:underline">
+                      {f.title}
+                    </Link>
+                    <SeverityBadge severity={f.severity} />
+                  </li>
+                ))}
+              </ul>
+              {engineering.length > 12 && <p className="mt-2 text-[12.5px] text-s-ink-3">and {engineering.length - 12} more in the workspace.</p>}
+            </section>
+          )}
 
           {data.history.length > 0 && (
             <section className="text-[12.5px] text-s-ink-3">

@@ -1,4 +1,5 @@
 import "server-only";
+import { ENGINEERING_PREFIXES } from "../security/guardian/categories";
 import { ApiError } from "../http";
 import type { FindingDraft, FindingStatus, SecurityAgentId, ToolRun } from "../security/types";
 import type { ServerSupabase } from "../supabase/server";
@@ -103,10 +104,16 @@ export async function getRunRow(db: ServerSupabase, userId: string, id: string):
  * updated in place (evidence, last seen, occurrences). A finding that was
  * fixed or verified and shows up again is reopened as a regression.
  */
-export async function saveFindings(db: ServerSupabase, userId: string, runId: string, drafts: FindingDraft[]): Promise<{ ids: Map<string, string>; created: number; updated: number; reopened: number }> {
+export async function saveFindings(
+  db: ServerSupabase,
+  userId: string,
+  runId: string,
+  drafts: FindingDraft[],
+): Promise<{ ids: Map<string, string>; created: number; updated: number; reopened: number; reopenedFingerprints: string[] }> {
   const ids = new Map<string, string>();
   const list = drafts.slice(0, 400);
-  if (!list.length) return { ids, created: 0, updated: 0, reopened: 0 };
+  const reopenedFingerprints: string[] = [];
+  if (!list.length) return { ids, created: 0, updated: 0, reopened: 0, reopenedFingerprints };
   const existing = new Map<string, { id: string; status: FindingStatus; occurrences: number }>();
   for (let i = 0; i < list.length; i += 150) {
     const { data } = await db
@@ -155,7 +162,10 @@ export async function saveFindings(db: ServerSupabase, userId: string, runId: st
     if (!prev) continue;
     ids.set(d.fingerprint, prev.id);
     const regress = prev.status === "fixed" || prev.status === "verified";
-    if (regress) reopened++;
+    if (regress) {
+      reopened++;
+      reopenedFingerprints.push(d.fingerprint);
+    }
     const { error } = await db
       .from("security_findings")
       .update({
@@ -172,7 +182,7 @@ export async function saveFindings(db: ServerSupabase, userId: string, runId: st
       .eq("id", prev.id);
     if (!error) updated++;
   }
-  return { ids, created, updated, reopened };
+  return { ids, created, updated, reopened, reopenedFingerprints };
 }
 
 /**
@@ -235,6 +245,8 @@ export interface FindingQuery {
   sort?: "severity" | "recent" | "oldest";
   includeDuplicates?: boolean;
   runId?: string;
+  /** Security findings only, Code Guardian engineering findings only (quality./compat./arch.), or everything (default). */
+  scope?: "security" | "engineering" | "all";
 }
 
 const SEV_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
@@ -247,6 +259,8 @@ export async function listFindings(db: ServerSupabase, userId: string, q: Findin
   if (q.asset) query = query.eq("asset", q.asset);
   if (q.runId) query = query.or(`run_id.eq.${q.runId},last_run_id.eq.${q.runId}`);
   if (!q.includeDuplicates) query = query.is("duplicate_of", null);
+  if (q.scope === "security") for (const p of ENGINEERING_PREFIXES) query = query.not("rule_id", "like", `${p}%`);
+  if (q.scope === "engineering") query = query.or(ENGINEERING_PREFIXES.map((p) => `rule_id.like.${p}%`).join(","));
   if (q.q) {
     const s = q.q.replace(/[%,()*]/g, " ").trim().slice(0, 100);
     if (s) query = query.or(`title.ilike.%${s}%,description.ilike.%${s}%,location.ilike.%${s}%,asset.ilike.%${s}%`);

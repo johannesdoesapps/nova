@@ -19,6 +19,8 @@ import { parseIndicators } from "./logs";
 import { analyseLogs, huntSections, type Analysis } from "./hunt/analyse";
 import { SOURCE_LABEL, type SourceKind } from "./hunt/events";
 import { ipRecord, uncheckedRecord, type IndicatorRecord } from "./hunt/intel";
+import { analyseEngineering, fitGuardianSummary } from "./guardian/analyse";
+import { buildMemory, countFindings, type Counts, type MemorySummary, type StoredFindingRow } from "./guardian/memory";
 import { fitHuntStats, relatedPrior, type Investigation } from "./hunt/investigate";
 import { qaCheck, type QaIssue } from "./hunt/qa";
 import { HUNT_RULES } from "./hunt/rules";
@@ -382,6 +384,20 @@ export async function runGuardianAgent(
       t,
     );
 
+    // Engineering analysis: defects, dependency compatibility, maintainability (kept apart from security counts).
+    t = steps.start("engineering", "Engineering analysis");
+    const complete = input.source.type === "github";
+    const eng = analyseEngineering(files, asset, { completeSnapshot: complete });
+    const engCounts = countFindings(eng.findings.map((f) => f.ruleId));
+    checked.push("quality.", "compat.", "arch.");
+    steps.finish(
+      "engineering",
+      "Engineering analysis",
+      "ok",
+      `${eng.summary.graph.modules} modules mapped; ${engCounts.defects} defect(s), ${engCounts.dependencies} dependency issue(s), ${engCounts.maintainability} maintainability note(s). Nothing executed: tests and builds weren't run.`,
+      t,
+    );
+
     const manifests = parseManifests(files);
     for (const n of manifests.notes) ctx.send({ type: "notice", agent: "code_guardian", text: n });
     if (manifests.packages.length) {
@@ -421,10 +437,39 @@ export async function runGuardianAgent(
       }
     }
 
-    const saved = await store.saveFindings(db, user.id, runId, findings);
+    // Security findings first: the store keeps at most 400 per run.
+    const saved = await store.saveFindings(db, user.id, runId, [...findings, ...eng.findings]);
     // Only compare against earlier audits of the same named source; unnamed uploads may be unrelated projects.
-    const resolved = input.source.type === "github" || input.asset ? await store.markNotDetected(db, user.id, runId, "code_guardian", asset, checked) : 0;
+    const named = input.source.type === "github" || !!input.asset;
+    const resolved = named ? await store.markNotDetected(db, user.id, runId, "code_guardian", asset, checked) : 0;
     ctx.send({ type: "findings", agent: "code_guardian", count: findings.length, bySeverity: countBy(findings), resolved, reopened: saved.reopened });
+
+    t = steps.start("memory", "Regression memory");
+    let memory: MemorySummary | null = null;
+    try {
+      const { data: rows } = await db
+        .from("security_findings")
+        .select("fingerprint,rule_id,title,location,status,occurrences,first_seen,last_run_id")
+        .eq("user_id", user.id)
+        .eq("agent", "code_guardian")
+        .eq("asset", asset)
+        .limit(1000);
+      const prev = named ? (await store.listRuns(db, user.id, 40)).find((r) => r.agent === "code_guardian" && r.asset === asset && r.id !== runId && r.status === "completed") : undefined;
+      const prevCounts = (prev?.stats.guardian as { memory?: { counts?: Counts } } | undefined)?.memory?.counts;
+      memory = buildMemory({ rows: (rows ?? []) as StoredFindingRow[], runId, reopened: saved.reopenedFingerprints, resolvedThisScan: resolved, previous: prev && prevCounts ? { at: prev.started_at, counts: prevCounts } : null });
+      steps.finish(
+        "memory",
+        "Regression memory",
+        "ok",
+        named
+          ? `${memory.regressions.length} regression(s) (fixed before, found again), ${resolved} finding(s) no longer detected, ${memory.fragile.length} fragile file(s)${memory.previous ? "; compared with the previous scan" : "; first scan of this source"}`
+          : "Unnamed upload: not compared with earlier scans (it may be a different project).",
+        t,
+      );
+    } catch (err) {
+      if (ctx.signal.aborted) throw err;
+      steps.finish("memory", "Regression memory", "failed", "History couldn't be read; this scan's results are saved.", t);
+    }
 
     if (input.proposeFixes) {
       const byPath = new Map(files.map((f) => [f.path, f]));
@@ -477,11 +522,13 @@ export async function runGuardianAgent(
       ctx,
       steps,
       "code_guardian",
-      `Code audit of ${asset}: ${rules.filesScanned} files scanned with rules; ${map.routes.length} routes mapped (frameworks: ${map.frameworks.join(", ") || "none recognised"}); dependencies: ${manifests.packages.length} packages. Route findings marked tentative come from reading code, not from running it.`,
+      `Code audit of ${asset}: ${rules.filesScanned} files scanned with rules; ${map.routes.length} routes mapped (frameworks: ${map.frameworks.join(", ") || "none recognised"}); dependencies: ${manifests.packages.length} packages. Route findings marked tentative come from reading code, not from running it. Engineering findings (defects, dependency compatibility, maintainability: ${engCounts.defects}/${engCounts.dependencies}/${engCounts.maintainability}) are reported separately in the Code Guardian workspace and aren't part of this security report.`,
       findings,
     );
     const base = {
       findings: findings.length,
+      engineeringFindings: eng.findings.length,
+      engineering: engCounts,
       bySeverity: countBy(findings),
       files: rules.filesScanned,
       lines: rules.linesScanned,
@@ -491,7 +538,8 @@ export async function runGuardianAgent(
       reopened: saved.reopened,
       routes: map.routes.length,
     };
-    const stats = fitStats({ ...base, codeMap: compactMap(map) });
+    const guardian = fitGuardianSummary({ ...eng.summary, memory }, 8_500);
+    const stats = fitStats({ ...base, codeMap: compactMap(map), guardian });
     await store.finishRun(db, runId, { status: "completed", summary: report.summary, tools: steps.tools, stats, modelId: report.modelId });
     await store.audit(db, user.id, "audit.finished", { runId, detail: base });
     ctx.send({ type: "done", agent: "code_guardian", runId });
@@ -507,7 +555,7 @@ export async function runCoordinatedReport(ctx: RunContext, parentId: string) {
   if (run.agent !== "coordinated") throw new ApiError("bad_request", "Not a coordinated investigation.");
   const steps = new Steps(ctx.send, "coordinated");
   return guarded(ctx, parentId, "coordinated", steps, async () => {
-    const childFindings = (await Promise.all(children.map((c) => store.listFindings(db, user.id, { runId: c.id, includeDuplicates: true })))).flat();
+    const childFindings = (await Promise.all(children.map((c) => store.listFindings(db, user.id, { runId: c.id, includeDuplicates: true, scope: "security" })))).flat();
     let t = steps.start("correlate", "Correlate findings");
     const links = correlate(childFindings);
     await store.linkRelated(db, links.pairs);
@@ -555,11 +603,11 @@ async function finishAudit(ctx: RunContext, steps: Steps, run: store.RunRow, chi
   const parentId = run.id;
   let t = steps.start("analyse", "Attack paths, coverage" + (cfg.mode === "release_gate" ? " & gate" : ""));
   // Re-read after linking so classifications see the new cross-source links.
-  const findings = (await Promise.all(children.map((c) => store.listFindings(db, user.id, { runId: c.id })))).flat();
+  const findings = (await Promise.all(children.map((c) => store.listFindings(db, user.id, { runId: c.id, scope: "security" })))).flat();
   const unique = [...new Map(findings.map((f) => [f.id, f])).values()];
   const assets = [...new Set(children.map((c) => c.asset).filter((a): a is string => !!a))];
   const childIds = new Set(children.map((c) => c.id));
-  const earlier = (await Promise.all(assets.map((asset) => store.listFindings(db, user.id, { asset })))).flat();
+  const earlier = (await Promise.all(assets.map((asset) => store.listFindings(db, user.id, { asset, scope: "security" })))).flat();
   const notRechecked = earlier.filter((f) => !childIds.has(f.last_run_id ?? "") && ["open", "investigating", "fix_proposed"].includes(f.status)).length;
   const previous = (await store.listRuns(db, user.id, 60)).find(
     (r) => r.id !== parentId && r.agent === "coordinated" && r.action === run.action && r.asset === run.asset && r.status === "completed" && r.stats.posture,

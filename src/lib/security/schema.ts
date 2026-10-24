@@ -92,6 +92,8 @@ export const findingsQuery = z.object({
   q: z.string().max(100).optional(),
   sort: z.enum(["severity", "recent", "oldest"]).optional(),
   includeDuplicates: z.enum(["1", "0"]).optional(),
+  /** security (default): security findings only; engineering: Code Guardian defects/dependencies/maintainability; all. */
+  scope: z.enum(["security", "engineering", "all"]).optional(),
 });
 
 /**

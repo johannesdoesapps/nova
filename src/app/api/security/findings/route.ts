@@ -9,7 +9,7 @@ export async function GET(req: Request) {
   try {
     const auth = await requireUser();
     const q = parseQuery(req.url, findingsQuery);
-    return NextResponse.json({ findings: await listFindings(auth.supabase, auth.user.id, { ...q, includeDuplicates: q.includeDuplicates === "1" }) });
+    return NextResponse.json({ findings: await listFindings(auth.supabase, auth.user.id, { ...q, scope: q.scope ?? "security", includeDuplicates: q.includeDuplicates === "1" }) });
   } catch (err) {
     return errorResponse(err);
   }

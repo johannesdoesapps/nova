@@ -59,8 +59,8 @@ export const SECURITY_AGENTS: SecurityAgentDef[] = [
   {
     id: "code_guardian",
     name: "Orbis Code Guardian",
-    role: "Secure code review and fixes",
-    description: "Reviews source code for secrets and insecure patterns, checks dependencies against known vulnerabilities, and proposes fixes for your review.",
+    role: "Code security, quality and repair",
+    description: "Maps your codebase and reviews it for security weaknesses, defects that compile but misbehave, dependency and compatibility problems and fragile structure; shows what a change would affect and hands repairs to the coding agent with your approval.",
     icon: "code",
     status: "active",
     capabilities: [
@@ -69,8 +69,11 @@ export const SECURITY_AGENTS: SecurityAgentDef[] = [
       "Config checks: database row rules, CI workflows, containers, storage",
       "Injection, XSS, unsafe eval and crypto rules",
       "Dependency vulnerabilities (OSV database)",
+      "Defect rules (async, logic, data, API errors), each with a failure scenario and how to test the fix",
+      "Module graph: import cycles, broken imports, unused code, change-impact analysis and test plans",
+      "Dependency compatibility: lockfile drift, undeclared imports, peer and Node version conflicts",
       "AI review with evidence checked against your code",
-      "Fix with the coding agent: your approval for every plan and edit, tests run, nothing pushed",
+      "Repair with the coding agent: root cause first, your approval for every plan and edit, tests run, nothing pushed",
     ],
     tools: ["orbis-code-rules", "orbis-code-map", "osv", "ai-review", "github", "semgrep", "trivy"],
     action: { id: "audit", label: "Audit code" },

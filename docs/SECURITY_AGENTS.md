@@ -9,7 +9,7 @@ produce the findings; AI models only explain them, propose fixes, and write repo
 | ----------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Orbis Sentinel**      | Scan website, Security audit | Built-in header/config checks (HTTPS, HSTS, CSP, framing, nosniff, cookies, CORS, version disclosure, mixed scripts, security.txt); exposed-file checks (`.env`, `.git`, backups, server-status…) in _active_ scope only; in audits, read-only site mapping (see below) | Scan a site without fresh proof of ownership; follow links or redirects to other domains; reach private/internal addresses; sign in, submit forms or send attack payloads |
 | **Orbis Threat Hunter** | Investigate threat           | Detection library (19 versioned rules, ATT&CK-mapped) over uploaded web, SSH/Linux auth, CloudTrail, Okta, Windows/Sysmon and DNS exports; investigations; AbuseIPDB reputation when `ABUSEIPDB_API_KEY` is set; CISA KEV catalogue | Claim continuous monitoring or data it never saw; confirm an attack or attribute it to a group from a score; perform any response action |
-| **Orbis Code Guardian** | Audit code                   | Secret & insecure-code rules (JS/TS, Python, PHP); application map and config checks; OSV.dev dependency vulnerabilities (package-lock, yarn.lock, requirements.txt, package.json ranges); GitHub snapshots; AI review whose quoted code must exist in your files       | Apply, commit or deploy patches (the coding agent can, with your approval of each plan and edit)                                                                          |
+| **Orbis Code Guardian** | Audit code                   | Security: secret & insecure-code rules (JS/TS, Python, PHP), application map and config checks, OSV.dev vulnerabilities, AI review whose quoted code must exist. Engineering: module graph, 23 defect rules, dependency compatibility (lockfile, peers, engines), maintainability, change impact, regression memory; repairs via the coding agent | Run your code or tests during an audit; claim a check passed that didn't run; apply, commit, push or deploy changes (the coding agent can edit, with your approval of each plan and edit) |
 
 **Coordinated investigation** runs the selected agents in order (Sentinel → Threat Hunter →
 Code Guardian, each as its own cancellable request), links related findings with transparent
@@ -165,6 +165,88 @@ says so. About 1.5 KB is kept free for decisions people record; decision notes a
 run (full text in the audit trail), and the record is re-compacted if it would overflow. A typical hunt with
 four investigations stores one in full and three as summaries. Raising the cap would need a database
 migration.
+
+## Code Guardian engineering analysis
+
+Open it from the Code Guardian card ("Open code health, impact analysis and repairs") or at
+`/agents/security/guardian`. Code: `src/lib/security/guardian/` (source, graph, profile, defects, semver,
+compat, maintain, impact, memory, repair, analyse); it runs as the "Engineering analysis" and "Regression memory"
+steps of every Code Guardian audit (`runGuardianAgent`). Engineering findings use the rule prefixes `quality.`
+(defects), `compat.` (dependencies) and `arch.` (maintainability); they're stored with the other findings but
+excluded from every security count, report and correlation (`listFindings` `scope`), and listed separately on
+run pages and in the workspace.
+
+**What it reads.** The files of the audit — a GitHub snapshot or an upload. Nothing is executed: tests, type
+checks, lint and builds are listed with their commands as "not run". Uploads may be partial, so imports that
+don't resolve are reported as defects only for GitHub snapshots.
+
+**Project profile.** Languages and lines, frameworks and versions (package.json, requirements, pyproject), runtime
+declarations (engines, .nvmrc, Dockerfile, requires-python), scripts, test files/frameworks/command, CI workflows
+and whether they run tests/lint/typecheck/build, environment variables referenced in code versus documented in
+`.env.example` or docs, migrations, docs and decision records, entry points.
+
+**Module graph.** Imports, requires, re-exports and dynamic imports (JS/TS, with tsconfig/jsconfig `paths`
+aliases) and Python imports (indented imports count as lazy). From it: runtime import cycles (Tarjan; type-only
+and lazy imports excluded), imports that point at no file (with a "differs only in letter case" check — works on
+macOS, fails on Linux), files nothing imports, exports nothing imports (split into dead and "only used in its own
+file"), and the most depended-on files.
+
+**Defect rules** (`defects.ts`, 23 rules, each with failure scenario, impact, fix, how to test the fix, and its
+own positive and negative cases in the test suite): async callbacks in forEach, async useEffect, NaN comparisons,
+impossible typeof checks, assignment in conditions, self-comparison, React state mutated then set, unguarded
+JSON.parse of browser storage, fetch responses used without a status check, unawaited `res.json()`, API routes
+returning an error body with status 200, intervals and listeners never cleaned up, awaited I/O inside loops (N+1),
+getYear, UTC date used as "today", `map(parseInt)`, duplicate case labels, promise chains without a rejection
+handler, empty catch blocks, Python mutable defaults, bare except and `is` with literals. Rules match code with
+comments removed and string contents blanked; test files are skipped; evidence lines are redacted for secrets.
+
+**Dependency compatibility** (`compat.ts`, package.json + package-lock v2/v3; security advisories stay with the
+OSV check): package.json ranges the lockfile doesn't satisfy (npm ci fails), imports of undeclared packages
+(high when not installed at all, medium when present only as someone else's dependency), peer-dependency
+conflicts, packages that need a newer Node than the project allows (low when only dev tools are affected),
+deprecated direct dependencies, unused dependencies, packages declared twice, unpinned versions, and .nvmrc
+versus engines. Semver matching is local (`semver.ts`, checked against npm's semver).
+
+**Maintainability** (`maintain.ts`): long (>120 lines) and branch-heavy (>25 decision points) functions, files
+over 800 lines, import cycles, duplicated blocks (≥10 identical lines; ≥15 become findings), and TODO/FIXME/HACK/XXX
+in comments. Each recommendation states the benefit and risk and is marked as optional, not urgent.
+
+**Change impact** (`impact.ts`, the Impact analysis tab, `POST /api/security/guardian/impact`): for files you plan
+to change, every direct and indirect dependent, the entry points and tests that reach them, files with no test,
+concerns (dependencies, migrations, auth, CI/deploy config, build config, API contracts), a risk level with its
+reasons, a test plan that starts with the tests importing the changed code and widens to the full suite with the
+risk (commands from the project's scripts and test framework, all marked "planned"), and a rollback approach for
+high-risk changes. It reads a fresh GitHub snapshot and changes nothing.
+
+**Repair** (`repair.ts`, `POST /api/security/findings/[id]/fix`): opens a Code project from the repository and
+starts the coding agent with plan approval and edit review on. The task gives the evidence, the change-impact
+report and the checks to run, and requires the nine-step workflow: confirm the finding, reproduce it with a
+failing test before editing (or say it can't be reproduced and stop), trace, isolate, check alternatives, make the
+smallest root-cause fix in the project's conventions, run the reproducer and the planned checks (stop after two
+failed attempts), look for side effects and the same root cause elsewhere, and report what ran, what passed or
+failed, whether the defect was reproduced and resolved, remaining risks and what couldn't be verified —
+"implemented but unverified" when no check could run. Dependency changes, migrations, auth changes, CI changes,
+refactors across modules and interface changes to widely used files need the user's approval first. Nothing is
+pushed or deployed. Files over the Code project's 200 KB file limit (often lockfiles) can't be edited there; the
+route says so and gives the manual steps.
+
+**Regression memory** (`memory.ts`): from this repository's stored findings — findings that came back after being
+fixed, findings seen in three or more scans, fragile files (three or more open findings, or a regression), the same
+rule in three or more files, counts versus the previous audit, and findings the scan no longer detects. Only rule
+ids, paths and titles are used. Flaky tests and test history aren't available (audits don't run tests).
+
+**Validation** (`tests/code-guardian.test.ts`): every rule's own cases; a seeded project with 13 planted defects
+(all found) and its corrected twin (no findings); graph, semver, compatibility, maintainability, impact, memory,
+repair-task and storage tests. On this repository (1,036 files, about 3 s) the analysis reports 17 findings, none
+above low severity: 2 import cycles, 5 very complex functions, 1 duplicated block, the dev-tool Node version
+mismatch, and 8 low/tentative patterns.
+
+**Storage.** No migration: the summary is stored in `security_runs.stats.guardian`, trimmed to about 8.5 KB
+(`fitGuardianSummary`), alongside the application map within the 20 KB limit.
+
+**Not built.** Executing tests or builds during an audit (the coding agent does that when it repairs), profiling
+and benchmarks (performance findings are static patterns, never measured claims), type-aware analysis (rules are
+text-based), pnpm/yarn lockfile compatibility checks, continuous monitoring, and automatic upgrades.
 
 ## Shared finding format
 
