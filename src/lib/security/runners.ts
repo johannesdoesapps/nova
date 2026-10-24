@@ -15,11 +15,17 @@ import { runCodeRules, type SourceFile } from "./code-rules";
 import { correlate } from "./correlate";
 import { checkDependencies, parseManifests } from "./deps";
 import { fetchRepoFiles } from "./github";
-import { huntThreats, parseIndicators, parseLogs, type TimelineEntry } from "./logs";
+import { parseIndicators } from "./logs";
+import { analyseLogs, huntSections, type Analysis } from "./hunt/analyse";
+import { SOURCE_LABEL, type SourceKind } from "./hunt/events";
+import { ipRecord, uncheckedRecord, type IndicatorRecord } from "./hunt/intel";
+import { fitHuntStats, relatedPrior, type Investigation } from "./hunt/investigate";
+import { qaCheck, type QaIssue } from "./hunt/qa";
+import { HUNT_RULES } from "./hunt/rules";
 import { normalizeHost } from "./net";
 import { analyseAudit, auditSections, compactAnalysis, fitStats, type StoredAnalysis } from "./audit-report";
-import { aiReviewMessages, auditReportMessages, compactFindings, fixMessages, parseAiReview, parseFixes, reportMessages, selectFilesForReview, unifiedReportMessages } from "./prompts";
-import { abuseIpLookup, reputationFindings } from "./reputation";
+import { aiReviewMessages, auditReportMessages, huntReportMessages, compactFindings, fixMessages, parseAiReview, parseFixes, reportMessages, selectFilesForReview, unifiedReportMessages } from "./prompts";
+import { abuseIpLookup, reputationFindings, type IpReputation } from "./reputation";
 import { crawlBudget, MODE_INFO, type AuditMode, type TimeBudget } from "./audit";
 import { auditConfig, type AuditConfig } from "./schema";
 import { codeMapFindings, compactMap, mapCode } from "./code-map";
@@ -215,63 +221,108 @@ export async function runHunterAgent(ctx: RunContext, input: { logs: { name: str
   const steps = new Steps(ctx.send, "threat_hunter");
   return guarded(ctx, runId, "threat_hunter", steps, async () => {
     await store.audit(db, user.id, "investigation.started", { runId, detail: { files: input.logs.map((l) => ({ name: l.name, bytes: l.content.length })), indicators: input.indicators.length > 0 } });
-    const findings: FindingDraft[] = [];
-    let timeline: TimelineEntry[] = [];
-    let stats: Record<string, unknown> = {};
-    let indicators: string[] = [];
-
+    let analysis: Analysis | null = null;
     if (input.logs.length) {
-      const t = steps.start("parse", "Log analyzer");
-      const parsed = parseLogs(input.logs);
-      if (!parsed.events.length) {
-        steps.finish("parse", "Log analyzer", "failed", `No supported log lines found (${parsed.unparsed} lines skipped). Supported: web access logs, SSH auth logs, JSON lines.`, t);
-      } else {
-        const hunt = huntThreats(parsed.events, asset);
-        findings.push(...hunt.findings);
-        timeline = hunt.timeline;
-        indicators = hunt.indicators;
-        stats = { ...hunt.stats, unparsedLines: parsed.unparsed, formats: parsed.formats };
-        steps.finish("parse", "Log analyzer", "ok", `${parsed.events.length} events parsed (${parsed.unparsed} lines skipped), ${hunt.findings.length} detections`, t);
-        ctx.send({ type: "timeline", agent: "threat_hunter", entries: timeline.slice(0, 100) });
+      const t = steps.start("parse", "Parse & inventory sources");
+      analysis = analyseLogs(input.logs, asset);
+      const inv = analysis.parsed.inventory;
+      const formats = [...new Set(inv.flatMap((f) => Object.keys(f.formats)))].map((k) => SOURCE_LABEL[k as SourceKind] ?? k);
+      if (!analysis.parsed.events.length)
+        steps.finish("parse", "Parse & inventory sources", "failed", `No supported log lines found (${inv.reduce((n, f) => n + f.unparsed, 0)} lines skipped). Supported: ${Object.values(SOURCE_LABEL).join("; ")}.`, t);
+      else {
+        steps.finish("parse", "Parse & inventory sources", "ok", `${analysis.parsed.events.length} events from ${inv.length} file(s): ${formats.join(", ")}; ${inv.reduce((n, f) => n + f.unparsed, 0)} lines not recognised`, t);
+        const d = steps.start("detect", "Detection library");
+        steps.finish("detect", "Detection library", "ok", `${HUNT_RULES.length} rules; ${analysis.findings.length} signal(s)`, d);
+        ctx.send({ type: "timeline", agent: "threat_hunter", entries: analysis.timeline.slice(0, 100) });
       }
     }
 
+    // Enrichment: third-party reputation for addresses (context, never proof).
     const pasted = parseIndicators(input.indicators);
     if (pasted.invalid.length) ctx.send({ type: "notice", agent: "threat_hunter", text: `Ignored ${pasted.invalid.length} value(s) that aren't IPs, domains or URLs.` });
-    const ips = [...new Set([...pasted.ips, ...indicators])];
+    const ips = [...new Set([...pasted.ips, ...(analysis?.indicators ?? [])])];
     const key = (process.env.ABUSEIPDB_API_KEY ?? "").trim();
+    const seen = (ip: string) => analysis?.parsed.events.filter((e) => e.ip === ip).length ?? 0;
+    const intel: IndicatorRecord[] = [];
+    const repFindings: FindingDraft[] = [];
+    let reputation: IpReputation[] = [];
     if (ips.length) {
       if (!key) {
-        steps.finish("reputation", "IP reputation", "skipped", "No reputation service connected (add ABUSEIPDB_API_KEY). Indicators were not enriched.");
+        steps.finish("reputation", "IP reputation", "skipped", "No reputation service connected (add ABUSEIPDB_API_KEY). Addresses were not enriched.");
+        for (const ip of ips.slice(0, 15)) intel.push(uncheckedRecord("ip", ip, "No IP reputation service is connected.", seen(ip)));
       } else {
         const t = steps.start("reputation", "IP reputation");
         const rep = await abuseIpLookup(ips, key, { signal: ctx.signal });
-        findings.push(...reputationFindings(rep.results, asset));
+        reputation = rep.results;
+        repFindings.push(...reputationFindings(rep.results, asset));
+        for (const r of rep.results) intel.push(ipRecord(r, seen(r.ip)));
+        for (const ip of rep.failed) intel.push(uncheckedRecord("ip", ip, "The lookup failed.", seen(ip)));
         steps.finish("reputation", "IP reputation", rep.results.length ? "ok" : "failed", `${rep.results.length} looked up${rep.failed.length ? `, ${rep.failed.length} failed` : ""}${ips.length > 15 ? " (first 15 only)" : ""}`, t);
-        stats = { ...stats, reputation: rep.results };
       }
     }
     if (pasted.domains.length || pasted.urls.length) {
       steps.finish("domains", "Domain & URL reputation", "skipped", "No domain or URL reputation service is connected yet, so these weren't checked.");
+      for (const d of pasted.domains.slice(0, 10)) intel.push(uncheckedRecord("domain", d, "No domain reputation service is connected."));
+      for (const u of pasted.urls.slice(0, 10)) intel.push(uncheckedRecord("url", u, "No URL reputation service is connected."));
     }
+    // Rebuild investigations with reputation context when there is any (cheap: pure, in-memory).
+    if (analysis && reputation.length) analysis = analyseLogs(input.logs, asset, { reputation });
 
+    const findings = [...(analysis?.findings ?? []), ...repFindings];
     const saved = await store.saveFindings(db, user.id, runId, findings);
     ctx.send({ type: "findings", agent: "threat_hunter", count: findings.length, bySeverity: countBy(findings) });
-    const timelineText = timeline
-      .slice(0, 40)
-      .map((e) => `${e.time ?? "?"} ${e.ip ?? ""} ${e.label} (${e.ref})`)
-      .join("\n");
-    const report = await writeReport(
-      ctx,
-      steps,
-      "threat_hunter",
-      `Investigation of ${asset}. Stats: ${JSON.stringify(stats).slice(0, 800)}. Pasted indicators: ${pasted.ips.length} IPs, ${pasted.domains.length} domains, ${pasted.urls.length} URLs. Continuous monitoring is NOT connected; only the uploaded data was analysed.`,
-      findings,
-      timelineText ? `Timeline:\n${timelineText}` : "",
-    );
-    const runStats = { ...stats, findings: findings.length, bySeverity: countBy(findings), created: saved.created, timeline: timeline.slice(0, 100) };
-    await store.finishRun(db, runId, { status: "completed", summary: report.summary, tools: steps.tools, stats: runStats, modelId: report.modelId });
-    await store.audit(db, user.id, "investigation.finished", { runId, detail: { findings: findings.length } });
+
+    // Investigations: signals point at saved finding ids; link earlier investigations that share entities.
+    let investigations: Investigation[] = [];
+    if (analysis) {
+      const t = steps.start("investigate", "Investigations");
+      const earlier = (await store.listRuns(db, user.id, 40))
+        .filter((r) => r.agent === "threat_hunter" && r.id !== runId && Array.isArray(r.stats.investigations))
+        .map((r) => ({ runId: r.id, at: r.started_at, investigations: r.stats.investigations as Investigation[] }));
+      investigations = analysis.investigations.map((i) => {
+        const withIds = { ...i, signals: i.signals.map((s) => ({ ...s, id: saved.ids.get(s.id) ?? s.id })) };
+        return { ...withIds, prior: relatedPrior(withIds, earlier) };
+      });
+      const likely = investigations.filter((i) => i.state === "likely_malicious").length;
+      steps.finish("investigate", "Investigations", "ok", `${investigations.length} investigation(s)${likely ? `, ${likely} likely malicious` : ""}; ${analysis.shared.length} shared address(es) not used to link signals`, t);
+    }
+
+    let summary: string | null = null;
+    let modelId: string | null = null;
+    let qa: QaIssue[] = [];
+    const t = steps.start("report", "Investigation report");
+    try {
+      const sections = analysis ? huntSections({ ...analysis, investigations }, intel) : `No logs analysed. Indicators checked: ${intel.map((r) => `${r.value}: ${r.rating ?? "not checked"}`).join("; ") || "none"}.`;
+      const r = await aiText(ctx, { defaultMode: "deep", messages: huntReportMessages(sections), purpose: "security", prompt: `[threat hunt] ${asset}`, maxOutputTokens: 2400 });
+      if ("skipped" in r) steps.finish("report", "Investigation report", "skipped", r.skipped, t);
+      else {
+        summary = r.text;
+        modelId = r.modelId;
+        // Quality check: unsupported attribution, overconfidence and claims about data Orbis never saw.
+        qa = qaCheck(r.text, investigations, sections);
+        ctx.send({ type: "report", text: r.text });
+        steps.finish("report", "Investigation report", "ok", `Written by ${r.modelName}${qa.length ? `; quality check flagged ${qa.length} statement(s)` : "; quality check passed"}`, t);
+      }
+    } catch (err) {
+      if (ctx.signal.aborted) throw err;
+      steps.finish("report", "Investigation report", "failed", err instanceof ApiError ? err.message : "The AI model call failed; the investigations are still saved.", t);
+    }
+
+    const runStats = fitHuntStats({
+      ...(analysis?.stats ?? {}),
+      findings: findings.length,
+      bySeverity: countBy(findings),
+      created: saved.created,
+      inventory: analysis?.parsed.inventory ?? [],
+      baselines: analysis?.baselines ?? null,
+      sharedAddresses: analysis?.shared ?? [],
+      investigations,
+      intel,
+      qa,
+      timeline: analysis?.timeline ?? [],
+    });
+    await store.finishRun(db, runId, { status: "completed", summary, tools: steps.tools, stats: runStats, modelId });
+    await store.audit(db, user.id, "investigation.finished", { runId, detail: { findings: findings.length, investigations: investigations.length } });
     ctx.send({ type: "done", agent: "threat_hunter", runId });
     return { runId, findings };
   });

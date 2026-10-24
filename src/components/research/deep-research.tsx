@@ -35,6 +35,20 @@ export function ResearchHome() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<CodeApiError | null>(null);
 
+  // Another agent can hand over a question (e.g. Threat Hunter's research hand-off): it's filled in, never started.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const q = p.get("q");
+    const c = p.get("context");
+    // Reading the address once after mount (it isn't available while rendering on the server).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (q) setQuestion(q.slice(0, 1000));
+    if (c) {
+      setContext(c.slice(0, 4000));
+      setShowContext(true);
+    }
+  }, []);
+
   useEffect(() => {
     if (!user) return;
     let alive = true;

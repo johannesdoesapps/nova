@@ -381,6 +381,18 @@ const KB: [RegExp, Kb][] = [
     },
   ],
   [
+    /^(priv|persist|evasion|exec|cloud|data|dns)\./,
+    {
+      reproduce: (f) => [`Find the log events cited in the evidence (${f.evidence[0]?.source ?? "the uploaded logs"}).`, "Open the investigation this finding belongs to on its run page to see the related signals and timeline."],
+      expected: "The activity matches an approved change, a known job or a known tool.",
+      impact: "A behaviour that attackers use at this stage of an intrusion. Logs alone usually can't prove intent: check it against change records and with the person or team responsible.",
+      privileges: "Depends on the activity; most of these need an account that already has access.",
+      rootCause: "Not determined from logs alone: confirm whether the activity was authorised.",
+      verify: () => ["Record the outcome on the investigation (benign, confirmed, contained or resolved) with a note.", "Analyse newer logs to check whether the activity continues."],
+      cvss: null,
+    },
+  ],
+  [
     /^web\.|^auth\.|^intel\./,
     {
       reproduce: (f) => [`Find the log lines cited in the evidence (${f.evidence[0]?.source ?? "the uploaded logs"}).`],

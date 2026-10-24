@@ -10,7 +10,12 @@ import type { CompactCodeMap } from "@/lib/security/code-map";
 import type { EndpointResult } from "@/lib/security/crawl";
 import { classify, type FindingLike } from "@/lib/security/details";
 import type { Surface } from "@/lib/security/surface";
+import type { FileInventory } from "@/lib/security/hunt/events";
+import type { IndicatorRecord } from "@/lib/security/hunt/intel";
+import type { Investigation } from "@/lib/security/hunt/investigate";
+import type { QaIssue } from "@/lib/security/hunt/qa";
 import { AttackPaths, ClassificationBadge, CodeMapView, Coverage, GateBanner, MonitoringNote, PostureStrip, SurfaceMap } from "./audit-views";
+import { IntelRecords, InvestigationList, QaNotes, SourceCoverage } from "./hunt-views";
 import { AGENT_NAME, AgentBadge, FindingStatus, fmtTime, ICON_OF, ReportBlock, RunStatus, SeverityBadge } from "./bits";
 import type { FindingSummary } from "./findings-panel";
 
@@ -32,6 +37,13 @@ interface Run {
     surface?: Surface & { trimmed?: string[] };
     endpointResults?: EndpointResult[];
     codeMap?: CompactCodeMap;
+    investigations?: Investigation[];
+    investigationsTrimmed?: string[];
+    inventory?: FileInventory[];
+    baselines?: { newSource: { assessed: number; insufficient: number } } | null;
+    sharedAddresses?: string[];
+    intel?: IndicatorRecord[];
+    qa?: QaIssue[];
     [k: string]: unknown;
   };
   error: string | null;
@@ -178,6 +190,10 @@ export function RunView({ id }: { id: string }) {
               <ReportBlock key={c.id} text={c.summary!} title={`${AGENT_NAME[c.agent]} report`} />
             ))}
 
+          {run.agent === "threat_hunter" && (run.stats.qa?.length ?? 0) > 0 && <QaNotes issues={run.stats.qa!} />}
+          {run.agent === "threat_hunter" && run.stats.investigations && <InvestigationList runId={run.id} investigations={run.stats.investigations} trimmed={run.stats.investigationsTrimmed} />}
+          {run.agent === "threat_hunter" && run.stats.inventory && <SourceCoverage inventory={run.stats.inventory} baselines={run.stats.baselines} shared={run.stats.sharedAddresses} />}
+          {run.agent === "threat_hunter" && <IntelRecords records={run.stats.intel ?? []} />}
           {analysis && <AttackPaths paths={analysis.paths} />}
           {analysis && <Coverage coverage={analysis.coverage} />}
           {allRuns
@@ -204,7 +220,7 @@ export function RunView({ id }: { id: string }) {
             </section>
           )}
 
-          {[run, ...children].some((r) => r.stats.timeline?.length) && (
+          {[run, ...children].some((r) => r.stats.timeline?.length && !r.stats.investigations) && (
             <section className="glass rounded-[20px] p-5">
               <h2 className="mb-3 text-[13px] font-semibold uppercase tracking-[0.06em] text-s-ink-3">Timeline from the logs</h2>
               <ol className="relative space-y-2 border-l border-s-line pl-4">

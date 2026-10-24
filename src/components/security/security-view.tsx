@@ -200,6 +200,11 @@ export function SecurityView() {
                         <button type="button" onClick={() => setLaunch(a.id as LaunchMode)} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-s-line-strong text-[14px] font-medium transition hover:border-transparent hover:bg-s-accent hover:text-s-accent-ink">
                           <Play className="h-4 w-4" /> {a.action?.label}
                         </button>
+                        {a.id === "threat_hunter" && (
+                          <Link href="/agents/security/hunter" className="mt-2 inline-flex h-9 w-full items-center justify-center rounded-xl text-[13px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink">
+                            Open investigations and detection lab
+                          </Link>
+                        )}
                       </div>
                     </article>
                   );

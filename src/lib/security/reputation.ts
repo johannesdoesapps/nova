@@ -10,6 +10,13 @@ export interface IpReputation {
   country: string | null;
   isp: string | null;
   lastReportedAt: string | null;
+  /** AbuseIPDB's network type, e.g. "Data Center/Web Hosting/Transit" or "Content Delivery Network". */
+  usageType?: string | null;
+  domain?: string | null;
+  isTor?: boolean;
+  isWhitelisted?: boolean;
+  distinctReporters?: number;
+  retrievedAt?: string;
 }
 
 export async function abuseIpLookup(ips: string[], apiKey: string, opts: { fetchImpl?: typeof fetch; signal?: AbortSignal } = {}): Promise<{ results: IpReputation[]; failed: string[] }> {
@@ -26,8 +33,26 @@ export async function abuseIpLookup(ips: string[], apiKey: string, opts: { fetch
         failed.push(ip);
         continue;
       }
-      const d = ((await r.json()) as { data?: { abuseConfidenceScore?: number; totalReports?: number; countryCode?: string; isp?: string; lastReportedAt?: string } }).data ?? {};
-      results.push({ ip, score: d.abuseConfidenceScore ?? 0, reports: d.totalReports ?? 0, country: d.countryCode ?? null, isp: d.isp ?? null, lastReportedAt: d.lastReportedAt ?? null });
+      const d =
+        (
+          (await r.json()) as {
+            data?: { abuseConfidenceScore?: number; totalReports?: number; countryCode?: string; isp?: string; lastReportedAt?: string; usageType?: string; domain?: string; isTor?: boolean; isWhitelisted?: boolean; numDistinctUsers?: number };
+          }
+        ).data ?? {};
+      results.push({
+        ip,
+        score: d.abuseConfidenceScore ?? 0,
+        reports: d.totalReports ?? 0,
+        country: d.countryCode ?? null,
+        isp: d.isp ?? null,
+        lastReportedAt: d.lastReportedAt ?? null,
+        usageType: d.usageType ?? null,
+        domain: d.domain ?? null,
+        isTor: d.isTor ?? false,
+        isWhitelisted: d.isWhitelisted ?? false,
+        distinctReporters: d.numDistinctUsers,
+        retrievedAt: new Date().toISOString(),
+      });
     } catch {
       failed.push(ip);
     }

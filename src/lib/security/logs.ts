@@ -236,11 +236,11 @@ export function huntThreats(
         key: p.id,
         title: `${p.label} attempts from ${ip} (${hits.length})`,
         description: `Observed: ${hits.length} request(s) containing ${p.label.toLowerCase()} patterns (${span(hits)}).${ok.length ? ` ${ok.length} received a 2xx response — that does not prove success, but those endpoints should be checked.` : " None received a successful response."}`,
-        severity: ok.length ? "high" : "medium",
+        severity: ok.length ? "high" : "low",
         confidence: ok.length ? "tentative" : "confirmed",
         rationale: ok.length
           ? "Attack payloads were sent and the server answered normally; whether the attack worked needs code review or deeper logs."
-          : "Attack attempts are directly observed; all were rejected or failed.",
+          : "Attack attempts are directly observed; all were rejected or failed, so they rank low on their own.",
         evidence: evid(ok.length ? ok : hits, 4),
         remediation: ok.length
           ? "Review the code for the endpoints that returned 2xx (Code Guardian can help), add input validation and parameterised queries, and consider a WAF rule."

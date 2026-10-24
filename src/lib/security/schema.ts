@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AUDIT_MODES, TIME_BUDGETS } from "./audit";
+import { ACTION_STATUSES, INVESTIGATION_STATES } from "./hunt/investigate";
 import { CONFIDENCES, FINDING_STATUSES, SEVERITIES } from "./types";
 
 const modelId = z.string().min(1).max(120).optional();
@@ -92,3 +93,16 @@ export const findingsQuery = z.object({
   sort: z.enum(["severity", "recent", "oldest"]).optional(),
   includeDuplicates: z.enum(["1", "0"]).optional(),
 });
+
+/**
+ * A person's decision on a Threat Hunter investigation: a state change (always with a reason), a note, or the
+ * status of one recommended action. Recorded with the investigation and in the audit trail.
+ */
+export const investigationPatch = z
+  .object({
+    state: z.enum(INVESTIGATION_STATES).optional(),
+    note: z.string().trim().max(2000).optional(),
+    action: z.object({ key: z.string().regex(/^(containment|credentials|eradication):\d{1,2}$/), status: z.enum(ACTION_STATUSES), note: z.string().trim().max(1000).optional() }).optional(),
+  })
+  .refine((b) => b.state || b.note || b.action, "Nothing to record.")
+  .refine((b) => !b.state || (b.note ?? "").length >= 3, "Say why you're changing the state (a short note is enough).");

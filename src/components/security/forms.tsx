@@ -236,7 +236,7 @@ export function HunterForm({ value, onChange }: { value: HunterValue; onChange: 
           }}
         />
         <button type="button" onClick={() => ref.current?.click()} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-s-line-strong px-4 py-5 text-[13.5px] text-s-ink-2 transition hover:bg-s-hover">
-          <FileUp className="h-4 w-4" /> Choose web access, SSH auth or JSON log files
+          <FileUp className="h-4 w-4" /> Choose log files (web, SSH/Linux auth, CloudTrail, Okta, Windows, DNS)
         </button>
         {value.files.length > 0 && (
           <ul className="mt-2 space-y-1">
@@ -271,7 +271,7 @@ export function HunterForm({ value, onChange }: { value: HunterValue; onChange: 
         </label>
         <input id="hunter-asset" value={value.asset} onChange={(e) => onChange({ ...value, asset: e.target.value })} placeholder="e.g. web-server-1" className={inputCls} />
       </div>
-      <p className="text-[12.5px] text-s-ink-3">Logs are analysed in this request and only findings with short evidence excerpts are saved. Orbis does not monitor your systems continuously.</p>
+      <p className="text-[12.5px] text-s-ink-3">Logs are analysed in this request and only findings, investigations and short, redacted evidence excerpts are saved. Orbis isn&apos;t connected to your SIEM, EDR or cloud accounts and doesn&apos;t monitor your systems continuously.</p>
     </div>
   );
 }

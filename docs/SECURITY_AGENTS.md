@@ -8,7 +8,7 @@ produce the findings; AI models only explain them, propose fixes, and write repo
 | Agent                   | Action                       | Real tools it uses                                                                                                                                                                                                                                                      | Never does                                                                                                                                                                |
 | ----------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Orbis Sentinel**      | Scan website, Security audit | Built-in header/config checks (HTTPS, HSTS, CSP, framing, nosniff, cookies, CORS, version disclosure, mixed scripts, security.txt); exposed-file checks (`.env`, `.git`, backups, server-status…) in _active_ scope only; in audits, read-only site mapping (see below) | Scan a site without fresh proof of ownership; follow links or redirects to other domains; reach private/internal addresses; sign in, submit forms or send attack payloads |
-| **Orbis Threat Hunter** | Investigate threat           | Log analyzer for web access logs (combined/common), SSH auth logs and JSON lines; AbuseIPDB reputation when `ABUSEIPDB_API_KEY` is set                                                                                                                                  | Claim continuous monitoring; call an event a confirmed attack from a guess                                                                                                |
+| **Orbis Threat Hunter** | Investigate threat           | Detection library (19 versioned rules, ATT&CK-mapped) over uploaded web, SSH/Linux auth, CloudTrail, Okta, Windows/Sysmon and DNS exports; investigations; AbuseIPDB reputation when `ABUSEIPDB_API_KEY` is set; CISA KEV catalogue | Claim continuous monitoring or data it never saw; confirm an attack or attribute it to a group from a score; perform any response action |
 | **Orbis Code Guardian** | Audit code                   | Secret & insecure-code rules (JS/TS, Python, PHP); application map and config checks; OSV.dev dependency vulnerabilities (package-lock, yarn.lock, requirements.txt, package.json ranges); GitHub snapshots; AI review whose quoted code must exist in your files       | Apply, commit or deploy patches (the coding agent can, with your approval of each plan and edit)                                                                          |
 
 **Coordinated investigation** runs the selected agents in order (Sentinel → Threat Hunter →
@@ -94,6 +94,77 @@ to verify the fix in Sentinel.
 cross-account testing, external scanners (ZAP, Semgrep, Trivy), cloud-account permission review. No database
 migration was needed: audit data lives in `security_runs.stats` (trimmed to its 20 KB limit, with the
 trimming recorded).
+
+## Threat Hunter
+
+Open it from the Threat Hunter card ("Open investigations and detection lab") or at
+`/agents/security/hunter`. Code: `src/lib/security/hunt/` (events, rules, investigate, intel, qa,
+analyse, scenarios), runner `runHunterAgent` in `src/lib/security/runners.ts`.
+
+**Sources.** Only log exports you upload or paste: web access logs, SSH and Linux auth/syslog (sudo,
+su, useradd/usermod, crontab, systemd, auditd), CloudTrail (`Records` download or JSON lines), Okta
+System Log, Windows Security/Sysmon/System events exported as JSON, DNS (Zeek, BIND query log, dnsmasq).
+Every run records a source inventory per file: formats recognised, unrecognised lines, time range,
+which fields are present, gaps in the timeline (longer than max(1 h, 20× the usual spacing)) and
+assumptions (e.g. the year for syslog lines). SIEM, EDR, network flow, email security, live cloud audit
+feeds and Kubernetes audit logs are **not connected**; the product lists what each blind spot hides.
+
+**Detection library** (`rules.ts`, 19 rules, 27 built-in test cases). Each rule has an id, version and
+changelog, ATT&CK tactic and techniques, the hypothesis it tests, required fields, logic, how severity is
+chosen, known benign causes, tuning advice, limitations, hunting queries (Splunk SPL, Microsoft Sentinel KQL,
+shell) and positive/negative test cases that run in the test suite and live in the Detection lab. Rules:
+sign-in attacks (brute force, spraying, success after failures, sign-in from a new source — only for
+accounts with ≥ 7 days and ≥ 10 sign-ins of history), web payloads and scanning, sudo to a root shell,
+admin rights granted, accounts and credentials created, scheduled jobs/services, logging switched off,
+suspicious parent/child processes, obfuscated or download-and-run commands, cloud root activity, cloud
+exposure changes, large transfers, DNS tunnelling and NXDOMAIN bursts. Orbis never deploys a detection
+anywhere; the queries are for you to run in your own tools.
+
+**Investigations** (`investigate.ts`). Signals are grouped by account, host or address. An address links
+signals only when it isn't shared (fewer than three different users signed in successfully from it);
+failures from shared addresses are downgraded. Each investigation has: severity, confidence (with its
+basis) and urgency as separate fields; a timeline; the ATT&CK stages with each marked observed, attempted
+or inferred; malicious and benign hypotheses with what supports and contradicts each; open questions and
+what couldn't be checked; a response plan (priorities, evidence to preserve, scoping, containment,
+credentials, further investigation, eradication, validation, follow-up) where every item is a
+recommendation — items that change systems are marked as needing approval; structured handoffs (task,
+scope, evidence, confidence, permissions, open questions) to Sentinel, Code Guardian, Research and
+Writing; and links to earlier investigations that share an account, host or unshared address.
+States: New, Investigating, Suspicious, Likely malicious, Confirmed malicious, Benign, Inconclusive,
+Contained, Resolved. The engine only sets Suspicious, Likely malicious or Inconclusive. Confirmed
+malicious, Benign, Contained and Resolved are set by a person with a required note
+(`PATCH /api/security/runs/[id]/investigations/[invId]`), which also records approved / declined / done /
+verified for each response item; every change goes to the audit trail.
+
+**Intelligence** (`intel.ts`). IP reputation from AbuseIPDB (when configured) is stored with source,
+retrieval date, last report date and caveats (shared hosting, CDN, Tor, allow-listed, stale > 30 days).
+Domains and URLs are recorded as not checked. `GET /api/security/intel` matches the public CISA Known
+Exploited Vulnerabilities catalogue against your stack: CVEs already listed by a Code Guardian dependency
+finding are verified matches; products seen in a Sentinel or Guardian map, added to the catalogue in the
+last year, are leads (your version isn't known). Reputation and catalogue matches are context, never proof.
+
+**Report and QA.** The AI writes the summary only from the investigation data. A deterministic check
+(`qa.ts`) then flags named threat groups or state involvement not in the evidence, certainty beyond the
+investigations' states, claims about SIEM/EDR/firewall data Orbis didn't have, and claims of monitoring.
+Flags are shown with the report; the report isn't rewritten.
+
+**Validation** (`scenarios.ts`, `tests/threat-hunter.test.ts`). Ten synthetic scenarios (documentation
+IP ranges and example domains): five malicious (SSH takeover with a backdoor account, cloud root misuse,
+macro document launching an encoded command, DNS tunnelling, sign-in from a new source) and five benign
+(internet background scanning, an office behind one address, routine administration, security-product DNS,
+planned key rotation). Current result: all expected detections found (19/19), no medium-or-worse alert in
+any benign scenario, and no benign scenario reaches Likely malicious. These are synthetic checks, not a
+measure of performance on real environments. The Detection lab re-runs them in the browser, and lets you
+run the whole analysis locally on a file without saving anything.
+
+**Storage.** No migration: investigations, inventory, intelligence and QA notes live in
+`security_runs.stats`, which the database caps at 20 KB (`fitHuntStats`, `compactInvestigations`).
+Every investigation stays visible: the highest-priority ones keep their full structure at shorter detail,
+the rest are stored as summaries (state, accounts, signals; no timeline or response plan), and the page
+says so. About 1.5 KB is kept free for decisions people record; decision notes are stored shortened in the
+run (full text in the audit trail), and the record is re-compacted if it would overflow. A typical hunt with
+four investigations stores one in full and three as summaries. Raising the cap would need a database
+migration.
 
 ## Shared finding format
 

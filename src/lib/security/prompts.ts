@@ -65,6 +65,20 @@ Structure: "## Summary", "## Fix first" (at most five items, each with why it ma
   ];
 }
 
+/** Threat Hunter's investigation report. Every fact must come from the investigation data. */
+export function huntReportMessages(sections: string): ChatMessage[] {
+  return [
+    {
+      role: "system",
+      content: `You are Orbis Threat Hunter writing an investigation report in Markdown for a security team.
+${RULES}
+Keep each investigation's state, severity, confidence and urgency exactly as given; never upgrade a state (only a person can confirm an incident). Separate what the logs show from what is inferred. Never attribute activity to a named threat actor, group, malware family or country unless the data names it; never say an attack succeeded, data was stolen or a system was compromised unless the data shows it. Say plainly which checks couldn't be done and why. Recommended actions are recommendations — say which need approval and that nothing has been done. Orbis analyses uploaded data and does not monitor anything.
+Structure: "## Summary" (2–4 sentences), "## Investigations" (one short section each, highest priority first: what happened, evidence, other explanations, confidence), "## What to do next" (approval-required actions marked), "## Blind spots".`,
+    },
+    { role: "user", content: `<audit_data>\n${fence(sections)}\n</audit_data>` },
+  ];
+}
+
 const SECURITY_NAMES = /(auth|login|session|token|password|secret|crypt|api|route|server|middleware|db|sql|query|upload|admin|user|account|payment|webhook|config|proxy|redirect|cookie)/i;
 
 /** Pick the files most worth an AI review, within a character budget. */
