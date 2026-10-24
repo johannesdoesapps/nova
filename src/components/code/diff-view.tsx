@@ -49,7 +49,7 @@ export function FileDiff({
       {note && <div className="border-t border-s-line px-2.5 py-1 text-[11.5px] text-s-ink-3">{note}</div>}
       {stale && <p className="border-t border-s-line px-2.5 py-1 text-[11.5px] text-s-danger">You changed this file after asking. Accepting replaces your newer edits.</p>}
       {open && (
-        <div className="s-scroll max-h-72 overflow-auto border-t border-s-line bg-[var(--s-code,transparent)] font-mono text-[11.5px] leading-[1.55]">
+        <div tabIndex={0} role="region" aria-label={`Changes to ${change.path}`} className="s-scroll max-h-72 overflow-auto border-t border-s-line bg-[var(--s-code,transparent)] font-mono text-[11.5px] leading-[1.55]">
           {hunks.length === 0 && <div className="px-2.5 py-1.5 text-s-ink-3">{change.after === null ? "Removes an empty file." : "Empty file."}</div>}
           {hunks.map((h, i) => (
             <div key={i} className={cn(i > 0 && "border-t border-dashed border-s-line")}>

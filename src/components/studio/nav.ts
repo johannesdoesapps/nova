@@ -17,6 +17,8 @@ import {
   Workflow,
   type LucideIcon,
   GitCompareArrows,
+  ScanSearch,
+  Telescope,
 } from "lucide-react";
 
 /**
@@ -40,6 +42,8 @@ export type Section =
   | "verify"
   | "connectors"
   | "pair"
+  | "review"
+  | "research"
   | "usage"
   | "team"
   | "workforce"
@@ -67,6 +71,8 @@ export const NAV_ENTRIES: NavEntry[] = [
   { id: "templates", label: "Templates", href: "/templates", icon: LayoutTemplate, group: "main", hint: "Ready-made workflows for common tasks" },
   { id: "discover", label: "Discover", href: "/discover", icon: Compass, group: "tools", hint: "What Orbis can do, with ways to try it" },
   { id: "missions", label: "Missions", href: "/missions", icon: Flag, group: "main", hint: "Plan projects and track tasks", parent: "projects" },
+  { id: "research", label: "Deep Research", href: "/research", icon: Telescope, group: "tools", hint: "Multi-step web research with a cited, exportable report" },
+  { id: "review", label: "Code Review", href: "/review", icon: ScanSearch, group: "tools", hint: "Find bugs, edge cases and security problems in code or a pull request" },
   { id: "pair", label: "Pair Coding", href: "/pair", icon: GitCompareArrows, group: "tools", hint: "Two AI models code together: one writes, one reviews" },
   { id: "council", label: "Council", href: "/council", icon: Users, group: "tools", hint: "Several models answer; one combined reply" },
   { id: "arena", label: "Arena", href: "/arena", icon: Swords, group: "tools", hint: "Compare models side by side, blind if you like" },

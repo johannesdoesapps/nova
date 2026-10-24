@@ -15,6 +15,8 @@ const FEATURES: [RegExp, string][] = [
   [/^(verify|claims|hypotheses|trial|benchmark|route)$/, "Research tools"],
   [/^(security|sentinel|reviewer|builder|architect|archaeologist)$/, "Security team"],
   [/^workforce$/, "Workforce"],
+  [/^code_review$/, "Code review"],
+  [/^deep_research$/, "Deep research"],
 ];
 
 export function featureLabel(purpose: string | null | undefined): string {

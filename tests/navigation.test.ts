@@ -223,7 +223,7 @@ describe("the redesigned sidebar", () => {
       sidebarFor(false)
         .filter((e) => e.group === "tools")
         .map((e) => e.id),
-    ).toEqual(["discover", "pair", "council", "arena", "images", "verify", "connectors"]);
+    ).toEqual(["discover", "research", "review", "pair", "council", "arena", "images", "verify", "connectors"]);
     expect(sidebarFor(true).some((e) => e.id === "missions")).toBe(false);
     // Still one command-palette destination.
     expect(navFor(false).filter((e) => e.id === "missions")).toHaveLength(1);

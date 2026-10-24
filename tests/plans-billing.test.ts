@@ -442,6 +442,27 @@ describe("admin unit economics", () => {
   });
 });
 
+describe("research runs are private to their owner", () => {
+  it("another user can't read, change or delete a research run", async () => {
+    const id = (await as(ALICE, () => db.query<{ id: string }>("insert into public.research_runs (question) values ('Compare free tiers') returning id"))).rows[0]!.id;
+    expect((await as(BOB, () => db.query("select id from public.research_runs"))).rows).toHaveLength(0);
+    expect((await as(BOB, () => db.query("update public.research_runs set report = 'x' where id = $1 returning id", [id]))).rows).toHaveLength(0);
+    expect((await as(BOB, () => db.query("delete from public.research_runs where id = $1 returning id", [id]))).rows).toHaveLength(0);
+    await expect(as(ALICE, () => db.query("insert into public.research_runs (question, depth) values ('Compare free tiers', 'endless')"))).rejects.toThrow();
+  });
+});
+
+describe("code reviews are private to their owner", () => {
+  it("another user can't read, change or delete a review, or create one in someone else's name", async () => {
+    const id = (await as(ALICE, () => db.query<{ id: string }>("insert into public.code_reviews (title, source) values ('mine', '{\"kind\":\"paste\",\"label\":\"x\"}') returning id"))).rows[0]!.id;
+    expect((await as(BOB, () => db.query("select id from public.code_reviews"))).rows).toHaveLength(0);
+    expect((await as(BOB, () => db.query("update public.code_reviews set title = 'stolen' where id = $1 returning id", [id]))).rows).toHaveLength(0);
+    expect((await as(BOB, () => db.query("delete from public.code_reviews where id = $1 returning id", [id]))).rows).toHaveLength(0);
+    await expect(as(BOB, () => db.query(`insert into public.code_reviews (user_id, title, source) values ('${ALICE}', 'forged', '{}')`))).rejects.toThrow();
+    expect((await as(ALICE, () => db.query<{ title: string }>("select title from public.code_reviews where id = $1", [id]))).rows[0]!.title).toBe("mine");
+  });
+});
+
 describe("finance report alerts", () => {
   const base: FinanceSummary = { subscriptions: [], canceled_since: 0, cost_by_plan: {}, cost_by_model: [], daily_cost: [], top_users: [], users_total: 0 };
 

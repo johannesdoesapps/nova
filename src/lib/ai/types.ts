@@ -103,6 +103,41 @@ export interface AIProvider {
   stream(params: GenerateParams): AsyncGenerator<StreamEvent, void, unknown>;
   /** One model turn with native tool calling, where the provider's API has it. */
   toolTurn?(params: ToolTurnParams): Promise<ToolTurnResult>;
+  /** Answer a question using the provider's own web search, with citations (Claude only for now). */
+  webResearch?(params: WebResearchParams): Promise<WebResearchResult>;
+}
+
+// ---------------------------------------------------------------- web research (provider-run search)
+
+export interface WebResearchParams {
+  model: ModelInfo;
+  system: string;
+  prompt: string;
+  /** Searches the model may run in this call. */
+  maxSearches: number;
+  maxOutputTokens: number;
+  signal?: AbortSignal;
+}
+
+/** A passage the model cited: the page and the exact text it relied on (from the search result). */
+export interface WebCitation {
+  url: string;
+  title: string | null;
+  quote: string;
+}
+
+export interface WebResearchResult {
+  /** The answer in order; each piece with the citations the provider attached to it. */
+  segments: { text: string; citations: WebCitation[] }[];
+  /** Every page the searches returned (cited or not). */
+  results: { url: string; title: string; pageAge: string | null }[];
+  queries: string[];
+  /** Searches the provider reports it ran (billed separately from tokens). */
+  searches: number;
+  usage: Usage;
+  servedModel?: string;
+  /** Why it stopped: "end", "length" (output limit), or "paused" (still paused after the allowed continuations). */
+  stop: "end" | "length" | "paused" | "other";
 }
 
 // ---------------------------------------------------------------- native tool calling

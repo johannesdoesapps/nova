@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { ApiError } from "../../http";
 import { reportError } from "../../observability";
 import { billingStop, billingStopError, providerErrorMessage } from "./errors";
-import type { AIProvider, ChatMessage, GenerateParams, GenerateResult, StreamEvent, ToolMessage, ToolTurnParams, ToolTurnResult, Usage } from "../types";
+import type { AIProvider, ChatMessage, GenerateParams, GenerateResult, StreamEvent, ToolMessage, ToolTurnParams, ToolTurnResult, Usage, WebCitation, WebResearchParams, WebResearchResult } from "../types";
 
 /**
  * Per-model request settings. Effort trades answer depth against token spend
@@ -107,6 +107,14 @@ export class AnthropicProvider implements AIProvider {
     }
   }
 
+  async webResearch(params: WebResearchParams): Promise<WebResearchResult> {
+    try {
+      return await anthropicWebResearch(this.getClient(), params);
+    } catch (err) {
+      throw toApiError(err, params);
+    }
+  }
+
   /**
    * One turn with native tool use. Thinking blocks aren't kept between turns:
    * the agent trims long histories, which would invalidate replayed blocks,
@@ -143,6 +151,72 @@ export class AnthropicProvider implements AIProvider {
       throw toApiError(err, params);
     }
   }
+}
+
+/** Models with web search's dynamic filtering (the 2026-02-09 tool); others use the basic version. */
+const DYNAMIC_FILTERING = /^claude-(opus|sonnet|fable)-/;
+/** A long search turn can pause; it's resumed at most this many times before giving up. */
+const MAX_CONTINUATIONS = 2;
+
+/**
+ * Claude's built-in web search: Anthropic runs the searches, and the reply's text blocks carry citations
+ * with the page and the exact text relied on. A paused turn (pause_turn) is resumed by sending the
+ * assistant turn back unchanged, at most MAX_CONTINUATIONS times.
+ */
+export async function anthropicWebResearch(client: Anthropic, params: WebResearchParams): Promise<WebResearchResult> {
+  const tool = DYNAMIC_FILTERING.test(params.model.providerModelId)
+    ? { type: "web_search_20260209" as const, name: "web_search" as const, max_uses: params.maxSearches }
+    : { type: "web_search_20250305" as const, name: "web_search" as const, max_uses: params.maxSearches };
+  const messages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: "user", content: params.prompt }];
+  const segments: WebResearchResult["segments"] = [];
+  const results = new Map<string, WebResearchResult["results"][number]>();
+  const queries: string[] = [];
+  let searches = 0;
+  let inTok = 0;
+  let outTok = 0;
+  let cached = 0;
+  let written = 0;
+  let served: string | undefined;
+  let stop: WebResearchResult["stop"] = "other";
+  for (let turn = 0; turn <= MAX_CONTINUATIONS; turn++) {
+    const msg = await client.beta.messages.create(
+      { model: params.model.providerModelId, max_tokens: params.maxOutputTokens, system: params.system, messages, tools: [tool] } as Anthropic.Beta.Messages.MessageCreateParamsNonStreaming,
+      { signal: params.signal },
+    );
+    served = msg.model;
+    inTok += msg.usage.input_tokens + (msg.usage.cache_creation_input_tokens ?? 0) + (msg.usage.cache_read_input_tokens ?? 0);
+    outTok += msg.usage.output_tokens;
+    cached += msg.usage.cache_read_input_tokens ?? 0;
+    written += msg.usage.cache_creation_input_tokens ?? 0;
+    searches += msg.usage.server_tool_use?.web_search_requests ?? 0;
+    for (const b of msg.content) {
+      if (b.type === "text") {
+        const citations: WebCitation[] = (b.citations ?? []).flatMap((c) => (c.type === "web_search_result_location" ? [{ url: c.url, title: c.title ?? null, quote: c.cited_text }] : []));
+        segments.push({ text: b.text, citations });
+      } else if (b.type === "server_tool_use" && b.name === "web_search") {
+        const q = (b.input as { query?: unknown } | null)?.query;
+        if (typeof q === "string") queries.push(q.slice(0, 300));
+      } else if (b.type === "web_search_tool_result" && Array.isArray(b.content)) {
+        for (const r of b.content) if (r.type === "web_search_result" && !results.has(r.url)) results.set(r.url, { url: r.url, title: r.title, pageAge: r.page_age ?? null });
+      }
+    }
+    if (msg.stop_reason === "pause_turn") {
+      messages.push({ role: "assistant", content: msg.content as Anthropic.Beta.Messages.BetaContentBlockParam[] });
+      stop = "paused";
+      continue;
+    }
+    stop = msg.stop_reason === "end_turn" ? "end" : msg.stop_reason === "max_tokens" ? "length" : "other";
+    break;
+  }
+  return {
+    segments,
+    results: [...results.values()],
+    queries,
+    searches,
+    usage: { inputTokens: inTok, outputTokens: outTok, estimated: false, cachedInputTokens: cached, cacheWriteInputTokens: written },
+    servedModel: served,
+    stop,
+  };
 }
 
 function toolMessageText(m: ToolMessage): string {
