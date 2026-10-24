@@ -402,7 +402,8 @@ describe("read-only site mapping (crawler)", () => {
     "https://shop.test/api/status": { status: 401, headers: { "content-type": "application/json" }, body: "{}" },
   });
   const fake = (routes: Record<string, Fake>) =>
-    vi.fn(async (url: string, _o?: { headers?: Record<string, string>; method?: string }) => {
+    vi.fn(async (url: string, ...rest: [{ headers?: Record<string, string>; method?: string }?]) => {
+      void rest;
       const r = routes[url] ?? (/orbis-sentinel-/.test(url) ? { status: 404, body: "Error: not found\n    at handler (/var/task/server.js:10:5)" } : undefined);
       if (!r) return { url, status: 404, headers: { "content-type": "text/html" }, body: "Not found", truncated: false };
       return { url, status: r.status, headers: r.headers ?? {}, body: r.body ?? "", truncated: false };
