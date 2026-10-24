@@ -39,7 +39,19 @@ Run on a test account with temporary Pro, a Quick research comparing the Neon an
 | Plan | Sonnet 5.5 | 229 / 291 | 0 | 5.61 | $0.0034 |
 | Question 1 | Sonnet 5.5 | 68,177 / 2,196 | 3 | 263.86 | $0.188 |
 
-The second question was refused by Pro's 5-hour limit, and the run was marked failed with that reason (the failure path works). One search step on Sonnet used most of a Pro 5-hour window, so the searches were moved to Haiku (commit 5d9288b). **The Haiku version has not yet been run live**: the test account's 5-hour window was used up, so it was locked again and the re-run is scheduled for when the window resets. The expected cost of a Haiku search step is about a tenth of the Sonnet one, by list price; that is an estimate, not a measurement.
+The second question was refused by Pro's 5-hour limit, and the run was marked failed with that reason (the failure path works). One search step on Sonnet used most of a Pro 5-hour window, so the searches were moved to Haiku (commit 5d9288b).
+
+**Re-run with Haiku searches (24 October 2026, 14:00 UTC), same question, Quick depth:** completed in 56 seconds.
+
+| Step | Model | Tokens in / out | Searches | Units | Cost (incl. searches) |
+| --- | --- | --- | --- | --- | --- |
+| Plan | Sonnet 5.5 | 229 / 271 | 0 | 5.28 | $0.0032 |
+| Question 1 | Haiku 5.5 | 51,779 / 2,374 | 3 | 10.61 | $0.0364 |
+| Question 2 | Haiku 5.5 | 49,720 / 2,086 | 3 | 10.03 | $0.0360 |
+| Report | Sonnet 5.5 | 4,219 / 1,691 | 0 | 42.25 | $0.0253 |
+| **Total** | | | **6** | **68.17** | **$0.101** |
+
+The report cited all 14 sources it kept, removed no invalid citations, and had no uncited paragraphs in its findings. A search step now costs about 10 units instead of 264, so a Quick research fits comfortably in a Pro 5-hour window. Most of each search step's cost is the $0.01 per search; the model's share is under a cent. One run on one question is a measurement, not an average.
 
 Also seen: the step reserved budget for 40,000 input tokens, but the search step used 68,177. The final charge was the real one; only the up-front reservation was low. It now reserves 70,000.
 

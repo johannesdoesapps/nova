@@ -150,7 +150,7 @@ Names only; set them in Vercel → Project → Settings → Environment Variable
 | --- | --- | --- |
 | Automated tests | `npx vitest run` | 1,227 tests in 92 files pass on `main`. The `agent-workflows` branch has 1,230 in 91 files (it has the workflow tests but not this round's Orbis Agent tests). |
 | Code Review | Live, production | Found all 6 planted bugs at the right lines, no false positives, $0.017 |
-| Deep Research | Live, production | Planning step ran; the first search step hit Pro's 5-hour limit (searches since moved to Haiku); re-run scheduled |
+| Deep Research | Live, production | Quick research with Haiku searches: completed in 56 s, 14 sources all cited, 68 units, $0.10 (DEEP_RESEARCH.md) |
 | Marketplace, Bug Fixing and QA forms, Activity, task card | Local build, browser | No accessibility violations at desktop and phone widths, no sideways scrolling. Starting a proposed task created the task; a second task on a busy project was refused with the reason. |
 | Bug Fixing, QA Testing, the Orbis Agent's proposals | Live, with a real model | **Not yet run**: needs a signed-in test account, which needs your permission |
 
