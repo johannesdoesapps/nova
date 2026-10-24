@@ -51,6 +51,7 @@ import { WorkingStatus } from "@/components/studio/generating";
 import { useAnimatedLogo } from "@/components/studio/prefs";
 import { useApp } from "@/components/layout/app-context";
 import { countFirstTask } from "@/lib/first-task";
+import type { SiteTemplateId } from "@/lib/code/site-templates";
 
 /**
  * The coding agent, the main view of a Code project: describe a task, follow
@@ -282,6 +283,8 @@ export interface AgentPanelProps {
   autoAttachments?: string[];
   /** The model picked on the start screen for `autoStart`. */
   autoModel?: string;
+  /** The website template `autoStart`'s project started from; the agent gets its design guidance. */
+  autoSiteTemplate?: SiteTemplateId;
   /** Start the project's computer without asking when the run needs it (the user asked for a build). */
   autoComputer?: boolean;
   /** A finished task to continue (from History): the next task started here is given its record. */
@@ -304,6 +307,7 @@ export function AgentPanel({
   autoStart,
   autoAttachments,
   autoModel,
+  autoSiteTemplate,
   autoComputer,
   continueFrom: continueFromId,
 }: AgentPanelProps) {
@@ -475,7 +479,7 @@ export function AgentPanel({
     feedEnd.current?.scrollIntoView({ block: "end" });
   }, [events.length, run?.status]);
 
-  const start = async (request: string, mode: ModeId, modelId: string, attachments: string[] = []): Promise<boolean> => {
+  const start = async (request: string, mode: ModeId, modelId: string, attachments: string[] = [], siteTemplate?: SiteTemplateId): Promise<boolean> => {
     if (!request.trim() || starting) return false;
     setStarting(true);
     setError(null);
@@ -483,7 +487,7 @@ export function AgentPanel({
       const preset = MODES.find((m) => m.id === mode)!;
       const r = await post<{ run: RunView; attachments?: AttachmentMeta[] }>(`/api/code/projects/${projectId}/agent`, {
         request,
-        options: { modelId, ...preset.options },
+        options: { modelId, ...preset.options, ...(siteTemplate && { siteTemplate }) },
         ...(attachments.length ? { attachments } : {}),
         ...(continuing ? { continueFrom: continuing.id } : {}),
       });
@@ -570,7 +574,7 @@ export function AgentPanel({
   useEffect(() => {
     if (!loaded || run || !autoStart || autoStarted.current) return;
     autoStarted.current = true;
-    void start(autoStart, "auto", autoModel ?? "auto:coding", autoAttachments ?? []);
+    void start(autoStart, "auto", autoModel ?? "auto:coding", autoAttachments ?? [], autoSiteTemplate);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once when the panel is ready
   }, [loaded, run, autoStart]);
 

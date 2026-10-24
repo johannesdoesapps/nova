@@ -1,5 +1,6 @@
 "use client";
 import type { FileChange, ProjectFile, ProjectSummary } from "@/lib/code/projects";
+import { isSiteTemplateId, type SiteTemplateId } from "@/lib/code/site-templates";
 
 /** An API error with its code and details, so the page can offer the right next step (sign in, start, upgrade). */
 export class CodeApiError extends Error {
@@ -100,12 +101,14 @@ export interface BuildRequest {
   attachments: string[];
   /** The model picked on the start screen ("auto:coding" when none was picked). */
   modelId?: string;
+  /** The website template the project started from (Discover → Build a website). */
+  siteTemplate?: SiteTemplateId;
 }
 
 /** Hand a "Build website" request from the start screen to the project's page (kept out of the URL: it can be long). */
-export function putBuildRequest(projectId: string, request: string, attachments: string[] = [], modelId?: string): void {
+export function putBuildRequest(projectId: string, request: string, attachments: string[] = [], modelId?: string, siteTemplate?: SiteTemplateId): void {
   try {
-    sessionStorage.setItem(BUILD_KEY(projectId), JSON.stringify({ request, attachments, modelId } satisfies BuildRequest));
+    sessionStorage.setItem(BUILD_KEY(projectId), JSON.stringify({ request, attachments, modelId, siteTemplate } satisfies BuildRequest));
   } catch {
     /* the page then shows the box with nothing filled in */
   }
@@ -122,7 +125,8 @@ export function takeBuildRequest(projectId: string): BuildRequest | undefined {
     const attachments = Array.isArray(parsed.attachments) ? parsed.attachments.filter((a): a is string => typeof a === "string").slice(0, 20) : [];
     // The server checks the model again; this only keeps out anything that isn't a model id.
     const modelId = typeof parsed.modelId === "string" && /^[\w.:/-]{1,120}$/.test(parsed.modelId) ? parsed.modelId : undefined;
-    return request ? { request, attachments, ...(modelId && { modelId }) } : undefined;
+    const siteTemplate = isSiteTemplateId(parsed.siteTemplate) ? parsed.siteTemplate : undefined;
+    return request ? { request, attachments, ...(modelId && { modelId }), ...(siteTemplate && { siteTemplate }) } : undefined;
   } catch {
     return undefined;
   }

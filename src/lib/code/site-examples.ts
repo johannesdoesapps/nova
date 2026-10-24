@@ -63,3 +63,17 @@ export function withSiteDetails(request: string, d: Partial<SiteDetails>): strin
   if (!lines.length) return request.trim();
   return `${request.trim()}\n\nDetails:\n${lines.map(([k, v]) => `- ${k}: ${v}`).join("\n")}`;
 }
+
+/** A short project name from a website request. */
+export function siteName(prompt: string): string {
+  const called = prompt.match(/\bcalled\s+["“]?([A-Z][\w&' -]{1,30}?)["”]?(?=[.,;:!?]|\s+(?:with|that|for|and|in)\b|$)/);
+  if (called) return `Website: ${called[1]!.trim()}`;
+  const words = prompt
+    .replace(/^\s*(please\s+)?(build|create|make|design|write)\s+(me\s+)?(an?|the)?\s*/i, "")
+    .split(/\s+/)
+    .slice(0, 6)
+    .join(" ")
+    .replace(/[.,;:!?]+$/, "");
+  const name = words ? words[0]!.toUpperCase() + words.slice(1) : "New website";
+  return name.length > 60 ? `${name.slice(0, 57)}…` : name;
+}

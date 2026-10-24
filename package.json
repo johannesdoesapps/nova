@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "templates:sync": "node scripts/site-templates.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "engine": "cd engine && .venv/bin/python -m orbis_engine",

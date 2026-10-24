@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SITE_TEMPLATE_IDS } from "./site-templates";
 
 /**
  * Code workspace projects: limits, path rules and starter templates. Shared
@@ -157,10 +158,14 @@ if __name__ == "__main__":
   },
 };
 
-export const newProjectBody = z.object({
-  name: z.string().trim().min(1).max(80),
-  template: z.enum(TEMPLATE_IDS).default("blank"),
-});
+export const newProjectBody = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    template: z.enum(TEMPLATE_IDS).default("blank"),
+    /** A website template (Discover → Build a website): the project starts from its files. Only with the website template. */
+    siteTemplate: z.enum(SITE_TEMPLATE_IDS).optional(),
+  })
+  .refine((b) => !b.siteTemplate || b.template === "website", { message: "A website template needs the website project type.", path: ["siteTemplate"] });
 
 export interface ProjectSummary {
   id: string;

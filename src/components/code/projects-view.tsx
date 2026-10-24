@@ -7,7 +7,7 @@ import { useApp } from "@/components/layout/app-context";
 import { forgetPlace } from "@/components/studio/mode-switch";
 import { StudioHeader } from "@/components/studio/frame";
 import { Menu, MenuItem } from "@/components/studio/ui";
-import { SITE_DETAIL_FIELDS, SITE_EXAMPLES, siteExample, withSiteDetails, type SiteDetails } from "@/lib/code/site-examples";
+import { SITE_DETAIL_FIELDS, SITE_EXAMPLES, siteExample, siteName, withSiteDetails, type SiteDetails } from "@/lib/code/site-examples";
 import { EXAMPLE_PROJECT, TEMPLATES, TEMPLATE_IDS, type ProjectSummary, type TemplateId } from "@/lib/code/projects";
 import { cn } from "@/lib/utils";
 import { api, CodeApiError, post, putBuildRequest, type Allowance } from "./api";
@@ -18,7 +18,7 @@ import { useCatalog } from "@/components/common/model-picker";
 import { ModelSelector } from "@/components/studio/model-selector";
 import { Greeting } from "@/components/studio/greeting";
 
-export { SITE_EXAMPLES };
+export { SITE_EXAMPLES, siteName };
 
 /**
  * Code's start screen: one prompt bar, front and centre. Starting a project
@@ -48,20 +48,6 @@ export function minutesLine(a: Allowance): string {
 
 const GITHUB_NEEDED =
   "To import a repository, Orbis needs your permission to read it on GitHub. Connect GitHub in Connectors and choose which repositories Orbis may see; it reads only those, and only when you import.";
-
-/** A short project name from a website request. */
-export function siteName(prompt: string): string {
-  const called = prompt.match(/\bcalled\s+["“]?([A-Z][\w&' -]{1,30}?)["”]?(?=[.,;:!?]|\s+(?:with|that|for|and|in)\b|$)/);
-  if (called) return `Website: ${called[1]!.trim()}`;
-  const words = prompt
-    .replace(/^\s*(please\s+)?(build|create|make|design|write)\s+(me\s+)?(an?|the)?\s*/i, "")
-    .split(/\s+/)
-    .slice(0, 6)
-    .join(" ")
-    .replace(/[.,;:!?]+$/, "");
-  const name = words ? words[0]!.toUpperCase() + words.slice(1) : "New website";
-  return name.length > 60 ? `${name.slice(0, 57)}…` : name;
-}
 
 const edited = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 

@@ -126,7 +126,7 @@ export const DISCOVER: DiscoverItem[] = [
     title: "Build a website from a prompt",
     text: "Describe a site; the coding agent builds it, runs it and checks it in a real browser at desktop, tablet and phone sizes.",
     icon: "globe",
-    action: { kind: "link", href: "/code" },
+    action: { kind: "link", href: "/code/website" },
     cta: "Build a website",
   },
   {

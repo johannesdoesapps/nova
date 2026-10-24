@@ -1094,6 +1094,7 @@ export function CodeWorkspace({ id, pair = false }: { id: string; pair?: boolean
       autoStart={buildRequest?.request}
       autoAttachments={buildRequest?.attachments}
       autoModel={buildRequest?.modelId}
+      autoSiteTemplate={buildRequest?.siteTemplate}
       autoComputer={!!buildRequest}
       continueFrom={select?.n === 0 ? continueFrom : null}
     />

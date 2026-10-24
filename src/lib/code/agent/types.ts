@@ -52,6 +52,8 @@ export interface RunOptions {
   agentInput?: import("./profiles").BugInput | import("./profiles").QaInput;
   /** The workflow this task is a step of. */
   workflowId?: string;
+  /** The website template the project started from (Discover → Build a website); the agent gets its design guidance. */
+  siteTemplate?: import("../site-templates").SiteTemplateId;
 }
 
 export const DEFAULT_OPTIONS: RunOptions = { modelId: null, approvePlans: true, reviewEdits: false, commands: "safe", readOnly: false };

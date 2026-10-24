@@ -38,6 +38,9 @@ function contentSecurityPolicy(): string {
   return [...Object.entries(rules).map(([k, v]) => `${k} ${v.join(" ")}`), ...(dev ? [] : ["upgrade-insecure-requests"])].join("; ");
 }
 
+/** The website template pages: their own styles, photos and fonts only, framed only by Orbis, sandboxed even when opened directly. */
+const TEMPLATE_CSP = "default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'; sandbox";
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   // "/" is the public homepage; the app itself starts at /home. The older
@@ -71,7 +74,8 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/(.*)",
+        // Everything except the website templates' sample pages, which have their own rules below.
+        source: "/((?!site-templates/).*)",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
@@ -79,6 +83,20 @@ const nextConfig: NextConfig = {
           // Voice input in the chat composer needs the microphone on ORBIS's own pages.
           { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=()" },
           { key: "Content-Security-Policy", value: contentSecurityPolicy() },
+        ],
+      },
+      {
+        // The website templates (public/site-templates): static sample pages shown in a sandboxed frame on
+        // Orbis's own pages only. No scripts, forms or outside requests; fonts are readable cross-origin
+        // because a sandboxed frame has no origin of its own.
+        source: "/site-templates/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "X-Robots-Tag", value: "noindex" },
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Content-Security-Policy", value: TEMPLATE_CSP },
         ],
       },
       {

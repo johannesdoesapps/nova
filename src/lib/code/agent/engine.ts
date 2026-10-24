@@ -38,6 +38,7 @@ import {
 } from "./protocol";
 import { classifyCommand } from "./policy";
 import { agentPurpose, profileGuidance, profileReport, qaMayEdit } from "./profiles";
+import { isSiteTemplateId, siteTemplateGuidance } from "../site-templates";
 import { buildReport } from "./report";
 import {
   addEvents,
@@ -671,7 +672,7 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
   const replyChars = maxOutputTokens * 3;
   const web = opts.web ?? isWebTask(row.request, [], project.template);
   const system = `${systemPrompt({ ...ctx, planning: !readOnly && !planApproved, reviewEdits: opts.reviewEdits, native, web, replyChars })}
-- Keep each reply under about ${replyChars.toLocaleString("en-US")} characters. A file that wouldn't fit: split it into several files, or write the first part and add the rest with edit_file in the next step.${opts.agent ? `\n\n${profileGuidance(opts.agent, ctx)}` : ""}`;
+- Keep each reply under about ${replyChars.toLocaleString("en-US")} characters. A file that wouldn't fit: split it into several files, or write the first part and add the rest with edit_file in the next step.${opts.agent ? `\n\n${profileGuidance(opts.agent, ctx)}` : ""}${web && !readOnly && isSiteTemplateId(opts.siteTemplate) ? `\n\n${siteTemplateGuidance(opts.siteTemplate)}` : ""}`;
   const history = trimTranscript(transcript, Math.max(24_000, limits.historyChars));
   const promptChars = system.length + history.reduce((n, m) => n + messageSize(m), 0);
   const purpose = agentPurpose(opts.agent);
