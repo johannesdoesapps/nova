@@ -11,6 +11,7 @@
  * To connect another AI API, implement `AIProvider` in src/lib/ai/providers
  * and register it in src/lib/ai/index.ts; this file and the UI stay unchanged.
  */
+import type { TaskProposal } from "@/lib/agent-platform/delegation";
 import { postNdjson } from "@/hooks/use-ndjson";
 import type { ReplyLength, ReplyStyle } from "@/lib/ai/reply-settings";
 import type { ChatMode } from "@/lib/ai/modes";
@@ -64,6 +65,8 @@ export type ChatEvent =
   | { type: "model"; model: ModelRef }
   | { type: "sources"; sources: SearchSource[] }
   | { type: "actions"; actions: ProposedAction[] }
+  /** A task the Orbis Agent proposed for a specialist agent, for the user to review and start. */
+  | { type: "tasks"; tasks: TaskProposal[] }
   | { type: "notice"; level?: string; message: string }
   /** The chat's project, and what of its saved information this reply used. */
   | { type: "project"; project: ProjectUse }

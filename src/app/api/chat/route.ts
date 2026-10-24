@@ -18,6 +18,8 @@ import { webSearch } from "@/lib/search/web";
 import { buildTurnContext } from "@/lib/ai/turn-context";
 import { chatConnectors } from "@/lib/connectors/chat";
 import { extractAction, type ProposedAction } from "@/lib/connectors/router";
+import { extractTask, stripTaskBlock, type TaskProposal } from "@/lib/agent-platform/delegation";
+import { orbisAgentContext, type OrbisAgentContext } from "@/lib/agent-platform/orbis-agent";
 import { enforceLimits, planLimits, recordRun, releaseUsage, shouldSaveAllowance } from "@/lib/usage";
 import { chatRequest } from "@/lib/validation";
 import { getProjectContext } from "@/lib/db/project-context";
@@ -213,6 +215,13 @@ export async function POST(req: Request) {
         }
       }
 
+      // The Orbis Agent: specialist agents it may hand work to, and the user's tasks, when the message calls for them.
+      let orbisAgent: OrbisAgentContext | null = null;
+      if (auth.mode === "authenticated") {
+        orbisAgent = await orbisAgentContext(auth, body.message);
+        if (orbisAgent) system += `\n\n${orbisAgent.system}`;
+      }
+
       // Fresh, trusted context for this turn: time, time-tool results, live-data honesty.
       const turn = buildTurnContext(body.message, { timeZone: body.timeZone, liveSources: sources.length > 0 });
       system += `\n\n${turn.system}`;
@@ -290,6 +299,17 @@ export async function POST(req: Request) {
         text = extractAction(text, [], () => "").text;
       }
 
+      // A task the Orbis Agent proposed becomes a card the user reviews and starts; nothing starts here.
+      let tasks: TaskProposal[] = [];
+      if (orbisAgent?.available.length) {
+        const ex = extractTask(text, orbisAgent, () => crypto.randomUUID());
+        text = ex.text;
+        if (ex.proposal) {
+          tasks = [ex.proposal];
+          send({ type: "tasks", tasks });
+        }
+      } else text = stripTaskBlock(text);
+
       let assistantMessageId: string | null = null;
       let userMessageId: string | null = null;
       if (auth.mode === "authenticated" && conversationId) {
@@ -300,6 +320,7 @@ export async function POST(req: Request) {
             sources: sources.map((s) => ({ index: s.index, url: s.url, title: s.title, ...(s.app ? { app: s.app } : {}) })),
             attachments: body.attachments?.map((a) => a.name) ?? [],
             ...(actions.length ? { actions } : {}),
+            ...(tasks.length ? { tasks } : {}),
           };
           const rows = await addMessages(auth.supabase, conversationId, [
             ...(replacing ? [] : [{ role: "user" as const, content: body.message, usage_metadata: { attachments: body.attachments?.map((a) => a.name) ?? [] } }]),

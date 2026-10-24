@@ -4,6 +4,7 @@
  * - signed in → the server (Supabase, via /api/conversations)
  * - guest     → this browser's localStorage (the server keeps no guest history)
  */
+import type { TaskProposal } from "@/lib/agent-platform/delegation";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import type { ChatMode } from "@/lib/ai/modes";
 import type { ProposedAction } from "@/lib/connectors/catalog";
@@ -45,6 +46,8 @@ export interface Msg {
   notices?: string[];
   /** Changes in connected apps the reply proposed, for the user to confirm. */
   actions?: ProposedAction[];
+  /** Tasks the Orbis Agent proposed for specialist agents, for the user to review and start. */
+  tasks?: TaskProposal[];
   attachments?: string[];
   /** User messages, this session only: the attached files, so a regenerate can resend them. */
   files?: ChatAttachment[];
@@ -84,7 +87,7 @@ type ServerMessage = {
   model_id: string | null;
   /** Display name for model_id, added by the conversation API. */
   model_name?: string | null;
-  usage_metadata: { sources?: SearchSource[]; attachments?: string[]; tools?: ToolRecord[]; actions?: ProposedAction[] } | null;
+  usage_metadata: { sources?: SearchSource[]; attachments?: string[]; tools?: ToolRecord[]; actions?: ProposedAction[]; tasks?: TaskProposal[] } | null;
 };
 
 /** Signed-in history. `listUrl` selects ordinary chats or one agent's conversations. */
@@ -116,6 +119,7 @@ export const serverHistory: HistoryStore = {
           sources: m.usage_metadata?.sources,
           tools: m.usage_metadata?.tools,
           actions: m.usage_metadata?.actions,
+          tasks: m.usage_metadata?.tasks,
           attachments: m.usage_metadata?.attachments,
         })),
     };

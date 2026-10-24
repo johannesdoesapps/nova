@@ -213,6 +213,7 @@ export function useStudioChat({
           else if (ev.type === "tool") patch((m) => ({ ...m, tools: [...(m.tools ?? []), ev.tool] }));
           else if (ev.type === "sources") patch((m) => ({ ...m, sources: ev.sources }));
           else if (ev.type === "actions") patch((m) => ({ ...m, actions: ev.actions }));
+          else if (ev.type === "tasks") patch((m) => ({ ...m, tasks: ev.tasks }));
           else if (ev.type === "notice") patch((m) => ({ ...m, notices: [...(m.notices ?? []), ev.message] }));
           else if (ev.type === "project") {
             setProjectId(ev.project.id);

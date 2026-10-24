@@ -218,7 +218,7 @@ describe("the redesigned sidebar", () => {
       sidebarFor(false)
         .filter((e) => e.group === "main")
         .map((e) => e.id),
-    ).toEqual(["home", "agents", "projects", "templates"]);
+    ).toEqual(["home", "agents", "projects", "activity", "templates"]);
     expect(
       sidebarFor(false)
         .filter((e) => e.group === "tools")

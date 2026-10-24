@@ -1,4 +1,5 @@
 import {
+  Activity,
   Bot,
   Code2,
   Compass,
@@ -32,6 +33,7 @@ export type Section =
   | "chat"
   | "code"
   | "projects"
+  | "activity"
   | "templates"
   | "agents"
   | "discover"
@@ -68,6 +70,7 @@ export const NAV_ENTRIES: NavEntry[] = [
   { id: "code", label: "Code", href: "/code", icon: Code2, group: "mode", hint: "Build and fix software with the coding agent" },
   { id: "agents", label: "Agents", href: "/agents", icon: Bot, group: "main", hint: "Specialised assistants, including the Security Team" },
   { id: "projects", label: "Projects", href: "/projects", icon: FolderKanban, group: "main", hint: "Ongoing work: code projects, missions and their tasks" },
+  { id: "activity", label: "Activity", href: "/activity", icon: Activity, group: "main", hint: "Every agent task: what's running, waiting for you, done or failed" },
   { id: "templates", label: "Templates", href: "/templates", icon: LayoutTemplate, group: "main", hint: "Ready-made workflows for common tasks" },
   { id: "discover", label: "Discover", href: "/discover", icon: Compass, group: "tools", hint: "What Orbis can do, with ways to try it" },
   { id: "missions", label: "Missions", href: "/missions", icon: Flag, group: "main", hint: "Plan projects and track tasks", parent: "projects" },

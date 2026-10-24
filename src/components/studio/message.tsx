@@ -3,6 +3,7 @@ import { memo, useState, type ReactNode } from "react";
 import { ArrowRight, BookmarkPlus, ChartColumn, Check, ChevronRight, CircleAlert, CircleCheck, Copy, Ellipsis, FileText, Flag, FolderPlus, Globe, MessageSquarePlus, Pencil, RefreshCw, Sparkles, Square, ThumbsDown, ThumbsUp, Wrench } from "lucide-react";
 import { Markdown } from "@/components/common/markdown";
 import { ActionCard } from "@/components/connectors/action-card";
+import { TaskCard } from "@/components/agent-platform/task-card";
 import { BrandIcon } from "@/components/connectors/brand-icon";
 import { cn, formatUsd } from "@/lib/utils";
 import type { Msg } from "./history";
@@ -244,6 +245,7 @@ function AssistantMessage({
       )}
 
       {!streaming && m.actions?.map((a) => <ActionCard key={a.id} action={a} messageId={m.id} />)}
+      {!streaming && m.tasks?.map((t) => <TaskCard key={t.id} proposal={t} messageId={m.id} />)}
 
       {m.status === "error" && (
         <div role={m.stopped ? "status" : "alert"} className="s-in mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-s-line bg-s-hover px-4 py-3 text-[14px]">
