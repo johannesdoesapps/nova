@@ -4,7 +4,8 @@ import { checkRunLimit, runSentinelAgent } from "@/lib/security/runners";
 import { sentinelRequest } from "@/lib/security/schema";
 import { assertAgentAccess } from "@/lib/agent-platform/server";
 
-export const maxDuration = 60;
+// An audit maps the site (crawl capped at 45 s by its budget) before the AI report, so allow up to two minutes.
+export const maxDuration = 120;
 
 /** POST /api/security/sentinel — scan a verified website (NDJSON progress stream). */
 export async function POST(req: Request) {

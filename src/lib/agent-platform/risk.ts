@@ -140,7 +140,7 @@ export const ACTION_RISKS: ActionRisk[] = [
     risk: "medium",
     reversible: "yes",
     approval: "always",
-    how: "Only websites you've proved you own; rate limits per user and site.",
+    how: "Only websites you've proved you own, re-checked before every scan; GET requests to the same site within a page and time budget; active testing only when you choose it; rate limits per user and site.",
     enforcedIn: "src/lib/security/runners.ts",
     anchor: "proveOwnership",
   },

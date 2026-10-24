@@ -5,6 +5,7 @@ import { Check, CircleAlert, CircleDashed, CircleX, Code2, Crosshair, Globe, Loa
 import { Markdown } from "@/components/common/markdown";
 import { postNdjson } from "@/hooks/use-ndjson";
 import type { SecurityAgentDef } from "@/lib/security/agents";
+import type { StoredAnalysis } from "@/lib/security/audit-report";
 import { cn } from "@/lib/utils";
 
 export const AGENT_ICON: Record<SecurityAgentDef["icon"] | "coordinated", typeof Radar> = { radar: Radar, crosshair: Crosshair, code: Code2, siren: Siren, globe: Globe, coordinated: Radar };
@@ -128,6 +129,8 @@ export interface RunState {
   runIds: Record<string, string>;
   findings: Record<string, { count: number; bySeverity: Record<string, number>; resolved?: number; reopened?: number }>;
   error: string | null;
+  /** A Sentinel audit's analysis (gate, paths, coverage), sent by its final step. */
+  audit?: StoredAnalysis;
 }
 export const EMPTY_RUN: RunState = { phase: "idle", steps: [], notices: [], progress: null, report: null, runIds: {}, findings: {}, error: null };
 
@@ -152,6 +155,7 @@ export async function streamRun(url: string, body: unknown, signal: AbortSignal,
       } else if (type === "progress") update((s) => ({ ...s, progress: ev.text as string }));
       else if (type === "notice") update((s) => ({ ...s, notices: [...s.notices, ev.text as string] }));
       else if (type === "report") update((s) => ({ ...s, report: ev.text as string }));
+      else if (type === "audit") update((s) => ({ ...s, audit: ev.analysis as StoredAnalysis }));
       else if (type === "findings") update((s) => ({ ...s, findings: { ...s.findings, [ev.agent as string]: ev as never } }));
       else if (type === "error") {
         update((s) => ({ ...s, error: ev.message as string, steps: s.steps.map((x) => (x.status === "running" ? { ...x, status: "failed" } : x)) }));
@@ -223,12 +227,27 @@ export function RunProgress({ state, showAgent }: { state: RunState; showAgent?:
           {Object.values(state.findings).some((f) => f.reopened) && <span className="text-s-danger">{Object.values(state.findings).reduce((n, f) => n + (f.reopened ?? 0), 0)} fixed finding(s) reappeared</span>}
         </div>
       )}
+      {state.audit && (
+        <p className="rounded-xl border border-s-line px-3 py-2 text-[13px]">
+          {state.audit.gate && (
+            <strong className={cn("mr-1.5 font-semibold", state.audit.gate.outcome === "passed" ? "text-emerald-600 dark:text-emerald-400" : "text-s-danger")}>
+              Gate {state.audit.gate.outcome === "incomplete" ? "incomplete (treat as failed)" : state.audit.gate.outcome}.
+            </strong>
+          )}
+          {state.audit.paths.length} attack path(s) · {state.audit.coverage.filter((c) => c.state === "assessed").length} of {state.audit.coverage.length} areas fully assessed,{" "}
+          {state.audit.coverage.filter((c) => c.state === "partial").length} partly, {state.audit.coverage.filter((c) => c.state === "not_assessed").length} not at all. Open the results for details.
+        </p>
+      )}
       {state.report && <ReportBlock text={state.report} />}
       {state.phase === "done" && Object.entries(state.runIds).length > 0 && (
         <div className="flex flex-wrap gap-2">
           {Object.entries(state.runIds).map(([agent, id]) => (
-            <Link key={id} href={`/agents/security/runs/${id}`} className="inline-flex h-9 items-center rounded-xl border border-s-line-strong px-3.5 text-[13px] font-medium transition hover:bg-s-hover">
-              Open {AGENT_NAME[agent] ?? "run"} results
+            <Link
+              key={id}
+              href={`/agents/security/runs/${id}`}
+              className="inline-flex h-9 items-center rounded-xl border border-s-line-strong px-3.5 text-[13px] font-medium transition hover:bg-s-hover"
+            >
+              Open {agent === "coordinated" && state.audit ? "audit" : (AGENT_NAME[agent] ?? "run")} results
             </Link>
           ))}
         </div>

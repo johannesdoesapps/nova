@@ -45,7 +45,20 @@ export interface SentinelValue {
   authorized: boolean;
 }
 
-export function SentinelForm({ value, onChange, targets, onTargetsChanged }: { value: SentinelValue; onChange: (v: SentinelValue) => void; targets: Target[]; onTargetsChanged: () => Promise<void> }) {
+export function SentinelForm({
+  value,
+  onChange,
+  targets,
+  onTargetsChanged,
+  audit,
+}: {
+  value: SentinelValue;
+  onChange: (v: SentinelValue) => void;
+  targets: Target[];
+  onTargetsChanged: () => Promise<void>;
+  /** In an audit, the site is mapped within this budget; the scope texts describe that instead of a single-page scan. */
+  audit?: { pages: number; scripts: number; endpointChecks: number };
+}) {
   const [host, setHost] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -95,9 +108,9 @@ export function SentinelForm({ value, onChange, targets, onTargetsChanged }: { v
       <div>
         <span className={labelCls}>Website</span>
         {targets.length > 0 && (
-          <ul className="mb-2 space-y-1.5" role="radiogroup" aria-label="Website to scan">
+          <div className="mb-2 space-y-1.5" role="radiogroup" aria-label="Website to scan">
             {targets.map((t) => (
-              <li key={t.id} className={cn("flex items-center gap-2 rounded-xl border px-3 py-2 transition", value.targetId === t.id ? "border-s-line-strong bg-s-hover" : "border-s-line")}>
+              <div key={t.id} className={cn("flex items-center gap-2 rounded-xl border px-3 py-2 transition", value.targetId === t.id ? "border-s-line-strong bg-s-hover" : "border-s-line")}>
                 <button type="button" role="radio" aria-checked={value.targetId === t.id} onClick={() => onChange({ ...value, targetId: t.id })} className="flex min-w-0 flex-1 items-center gap-2 text-left text-[14px]">
                   <Globe className="h-4 w-4 shrink-0 text-s-ink-3" />
                   <span className="truncate">{t.hostname}</span>
@@ -112,9 +125,9 @@ export function SentinelForm({ value, onChange, targets, onTargetsChanged }: { v
                 <button type="button" onClick={() => void remove(t)} disabled={!!busy} aria-label={`Remove ${t.hostname}`} className="rounded-lg p-1 text-s-ink-3 transition hover:bg-s-hover hover:text-s-ink">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
         <div className="flex gap-2">
           <input value={host} onChange={(e) => setHost(e.target.value)} placeholder="yourdomain.com" aria-label="Add a website you own" className={inputCls} onKeyDown={(e) => e.key === "Enter" && host.trim() && (e.preventDefault(), void add())} />
@@ -158,20 +171,31 @@ export function SentinelForm({ value, onChange, targets, onTargetsChanged }: { v
       {msg && <p className={cn("text-[13px]", msg.ok ? "text-emerald-600 dark:text-emerald-400" : "text-s-danger")} role="status">{msg.text}</p>}
 
       <div>
-        <span className={labelCls}>Scope</span>
+        <span className={labelCls}>{audit ? "Testing permission" : "Scope"}</span>
         <Segmented
-          label="Scan scope"
+          label={audit ? "Testing permission" : "Scan scope"}
           value={value.scope}
           onChange={(scope) => onChange({ ...value, scope })}
-          options={[
-            { value: "passive", label: "Read-only" },
-            { value: "active", label: "Read-only + exposed files" },
-          ]}
+          options={
+            audit
+              ? [
+                  { value: "passive", label: "Passive" },
+                  { value: "active", label: "Active (read-only)" },
+                ]
+              : [
+                  { value: "passive", label: "Read-only" },
+                  { value: "active", label: "Read-only + exposed files" },
+                ]
+          }
         />
         <p className="mt-1.5 text-[12.5px] text-s-ink-3">
-          {value.scope === "passive"
-            ? "Loads the home page over HTTPS and HTTP and reads headers, cookies and security.txt — like a normal visitor (about 4 requests)."
-            : "Also requests 8 sensitive paths such as /.env and /.git/HEAD, one at a time, and confirms exposure by content. Nothing is modified."}
+          {audit
+            ? value.scope === "passive"
+              ? `Ordinary visitor requests only: up to ${audit.pages} same-site page(s) and ${audit.scripts} script(s), respecting robots.txt, skipping links that look like actions (log out, delete…).`
+              : `Also, one at a time: 8 sensitive paths such as /.env, signed-out GET requests to up to ${audit.endpointChecks} API endpoints the site itself references, and a not-found page to check for leaked error details. No forms are submitted, no sign-in is attempted, no attack payloads are sent, nothing is modified.`
+            : value.scope === "passive"
+              ? "Loads the home page over HTTPS and HTTP and reads headers, cookies and security.txt — like a normal visitor (about 4 requests)."
+              : "Also requests 8 sensitive paths such as /.env and /.git/HEAD, one at a time, and confirms exposure by content. Nothing is modified."}
         </p>
       </div>
       <label className="flex cursor-pointer items-start gap-2.5 text-[13.5px]">
@@ -292,8 +316,8 @@ export function GuardianForm({ value, onChange }: { value: GuardianValue; onChan
       />
       {value.mode === "upload" ? (
         <div>
-          <input ref={filesRef} type="file" multiple className="sr-only" onChange={(e) => void pick(e.target.files).then(() => (e.target.value = ""))} />
-          <input ref={dirRef} type="file" multiple className="sr-only" {...({ webkitdirectory: "" } as Record<string, string>)} onChange={(e) => void pick(e.target.files).then(() => (e.target.value = ""))} />
+          <input ref={filesRef} type="file" multiple aria-label="Choose code files" className="sr-only" onChange={(e) => void pick(e.target.files).then(() => (e.target.value = ""))} />
+          <input ref={dirRef} type="file" multiple aria-label="Choose a code folder" className="sr-only" {...({ webkitdirectory: "" } as Record<string, string>)} onChange={(e) => void pick(e.target.files).then(() => (e.target.value = ""))} />
           <div className="grid gap-2 sm:grid-cols-2">
             <button type="button" onClick={() => dirRef.current?.click()} className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-s-line-strong px-4 py-5 text-[13.5px] text-s-ink-2 transition hover:bg-s-hover">
               <FolderUp className="h-4 w-4" /> Choose a project folder

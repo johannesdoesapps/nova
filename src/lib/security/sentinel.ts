@@ -1,5 +1,8 @@
 import "server-only";
+import type { CrawlBudget } from "./audit";
+import { crawlSite, type EndpointResult } from "./crawl";
 import { header, headerList, safeRequest, type SafeResponse } from "./net";
+import { compactSurface } from "./surface";
 import { fingerprint, maskSecret, type FindingDraft, type Severity, type Confidence } from "./types";
 
 /**
@@ -33,6 +36,15 @@ export interface SentinelResult {
   requests: number;
   finalUrl: string | null;
   notes: string[];
+  /** Present when the site was mapped (an audit with a crawl budget). */
+  map?: {
+    surface: ReturnType<typeof compactSurface>;
+    pagesFetched: number;
+    scriptsFetched: number;
+    endpointResults: EndpointResult[];
+    /** URLs that were actually fetched this time: only findings at these locations can be marked "not detected". */
+    covered: string[];
+  };
 }
 
 type Draft = Omit<FindingDraft, "agent" | "fingerprint" | "asset" | "evidenceSource"> & { key?: string };
@@ -40,7 +52,7 @@ type Draft = Omit<FindingDraft, "agent" | "fingerprint" | "asset" | "evidenceSou
 export async function runSentinel(
   host: string,
   scope: SentinelScope,
-  opts: { signal?: AbortSignal; progress?: SentinelProgress; request?: typeof safeRequest; delayMs?: number } = {},
+  opts: { signal?: AbortSignal; progress?: SentinelProgress; request?: typeof safeRequest; delayMs?: number; budget?: CrawlBudget } = {},
 ): Promise<SentinelResult> {
   const req = opts.request ?? safeRequest;
   const progress = opts.progress ?? (() => {});
@@ -186,14 +198,41 @@ export async function runSentinel(
     }
   }
 
-  const findings = drafts.map<FindingDraft>((d) => ({
+  let map: SentinelResult["map"];
+  if (opts.budget && res && res.status > 0) {
+    const crawl = await crawlSite(host, finalUrl, opts.budget, {
+      get: (url, o) => get(url, o?.headers, o?.maxBytes),
+      active: scope === "active",
+      signal: opts.signal,
+      delayMs: opts.delayMs,
+      progress,
+    });
+    // get() above already counts each request.
+    drafts.push(...crawl.findings);
+    // Cookies set on other pages (sign-in pages often set the session cookie) get the same checks.
+    for (const r of crawl.responses) if (r.url !== finalUrl) drafts.push(...cookieChecks(r.res, r.url));
+    notes.push(...crawl.notes);
+    checked.push("surface.");
+    map = {
+      surface: compactSurface(crawl.surface),
+      pagesFetched: crawl.pagesFetched.length,
+      scriptsFetched: crawl.scriptsFetched.length,
+      endpointResults: crawl.endpointResults.slice(0, 60),
+      covered: [...crawl.pagesFetched, ...crawl.scriptsFetched, ...crawl.endpointResults.map((e) => `https://${host}${e.path}`), ...crawl.surface.sourceMaps],
+    };
+  }
+
+  const all = drafts.map<FindingDraft>((d) => ({
     ...d,
     agent: "sentinel",
     asset: host,
-    evidenceSource: d.ruleId.startsWith("exposure.") ? "orbis:exposure" : "orbis:headers",
+    evidenceSource: d.ruleId.startsWith("exposure.") ? "orbis:exposure" : d.ruleId.startsWith("surface.") ? "orbis:surface" : "orbis:headers",
     fingerprint: fingerprint("sentinel", d.ruleId, host, d.key ?? ""),
   }));
-  return { findings, checked, requests, finalUrl: res ? finalUrl : null, notes };
+  // The same cookie or script can be seen on several pages; keep the first sighting of each.
+  const seen = new Set<string>();
+  const findings = all.filter((f) => !seen.has(f.fingerprint) && seen.add(f.fingerprint));
+  return { findings, checked, requests, finalUrl: res ? finalUrl : null, notes, ...(map ? { map } : {}) };
 }
 
 function headerChecks(res: SafeResponse, url: string): Draft[] {

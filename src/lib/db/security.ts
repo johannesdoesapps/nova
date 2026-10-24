@@ -179,18 +179,27 @@ export async function saveFindings(db: ServerSupabase, userId: string, runId: st
  * After a re-scan, mark findings for the same agent and asset that the scan
  * checked for but did not detect. Fixed findings become verified.
  */
-export async function markNotDetected(db: ServerSupabase, userId: string, runId: string, agent: SecurityAgentId, asset: string, checkedPrefixes: string[]) {
+export async function markNotDetected(
+  db: ServerSupabase,
+  userId: string,
+  runId: string,
+  agent: SecurityAgentId,
+  asset: string,
+  checkedPrefixes: string[],
+  /** Rule prefixes whose findings count as re-checked only where the run actually looked (e.g. pages a crawl fetched). */
+  located?: { prefix: string; covers: (location: string | null) => boolean },
+) {
   if (!checkedPrefixes.length) return 0;
   const { data } = await db
     .from("security_findings")
-    .select("id,rule_id,status,last_run_id")
+    .select("id,rule_id,status,last_run_id,location")
     .eq("user_id", userId)
     .eq("agent", agent)
     .eq("asset", asset)
     .not("status", "in", "(false_positive,accepted_risk)")
     .limit(1000);
-  const missing = ((data ?? []) as { id: string; rule_id: string; status: FindingStatus; last_run_id: string | null }[]).filter(
-    (f) => f.last_run_id !== runId && checkedPrefixes.some((p) => f.rule_id.startsWith(p)),
+  const missing = ((data ?? []) as { id: string; rule_id: string; status: FindingStatus; last_run_id: string | null; location: string | null }[]).filter(
+    (f) => f.last_run_id !== runId && checkedPrefixes.some((p) => f.rule_id.startsWith(p)) && (!located || !f.rule_id.startsWith(located.prefix) || located.covers(f.location)),
   );
   const note = `Not detected by the re-scan on ${new Date().toISOString().slice(0, 10)}.`;
   for (const f of missing) {
@@ -256,7 +265,7 @@ export async function getFinding(db: ServerSupabase, userId: string, id: string)
   const f = data as FindingRow;
   const relIds = [...new Set([...(f.related ?? []), ...(f.duplicate_of ? [f.duplicate_of] : [])])];
   const [related, duplicates, history, run] = await Promise.all([
-    relIds.length ? db.from("security_findings").select("id,title,severity,agent,status,asset").in("id", relIds) : Promise.resolve({ data: [] }),
+    relIds.length ? db.from("security_findings").select("id,title,severity,agent,status,asset,rule_id,confidence,evidence_source,location").in("id", relIds) : Promise.resolve({ data: [] }),
     db.from("security_findings").select("id,title,severity,agent,status,asset").eq("duplicate_of", id).limit(50),
     db.from("security_audit").select("id,action,detail,created_at").eq("finding_id", id).order("created_at", { ascending: false }).limit(50),
     f.run_id ? db.from("security_runs").select("id,agent,action,started_at").eq("id", f.run_id).maybeSingle() : Promise.resolve({ data: null }),

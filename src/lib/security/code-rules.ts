@@ -107,6 +107,39 @@ const RULES: Rule[] = [
 
 export const CODE_RULE_IDS = RULES.map((r) => r.id);
 
+export interface SecretHit {
+  rule: Pick<Rule, "id" | "title" | "severity" | "confidence" | "description" | "rationale" | "remediation" | "references">;
+  masked: string;
+  /** The surrounding text with the value masked. */
+  context: string;
+}
+
+/**
+ * Secret patterns over a whole text, for minified JavaScript served to browsers (one line can be megabytes,
+ * which the line-based rules skip). The name-based "hard-coded credential" rule is left out: minified code
+ * is full of short literals assigned to names like "token".
+ */
+export function scanTextForSecrets(text: string, maxPerRule = 3): SecretHit[] {
+  const hits = new Map<string, SecretHit>();
+  for (const rule of RULES) {
+    if (!rule.secret || rule.id === "secret.hardcoded-credential") continue;
+    const re = new RegExp(rule.pattern.source, rule.pattern.flags.includes("g") ? rule.pattern.flags : `${rule.pattern.flags}g`);
+    let n = 0;
+    for (const m of text.matchAll(re)) {
+      if (n >= maxPerRule) break;
+      if (rule.accept && rule.accept(m as RegExpExecArray, "", { path: "served-script.js", content: "" }) === false) continue;
+      const masked = maskSecret(m[0]);
+      if (hits.has(`${rule.id}:${masked}`)) continue;
+      n++;
+      const at = m.index ?? 0;
+      const context = `${text.slice(Math.max(0, at - 40), at)}${masked}${text.slice(at + m[0].length, at + m[0].length + 20)}`.replace(/\s+/g, " ");
+      hits.set(`${rule.id}:${masked}`, { rule, masked, context: context.slice(0, 160) });
+    }
+  }
+  return [...hits.values()];
+}
+
+
 const LANG: Record<string, Rule["langs"]> = { js: "js", jsx: "js", ts: "js", tsx: "js", mjs: "js", cjs: "js", vue: "js", svelte: "js", py: "py", php: "php" };
 export const SUPPORTED_EXT = /\.(js|jsx|ts|tsx|mjs|cjs|vue|svelte|py|php|rb|go|java|cs|json|ya?ml|toml|env|ini|cfg|conf|properties|sh|tf|xml|html?|sql|txt|md)$/i;
 const SKIP_PATH = /(^|\/)(node_modules|\.git|dist|build|\.next|out|vendor|coverage|__pycache__|\.venv|venv)\//;

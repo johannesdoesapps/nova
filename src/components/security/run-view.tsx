@@ -4,7 +4,14 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, Check, ChevronRight, CircleAlert, SkipForward } from "lucide-react";
 import { StudioHeader } from "@/components/studio/frame";
 import { jsonFetch } from "@/hooks/use-ndjson";
-import { AGENT_NAME, AgentBadge, ConfidenceBadge, FindingStatus, fmtTime, ICON_OF, ReportBlock, RunStatus, SeverityBadge } from "./bits";
+import { MODE_INFO, type AuditMode } from "@/lib/security/audit";
+import type { StoredAnalysis } from "@/lib/security/audit-report";
+import type { CompactCodeMap } from "@/lib/security/code-map";
+import type { EndpointResult } from "@/lib/security/crawl";
+import { classify, type FindingLike } from "@/lib/security/details";
+import type { Surface } from "@/lib/security/surface";
+import { AttackPaths, ClassificationBadge, CodeMapView, Coverage, GateBanner, MonitoringNote, PostureStrip, SurfaceMap } from "./audit-views";
+import { AGENT_NAME, AgentBadge, FindingStatus, fmtTime, ICON_OF, ReportBlock, RunStatus, SeverityBadge } from "./bits";
 import type { FindingSummary } from "./findings-panel";
 
 interface Run {
@@ -18,7 +25,15 @@ interface Run {
   tools: { tool: string; status: string; detail: string; durationMs?: number }[];
   summary: string | null;
   model_id: string | null;
-  stats: { timeline?: { time: string | null; ip: string | null; label: string; ref: string }[]; linkNotes?: string[]; [k: string]: unknown };
+  stats: {
+    timeline?: { time: string | null; ip: string | null; label: string; ref: string }[];
+    linkNotes?: string[];
+    audit?: { mode: AuditMode; active: boolean; timeBudget: string };
+    surface?: Surface & { trimmed?: string[] };
+    endpointResults?: EndpointResult[];
+    codeMap?: CompactCodeMap;
+    [k: string]: unknown;
+  };
   error: string | null;
   started_at: string;
   finished_at: string | null;
@@ -78,6 +93,10 @@ export function RunView({ id }: { id: string }) {
   const { run, children } = data;
   const findings = [...data.findings].sort((a, b) => SEV_RANK[a.severity]! - SEV_RANK[b.severity]!);
   const allRuns = [run, ...children];
+  const auditMode = run.stats.audit?.mode;
+  // Present once the audit's report step has run (the analysis is stored with the parent run).
+  const analysis = auditMode && run.stats.posture ? (run.stats as unknown as StoredAnalysis) : null;
+  const asLike = findings as unknown as (FindingLike & { id: string })[];
   return (
     <>
       {header}
@@ -86,12 +105,10 @@ export function RunView({ id }: { id: string }) {
           <div className="s-in flex items-start gap-3.5">
             <AgentBadge agent={run.agent} icon={ICON_OF[run.agent]!} />
             <div className="min-w-0 flex-1">
-              <h1 className="text-[clamp(22px,3vw,28px)] font-semibold tracking-[-0.01em]">
-                {AGENT_NAME[run.agent]} · {run.action}
-              </h1>
+              <h1 className="text-[clamp(22px,3vw,28px)] font-semibold tracking-[-0.01em]">{auditMode ? `Sentinel · ${MODE_INFO[auditMode].label}` : `${AGENT_NAME[run.agent]} · ${run.action}`}</h1>
               <p className="mt-1 text-[13px] text-s-ink-2">
                 {run.asset}
-                {run.scope ? ` · ${run.scope} scope` : ""} · started {fmtTime(run.started_at)}
+                {run.scope ? ` · ${run.scope === "active" ? "active read-only testing" : "passive checks only"}` : ""} · started {fmtTime(run.started_at)}
                 {run.finished_at ? ` · finished ${fmtTime(run.finished_at)}` : ""}
                 {run.model_id ? ` · AI: ${run.model_id}` : ""}
               </p>
@@ -100,9 +117,16 @@ export function RunView({ id }: { id: string }) {
           </div>
           {run.parent_id && (
             <Link href={`/agents/security/runs/${run.parent_id}`} className="inline-flex text-[13px] text-s-ink-2 underline underline-offset-2">
-              Part of a coordinated investigation
+              Part of a coordinated investigation or audit
             </Link>
           )}
+          {analysis?.gate && <GateBanner gate={analysis.gate} />}
+          {auditMode && !analysis && run.status !== "running" && (
+            <p className="rounded-xl border border-s-line px-3 py-2 text-[13.5px] text-s-ink-2">
+              This audit didn&apos;t reach its analysis step, so there are no attack paths, coverage or gate result. The steps that ran and their findings are below.
+            </p>
+          )}
+          {analysis && <PostureStrip analysis={analysis} />}
           {run.error && (
             <p role="alert" className="rounded-xl border border-s-line px-3 py-2 text-[13.5px] text-s-danger">
               {run.error}
@@ -121,7 +145,7 @@ export function RunView({ id }: { id: string }) {
                     <div key={r.id}>
                       {children.length > 0 && (
                         <Link href={`/agents/security/runs/${r.id}`} className="mb-1.5 flex items-center gap-2 text-[13px] font-medium hover:underline">
-                          {AGENT_NAME[r.agent]} <RunStatus status={r.status} />
+                          {r.id === run.id && auditMode ? "Sentinel audit" : AGENT_NAME[r.agent]} <RunStatus status={r.status} />
                         </Link>
                       )}
                       <ol className="space-y-1.5">
@@ -154,6 +178,20 @@ export function RunView({ id }: { id: string }) {
               <ReportBlock key={c.id} text={c.summary!} title={`${AGENT_NAME[c.agent]} report`} />
             ))}
 
+          {analysis && <AttackPaths paths={analysis.paths} />}
+          {analysis && <Coverage coverage={analysis.coverage} />}
+          {allRuns
+            .filter((r) => r.stats.surface)
+            .map((r) => (
+              <SurfaceMap key={`s-${r.id}`} surface={r.stats.surface!} endpointResults={r.stats.endpointResults} />
+            ))}
+          {allRuns
+            .filter((r) => r.stats.codeMap)
+            .map((r) => (
+              <CodeMapView key={`c-${r.id}`} map={r.stats.codeMap!} />
+            ))}
+          {auditMode && <MonitoringNote />}
+
           {(run.stats.linkNotes?.length ?? 0) > 0 && (
             <section className="glass rounded-[20px] p-5">
               <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-[0.06em] text-s-ink-3">Connected findings</h2>
@@ -185,7 +223,11 @@ export function RunView({ id }: { id: string }) {
           <section>
             <h2 className="mb-3 text-[15px] font-semibold">Findings ({findings.length})</h2>
             {findings.length === 0 ? (
-              <p className="rounded-[20px] border border-dashed border-s-line-strong px-6 py-8 text-center text-[14px] text-s-ink-2">{run.status === "completed" ? "Nothing was found by the checks that ran." : "No findings were saved."}</p>
+              <p className="rounded-[20px] border border-dashed border-s-line-strong px-6 py-8 text-center text-[14px] text-s-ink-2">
+                {run.status === "completed"
+                  ? `Nothing was found by the checks that ran. That isn't proof the application is secure${analysis ? " — see Coverage above for what wasn't assessed" : ""}.`
+                  : "No findings were saved."}
+              </p>
             ) : (
               <ul className="space-y-2">
                 {findings.map((f) => (
@@ -201,7 +243,7 @@ export function RunView({ id }: { id: string }) {
                       </div>
                       <div className="hidden items-center gap-1.5 sm:flex">
                         <SeverityBadge severity={f.severity} />
-                        <ConfidenceBadge confidence={f.confidence} />
+                        <ClassificationBadge value={classify(f as unknown as FindingLike, asLike)} />
                         <FindingStatus status={f.status} />
                       </div>
                       <div className="sm:hidden">

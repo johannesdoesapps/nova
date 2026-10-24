@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AUDIT_MODES, TIME_BUDGETS } from "./audit";
 import { CONFIDENCES, FINDING_STATUSES, SEVERITIES } from "./types";
 
 const modelId = z.string().min(1).max(120).optional();
@@ -17,6 +18,9 @@ export const sentinelRequest = z.object({
   scope: z.enum(["passive", "active"]).default("passive"),
   /** The user's explicit confirmation, required for every scan. */
   authorized: z.literal(true, { error: "Confirm you own or are authorised to test this website." }),
+  /** With an audit mode, Sentinel also maps the site within that mode's budget. */
+  mode: z.enum(AUDIT_MODES).optional(),
+  timeBudget: z.enum(TIME_BUDGETS).default("standard"),
   modelId,
   parentId,
 });
@@ -46,7 +50,29 @@ export const guardianRequest = z
   })
   .refine((b) => b.source.type !== "upload" || b.source.files.reduce((n, f) => n + f.content.length, 0) <= 3_000_000, "Uploads are limited to 3 MB of code per audit.");
 
-export const coordinateStart = z.object({ plan: z.array(z.enum(["sentinel", "threat_hunter", "code_guardian"])).min(1).max(3), asset: z.string().trim().max(120).default("") });
+/** A Sentinel audit: its mode, time budget, testing permission and (for the release gate) what blocks. */
+export const auditConfig = z.object({
+  mode: z.enum(AUDIT_MODES),
+  timeBudget: z.enum(TIME_BUDGETS).default("standard"),
+  /** Active testing (exposed files, signed-out endpoint checks, error pages) — read-only, but the user must choose it. */
+  active: z.boolean().default(false),
+  gate: z
+    .object({ blockSeverities: z.array(z.enum(SEVERITIES)).min(1).max(5).default(["critical", "high"]), blockUnverified: z.boolean().default(false) })
+    .default({ blockSeverities: ["critical", "high"], blockUnverified: false }),
+});
+export type AuditConfig = z.infer<typeof auditConfig>;
+
+export const coordinateStart = z
+  .object({
+    plan: z
+      .array(z.enum(["sentinel", "threat_hunter", "code_guardian"]))
+      .min(1)
+      .max(3),
+    asset: z.string().trim().max(120).default(""),
+    audit: auditConfig.optional(),
+  })
+  // A coordinated investigation links at least two agents; an audit may cover just the website or just the code.
+  .refine((b) => b.audit || b.plan.length >= 2, "Choose at least two agents.");
 export const coordinateReport = z.object({ modelId });
 
 export const findingPatch = z.object({

@@ -3,7 +3,8 @@ import { getFinding, listTargets } from "@/lib/db/security";
 import { ApiError, errorResponse, ndjsonStream, requireUuid } from "@/lib/http";
 import { checkRunLimit, runGuardianAgent, runSentinelAgent } from "@/lib/security/runners";
 
-export const maxDuration = 60;
+// An audit maps the site (crawl capped at 45 s by its budget) before the AI report, so allow up to two minutes.
+export const maxDuration = 120;
 
 /**
  * POST /api/security/findings/[id]/recheck — re-run the tool that produced a
@@ -19,8 +20,10 @@ export async function POST(req: Request, ctx: RouteContext<"/api/security/findin
       const target = (await listTargets(auth.supabase, auth.user.id)).find((t) => t.hostname === finding.asset);
       if (!target) throw new ApiError("bad_request", `${finding.asset} is no longer in your targets. Add and verify it to re-check.`);
       checkRunLimit(req, auth);
-      const scope = finding.rule_id.startsWith("exposure.") ? "active" : "passive";
-      return ndjsonStream((send, signal) => runSentinelAgent({ req, auth, send, signal }, { targetId: target.id, scope }).then(() => {}), req.signal);
+      const scope = /^(exposure\.|surface\.api-|surface\.error-)/.test(finding.rule_id) ? "active" : "passive";
+      // Findings from the site map need the mapping pass to be seen again; only locations it re-fetches can be cleared.
+      const mode = finding.rule_id.startsWith("surface.") ? ("deep" as const) : undefined;
+      return ndjsonStream((send, signal) => runSentinelAgent({ req, auth, send, signal }, { targetId: target.id, scope, mode, timeBudget: "short" }).then(() => {}), req.signal);
     }
     if (finding.agent === "code_guardian" && finding.asset.startsWith("github:")) {
       checkRunLimit(req, auth);

@@ -1,3 +1,5 @@
+import { routeMatches } from "./attack-paths";
+
 /**
  * Links findings from different agents that plausibly concern the same
  * weakness. A link is a lead for the user to check, not proof.
@@ -54,6 +56,35 @@ export function correlate(findings: CorrelationInput[]): { pairs: [string, strin
         pairs.push([f.id, s.id]);
         notes.push(`The exposed ${path} found by Sentinel was requested in the logs (${s.title}).`);
       }
+    }
+  }
+  // Code that looks unprotected ↔ the live site answering the same route without a session.
+  const liveApi = findings.filter((f) => f.rule_id.startsWith("surface.api-") && f.location);
+  for (const c of findings.filter((f) => /^map\.(route-no-auth|read-no-auth|object-access)$/.test(f.rule_id))) {
+    // Live checks are signed-out GETs, so they only say something about GET (or any-method) handlers.
+    const m = /^(GET|POST|PUT|PATCH|DELETE|ANY) (\S+)/.exec(c.evidence[0]?.detail ?? "");
+    if (!m || (m[1] !== "GET" && m[1] !== "ANY")) continue;
+    const route = m[2]!;
+    for (const l of liveApi) {
+      let path: string;
+      try {
+        path = new URL(l.location!).pathname;
+      } catch {
+        continue;
+      }
+      if (!routeMatches(route, path)) continue;
+      pairs.push([c.id, l.id]);
+      notes.push(`"${c.title}" (code) matches ${path}, which answered a signed-out request on the live site.`);
+    }
+  }
+  // The same key in the code and in JavaScript served to browsers (compared in masked form only).
+  const masked = (f: CorrelationInput) => f.evidence.flatMap((e) => e.detail.match(/[A-Za-z0-9_\-]{4}•{3,}[A-Za-z0-9_\-]{2}/g) ?? []);
+  const served = findings.filter((f) => f.rule_id === "surface.client-secret");
+  for (const c of findings.filter((f) => f.rule_id.startsWith("secret."))) {
+    const keys = new Set(masked(c));
+    for (const s of served.filter((x) => masked(x).some((k) => keys.has(k)))) {
+      pairs.push([c.id, s.id]);
+      notes.push(`The secret in ${c.location ?? "the code"} is also served to browsers (${s.location}).`);
     }
   }
   return { pairs, notes };

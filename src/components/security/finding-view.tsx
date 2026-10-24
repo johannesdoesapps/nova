@@ -1,11 +1,14 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, CircleAlert, Copy, ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, CircleDashed, CircleMinus, Copy, ExternalLink, Loader2, RefreshCw, Wrench } from "lucide-react";
 import { highlight } from "@/components/common/highlight";
 import { StudioHeader, useStudio } from "@/components/studio/frame";
 import { jsonFetch } from "@/hooks/use-ndjson";
+import type { Classification, FindingDetails, InvestigationStep } from "@/lib/security/details";
 import { cn, isSafeHttpUrl } from "@/lib/utils";
+import { ClassificationBadge } from "./audit-views";
 import {
   AGENT_NAME,
   AgentBadge,
@@ -52,12 +55,23 @@ interface Detail {
   duplicates: Mini[];
   history: { id: number; action: string; detail: Record<string, unknown>; created_at: string }[];
   run: { id: string; agent: string; action: string; started_at: string } | null;
+  classification: Classification;
+  details: FindingDetails;
+  investigation: InvestigationStep[];
 }
+
+const STEP_ICON: Record<InvestigationStep["state"], React.ReactNode> = {
+  done: <Check className="text-emerald-500" />,
+  partial: <CircleDashed className="text-amber-500" />,
+  not_done: <CircleMinus className="text-s-ink-3" />,
+};
 
 const selectCls = "h-9 w-full rounded-xl border border-s-line bg-transparent px-2.5 text-[13px] text-s-ink outline-none focus:border-s-line-strong";
 
 export function FindingView({ id }: { id: string }) {
   const { notify } = useStudio();
+  const router = useRouter();
+  const [fixing, setFixing] = useState(false);
   const [data, setData] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
@@ -109,6 +123,22 @@ export function FindingView({ id }: { id: string }) {
     setVersion((v) => v + 1);
   };
 
+  // Opens a Code project with the audited repository and starts the coding agent with plan approval and edit review on.
+  const fixWithAgent = async () => {
+    setFixing(true);
+    try {
+      const { projectId, task } = await jsonFetch<{ projectId: string; task: string }>(`/api/security/findings/${id}/fix`, { method: "POST", body: "{}" });
+      const r = await jsonFetch<{ run: { id: string } }>(`/api/code/projects/${projectId}/agent`, {
+        method: "POST",
+        body: JSON.stringify({ request: task, options: { approvePlans: true, reviewEdits: true, commands: "safe" } }),
+      });
+      router.push(`/code/${projectId}?run=${r.run.id}`);
+    } catch (e) {
+      notify((e as Error).message);
+      setFixing(false);
+    }
+  };
+
   const header = (
     <StudioHeader>
       <Link href="/agents/security" className="inline-flex items-center gap-1.5 text-[14px] text-s-ink-2 transition hover:text-s-ink">
@@ -157,6 +187,7 @@ export function FindingView({ id }: { id: string }) {
               <h1 className="mt-3 text-[clamp(22px,3vw,28px)] font-semibold leading-tight tracking-[-0.01em]">{f.title}</h1>
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
                 <SeverityBadge severity={f.severity} />
+                <ClassificationBadge value={data.classification} />
                 <ConfidenceBadge confidence={f.confidence} />
                 <FindingStatus status={f.status} />
                 {f.duplicate_of && (
@@ -210,15 +241,79 @@ export function FindingView({ id }: { id: string }) {
                 {f.evidence.map((e, i) => (
                   <li key={i}>
                     <p className="text-[12.5px] text-s-ink-3">{e.source}</p>
-                    <pre className="s-scroll mt-1 overflow-x-auto rounded-xl border border-s-line bg-s-hover/60 px-3 py-2 text-[12.5px]">
+                    <pre tabIndex={0} aria-label={`Evidence from ${e.source}`} className="s-scroll mt-1 overflow-x-auto rounded-xl border border-s-line bg-s-hover/60 px-3 py-2 text-[12.5px]">
                       <code>{e.detail}</code>
                     </pre>
                   </li>
                 ))}
               </ul>
             </Section>
+            <Section title="Expected vs observed">
+              <dl className="space-y-2 text-[13.5px]">
+                <div>
+                  <dt className="text-[12.5px] text-s-ink-3">Expected (secure behaviour)</dt>
+                  <dd>{data.details.expected}</dd>
+                </div>
+                <div>
+                  <dt className="text-[12.5px] text-s-ink-3">Observed</dt>
+                  <dd className="break-words">{data.details.observed}</dd>
+                </div>
+              </dl>
+            </Section>
+            <Section title="Reproduce (in your authorised environment)">
+              <ol className="list-decimal space-y-1 pl-5 text-[13.5px] text-s-ink-2">
+                {data.details.reproduce.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ol>
+              <p className="mt-2 text-[12px] text-s-ink-3">Use test accounts and synthetic data; never real users&apos; data.</p>
+            </Section>
+            <Section title="Impact and root cause">
+              <dl className="space-y-2 text-[13.5px]">
+                <div>
+                  <dt className="text-[12.5px] text-s-ink-3">Realistic impact</dt>
+                  <dd>{data.details.impact}</dd>
+                </div>
+                <div>
+                  <dt className="text-[12.5px] text-s-ink-3">What an attacker needs first</dt>
+                  <dd>{data.details.privileges}</dd>
+                </div>
+                <div>
+                  <dt className="text-[12.5px] text-s-ink-3">Root cause</dt>
+                  <dd>{data.details.rootCause}</dd>
+                </div>
+                {data.details.cvss && (
+                  <div>
+                    <dt className="text-[12.5px] text-s-ink-3">CVSS 3.1 vector (typical for this kind of issue; the explanation above is what matters)</dt>
+                    <dd className="font-mono text-[12px]">{data.details.cvss}</dd>
+                  </div>
+                )}
+              </dl>
+            </Section>
             <Section title="How to fix it">
               <p className="whitespace-pre-wrap text-[14px] leading-relaxed">{f.remediation}</p>
+            </Section>
+            <Section title="Verify the fix">
+              <ol className="list-decimal space-y-1 pl-5 text-[13.5px] text-s-ink-2">
+                {data.details.verify.map((v, i) => (
+                  <li key={i}>{v}</li>
+                ))}
+              </ol>
+              <p className="mt-2 text-[12px] text-s-ink-3">A finding counts as fixed only when a check shows it — editing the code isn&apos;t enough.</p>
+            </Section>
+            <Section title="Investigation">
+              <ol className="space-y-2">
+                {data.investigation.map((st) => (
+                  <li key={st.id} className="flex items-start gap-2.5 text-[13.5px] [&>svg]:mt-0.5 [&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0">
+                    {STEP_ICON[st.state]}
+                    <span>
+                      <span className="font-medium">{st.label}</span>
+                      <span className="sr-only"> ({st.state.replace("_", " ")})</span>
+                      <span className="block text-[12.5px] text-s-ink-2">{st.detail}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
             </Section>
             {f.patch && (
               <Section title="Proposed patch">
@@ -315,6 +410,21 @@ export function FindingView({ id }: { id: string }) {
                 </button>
                 {!canRecheck && <p className="mt-1.5 text-[12px] text-s-ink-3">{f.agent === "code_guardian" ? "Uploaded code: run Audit code again with the fixed files and the same project name." : "Log findings: investigate newer logs to see whether it continues."}</p>}
                 <RunProgress state={recheck} />
+                {f.agent === "code_guardian" && f.asset.startsWith("github:") && f.location && !["fixed", "verified", "false_positive"].includes(f.status) && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void fixWithAgent()}
+                      disabled={fixing}
+                      className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-s-line-strong text-[13px] font-medium transition hover:bg-s-hover disabled:opacity-50"
+                    >
+                      {fixing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Wrench className="h-4 w-4" aria-hidden />} Fix with the coding agent
+                    </button>
+                    <p className="mt-1.5 text-[12px] text-s-ink-3">
+                      Opens a Code project with this repository. You approve the agent&apos;s plan and edits; it adds a regression test and runs the checks. Nothing is pushed or deployed.
+                    </p>
+                  </>
+                )}
               </div>
             </div>
 

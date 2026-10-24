@@ -2,14 +2,21 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { audit, getFinding, updateFinding } from "@/lib/db/security";
 import { ApiError, errorResponse, parseJsonBody, requireUuid } from "@/lib/http";
+import { classify, findingDetails, investigation, type FindingLike } from "@/lib/security/details";
 import { findingPatch } from "@/lib/security/schema";
 
-/** GET /api/security/findings/[id] — a finding with related findings, duplicates and its audit history. */
+/**
+ * GET /api/security/findings/[id] — a finding with related findings, duplicates and its audit history, plus
+ * its classification, details (reproduction, expected vs observed, impact, root cause, verification) and the
+ * investigation record, all derived from what was recorded.
+ */
 export async function GET(_req: Request, ctx: RouteContext<"/api/security/findings/[id]">) {
   try {
     const auth = await requireUser();
     const id = requireUuid((await ctx.params).id);
-    return NextResponse.json(await getFinding(auth.supabase, auth.user.id, id));
+    const data = await getFinding(auth.supabase, auth.user.id, id);
+    const others = (data.related as unknown as FindingLike[]).map((r) => ({ ...r, description: "", evidence: [], remediation: "", verification: "not_verified", related: [id] }));
+    return NextResponse.json({ ...data, classification: classify(data.finding, others), details: findingDetails(data.finding), investigation: investigation(data.finding, others) });
   } catch (err) {
     return errorResponse(err);
   }

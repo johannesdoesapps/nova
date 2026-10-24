@@ -24,8 +24,17 @@ export async function securityTools(auth?: AuthContext): Promise<SecurityTool[]>
   const externalReason = "Not connected. Needs a separate scanner runner (it can't run inside the website's serverless functions).";
   return [
     { id: "orbis-headers", name: "Header & config checks", kind: "builtin", description: "HTTPS, HSTS, CSP, framing, cookie flags, CORS and version disclosure from live HTTP responses.", envVars: [], available: true },
+    {
+      id: "orbis-surface",
+      name: "Site mapping",
+      kind: "builtin",
+      description: "Read-only crawl of your verified site within an audit's budget: pages, forms, scripts, API endpoints, client-side secrets, source maps; signed-out endpoint checks with active testing.",
+      envVars: [],
+      available: true,
+    },
     { id: "orbis-exposure", name: "Exposed file checks", kind: "builtin", description: "Requests a short list of sensitive paths (.env, .git, server-status) and confirms by content. Active scope only.", envVars: [], available: true },
     { id: "orbis-code-rules", name: "Code & secret rules", kind: "builtin", description: "Pattern rules for secrets, injection, XSS, unsafe eval, weak crypto and TLS bypasses.", envVars: [], available: true },
+    { id: "orbis-code-map", name: "Application map", kind: "builtin", description: "Routes and what each handler visibly checks (sign-in, owner, validation, signatures), trust boundaries and configuration files.", envVars: [], available: true },
     { id: "osv", name: "OSV.dev vulnerability database", kind: "service", description: "Known vulnerabilities for npm and PyPI packages from lockfiles and manifests.", envVars: [], available: true },
     { id: "ai-review", name: "AI code review", kind: "builtin", description: "Uses your chosen AI model; only findings whose quoted code exists in your files are kept, marked tentative.", envVars: [], available: true },
     { id: "orbis-logs", name: "Log analyzer", kind: "builtin", description: "Parses web access, SSH auth and JSON logs; detects brute force, spraying, scanners and payloads.", envVars: [], available: true },

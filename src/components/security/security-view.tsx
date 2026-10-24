@@ -1,13 +1,16 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, Check, ChevronRight, CircleAlert, Network, Play, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, CircleAlert, Network, Play, ScanSearch, ShieldCheck, Trash2 } from "lucide-react";
 import { useApp } from "@/components/layout/app-context";
 import { StudioHeader } from "@/components/studio/frame";
 import { Segmented } from "@/components/studio/ui";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import type { SecurityAgentDef } from "@/lib/security/agents";
+import { MODE_INFO, type AuditMode } from "@/lib/security/audit";
+import type { StoredAnalysis } from "@/lib/security/audit-report";
 import { cn } from "@/lib/utils";
+import { MonitoringNote } from "./audit-views";
 import { AGENT_NAME, AgentBadge, fmtTime, ICON_OF, RunStatus, SEVERITY_DOT } from "./bits";
 import { EMPTY_FILTERS, FindingsPanel, type FindingFilters } from "./findings-panel";
 import type { Target } from "./forms";
@@ -30,7 +33,7 @@ interface Run {
   status: string;
   asset: string | null;
   scope: string | null;
-  stats: { findings?: number };
+  stats: { findings?: number; audit?: { mode: AuditMode }; posture?: StoredAnalysis["posture"]; gate?: StoredAnalysis["gate"] };
   error: string | null;
   started_at: string;
 }
@@ -41,6 +44,7 @@ interface Overview {
   runs: Run[];
   latest: Record<string, { status: string; runId: string; at: string } | null>;
   openCounts: Record<string, number>;
+  openPosture: { confirmedOrLikely: number; unverified: number };
   totals: { all: number; open: number; assets: string[] };
 }
 
@@ -108,6 +112,8 @@ export function SecurityView() {
   const toolById = new Map(data?.tools.map((t) => [t.id, t]) ?? []);
   const topRuns = data?.runs.filter((r) => !r.parent_id) ?? [];
   const childCount = (id: string) => data?.runs.filter((r) => r.parent_id === id).length ?? 0;
+  const audits = topRuns.filter((r) => r.stats?.audit).slice(0, 6);
+  const runTitle = (r: Run) => (r.stats?.audit ? `Sentinel · ${MODE_INFO[r.stats.audit.mode].label}` : `${AGENT_NAME[r.agent]} · ${r.action}${r.scope ? ` (${r.scope})` : ""}`);
 
   return (
     <>
@@ -119,14 +125,24 @@ export function SecurityView() {
               <h1 className="font-serif text-[clamp(34px,5vw,46px)] leading-[1.05] tracking-[-0.01em]">Security Team</h1>
               <p className="mt-2 max-w-2xl text-[15.5px] text-s-ink-2">Three specialised agents that check what you own using real scanners and data, explain the results, and help you fix them. Nothing is changed without your approval.</p>
             </div>
-            <button
-              type="button"
-              onClick={() => setLaunch("coordinated")}
-              disabled={!data}
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-s-accent px-4 text-[14px] font-medium text-s-accent-ink shadow-[0_8px_24px_-12px_var(--s-accent)] transition hover:-translate-y-px hover:brightness-110 disabled:opacity-50"
-            >
-              <Network className="h-4 w-4" /> Coordinated investigation
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setLaunch("coordinated")}
+                disabled={!data}
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-s-line-strong px-4 text-[14px] font-medium transition hover:bg-s-hover disabled:opacity-50"
+              >
+                <Network className="h-4 w-4" /> Coordinated investigation
+              </button>
+              <button
+                type="button"
+                onClick={() => setLaunch("audit")}
+                disabled={!data}
+                className="inline-flex h-10 items-center gap-2 rounded-xl bg-s-accent px-4 text-[14px] font-medium text-s-accent-ink shadow-[0_8px_24px_-12px_var(--s-accent)] transition hover:-translate-y-px hover:brightness-110 disabled:opacity-50"
+              >
+                <ScanSearch className="h-4 w-4" /> Security audit
+              </button>
+            </div>
           </div>
 
           {error && (
@@ -232,6 +248,56 @@ export function SecurityView() {
                   </button>
                 ))}
               </div>
+              <p className="mt-3 text-[12.5px] text-s-ink-2">
+                {data.openPosture.confirmedOrLikely} confirmed or likely · {data.openPosture.unverified} still need verification (leads from reading code or heuristics).
+              </p>
+            </section>
+          )}
+
+          {data && (
+            <section className="glass mt-4 rounded-[22px] p-5" aria-labelledby="audits">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 id="audits" className="text-[15px] font-semibold">
+                  Audits
+                </h2>
+                <button type="button" onClick={() => setLaunch("audit")} className="text-[13px] text-s-ink-2 underline underline-offset-2 hover:text-s-ink">
+                  Run an audit
+                </button>
+              </div>
+              {audits.length === 0 ? (
+                <p className="mt-2 text-[13.5px] text-s-ink-2">
+                  No audits yet. A Sentinel audit maps your website and code, runs every check in scope, links findings into attack paths and lists what wasn&apos;t assessed. Modes:{" "}
+                  {Object.values(MODE_INFO)
+                    .map((m) => m.label)
+                    .join(", ")}
+                  .
+                </p>
+              ) : (
+                <ul className="mt-3 divide-y divide-s-line">
+                  {audits.map((r) => (
+                    <li key={r.id}>
+                      <Link href={`/agents/security/runs/${r.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 text-[13.5px] hover:underline">
+                        <span className="font-medium">{MODE_INFO[r.stats.audit!.mode].label}</span>
+                        <span className="text-s-ink-3">{fmtTime(r.started_at)}</span>
+                        {r.stats.posture && (
+                          <span className="text-s-ink-2">
+                            open critical/high {r.stats.posture.open.critical}/{r.stats.posture.open.high} · {r.stats.posture.confirmedOrLikely} confirmed or likely
+                          </span>
+                        )}
+                        {r.stats.gate && (
+                          <span className={cn("font-medium", r.stats.gate.outcome === "passed" ? "text-emerald-600 dark:text-emerald-400" : "text-s-danger")}>Gate {r.stats.gate.outcome}</span>
+                        )}
+                        <span className="ml-auto">
+                          <RunStatus status={r.status} />
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="mt-3">
+                <MonitoringNote />
+              </div>
             </section>
           )}
 
@@ -259,10 +325,7 @@ export function SecurityView() {
                         <Link href={`/agents/security/runs/${r.id}`} className="glass group flex items-center gap-3 rounded-2xl px-4 py-3 transition hover:border-s-line-strong">
                           <AgentBadge agent={r.agent} icon={ICON_OF[r.agent]!} size="sm" />
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-[14px] font-medium">
-                              {AGENT_NAME[r.agent]} · {r.action}
-                              {r.scope ? ` (${r.scope})` : ""}
-                            </p>
+                            <p className="truncate text-[14px] font-medium">{runTitle(r)}</p>
                             <p className="truncate text-[12.5px] text-s-ink-3">
                               {r.asset ?? "—"} · {fmtTime(r.started_at)}
                               {typeof r.stats?.findings === "number" ? ` · ${r.stats.findings} findings` : ""}
