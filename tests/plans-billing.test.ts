@@ -164,18 +164,20 @@ async function as<T>(user: string, fn: () => Promise<T>): Promise<T> {
 
 type R = { ok: boolean; reason?: string; scope?: string; spent?: number };
 const reserve = (user: string, id: string, o: { units?: number; est?: number; budget?: number | null; premium?: boolean; limits?: [number, number] } = {}) =>
-  as(user, async () =>
-    (
-      await db.query<{ r: R }>("select public.usage_reserve_v2($1, $2, $3, $4, $5, $6, date_trunc('month', now()), $7, 0.8, 4, 20, 'chat', 'm') as r", [
-        id,
-        o.units ?? 1,
-        o.limits?.[0] ?? 200,
-        o.limits?.[1] ?? 1100,
-        o.est ?? 0.01,
-        o.budget === undefined ? 4.66 : o.budget,
-        o.premium ?? false,
-      ])
-    ).rows[0]!.r,
+  as(
+    user,
+    async () =>
+      (
+        await db.query<{ r: R }>("select public.usage_reserve_v2($1, $2, $3, $4, $5, $6, date_trunc('month', now()), $7, 0.8, 4, 20, 'chat', 'm') as r", [
+          id,
+          o.units ?? 1,
+          o.limits?.[0] ?? 200,
+          o.limits?.[1] ?? 1100,
+          o.est ?? 0.01,
+          o.budget === undefined ? 4.66 : o.budget,
+          o.premium ?? false,
+        ])
+      ).rows[0]!.r,
   );
 const spend = (user: string, usd: number | null, tokens: [number, number] = [1000, 500]) =>
   as(user, () => db.query("insert into public.model_runs (model_id, status, units, estimated_cost, input_tokens, output_tokens) values ('m', 'success', 1, $1, $2, $3)", [usd, tokens[0], tokens[1]]));
@@ -195,7 +197,10 @@ beforeAll(async () => {
     grant execute on function auth.uid() to anon, authenticated;
   `);
   const dir = join(__dirname, "..", "supabase", "migrations");
-  for (const f of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) await db.exec(readFileSync(join(dir, f), "utf8"));
+  for (const f of readdirSync(dir)
+    .filter((f) => f.endsWith(".sql"))
+    .sort())
+    await db.exec(readFileSync(join(dir, f), "utf8"));
   await db.exec(`
     grant usage on schema public to anon, authenticated;
     grant select, insert, update, delete on all tables in schema public to authenticated;
@@ -204,7 +209,9 @@ beforeAll(async () => {
 }, 60_000);
 
 beforeEach(async () => {
-  await db.exec("delete from public.code_agent_runs; delete from public.code_projects; delete from public.usage_holds; delete from public.model_runs; delete from public.admins; delete from public.subscriptions; delete from public.billing_ledger;");
+  await db.exec(
+    "delete from public.agent_workflows; delete from public.code_agent_runs; delete from public.code_projects; delete from public.usage_holds; delete from public.model_runs; delete from public.admins; delete from public.subscriptions; delete from public.billing_ledger;",
+  );
 });
 
 describe("usage_reserve_v2 (budget, atomically)", () => {
@@ -272,17 +279,30 @@ const reserve3 = (
   id: string,
   o: { units?: number; est?: number; tokens?: number; budget?: number | null; premiumBudget?: number | null; premium?: boolean; daily?: number; tokenLimit?: number; since?: string } = {},
 ) =>
-  as(user, async () =>
-    (
-      await db.query<{ r: R3 }>(
-        "select public.usage_reserve_v3($1, $2, 200, 1100, $3, $4, $5, $6, $7, $8, $9, coalesce($10::timestamptz, date_trunc('month', now())), 4, 20, 'chat', 'm') as r",
-        [id, o.units ?? 1, o.est ?? 0.01, o.tokens ?? 1000, o.budget === undefined ? 3.0 : o.budget, o.premiumBudget === undefined ? 1.8 : o.premiumBudget, o.premium ?? false, o.daily ?? 0, o.tokenLimit ?? 0, o.since ?? null],
-      )
-    ).rows[0]!.r,
+  as(
+    user,
+    async () =>
+      (
+        await db.query<{ r: R3 }>("select public.usage_reserve_v3($1, $2, 200, 1100, $3, $4, $5, $6, $7, $8, $9, coalesce($10::timestamptz, date_trunc('month', now())), 4, 20, 'chat', 'm') as r", [
+          id,
+          o.units ?? 1,
+          o.est ?? 0.01,
+          o.tokens ?? 1000,
+          o.budget === undefined ? 3.0 : o.budget,
+          o.premiumBudget === undefined ? 1.8 : o.premiumBudget,
+          o.premium ?? false,
+          o.daily ?? 0,
+          o.tokenLimit ?? 0,
+          o.since ?? null,
+        ])
+      ).rows[0]!.r,
   );
 const spendTier = (user: string, usd: number, tier: string, tokens: [number, number] = [1000, 500]) =>
   as(user, () =>
-    db.query("insert into public.model_runs (model_id, status, units, estimated_cost, input_tokens, output_tokens, model_tier, request_id) values ('anthropic:m', 'success', 1, $1, $2, $3, $4, gen_random_uuid())", [usd, tokens[0], tokens[1], tier]),
+    db.query(
+      "insert into public.model_runs (model_id, status, units, estimated_cost, input_tokens, output_tokens, model_tier, request_id) values ('anthropic:m', 'success', 1, $1, $2, $3, $4, gen_random_uuid())",
+      [usd, tokens[0], tokens[1], tier],
+    ),
   );
 
 describe("usage_reserve_v3 (premium budget, daily and token caps, atomically)", () => {
@@ -363,7 +383,11 @@ describe("admin finance summary", () => {
     await db.exec(`insert into public.admins (user_id) values ('${BOB}')`);
     await db.exec(`insert into public.subscriptions (user_id, plan, status, billing_interval, price_usd) values ('${ALICE}', 'pro', 'active', 'month', 15)`);
     await spendTier(ALICE, 0.5, "advanced", [2000, 800]);
-    await as(ALICE, () => db.query("insert into public.model_runs (model_id, status, units, estimated_cost, input_tokens, output_tokens, cached_input_tokens, model_tier, entitlement) values ('openai:gpt-5.6-luna', 'success', 1, 0.25, 4000, 800, 1000, 'standard', 'plan:pro')"));
+    await as(ALICE, () =>
+      db.query(
+        "insert into public.model_runs (model_id, status, units, estimated_cost, input_tokens, output_tokens, cached_input_tokens, model_tier, entitlement) values ('openai:gpt-5.6-luna', 'success', 1, 0.25, 4000, 800, 1000, 'standard', 'plan:pro')",
+      ),
+    );
     await db.exec(`
       insert into public.billing_ledger (stripe_object_id, user_id, kind, plan, amount_usd, tax_usd) values
         ('in_1', '${ALICE}', 'payment', 'pro', 15, 1.2), ('re_1', '${ALICE}', 'refund', null, 15, 0), ('failed:evt_1', '${ALICE}', 'failed_payment', 'pro', 16.2, 1.2);
@@ -411,7 +435,9 @@ describe("admin unit economics", () => {
         [pid],
       ),
     );
-    await db.exec(`insert into public.billing_ledger (stripe_object_id, user_id, kind, plan, amount_usd) values ('in_ue1', '${ALICE}', 'payment', 'pro', 20), ('re_ue1', '${ALICE}', 'refund', 'pro', 5)`);
+    await db.exec(
+      `insert into public.billing_ledger (stripe_object_id, user_id, kind, plan, amount_usd) values ('in_ue1', '${ALICE}', 'payment', 'pro', 20), ('re_ue1', '${ALICE}', 'refund', 'pro', 5)`,
+    );
 
     const raw = await as(BOB, async () => (await db.query<{ r: UnitEconomicsRaw }>("select public.admin_unit_economics(now() - interval '30 days') as r")).rows[0]!.r);
     const pro = raw.by_plan.find((p) => p.entitlement === "plan:pro")!;
@@ -454,12 +480,47 @@ describe("research runs are private to their owner", () => {
 
 describe("code reviews are private to their owner", () => {
   it("another user can't read, change or delete a review, or create one in someone else's name", async () => {
-    const id = (await as(ALICE, () => db.query<{ id: string }>("insert into public.code_reviews (title, source) values ('mine', '{\"kind\":\"paste\",\"label\":\"x\"}') returning id"))).rows[0]!.id;
+    const id = (await as(ALICE, () => db.query<{ id: string }>('insert into public.code_reviews (title, source) values (\'mine\', \'{"kind":"paste","label":"x"}\') returning id'))).rows[0]!.id;
     expect((await as(BOB, () => db.query("select id from public.code_reviews"))).rows).toHaveLength(0);
     expect((await as(BOB, () => db.query("update public.code_reviews set title = 'stolen' where id = $1 returning id", [id]))).rows).toHaveLength(0);
     expect((await as(BOB, () => db.query("delete from public.code_reviews where id = $1 returning id", [id]))).rows).toHaveLength(0);
     await expect(as(BOB, () => db.query(`insert into public.code_reviews (user_id, title, source) values ('${ALICE}', 'forged', '{}')`))).rejects.toThrow();
     expect((await as(ALICE, () => db.query<{ title: string }>("select title from public.code_reviews where id = $1", [id]))).rows[0]!.title).toBe("mine");
+  });
+});
+
+describe("agent workflows are private to their owner", () => {
+  const steps = JSON.stringify([{ key: "fix", status: "pending" }]);
+  const insert = (pid: string, owner?: string) =>
+    `insert into public.agent_workflows (${owner ? "user_id, " : ""}project_id, template, title, input, steps) values (${owner ? `'${owner}', ` : ""}'${pid}', 'fix_and_verify', 'Fix: total', '{"bug":{"summary":"total"}}', '${steps}') returning id`;
+
+  it("another user can't read, change or delete a workflow, or start one on someone else's project", async () => {
+    const pid = (await as(ALICE, () => db.query<{ id: string }>("insert into public.code_projects (name) values ('shop') returning id"))).rows[0]!.id;
+    const id = (await as(ALICE, () => db.query<{ id: string }>(insert(pid)))).rows[0]!.id;
+    expect((await as(BOB, () => db.query("select id from public.agent_workflows"))).rows).toHaveLength(0);
+    expect((await as(BOB, () => db.query("update public.agent_workflows set status = 'cancelled' where id = $1 returning id", [id]))).rows).toHaveLength(0);
+    expect((await as(BOB, () => db.query("delete from public.agent_workflows where id = $1 returning id", [id]))).rows).toHaveLength(0);
+    // Bob can't attach a workflow to Alice's project, in his name or hers.
+    await expect(as(BOB, () => db.query(insert(pid)))).rejects.toThrow();
+    await expect(as(BOB, () => db.query(insert(pid, ALICE)))).rejects.toThrow();
+    // Alice can't move her workflow onto Bob's project either.
+    const bobs = (await as(BOB, () => db.query<{ id: string }>("insert into public.code_projects (name) values ('bob') returning id"))).rows[0]!.id;
+    await expect(as(ALICE, () => db.query("update public.agent_workflows set project_id = $1 where id = $2", [bobs, id]))).rejects.toThrow();
+    expect((await as(ALICE, () => db.query<{ status: string }>("select status from public.agent_workflows where id = $1", [id]))).rows[0]!.status).toBe("running");
+  });
+
+  it("only known templates and statuses are stored", async () => {
+    const pid = (await as(ALICE, () => db.query<{ id: string }>("insert into public.code_projects (name) values ('p2') returning id"))).rows[0]!.id;
+    await expect(as(ALICE, () => db.query(insert(pid).replace("'fix_and_verify'", "'deploy_everything'")))).rejects.toThrow();
+    const id = (await as(ALICE, () => db.query<{ id: string }>(insert(pid)))).rows[0]!.id;
+    await expect(as(ALICE, () => db.query("update public.agent_workflows set status = 'merged' where id = $1", [id]))).rejects.toThrow();
+  });
+
+  it("anonymous visitors have no access, and nobody can truncate the table", async () => {
+    await db.exec("reset role; set role anon;");
+    await expect(db.query("select id from public.agent_workflows")).rejects.toThrow();
+    await db.exec("reset role");
+    await expect(as(ALICE, () => db.query("truncate public.agent_workflows"))).rejects.toThrow();
   });
 });
 
@@ -519,19 +580,26 @@ describe("prompt caching only where it pays", () => {
   it("asks Anthropic to cache long prompts, not short ones (a write costs 1.25× input)", async () => {
     const { shouldCache } = await import("@/lib/ai/providers/anthropic");
     expect(shouldCache([{ role: "user", content: "hi" }])).toBe(false);
-    expect(shouldCache([{ role: "system", content: "x".repeat(8000) }, { role: "user", content: "y".repeat(8000) }])).toBe(true);
+    expect(
+      shouldCache([
+        { role: "system", content: "x".repeat(8000) },
+        { role: "user", content: "y".repeat(8000) },
+      ]),
+    ).toBe(true);
   });
 });
 
 describe("usage_reserve_v4 (daily money cap, site-wide emergency cap)", () => {
   const reserve4 = (user: string, id: string, o: { est?: number; daily?: number | null; site?: number | null } = {}) =>
-    as(user, async () =>
-      (
-        await db.query<{ r: { ok: boolean; reason?: string; scope?: string } }>(
-          "select public.usage_reserve_v4($1, 1, 200, 1100, $2, 1000, 30, null, false, 0, 0, date_trunc('month', now()), 4, 20, 'chat', 'm', 180, $3, $4) as r",
-          [id, o.est ?? 0.01, o.daily ?? null, o.site ?? null],
-        )
-      ).rows[0]!.r,
+    as(
+      user,
+      async () =>
+        (
+          await db.query<{ r: { ok: boolean; reason?: string; scope?: string } }>(
+            "select public.usage_reserve_v4($1, 1, 200, 1100, $2, 1000, 30, null, false, 0, 0, date_trunc('month', now()), 4, 20, 'chat', 'm', 180, $3, $4) as r",
+            [id, o.est ?? 0.01, o.daily ?? null, o.site ?? null],
+          )
+        ).rows[0]!.r,
     );
 
   it("caps one day's spend, and yesterday's spend doesn't count", async () => {

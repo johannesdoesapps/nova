@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { startDelegatedTask } from "@/lib/agent-platform/delegate-server";
+import { startDelegatedWithAssignment } from "@/lib/agent-platform/delegate-server";
+import type { TaskAssignment } from "@/lib/agent-platform/protocol";
 import { startDelegated, type TaskProposal } from "@/lib/agent-platform/delegation";
 import { codeContext } from "@/lib/code/server";
 import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
@@ -18,10 +19,12 @@ export async function POST(req: Request) {
     const input = await parseJsonBody(req, startDelegated, 260_000);
     const auth = await codeContext("agent-delegate", 10);
     let outcome: { ok: boolean; summary: string; href: string | null };
+    let assignment: TaskAssignment | null = null;
     let failure: unknown = null;
     try {
-      const r = await startDelegatedTask(req, auth, input.agent, input.projectId ?? null, input.input);
+      const r = await startDelegatedWithAssignment(req, auth, input.agent, input.projectId ?? null, input.input);
       outcome = { ok: true, summary: r.summary, href: r.href };
+      assignment = r.assignment;
     } catch (err) {
       failure = err;
       outcome = { ok: false, summary: err instanceof ApiError ? err.message : "The task couldn't be started.", href: null };
@@ -38,6 +41,7 @@ export async function POST(req: Request) {
                 input: input.input,
                 status: outcome.ok ? ("started" as const) : ("failed" as const),
                 result: { summary: outcome.summary, href: outcome.href },
+                ...(assignment ? { assignment } : {}),
               }
             : t,
         );

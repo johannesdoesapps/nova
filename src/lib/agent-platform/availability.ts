@@ -20,6 +20,7 @@ export interface PlatformFlags {
 
 export type Availability =
   | { state: "available" }
+  | { state: "paused"; message: string }
   | { state: "sign_in"; message: string }
   | { state: "setup"; message: string; missing: Requirement[] }
   | { state: "upgrade"; message: string; plans: PlanId[] };
@@ -33,8 +34,12 @@ const SETUP_MESSAGE: Record<Requirement, string> = {
 
 const PLAN_LABEL: Record<PlanId, string> = { free: "Free", pro: "Pro", max: "Max" };
 
-/** `plan` is null for a signed-out visitor; `admin` users have every plan's access. */
-export function availability(def: Pick<AgentDef, "requires" | "plans">, flags: PlatformFlags, plan: PlanId | null, admin = false): Availability {
+/**
+ * `plan` is null for a signed-out visitor; `admin` users have every plan's access. A paused agent is paused
+ * for everyone, administrators included, until it's resumed.
+ */
+export function availability(def: Pick<AgentDef, "requires" | "plans"> & { id?: string }, flags: PlatformFlags, plan: PlanId | null, admin = false, paused: readonly string[] = []): Availability {
+  if (def.id && paused.includes(def.id)) return { state: "paused", message: "An administrator has paused this agent. Tasks already running carry on; new ones can't start until it's resumed." };
   const missing = def.requires.filter((r) => !flags[r]);
   if (missing.length) return { state: "setup", message: missing.map((r) => SETUP_MESSAGE[r]).join(" "), missing };
   if (def.requires.includes("accounts") && plan === null) return { state: "sign_in", message: "Sign in to use this agent." };

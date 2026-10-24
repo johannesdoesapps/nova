@@ -515,7 +515,12 @@ export function AgentPanel({
     setError(null);
     try {
       const { agent, agentInput, modelId: m, approvePlans, reviewEdits, commands } = prior.options;
-      const r = await post<{ run: RunView }>("/api/agent-platform/tasks", { agent, projectId, input: agentInput, options: { modelId: m, approvePlans, reviewEdits, commands: commands === "off" ? "safe" : commands } });
+      const r = await post<{ run: RunView }>("/api/agent-platform/tasks", {
+        agent,
+        projectId,
+        input: agentInput,
+        options: { modelId: m, approvePlans, reviewEdits, commands: commands === "off" ? "safe" : commands },
+      });
       lastSeq.current = 0;
       setEvents([]);
       setRunAttachments([]);
@@ -757,6 +762,14 @@ export function AgentPanel({
                   ) : (
                     runMode && <span className="text-[11.5px] text-s-ink-3">{runMode.label}</span>
                   )}
+                  {run.options.workflowId && (
+                    <Link
+                      href={`/agents/workflows/${run.options.workflowId}`}
+                      className="rounded-full border border-s-line px-2 text-[11.5px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink"
+                    >
+                      Back to the workflow
+                    </Link>
+                  )}
                   {!ended && (
                     <button
                       type="button"
@@ -771,7 +784,11 @@ export function AgentPanel({
                 {runAttachments.length > 0 && (
                   <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Attached to this task">
                     {runAttachments.map((a) => (
-                      <li key={a.id} className="inline-flex max-w-[220px] items-center gap-1.5 rounded-full border border-s-line px-2.5 py-1 text-[12px] text-s-ink-2" title={`${a.name} · ${formatBytes(a.size)}`}>
+                      <li
+                        key={a.id}
+                        className="inline-flex max-w-[220px] items-center gap-1.5 rounded-full border border-s-line px-2.5 py-1 text-[12px] text-s-ink-2"
+                        title={`${a.name} · ${formatBytes(a.size)}`}
+                      >
                         {a.kind === "image" ? <ImageIcon className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden />}
                         <span className="truncate">{a.name.split("/").pop()}</span>
                       </li>
@@ -788,15 +805,15 @@ export function AgentPanel({
               </ol>
 
               {run.busy && run.stepStartedAt && !ended && <StepClock since={run.stepStartedAt} />}
-              {(driving || run.busy) && !ended && (
-                run.pending?.kind === "job" ? (
+              {(driving || run.busy) &&
+                !ended &&
+                (run.pending?.kind === "job" ? (
                   <p role="status" className="flex items-center gap-2.5 px-1 text-[13px] text-s-ink-3">
                     {animated ? <InfinityMark wide animate weight={7} className="h-3 w-5 shrink-0" /> : <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />} Running {run.pending.command}…
                   </p>
                 ) : (
                   <WorkingStatus kind="agent" fallback={<Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />} className="flex items-center gap-2.5 px-1 text-[13px] text-s-ink-3" />
-                )
-              )}
+                ))}
 
               {run.pending && !busy && <PendingCard run={run} computerOn={computerOn} onRespond={respond} onStartComputer={startAndContinue} />}
 
@@ -1034,14 +1051,22 @@ function ModeMenu({ mode, onChange, disabled }: { mode: ModeId; onChange: (m: Mo
       }
     >
       {MODES.map((m) => (
-        <MenuItem key={m.id} role="menuitemradio" checked={mode === m.id} right={mode === m.id ? <Check /> : undefined} hint={m.detail} onClick={() => onChange(m.id)} className="[&>span>span:first-child]:whitespace-normal">
+        <MenuItem
+          key={m.id}
+          role="menuitemradio"
+          checked={mode === m.id}
+          right={mode === m.id ? <Check /> : undefined}
+          hint={m.detail}
+          onClick={() => onChange(m.id)}
+          className="[&>span>span:first-child]:whitespace-normal"
+        >
           {m.label} <span className="text-s-ink-3">· {m.short}</span>
         </MenuItem>
       ))}
       <p className="mx-2.5 mb-1 mt-2 border-t border-s-line pt-2 text-[11.5px] leading-snug text-s-ink-3">
         In every mode the agent works only on this project&apos;s files and its private computer. Files like <code className="font-mono">.env</code> are never shown to the AI; it never deploys,
-        publishes or pushes on its own; every change can be undone. The computer is isolated, but no setup is perfectly secure: keep real passwords and keys out of your files. Each step
-        counts like one chat message on your plan.
+        publishes or pushes on its own; every change can be undone. The computer is isolated, but no setup is perfectly secure: keep real passwords and keys out of your files. Each step counts like
+        one chat message on your plan.
       </p>
     </Menu>
   );
@@ -1184,7 +1209,8 @@ function StepClock({ since }: { since: string }) {
     return () => clearInterval(t);
   }, []);
   const s = Math.max(0, Math.round((now - Date.parse(since)) / 1000));
-  const text = s >= 300 ? "This step stopped without finishing; the next one picks up from what was saved." : `This step has been running for ${s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s`}.`;
+  const text =
+    s >= 300 ? "This step stopped without finishing; the next one picks up from what was saved." : `This step has been running for ${s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s`}.`;
   return (
     <p className="px-1 text-[12px] text-s-ink-3" aria-live="off">
       {text}

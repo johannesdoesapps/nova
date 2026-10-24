@@ -5,6 +5,7 @@ import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
 import { limiter } from "@/lib/rate-limit";
 import { createReview, listReviews } from "@/lib/review/server";
 import { sourceInput } from "@/lib/review/sources";
+import { assertAgentAccess } from "@/lib/agent-platform/server";
 
 export const maxDuration = 90;
 
@@ -29,6 +30,8 @@ export async function POST(req: Request) {
   try {
     const input = await parseJsonBody(req, body, 4_400_000);
     const auth = await codeContext("review-create", 20);
+    // The same plan, configuration and pause rules as a review the Orbis Agent or a workflow starts.
+    await assertAgentAccess(auth, "code_review");
     if (!limiter("review-new", 12, 10 * 60_000).check(`u:${auth.user.id}`, 1).ok) throw new ApiError("rate_limited", "Too many new reviews. Please wait a few minutes.");
     return NextResponse.json({ review: await createReview(req, auth, input) }, { status: 201 });
   } catch (err) {

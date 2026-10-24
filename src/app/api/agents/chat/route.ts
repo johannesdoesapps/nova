@@ -46,8 +46,9 @@ export async function POST(req: Request) {
     const attachments = body.attachments ?? [];
     authorizeTurn(agent, { attachments, useWeb: !!body.useWeb });
 
-    // Model: the user's pick for this conversation, else the agent's saved model,
-    // else a model with the agent's preferred capability, else the site default.
+    // Model: the user's pick for this conversation, else the agent's saved model, else the site default.
+    // (An assistant's modelPreference is descriptive only: it isn't used to choose a model, so an assistant
+    // never quietly costs more than the site default.)
     // Instructions and tools don't change with the model.
     // Near the limit (and always on Free) Auto and agent defaults keep to low-cost models.
     const preferLowCost = await shouldSaveAllowance(auth);
@@ -66,7 +67,16 @@ export async function POST(req: Request) {
     } else {
       // No model chosen by the user or the agent's owner: the site default, which is the lowest-cost available model.
       choice = await resolveModelChoice(null, ctx);
-      choice = { ...choice, routing: { auto: true, mode: "balanced", reason: choice.model.isDefault ? `${choice.model.displayName} answered: the site's default model.` : `${choice.model.displayName} answered: the lowest-cost available model (the default when no model is chosen).` } };
+      choice = {
+        ...choice,
+        routing: {
+          auto: true,
+          mode: "balanced",
+          reason: choice.model.isDefault
+            ? `${choice.model.displayName} answered: the site's default model.`
+            : `${choice.model.displayName} answered: the lowest-cost available model (the default when no model is chosen).`,
+        },
+      };
     }
     let model: ModelWithStatus = choice.model;
     const requestedModel = body.modelId ?? agent.modelId ?? `agent-default:${agent.modelPreference ?? "none"}`;
@@ -79,7 +89,10 @@ export async function POST(req: Request) {
       maxOutputTokens: limits.maxOutputTokens,
     });
     // A model the user (or the agent's owner) picked is never swapped for another provider's.
-    const fallbacks = await fallbackChain(model, choice.settings, !!body.allowFallback, { sameProvider: !!(body.modelId ?? agent.modelId) && !isAutoId(body.modelId ?? agent.modelId), tiers: limits.tiers });
+    const fallbacks = await fallbackChain(model, choice.settings, !!body.allowFallback, {
+      sameProvider: !!(body.modelId ?? agent.modelId) && !isAutoId(body.modelId ?? agent.modelId),
+      tiers: limits.tiers,
+    });
 
     // Conversation and history.
     let conversationId: string | null = null;
@@ -130,7 +143,20 @@ export async function POST(req: Request) {
       };
       const started = performance.now();
       try {
-        result = await runAgentTurn({ agent, model, fallbacks, history, message: body.message, attachments, useWeb: !!body.useWeb && !searchesUsed, timeZone: body.timeZone, maxOutputTokens: limits.maxOutputTokens, historyChars: limits.historyChars, signal, send: relay });
+        result = await runAgentTurn({
+          agent,
+          model,
+          fallbacks,
+          history,
+          message: body.message,
+          attachments,
+          useWeb: !!body.useWeb && !searchesUsed,
+          timeZone: body.timeZone,
+          maxOutputTokens: limits.maxOutputTokens,
+          historyChars: limits.historyChars,
+          signal,
+          send: relay,
+        });
         model = result.model;
       } catch (err) {
         await recordRun(auth, {
@@ -139,7 +165,11 @@ export async function POST(req: Request) {
           response: partial,
           latencyMs: performance.now() - started,
           usage: partial
-            ? { inputTokens: estimateTokens([...history, { role: "user", content: body.message }]) + estimateTokens(attachments.map((a) => a.content).join("\n")), outputTokens: estimateTokens(partial), estimated: true }
+            ? {
+                inputTokens: estimateTokens([...history, { role: "user", content: body.message }]) + estimateTokens(attachments.map((a) => a.content).join("\n")),
+                outputTokens: estimateTokens(partial),
+                estimated: true,
+              }
             : { inputTokens: null, outputTokens: null, estimated: true },
           status: "error",
           conversationId,

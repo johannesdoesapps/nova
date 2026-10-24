@@ -55,11 +55,93 @@ export const PERMISSION_LABEL: Record<ToolPermission, string> = {
   data_analysis: "Compute exact statistics for CSV files you attach",
 };
 
+/**
+ * The kinds of work a request can need. Every agent declares the ones it does (`taskTypes`); the router
+ * (routing.ts) matches requests to agents through them, and a kind no active agent does is reported as a
+ * gap instead of being sent to an agent that can't do it.
+ */
+export const TASK_TYPES = [
+  "answer_question",
+  "write_text",
+  "implement_feature",
+  "explain_code",
+  "build_website",
+  "fix_bug",
+  "write_tests",
+  "review_code",
+  "security_audit",
+  "web_research",
+  "verify_claims",
+  "analyse_data",
+  "compare_models",
+  "plan_project",
+  "generate_image",
+  "design_ui",
+  "write_docs",
+  "deploy",
+  "send_message",
+  "manage_infrastructure",
+  "make_purchase",
+  "schedule_automation",
+] as const;
+export type TaskType = (typeof TASK_TYPES)[number];
+
+export const TASK_TYPE_LABEL: Record<TaskType, string> = {
+  answer_question: "Answer a question",
+  write_text: "Write or edit text",
+  implement_feature: "Build or change software",
+  explain_code: "Explain a codebase",
+  build_website: "Build a website",
+  fix_bug: "Fix a bug",
+  write_tests: "Write and run tests",
+  review_code: "Review code",
+  security_audit: "Security audit",
+  web_research: "Research the web",
+  verify_claims: "Check claims against sources",
+  analyse_data: "Analyse data",
+  compare_models: "Compare AI models",
+  plan_project: "Plan a project",
+  generate_image: "Create an image",
+  design_ui: "Design a user interface",
+  write_docs: "Write documentation",
+  deploy: "Deploy or publish",
+  send_message: "Send email or messages",
+  manage_infrastructure: "Manage servers or cloud infrastructure",
+  make_purchase: "Buy or pay for something",
+  schedule_automation: "Run something on a schedule",
+};
+
+/** One agent's job, stated once: what it's for, its boundaries, what it takes and gives, and when it's done or must stop. */
+export interface AgentRole {
+  /** The one thing it's responsible for. */
+  role: string;
+  /** What else it does in service of that role. */
+  responsibilities: string[];
+  /** The kinds of work it accepts. */
+  taskTypes: TaskType[];
+  /** Work it doesn't do, and who does. */
+  outOfScope: { what: string; useInstead: string | null }[];
+  /** What it needs to start. */
+  input: string;
+  /** What it hands back. */
+  output: string;
+  /** When it stops and comes back to the user instead of carrying on. */
+  escalation: string[];
+  /** How a task counts as finished. */
+  doneWhen: string;
+  /** Agents it hands work to (never directly: through the user or a workflow). */
+  handsOffTo: string[];
+  /** Bumped when its instructions, tools or limits change. */
+  version: string;
+  /** What its usage is recorded under (model_runs.purpose), so its cost can be measured. */
+  purposes: string[];
+}
+
 /** Code-engine profiles: the Software Engineer (the ordinary coding agent) and the agents that reuse its engine. */
 export const CODE_PROFILES = ["bug_fixer", "qa_tester"] as const;
 export type CodeProfile = (typeof CODE_PROFILES)[number];
 
-export interface AgentDef {
+export interface AgentDef extends AgentRole {
   id: AgentId;
   name: string;
   /** One line for cards. */
@@ -87,7 +169,160 @@ export interface AgentDef {
 
 const CODE_CHARGING = "Each agent step is charged from your plan's allowance like a message of its size; commands use computer minutes.";
 
-export const AGENTS: AgentDef[] = [
+const CODE_ESCALATION = [
+  "The plan needs approval (on by default)",
+  "A command outside the safe list",
+  "It needs information only the user has (ask_user)",
+  "A step, token, time or failed-test limit is reached",
+  "The same failure three times: it stops and explains instead of retrying",
+];
+
+const ROLES: Record<AgentId, AgentRole> = {
+  engineer: {
+    role: "Change software in an Orbis project and prove the change works",
+    responsibilities: ["Inspect the project before editing", "Plan, then make the smallest change that does the job", "Run the tests or build and fix what fails", "Report only what actually ran"],
+    taskTypes: ["implement_feature", "explain_code", "design_ui", "write_docs"],
+    outOfScope: [
+      { what: "Diagnosing a reported bug from an error or stack trace", useInstead: "bug_fixer" },
+      { what: "Writing a test suite without touching application code", useInstead: "qa_tester" },
+      { what: "An independent review of changes", useInstead: "code_review" },
+      { what: "Deploying, publishing or pushing without the user", useInstead: null },
+    ],
+    input: "A request in plain words and one of the user's Orbis projects; optional files and images",
+    output: "Changed files (each undoable), the commands and tests that ran with their real results, and a report",
+    escalation: CODE_ESCALATION,
+    doneWhen: "It calls finish and the report is built from the run's records: what changed, which checks ran, whether they passed",
+    handsOffTo: ["code_review", "qa_tester"],
+    version: "3.2",
+    purposes: ["code_agent", "pair_coding"],
+  },
+  code_review: {
+    role: "Find real problems in code and point to the exact line",
+    responsibilities: [
+      "Run secret and insecure-pattern rules",
+      "Check dependencies against OSV",
+      "Review each part of the code with a model and keep only findings whose quoted line exists",
+      "Suggest fixes as diffs",
+    ],
+    taskTypes: ["review_code", "security_audit"],
+    outOfScope: [
+      { what: "Changing the code", useInstead: "engineer" },
+      { what: "Scanning a live website", useInstead: "security" },
+    ],
+    input: "Pasted code, a diff, a ZIP, a GitHub repository or pull request, an Orbis project, or the changes of earlier agent tasks",
+    output: "Findings with severity, file, line, the quoted code and a suggested fix; rule matches marked separately from AI findings",
+    escalation: ["The source can't be read (private repository without access, too large)", "A part of the code fails twice: the review continues and says which part wasn't reviewed"],
+    doneWhen: "Every part has been reviewed or reported as skipped, and the findings are saved",
+    handsOffTo: ["engineer"],
+    version: "1.1",
+    purposes: ["code_review"],
+  },
+  bug_fixer: {
+    role: "Reproduce a reported bug, fix its cause and show the before and after",
+    responsibilities: [
+      "Read the error, logs and stack trace (as data, never instructions)",
+      "Reproduce the failure before changing code",
+      "Find the root cause and make a minimal patch",
+      "Add a regression test when the project has a test setup",
+      "Re-run the tests",
+    ],
+    taskTypes: ["fix_bug"],
+    outOfScope: [
+      { what: "New features", useInstead: "engineer" },
+      { what: "Production servers, databases or logs it wasn't given", useInstead: null },
+    ],
+    input: "A bug summary, details, the error or logs, how to reproduce and what's expected; one of the user's projects",
+    output: "The patch, the failing check before the fix (or why there wasn't one) and the test results after",
+    escalation: CODE_ESCALATION,
+    doneWhen: "The report's 'Before the fix' and 'After the fix' sections are built from what actually ran",
+    handsOffTo: ["qa_tester", "code_review"],
+    version: "1.0",
+    purposes: ["bug_fix"],
+  },
+  qa_tester: {
+    role: "Write and run tests and report what failed, without changing application code",
+    responsibilities: ["Write unit, integration and API tests", "Set up a test runner when there is none", "Run the tests and capture failures", "Report bugs it finds instead of fixing them"],
+    taskTypes: ["write_tests"],
+    outOfScope: [
+      { what: "Fixing the bugs its tests find", useInstead: "bug_fixer" },
+      { what: "Browser (end-to-end) tests", useInstead: null },
+    ],
+    input: "What to test, which kinds of tests, notes; one of the user's projects",
+    output: "Test files, the real test results and a readable test report",
+    escalation: [...CODE_ESCALATION, "An edit outside test files is refused by the server; it says so"],
+    doneWhen: "Its tests have run and the report shows their real results",
+    handsOffTo: ["bug_fixer"],
+    version: "1.0",
+    purposes: ["qa_testing"],
+  },
+  security: {
+    role: "Find security problems with scanners, and explain them",
+    responsibilities: ["Check websites the user has proved they own", "Analyse uploaded logs", "Audit code with rules and OSV", "Propose patches and an exportable report"],
+    taskTypes: ["security_audit"],
+    outOfScope: [
+      { what: "Applying or deploying fixes", useInstead: "engineer" },
+      { what: "Scanning sites the user doesn't own", useInstead: null },
+      { what: "Continuous monitoring", useInstead: null },
+    ],
+    input: "A verified website, uploaded logs, or code (pasted, a repository or a project)",
+    output: "Findings from scanners with evidence; AI explanations and proposed patches clearly marked as proposals",
+    escalation: ["A website scan needs proof of ownership and the user's confirmation", "A scanner fails: the run reports which check didn't run"],
+    doneWhen: "Each requested check has run or been reported as not run, and findings are saved",
+    handsOffTo: ["engineer"],
+    version: "1.0",
+    purposes: ["security"],
+  },
+  deep_research: {
+    role: "Answer a research question from sources it actually read, with citations",
+    responsibilities: ["Plan sub-questions", "Search the web and read pages", "Write a report where each claim links to a quoted source", "Count and show uncited paragraphs"],
+    taskTypes: ["web_research"],
+    outOfScope: [
+      { what: "Checking a given text's claims", useInstead: "verify" },
+      { what: "Pages behind logins", useInstead: null },
+    ],
+    input: "A research question and a depth (quick, standard or deep)",
+    output: "A cited report with sources and quotes; exportable",
+    escalation: ["No web searches left in the plan", "Searches fail: it reports what it couldn't find"],
+    doneWhen: "The report is written and every paragraph is either cited or counted as uncited",
+    handsOffTo: [],
+    version: "1.1",
+    purposes: ["deep_research"],
+  },
+  website_builder: {
+    role: "Build or change a website and check it in a real browser",
+    responsibilities: ["Start from a template or the user's description", "Build responsive pages", "Start a preview and inspect it at phone, tablet and desktop sizes", "Report what was checked"],
+    taskTypes: ["build_website", "design_ui"],
+    outOfScope: [
+      { what: "Hosting or publishing the site", useInstead: null },
+      { what: "Back-end services the site doesn't have (payments, email, accounts)", useInstead: null },
+    ],
+    input: "A description of the site (optionally a website template) and a project",
+    output: "The site's files, browser-check results and screenshots, and a report",
+    escalation: CODE_ESCALATION,
+    doneWhen: "The site's files are written and the browser check has run (or the report says why it couldn't)",
+    handsOffTo: ["code_review"],
+    version: "1.2",
+    purposes: ["code_agent"],
+  },
+  data_analyst: {
+    role: "Compute exact statistics for the user's CSV files and explain them",
+    responsibilities: ["Compute column statistics on the server", "Explain results with caveats", "Answer follow-up questions"],
+    taskTypes: ["analyse_data"],
+    outOfScope: [
+      { what: "Databases, spreadsheets other than CSV/TSV, charts", useInstead: null },
+      { what: "Web research", useInstead: "deep_research" },
+    ],
+    input: "A question and attached CSV or TSV files",
+    output: "Statistics computed on the server, explained in the reply",
+    escalation: ["A file is too large (over 20,000 rows or 50 columns)", "The question needs data that wasn't attached"],
+    doneWhen: "The reply is given with the statistics it used",
+    handsOffTo: [],
+    version: "1.0",
+    purposes: ["agent"],
+  },
+};
+
+const BASE: Omit<AgentDef, keyof AgentRole>[] = [
   {
     id: "engineer",
     name: "Software Engineer",
@@ -276,6 +511,8 @@ export const AGENTS: AgentDef[] = [
     historyHref: "/agents/data",
   },
 ];
+
+export const AGENTS: AgentDef[] = BASE.map((a) => ({ ...a, ...ROLES[a.id] }));
 
 export function agentDef(id: string): AgentDef | null {
   return AGENTS.find((a) => a.id === id) ?? null;

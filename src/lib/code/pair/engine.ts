@@ -108,7 +108,7 @@ export async function pairStep(req: Request, auth: Authed, row: RunRow, deadline
   const messages = messagesFor(phase, s, { request: row.request, projectName: project.name, files, isSecret: isSecretPath });
   const promptChars = messages.reduce((x, m) => x + m.content.length, 0);
   const maxOutputTokens = Math.max(limits.maxOutputTokens, AGENT_OUTPUT_TOKENS);
-  await enforceLimits(req, auth, 1, [model], { purpose: "code_agent", inputTokens: Math.ceil(promptChars / 3.5) + 200, maxOutputTokens });
+  await enforceLimits(req, auth, 1, [model], { purpose: "pair_coding", inputTokens: Math.ceil(promptChars / 3.5) + 200, maxOutputTokens });
 
   // The call, streamed: what the agent writes is saved every second or so for the page to show.
   const started = performance.now();
@@ -166,7 +166,7 @@ export async function pairStep(req: Request, auth: Authed, row: RunRow, deadline
     latencyMs: performance.now() - started,
     usage: callUsage,
     status: "success",
-    purpose: "code_agent",
+    purpose: "pair_coding",
     category: "coding",
     servedModel,
     requestedModel: s.settings[agent] ?? "auto:coding",

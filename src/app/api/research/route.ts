@@ -4,6 +4,7 @@ import { codeContext } from "@/lib/code/server";
 import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
 import { limiter } from "@/lib/rate-limit";
 import { createResearch, listResearch } from "@/lib/research/server";
+import { assertAgentAccess } from "@/lib/agent-platform/server";
 
 /** GET /api/research — the user's research runs, newest first. */
 export async function GET() {
@@ -26,6 +27,7 @@ export async function POST(req: Request) {
   try {
     const input = await parseJsonBody(req, body, 80_000);
     const auth = await codeContext("research-create", 20);
+    await assertAgentAccess(auth, "deep_research");
     if (!limiter("research-new", 8, 10 * 60_000).check(`u:${auth.user.id}`, 1).ok) throw new ApiError("rate_limited", "Too many new research runs. Please wait a few minutes.");
     return NextResponse.json({ run: await createResearch(auth, { question: input.question, depth: input.depth, context: input.context || null }) }, { status: 201 });
   } catch (err) {

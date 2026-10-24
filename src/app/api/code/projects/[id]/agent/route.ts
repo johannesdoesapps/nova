@@ -9,6 +9,7 @@ import { changeCounts, createRun, getRun, listRuns, openRun, toRunView } from "@
 import { DEFAULT_STEP_LIMIT, ENDED_STATUSES, MAX_STEP_LIMIT } from "@/lib/code/agent/types";
 import { codeContext, getFiles, getProjectRow } from "@/lib/code/server";
 import { ApiError, errorResponse, parseJsonBody, requireUuid } from "@/lib/http";
+import { assertAgentAccess } from "@/lib/agent-platform/server";
 
 type Ctx = RouteContext<"/api/code/projects/[id]/agent">;
 
@@ -19,7 +20,10 @@ export async function GET(_req: Request, ctx: Ctx) {
     const auth = await codeContext("code-agent-read", 240);
     await getProjectRow(auth, id);
     const runs = await listRuns(auth, id);
-    const counts = await changeCounts(auth, runs.map((r) => r.id));
+    const counts = await changeCounts(
+      auth,
+      runs.map((r) => r.id),
+    );
     return NextResponse.json({ runs: runs.map((r) => ({ ...r, changedFiles: counts[r.id] ?? 0 })) });
   } catch (err) {
     return errorResponse(err);
@@ -65,6 +69,8 @@ export async function POST(req: Request, ctx: Ctx) {
     const id = requireUuid((await ctx.params).id);
     const input = await parseJsonBody(req, body, 20_000);
     const auth = await codeContext("code-agent", 20);
+    // The Software Engineer's plan, configuration and pause rules (pair coding and website tasks run on the same engine).
+    await assertAgentAccess(auth, "engineer");
     const project = await getProjectRow(auth, id);
     const open = await openRun(auth, id);
     if (open) throw new ApiError("conflict", "The agent is already working on this project. Stop that run or let it finish first.", { runId: open.id });
@@ -96,13 +102,32 @@ export async function POST(req: Request, ctx: Ctx) {
       request: input.request,
       ...(pair ? { pair: newPairState(pair) } : {}),
       // A read-only run never plans, edits or runs anything, so its other switches are fixed.
-      options: o.readOnly && !pair
-        ? { modelId: o.modelId ?? null, approvePlans: false, reviewEdits: false, commands: "off", readOnly: true, web, attachments, ...continueFrom }
-        : { modelId: o.modelId ?? null, approvePlans: o.approvePlans ?? true, reviewEdits: o.reviewEdits ?? false, commands: o.commands ?? "safe", readOnly: false, web, attachments, ...continueFrom, ...siteTemplate, ...(pair ? { pair, approvePlans: false } : {}) },
+      options:
+        o.readOnly && !pair
+          ? { modelId: o.modelId ?? null, approvePlans: false, reviewEdits: false, commands: "off", readOnly: true, web, attachments, ...continueFrom }
+          : {
+              modelId: o.modelId ?? null,
+              approvePlans: o.approvePlans ?? true,
+              reviewEdits: o.reviewEdits ?? false,
+              commands: o.commands ?? "safe",
+              readOnly: false,
+              web,
+              attachments,
+              ...continueFrom,
+              ...siteTemplate,
+              ...(pair ? { pair, approvePlans: false } : {}),
+            },
       // A pair task takes about three steps per review round (revise, test, review) plus planning and the summary.
       stepLimit: input.stepLimit ?? (pair ? Math.min(MAX_STEP_LIMIT, 8 + pair.maxRounds * 4) : DEFAULT_STEP_LIMIT),
     });
-    const linked = pending.length ? await linkAttachments(auth, id, row.id, pending.map((a) => a.id)) : [];
+    const linked = pending.length
+      ? await linkAttachments(
+          auth,
+          id,
+          row.id,
+          pending.map((a) => a.id),
+        )
+      : [];
     return NextResponse.json({ run: toRunView(row), attachments: linked }, { status: 201 });
   } catch (err) {
     return errorResponse(err);

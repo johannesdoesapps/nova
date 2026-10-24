@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { bugInput, qaInput, QA_KINDS } from "../code/agent/profiles";
+import type { TaskAssignment } from "./protocol";
 import { agentDef } from "./registry";
 
 /**
@@ -99,6 +100,8 @@ export interface TaskProposal {
   input: Record<string, unknown>;
   status: "proposed" | "started" | "failed";
   result?: { summary: string; href: string | null };
+  /** What the agent was given once started (the task protocol's assignment). */
+  assignment?: TaskAssignment;
 }
 
 /** Messages that ask for work a specialist agent does, or about tasks already running. */

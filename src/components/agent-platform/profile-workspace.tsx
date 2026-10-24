@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, CircleAlert, FileArchive, GitBranch, Loader2, RotateCcw, Upload } from "lucide-react";
 import { api, post, CodeApiError } from "@/components/code/api";
@@ -52,6 +52,18 @@ export function ProfileWorkspace({ profile }: { profile: CodeProfile }) {
   const [commands, setCommands] = useState<"safe" | "ask">("safe");
   const catalog = useCatalog();
   const [modelId, setModelId] = useCodeModel(catalog);
+  const params = useSearchParams();
+  // Bug Fixing can run as the first step of the Fix and verify workflow (?workflow=1 from the Workflows page).
+  const [asWorkflow, setAsWorkflow] = useState(() => profile === "bug_fixer" && params.get("workflow") === "1");
+  // Workflows are only offered where they can run (their database table exists).
+  const [workflowsReady, setWorkflowsReady] = useState(false);
+  useEffect(() => {
+    if (profile !== "bug_fixer") return;
+    fetch("/api/workflows?check=1", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { ready: false }))
+      .then((j: { ready?: boolean }) => setWorkflowsReady(!!j.ready))
+      .catch(() => setWorkflowsReady(false));
+  }, [profile]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -124,6 +136,11 @@ export function ProfileWorkspace({ profile }: { profile: CodeProfile }) {
     setBusy("start");
     setError(null);
     try {
+      if (asWorkflow && workflowsReady) {
+        const w = await post<{ workflow: { id: string } }>("/api/workflows", { template: "fix_and_verify", projectId, bug, options: { modelId, approvePlans, commands } });
+        router.push(`/agents/workflows/${w.workflow.id}`);
+        return;
+      }
       const r = await post<{ run: RunView; href: string }>("/api/agent-platform/tasks", {
         agent: profile,
         projectId,
@@ -352,6 +369,20 @@ export function ProfileWorkspace({ profile }: { profile: CodeProfile }) {
                 </div>
               )}
 
+              {profile === "bug_fixer" && workflowsReady && (
+                <div className="rounded-2xl border border-s-line p-4">
+                  <Toggle
+                    label="Run the full workflow"
+                    hint="After the fix: QA Testing adds regression tests and runs them, Code Review checks the changes for bugs and security problems, then you approve or reject (rejecting undoes everything)."
+                    checked={asWorkflow}
+                    onChange={setAsWorkflow}
+                  />
+                  <Link href="/agents/workflows" className="mt-2 inline-block text-[12.5px] text-s-accent underline-offset-4 hover:underline">
+                    Past workflows
+                  </Link>
+                </div>
+              )}
+
               <fieldset className="space-y-3 rounded-2xl border border-s-line p-4">
                 <legend className="px-1 text-[13px] font-medium">Approvals and model</legend>
                 <Toggle
@@ -360,12 +391,14 @@ export function ProfileWorkspace({ profile }: { profile: CodeProfile }) {
                   checked={approvePlans}
                   onChange={setApprovePlans}
                 />
-                <Toggle
-                  label="Review each set of edits before it's saved"
-                  hint="Slower, but you see every change first. Either way, every change can be reverted."
-                  checked={reviewEdits}
-                  onChange={setReviewEdits}
-                />
+                {!(asWorkflow && workflowsReady) && (
+                  <Toggle
+                    label="Review each set of edits before it's saved"
+                    hint="Slower, but you see every change first. Either way, every change can be reverted."
+                    checked={reviewEdits}
+                    onChange={setReviewEdits}
+                  />
+                )}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-[13.5px]">Commands</p>
@@ -405,7 +438,8 @@ export function ProfileWorkspace({ profile }: { profile: CodeProfile }) {
                   disabled={!ready || !projectId || !valid || !!busy}
                   className="inline-flex h-10 items-center gap-2 rounded-xl bg-s-accent px-5 text-[14px] font-medium text-s-accent-ink transition hover:brightness-110 disabled:opacity-50"
                 >
-                  {busy === "start" ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Start {def.name.toLowerCase()} task <ArrowRight className="h-4 w-4" />
+                  {busy === "start" ? <Loader2 className="h-4 w-4 animate-spin" /> : null} {asWorkflow && workflowsReady ? "Start the workflow" : `Start ${def.name.toLowerCase()} task`}{" "}
+                  <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
             </form>

@@ -18,6 +18,8 @@ export const platformSettingsSchema = z.object({
   modelUnits: z.record(z.string().min(1).max(120), z.number().int().min(0).max(100)).default({}),
   /** Extra models added by an administrator, e.g. new releases discovered with "Test connection". */
   customModels: z.array(modelInfoSchema).max(50).default([]),
+  /** Task agents an administrator has paused: no new task can start with them until resumed (ids from the agent registry). */
+  pausedAgents: z.array(z.string().min(1).max(40)).max(50).default([]),
   /** Plans, prices, allowances and budget rules (merged over DEFAULT_BILLING; see src/lib/plans.ts). */
   billing: z.record(z.string(), z.unknown()).optional(),
 });

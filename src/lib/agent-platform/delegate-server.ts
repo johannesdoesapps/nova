@@ -7,8 +7,33 @@ import { ApiError } from "../http";
 import { createResearch } from "../research/server";
 import { createReview } from "../review/server";
 import { engineerInput, researchInput, reviewInput, type DelegableAgent } from "./delegation";
+import { assignmentFor, type TaskAssignment } from "./protocol";
 import { assertAgentAccess } from "./server";
 import { startProfileTask } from "./tasks";
+
+/** The request in the user's words, whichever form it came in. */
+function objectiveOf(raw: Record<string, unknown>): string {
+  for (const k of ["request", "summary", "scope", "question", "focus", "url"]) if (typeof raw[k] === "string" && (raw[k] as string).trim()) return raw[k] as string;
+  return "Task proposed in chat";
+}
+
+/** Start a delegated task and describe it in the task protocol (the assignment the agent received). */
+export async function startDelegatedWithAssignment(
+  req: Request,
+  auth: Authed,
+  agent: DelegableAgent,
+  projectId: string | null,
+  raw: Record<string, unknown>,
+): Promise<{ summary: string; href: string; taskId: string; assignment: TaskAssignment }> {
+  const r = await startDelegatedTask(req, auth, agent, projectId, raw);
+  // The inputs themselves stay on the card they came from (not stored twice); the assignment lists which were given.
+  const inputs = Object.fromEntries(
+    Object.entries(raw)
+      .filter(([, v]) => v !== "" && v != null)
+      .map(([k]) => [k, "given"]),
+  );
+  return { ...r, assignment: assignmentFor(agent, { objective: objectiveOf(raw), projectId, inputs, taskId: r.taskId }) };
+}
 
 /**
  * Starting a task the Orbis Agent proposed in chat, after the user pressed
