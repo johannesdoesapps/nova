@@ -1,5 +1,6 @@
 import "server-only";
 import { ApiError } from "@/lib/http";
+import { findSecrets, secretRefusal } from "../secrets";
 import type { MemoryEntry, MemoryKind } from "./memory";
 import { dbError, type Authed } from "./server";
 
@@ -32,6 +33,12 @@ const toEntry = (r: Row): MemoryEntry => ({
   updatedAt: r.updated_at,
 });
 
+/** Notes are given to the agent and shown in the Memory panel, so credentials never go in, whoever writes them (the user or the agent). */
+function refuseSecrets(text: string): void {
+  const kinds = findSecrets(text);
+  if (kinds.length) throw new ApiError("bad_request", secretRefusal(kinds));
+}
+
 export async function listMemory(auth: Authed, projectId: string): Promise<MemoryEntry[]> {
   const { data, error } = await auth.supabase.from("code_project_memory").select(COLS).eq("project_id", projectId).order("updated_at", { ascending: false }).limit(200);
   if (error) throw dbError(error, "code.memory.list");
@@ -43,6 +50,7 @@ export async function addMemory(
   projectId: string,
   e: { kind: MemoryKind; title: string; content: string; always?: boolean; status?: "active" | "proposed"; source?: "user" | "agent"; runId?: string | null },
 ): Promise<MemoryEntry> {
+  refuseSecrets(`${e.title}\n${e.content}`);
   const { data, error } = await auth.supabase
     .from("code_project_memory")
     .insert({ project_id: projectId, kind: e.kind, title: e.title, content: e.content, always: e.always ?? false, status: e.status ?? "active", source: e.source ?? "user", run_id: e.runId ?? null })
@@ -58,6 +66,7 @@ export async function updateMemory(
   id: string,
   patch: { kind?: MemoryKind; title?: string; content?: string; always?: boolean; status?: "active" },
 ): Promise<MemoryEntry> {
+  refuseSecrets(`${patch.title ?? ""}\n${patch.content ?? ""}`);
   const { data, error } = await auth.supabase.from("code_project_memory").update(patch).eq("id", id).eq("project_id", projectId).select(COLS).maybeSingle();
   if (error) throw dbError(error, "code.memory.update");
   if (!data) throw new ApiError("not_found", "Note not found.");

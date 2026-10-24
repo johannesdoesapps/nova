@@ -1,5 +1,6 @@
 import type { ActivityItem, ActivityStatus } from "./activity";
 import { agentDef, type AgentId } from "./registry";
+import type { Outcome } from "./outcomes";
 import type { StepStatus, WorkflowStep } from "./workflow";
 
 /**
@@ -58,6 +59,8 @@ export interface TaskResult {
   taskId: string;
   agent: AgentId;
   state: TaskState;
+  /** How it ended (verified, completed, partial, blocked, failed, unverified), from its records; null while open. */
+  outcome: Outcome | null;
   /** One line from the task's own records. */
   summary: string;
   /** Where its results are. */
@@ -114,17 +117,34 @@ const FROM_ACTIVITY: Record<ActivityStatus, TaskState> = {
 /** A task's result, from its Activity entry (which is read from the task's own records). */
 export function resultFromActivity(item: ActivityItem): TaskResult {
   const state = FROM_ACTIVITY[item.status];
-  const label = item.kind === "review" ? "Open the review" : item.kind === "research" ? "Open the report" : "Open the task";
+  const label =
+    item.kind === "review"
+      ? "Open the review"
+      : item.kind === "research"
+        ? "Open the report"
+        : item.kind === "security"
+          ? "Open the scan"
+          : item.kind === "workflow"
+            ? "Open the workflow"
+            : "Open the task";
   return {
     taskId: item.id,
     agent: item.agent,
     state,
+    outcome: item.outcome,
     summary: item.detail ?? item.title,
     artifacts: [{ label, href: item.href }],
-    evidence: state === "completed" && item.detail ? [item.detail] : [],
+    evidence: state === "completed" ? [item.detail, item.outcomeNote].filter((x): x is string => !!x) : [],
     errors: state === "failed" && item.detail ? [item.detail] : [],
-    unresolved: state === "waiting_user" && item.detail ? [item.detail] : [],
-    next: state === "waiting_user" ? (item.detail ?? "Open the task to answer") : state === "failed" ? "Open the task to retry or change the request" : null,
+    unresolved: state === "waiting_user" && item.detail ? [item.detail] : item.outcome === "partial" && item.outcomeNote ? [item.outcomeNote] : [],
+    next:
+      state === "waiting_user"
+        ? (item.detail ?? "Open the task to answer")
+        : state === "failed"
+          ? (item.failure?.advice ?? "Open the task to retry or change the request")
+          : item.stalled
+            ? "Open the task to continue it (tasks move on while their page is open)"
+            : null,
   };
 }
 

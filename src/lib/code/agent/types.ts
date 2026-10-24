@@ -54,6 +54,8 @@ export interface RunOptions {
   workflowId?: string;
   /** The website template the project started from (Discover → Build a website); the agent gets its design guidance. */
   siteTemplate?: import("../site-templates").SiteTemplateId;
+  /** The agent definition's version when the task started (registry.ts), so outcomes can be compared across versions. Set by the server. */
+  agentVersion?: string;
 }
 
 export const DEFAULT_OPTIONS: RunOptions = { modelId: null, approvePlans: true, reviewEdits: false, commands: "safe", readOnly: false };

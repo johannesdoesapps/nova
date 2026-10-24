@@ -20,6 +20,15 @@ export const platformSettingsSchema = z.object({
   customModels: z.array(modelInfoSchema).max(50).default([]),
   /** Task agents an administrator has paused: no new task can start with them until resumed (ids from the agent registry). */
   pausedAgents: z.array(z.string().min(1).max(40)).max(50).default([]),
+  /**
+   * Default resource limits for a new coding-agent task (Software Engineer, Bug Fixing, QA Testing, Website Builder).
+   * When a task reaches one it pauses and asks the user to allow more or stop; it never silently continues.
+   * Unset fields keep the built-in defaults (600,000 tokens, 30 minutes).
+   */
+  taskLimits: z
+    .object({ tokenBudget: z.number().int().min(10_000).max(10_000_000).optional(), timeLimitMinutes: z.number().int().min(1).max(240).optional() })
+    .strict()
+    .default({}),
   /** Plans, prices, allowances and budget rules (merged over DEFAULT_BILLING; see src/lib/plans.ts). */
   billing: z.record(z.string(), z.unknown()).optional(),
 });

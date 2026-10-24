@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
 import { MEMORY_MAX_CHARS, MEMORY_MAX_ITEMS, addMemory, listMemories } from "@/lib/memory";
+import { findSecrets, secretRefusal } from "@/lib/secrets";
 
 /** GET /api/memories — what Orbis remembers about the signed-in person. */
 export async function GET() {
@@ -25,6 +26,7 @@ export async function POST(req: Request) {
     if (!r.ok) {
       if (r.reason === "full") throw new ApiError("conflict", `Orbis keeps up to ${MEMORY_MAX_ITEMS} memories. Delete one to add another.`);
       if (r.reason === "duplicate") throw new ApiError("conflict", "That's already remembered.");
+      if (r.reason === "secret") throw new ApiError("bad_request", secretRefusal(findSecrets(content)));
       throw new ApiError("bad_request", "Write something to remember.");
     }
     return NextResponse.json({ memory: r.memory });

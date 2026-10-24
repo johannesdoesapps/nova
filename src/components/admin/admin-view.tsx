@@ -146,12 +146,7 @@ export function AdminView() {
                             <div className="text-[14px] font-medium">{p.label}</div>
                             <code className="text-[12px] text-s-ink-3">{p.envVar}</code>
                           </div>
-                          <span
-                            className={cn(
-                              "rounded-full px-2 py-0.5 text-[11.5px]",
-                              p.configured ? "bg-s-accent-soft text-s-accent" : "border border-s-line-strong text-s-ink-3",
-                            )}
-                          >
+                          <span className={cn("rounded-full px-2 py-0.5 text-[11.5px]", p.configured ? "bg-s-accent-soft text-s-accent" : "border border-s-line-strong text-s-ink-3")}>
                             {p.configured ? "Key set" : "Not configured"}
                           </span>
                         </div>
@@ -238,6 +233,39 @@ export function AdminView() {
                     </span>
                     <Switch label="Backup models" checked={draft.fallbackEnabled} onChange={(v) => patch({ fallbackEnabled: v })} />
                   </label>
+                  <div className="py-3">
+                    <span className="block text-[14px]">Default limits for a coding-agent task</span>
+                    <span className="block text-[12.5px] text-s-ink-3">
+                      Applies to new tasks. When a task reaches a limit it pauses and asks the user to allow more or stop; it never continues on its own. Leave empty for the built-in defaults.
+                    </span>
+                    <div className="mt-2 flex flex-wrap gap-3">
+                      <label className="flex items-center gap-2 text-[13px]">
+                        Tokens per task
+                        <input
+                          type="number"
+                          min={10_000}
+                          max={10_000_000}
+                          step={10_000}
+                          placeholder="600000"
+                          value={draft.taskLimits?.tokenBudget ?? ""}
+                          onChange={(e) => patch({ taskLimits: { ...draft.taskLimits, tokenBudget: e.target.value ? Number(e.target.value) : undefined } })}
+                          className={cn(field, "w-[130px] bg-s-bg")}
+                        />
+                      </label>
+                      <label className="flex items-center gap-2 text-[13px]">
+                        Minutes per task
+                        <input
+                          type="number"
+                          min={1}
+                          max={240}
+                          placeholder="30"
+                          value={draft.taskLimits?.timeLimitMinutes ?? ""}
+                          onChange={(e) => patch({ taskLimits: { ...draft.taskLimits, timeLimitMinutes: e.target.value ? Number(e.target.value) : undefined } })}
+                          className={cn(field, "w-[90px] bg-s-bg")}
+                        />
+                      </label>
+                    </div>
+                  </div>
                   <div className="flex flex-wrap items-center justify-between gap-3 py-3">
                     <label htmlFor="default-model" className="text-[14px]">
                       Default model
@@ -271,9 +299,7 @@ export function AdminView() {
                     <Plus className="h-4 w-4" /> Add model
                   </button>
                 </div>
-                <p className="mt-1 text-[12.5px] text-s-ink-3">
-                  Units per message count against users&apos; 5-hour and weekly allowance. Defaults: 1 for low-cost models, 15 for larger ones.
-                </p>
+                <p className="mt-1 text-[12.5px] text-s-ink-3">Units per message count against users&apos; 5-hour and weekly allowance. Defaults: 1 for low-cost models, 15 for larger ones.</p>
                 <ul className="mt-3 divide-y divide-s-line">
                   {models.map((m) => {
                     const custom = draft.customModels.some((c) => c.id === m.id);

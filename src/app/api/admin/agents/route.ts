@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AGENT_IDS } from "@/lib/agent-platform/registry";
 import { parsePlatformSettings } from "@/lib/ai/platform";
 import { requireAdmin } from "@/lib/admin";
+import { recordAdminAction } from "@/lib/admin-audit";
 import { getAuth } from "@/lib/auth";
 import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
 
@@ -29,6 +30,7 @@ export async function POST(req: Request) {
       .eq("id", 1)
       .select("id");
     if (saveError || !saved?.length) throw new ApiError("internal", "The change couldn't be saved.");
+    await recordAdminAction(auth.supabase, paused ? "agent.pause" : "agent.resume", agent);
     return NextResponse.json({ pausedAgents });
   } catch (err) {
     return errorResponse(err);

@@ -215,7 +215,23 @@ describe("the task protocol", () => {
 
   it("results use one set of states, built only from the task's records", () => {
     expect(TASK_STATES).toEqual(["pending", "ready", "running", "waiting_dependency", "waiting_user", "completed", "failed", "cancelled"]);
-    const item = { kind: "code_run" as const, agent: "engineer" as const, id: "r1", title: "Add login", href: "/code/p?run=r1", projectName: "App", createdAt: "", updatedAt: "" };
+    const item = {
+      kind: "code_run" as const,
+      agent: "engineer" as const,
+      id: "r1",
+      title: "Add login",
+      href: "/code/p?run=r1",
+      projectName: "App",
+      createdAt: "",
+      updatedAt: "",
+      outcome: null,
+      outcomeNote: null,
+      failure: null,
+      progress: null,
+      costUsd: null,
+      cancelUrl: null,
+      stalled: false,
+    };
     expect(resultFromActivity({ ...item, status: "awaiting_approval", detail: "Approve the plan" })).toMatchObject({
       state: "waiting_user",
       unresolved: ["Approve the plan"],

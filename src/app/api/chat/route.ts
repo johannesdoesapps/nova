@@ -2,7 +2,7 @@ import { fallbackChain, resolveModelChoice, withTimeout } from "@/lib/ai";
 import { MIN_FALLBACK_MS, modelBudget, streamWithFallback } from "@/lib/ai/fallback";
 import { estimateCost, estimateTokens } from "@/lib/ai/cost";
 import { systemPromptFor } from "@/lib/ai/modes";
-import { addMemory, listMemories, memoryBlock, rememberRequest } from "@/lib/memory";
+import { addMemory, listMemories, memoryBlock, rememberRequest, selectMemories } from "@/lib/memory";
 import { omittedNote, trimHistory } from "@/lib/ai/trim";
 import { isAutoId } from "@/lib/ai/platform";
 import type { ChatMessage, Usage } from "@/lib/ai/types";
@@ -59,12 +59,7 @@ export async function POST(req: Request) {
     let model = choice.model;
     const promptChars = body.message.length + (body.attachments ?? []).reduce((n, a) => n + a.content.length, 0);
     const maxOutputTokens = replyTokens(limits.maxOutputTokens, body.replyLength);
-    await enforceLimits(req, auth, 1, [model], {
-      requestId: body.requestId,
-      purpose: "chat",
-      inputTokens: Math.ceil((promptChars + limits.historyChars) / 4) + 1500,
-      maxOutputTokens,
-    });
+    await enforceLimits(req, auth, 1, [model], { requestId: body.requestId, purpose: "chat", inputTokens: Math.ceil((promptChars + limits.historyChars) / 4) + 1500, maxOutputTokens });
     const requestedModel = body.modelId ?? "default";
     const routingReason = choice.routing?.reason ?? (body.modelId ? "Chosen by the user." : "Site default model.");
     // A model the user picked is never swapped for another provider's.
@@ -102,11 +97,7 @@ export async function POST(req: Request) {
           await updateConversation(auth.supabase, auth.user.id, conversation.id, { mode: body.mode });
         }
       } else {
-        const c = await createConversation(auth.supabase, auth.user.id, {
-          title: titleFrom(body.message),
-          mode: body.mode,
-          projectId: body.projectId,
-        });
+        const c = await createConversation(auth.supabase, auth.user.id, { title: titleFrom(body.message), mode: body.mode, projectId: body.projectId });
         conversationId = c.id;
         projectId = c.project_id ?? null;
       }
@@ -115,13 +106,7 @@ export async function POST(req: Request) {
     }
 
     return ndjsonStream(async (send, signal) => {
-      send({
-        type: "meta",
-        conversationId,
-        persisted: auth.mode === "authenticated",
-        model: { id: model.id, displayName: model.displayName, provider: model.provider },
-        routing: choice.routing,
-      });
+      send({ type: "meta", conversationId, persisted: auth.mode === "authenticated", model: { id: model.id, displayName: model.displayName, provider: model.provider }, routing: choice.routing });
 
       let system = systemPromptFor(body.mode);
       const preferences = replyInstruction(body.replyLength, body.replyStyle);
@@ -149,17 +134,31 @@ export async function POST(req: Request) {
           const fact = rememberRequest(body.message);
           if (fact) {
             const saved = await addMemory(auth.supabase, auth.user.id, fact, "chat");
-            const tool = { name: "memory", label: "Memory", status: "ok" as const, detail: saved.ok ? `Saved: ${fact}` : saved.reason === "full" ? "Memory is full; nothing saved" : "Already remembered" };
+            const tool = {
+              name: "memory",
+              label: "Memory",
+              status: "ok" as const,
+              detail: saved.ok
+                ? `Saved: ${fact}`
+                : saved.reason === "full"
+                  ? "Memory is full; nothing saved"
+                  : saved.reason === "secret"
+                    ? "Not saved: it looks like a password or key"
+                    : "Already remembered",
+            };
             send({ type: "tool", tool });
             turnTools.push("memory");
             system += saved.ok
               ? `\n\nThe user just asked you to remember: "${fact}". It has been saved to their memory (they can see and delete it in Settings → Memory). Confirm briefly.`
-              : saved.reason === "full"
-                ? "\n\nThe user asked you to remember something, but their memory is full (50 items). Tell them to delete some in Settings → Memory."
-                : "\n\nThe user asked you to remember something that is already in their memory. Say so briefly.";
+              : saved.reason === "secret"
+                ? "\n\nThe user asked you to remember something that looks like a password or API key. It was NOT saved: memory isn't a place for secrets. Say so briefly and suggest a password manager or environment variables; don't repeat the secret."
+                : saved.reason === "full"
+                  ? "\n\nThe user asked you to remember something, but their memory is full (50 items). Tell them to delete some in Settings → Memory."
+                  : "\n\nThe user asked you to remember something that is already in their memory. Say so briefly.";
           }
           if (body.useMemory !== false) {
-            const block = memoryBlock(await listMemories(auth.supabase, auth.user.id));
+            // Only what's relevant to this message once the list is long, not every memory every time.
+            const block = memoryBlock(selectMemories(await listMemories(auth.supabase, auth.user.id), body.message));
             if (block) system += `\n\n${block}`;
           }
         } catch (err) {
@@ -172,7 +171,11 @@ export async function POST(req: Request) {
       const routerResearch = choice.routing?.mode === "research";
       const searchReady = !!serverEnv().searchKey && ["tavily", "brave"].includes(serverEnv().searchProvider);
       if (routerResearch && !searchReady) {
-        send({ type: "notice", level: "info", message: "Research mode uses web sources when search is set up. It isn't on this site, so this answer comes from the model's own knowledge and may be out of date." });
+        send({
+          type: "notice",
+          level: "info",
+          message: "Research mode uses web sources when search is set up. It isn't on this site, so this answer comes from the model's own knowledge and may be out of date.",
+        });
       }
       const wantsSearch = (body.mode === "research" && body.useWeb) || (routerResearch && searchReady);
       if (wantsSearch && limits.webSearchesLeft === 0) {
@@ -190,11 +193,7 @@ export async function POST(req: Request) {
               .join("\n")}\n</sources>`;
           }
         } catch (err) {
-          send({
-            type: "notice",
-            level: "warning",
-            message: `Web sources could not be retrieved (${err instanceof ApiError ? err.message : "search failed"}). Answering without live evidence.`,
-          });
+          send({ type: "notice", level: "warning", message: `Web sources could not be retrieved (${err instanceof ApiError ? err.message : "search failed"}). Answering without live evidence.` });
         }
       }
 
@@ -230,9 +229,7 @@ export async function POST(req: Request) {
 
       let userContent = body.message;
       if (body.attachments?.length) {
-        const docs = body.attachments
-          .map((a) => `<document name="${a.name.replace(/"/g, "'")}">\n${escapeDoc(a.content)}\n</document>`)
-          .join("\n");
+        const docs = body.attachments.map((a) => `<document name="${a.name.replace(/"/g, "'")}">\n${escapeDoc(a.content)}\n</document>`).join("\n");
         userContent = `${docs}\n\n${body.message}`;
       }
 
@@ -248,7 +245,9 @@ export async function POST(req: Request) {
       // The reply hit the output limit and was cut off.
       let truncated = false;
       try {
-        for await (const ev of streamWithFallback(model, fallbacks, { messages, maxOutputTokens }, () => withTimeout(modelBudget(deadline), signal), { canFallBack: () => modelBudget(deadline) >= MIN_FALLBACK_MS })) {
+        for await (const ev of streamWithFallback(model, fallbacks, { messages, maxOutputTokens }, () => withTimeout(modelBudget(deadline), signal), {
+          canFallBack: () => modelBudget(deadline) >= MIN_FALLBACK_MS,
+        })) {
           if (ev.type === "delta") {
             text += ev.text;
             send({ type: "delta", text: ev.text });

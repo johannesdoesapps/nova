@@ -22,7 +22,7 @@ import { TASK_TYPE_LABEL, type AgentId, type TaskType } from "./registry";
 const PATTERNS: [TaskType, RegExp][] = [
   ["fix_bug", /\b(fix(es|ing)?|debug|broken|crash(es|ing)?|\w*error\b|\w*exception|stack ?trace|traceback|doesn'?t work|not working|failing|regression|bugs?)\b/i],
   ["write_tests", /\b((write|add|create|generate|run)\b[^.?!]{0,30}\btests?|unit tests?|integration tests?|test coverage|qa)\b/i],
-  ["review_code", /\b((review|audit|check)\b[^.?!]{0,30}\b(code|pr|pull request|repo|repository|diff|changes|project)|code review)\b/i],
+  ["review_code", /\b((review|audit|check)\b[^.?!]{0,30}\b(code|pr|pull request|repo|repository|diff|changes|project)|code review|review (it|this|that|them|the fix|my work)\b)\b/i],
   // "Security" alone ("social security", "job security") isn't a request for an audit; it needs a target or an action.
   [
     "security_audit",
@@ -68,6 +68,11 @@ export function classify(message: string): TaskType[] {
   const found = new Set<TaskType>(PATTERNS.filter(([, re]) => re.test(message)).map(([t]) => t));
   // "Build a website" is a website, not a generic feature; "write tests" isn't also generic text.
   if (found.has("build_website")) found.delete("implement_feature");
+  // "Add integration tests for the API" is tests, not a feature: only count a feature found outside the test phrases.
+  if (found.has("write_tests") && found.has("implement_feature")) {
+    const rest = message.replace(/\b(add|write|create|generate|run)\b[^.?!]{0,30}?\btests?\b[^.?!,;]*/gi, " ");
+    if (!PATTERNS.find(([t]) => t === "implement_feature")![1].test(rest)) found.delete("implement_feature");
+  }
   if (found.has("write_tests") || found.has("write_docs")) found.delete("write_text");
   // A security audit of code is a code review with the security focus; keep both, the router merges them on one agent.
   // Asking to send/post isn't also a writing task.

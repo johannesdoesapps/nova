@@ -6,7 +6,7 @@ import { api, post, type CodeApiError } from "@/components/code/api";
 import { StudioHeader } from "@/components/studio/frame";
 import { ConfirmDialog } from "@/components/studio/dialogs";
 import type { WorkflowView as View } from "@/lib/agent-platform/workflow-server";
-import { MAX_ATTEMPTS, TEMPLATE_INFO, type StepStatus, type WorkflowStatus, type WorkflowStep } from "@/lib/agent-platform/workflow";
+import { MAX_ATTEMPTS, retryAdvice, TEMPLATE_INFO, type StepStatus, type WorkflowStatus, type WorkflowStep } from "@/lib/agent-platform/workflow";
 import { agentDef } from "@/lib/agent-platform/registry";
 import { ago } from "@/lib/home";
 import { cn } from "@/lib/utils";
@@ -123,6 +123,8 @@ export function WorkflowDetail({ id }: { id: string }) {
   // The failed step the user is asked about (other steps that were running have finished by now).
   const current = w?.steps.find((s) => s.status === "failed");
   const canRecover = w?.status === "failed" && !!current;
+  // Whether another try can help (the same rule the server applies), and why.
+  const advice = current ? retryAdvice(current) : null;
 
   return (
     <>
@@ -255,9 +257,14 @@ export function WorkflowDetail({ id }: { id: string }) {
                 })}
               </ol>
 
+              {canRecover && advice && (
+                <p className="mt-4 text-[13px] text-s-ink-2">
+                  <span className="font-medium text-s-ink">{advice.failure.label}.</span> {advice.reason}
+                </p>
+              )}
               {canRecover && (
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  {current!.attempts < MAX_ATTEMPTS && (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {advice?.retry && (
                     <button
                       type="button"
                       disabled={!!busy}

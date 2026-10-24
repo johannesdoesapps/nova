@@ -10,12 +10,13 @@ import { ACTIVITY_STATUS_LABEL, OPEN_STATUSES, type ActivityItem } from "@/lib/a
 import { plansLabel, type Availability } from "@/lib/agent-platform/availability";
 import { LEVEL_INFO, type CatalogueEntry, type Category, type Level } from "@/lib/agent-platform/catalogue";
 import { TASK_TYPE_LABEL, type AgentId } from "@/lib/agent-platform/registry";
+import { ACTION_RISKS, APPROVAL_LABEL, type Risk } from "@/lib/agent-platform/risk";
 import { ago } from "@/lib/home";
 import { cn } from "@/lib/utils";
 import { STATE_DOT, STATE_LABEL } from "./marketplace";
 
-/** Task agents whose tasks appear in Activity (coding runs, reviews, research); the others keep their history on their own pages. */
-const IN_ACTIVITY: AgentId[] = ["engineer", "bug_fixer", "qa_tester", "website_builder", "code_review", "deep_research"];
+/** Task agents whose tasks appear in Activity (coding runs, reviews, research, security scans); the others keep their history on their own pages. */
+const IN_ACTIVITY: AgentId[] = ["engineer", "bug_fixer", "qa_tester", "website_builder", "code_review", "deep_research", "security"];
 
 type StatusFilter = "all" | "ready" | "paused" | "unavailable" | "planned" | "admin_only";
 const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
@@ -55,7 +56,8 @@ function statusOf(e: CatalogueEntry, av: Availability | undefined): { key: Statu
 }
 
 function statsFor(items: ActivityItem[], agent: AgentId): Stats {
-  const mine = items.filter((i) => i.agent === agent);
+  // A workflow is listed under its first agent in Activity, but it isn't that agent's own task.
+  const mine = items.filter((i) => i.agent === agent && i.kind !== "workflow");
   return {
     total: mine.length,
     open: mine.filter((i) => OPEN_STATUSES.includes(i.status)).length,
@@ -120,6 +122,18 @@ export function DirectoryView({ catalogue }: { catalogue: CatalogueEntry[] }) {
       alive = false;
     };
   }, [user]);
+
+  const [audit, setAudit] = useState<{ ready: boolean; entries: AuditEntry[] } | null>(null);
+  useEffect(() => {
+    if (!admin) return;
+    let alive = true;
+    api<{ ready: boolean; entries: AuditEntry[] }>("/api/admin/audit")
+      .then((r) => alive && setAudit(r))
+      .catch(() => alive && setAudit(null));
+    return () => {
+      alive = false;
+    };
+  }, [admin]);
 
   useEffect(() => {
     if (!admin) return;
@@ -252,12 +266,15 @@ export function DirectoryView({ catalogue }: { catalogue: CatalogueEntry[] }) {
             ))
           )}
 
+          <RiskTable />
+          {admin && <AuditLog audit={audit} />}
+
           <p className="mt-10 text-[12.5px] text-s-ink-3">
             Status comes from this deployment&apos;s setup and your plan. Activity counts come from your own tasks in{" "}
             <Link href="/activity" className="underline-offset-4 hover:underline">
               Activity
             </Link>
-            ; Security Team runs, chat assistants and multi-model tools keep their history on their own pages and aren&apos;t counted here.
+            ; chat assistants and multi-model tools keep their history on their own pages and aren&apos;t counted here.
           </p>
         </div>
       </div>
@@ -490,5 +507,96 @@ function Text({ title, children }: { title: string; children: React.ReactNode })
       <h3 className="text-[12.5px] font-semibold uppercase tracking-[0.06em] text-s-ink-3">{title}</h3>
       <p className="mt-1.5 text-s-ink-2">{children}</p>
     </div>
+  );
+}
+
+interface AuditEntry {
+  id: number;
+  action: string;
+  target: string | null;
+  detail: { changed?: string[] };
+  createdAt: string;
+}
+
+const RISK_TONE: Record<Risk, string> = { low: "text-s-ink-2", medium: "text-amber-700 dark:text-amber-400", high: "text-s-danger" };
+
+/** What agents may do, how risky each action is, and what approval it needs (enforced in code; see risk.ts). */
+function RiskTable() {
+  return (
+    <section aria-labelledby="risks" className="mt-10">
+      <h2 id="risks" className="text-[17px] font-semibold tracking-[-0.01em]">
+        What agents may do, and when they ask
+      </h2>
+      <p className="mt-0.5 text-[13.5px] text-s-ink-2">
+        Low-risk, reversible work runs on its own; anything consequential waits for you. These rules are enforced where each action runs, not just in the agents&apos; instructions.
+      </p>
+      <div className="mt-3 overflow-x-auto rounded-2xl border border-s-line">
+        <table className="w-full min-w-[640px] text-left text-[13px]">
+          <thead className="text-[12px] text-s-ink-3">
+            <tr className="border-b border-s-line">
+              <th scope="col" className="px-3 py-2 font-medium">
+                Action
+              </th>
+              <th scope="col" className="px-3 py-2 font-medium">
+                Risk
+              </th>
+              <th scope="col" className="px-3 py-2 font-medium">
+                Can be undone
+              </th>
+              <th scope="col" className="px-3 py-2 font-medium">
+                Approval
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {ACTION_RISKS.map((a) => (
+              <tr key={a.id} className="border-b border-s-line last:border-0 align-top">
+                <th scope="row" className="px-3 py-2 font-normal">
+                  <span className="block text-s-ink">{a.action}</span>
+                  <span className="block text-[12px] text-s-ink-3">
+                    {a.agents}. {a.how}
+                  </span>
+                </th>
+                <td className={cn("px-3 py-2 capitalize", RISK_TONE[a.risk])}>{a.risk}</td>
+                <td className="px-3 py-2 text-s-ink-2">{a.reversible === "yes" ? "Yes" : a.reversible === "partly" ? "Partly" : "No"}</td>
+                <td className="px-3 py-2 text-s-ink-2">{APPROVAL_LABEL[a.approval]}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+const AUDIT_ACTION: Record<string, string> = { "agent.pause": "Paused an agent", "agent.resume": "Resumed an agent", "settings.save": "Saved platform settings" };
+
+function AuditLog({ audit }: { audit: { ready: boolean; entries: AuditEntry[] } | null }) {
+  return (
+    <section aria-labelledby="audit" className="mt-8">
+      <h2 id="audit" className="text-[17px] font-semibold tracking-[-0.01em]">
+        Administrator changes
+      </h2>
+      {!audit ? (
+        <p className="mt-1 text-[13.5px] text-s-ink-3">The audit log couldn&apos;t be loaded.</p>
+      ) : !audit.ready ? (
+        <p className="mt-1 text-[13.5px] text-s-ink-2">The audit log isn&apos;t set up on this deployment yet (its database table hasn&apos;t been created), so changes aren&apos;t being recorded.</p>
+      ) : audit.entries.length === 0 ? (
+        <p className="mt-1 text-[13.5px] text-s-ink-2">No administrator changes recorded yet.</p>
+      ) : (
+        <ul className="mt-2 space-y-1 text-[13px] text-s-ink-2">
+          {audit.entries.slice(0, 20).map((e) => (
+            <li key={e.id}>
+              <time dateTime={e.createdAt} suppressHydrationWarning className="text-s-ink-3">
+                {ago(e.createdAt)}
+              </time>{" "}
+              · {AUDIT_ACTION[e.action] ?? e.action}
+              {e.target ? `: ${e.target}` : ""}
+              {e.detail.changed?.length ? ` (${e.detail.changed.join(", ")})` : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

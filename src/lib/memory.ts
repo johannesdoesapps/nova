@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { findSecrets, secretRefusal } from "./secrets";
 
 /**
  * Memory across chats: short facts a person asks Orbis to remember ("Remember that I work in Lisbon").
@@ -37,6 +38,47 @@ export function rememberRequest(message: string): string | null {
   return fact;
 }
 
+/** Below this many characters every memory is given to the model; above it, only the relevant ones. */
+export const MEMORY_PROMPT_BUDGET = 1_500;
+
+const WORD = /[a-z0-9][a-z0-9'-]{2,}/g;
+const COMMON = new Set(
+  "the and for with that this from your you are was have has not but all can our use when then than they its also only about what how why who where which would could should please tell give make".split(
+    " ",
+  ),
+);
+const words = (t: string) => new Set((t.toLowerCase().match(WORD) ?? []).filter((w) => !COMMON.has(w)));
+
+/**
+ * The memories to give the model for one message: all of them while they're short, otherwise the ones that
+ * share words with the message (best first), then the newest, until the budget is used. So a long memory list
+ * doesn't ride along with every reply, and what's relevant still does.
+ */
+export function selectMemories<T extends Pick<Memory, "content">>(memories: T[], message: string, budget = MEMORY_PROMPT_BUDGET): T[] {
+  const total = memories.reduce((n, m) => n + m.content.length + 3, 0);
+  if (total <= budget) return memories;
+  const asked = words(message);
+  const scored = memories.map((m, i) => {
+    const w = words(m.content);
+    let score = 0;
+    for (const x of asked) if (w.has(x)) score++;
+    return { m, i, score };
+  });
+  // Relevant first (more shared words first); then newest (the list is newest first).
+  scored.sort((a, b) => b.score - a.score || a.i - b.i);
+  const out: { m: T; i: number }[] = [];
+  let used = 0;
+  for (const s of scored) {
+    const size = s.m.content.length + 3;
+    if (used + size > budget) continue;
+    out.push(s);
+    used += size;
+  }
+  return out.sort((a, b) => a.i - b.i).map((s) => s.m);
+}
+
+export { secretRefusal };
+
 /** The system-prompt block for a person's memories (newest first, already limited). */
 export function memoryBlock(memories: Pick<Memory, "content">[]): string {
   if (!memories.length) return "";
@@ -56,9 +98,11 @@ export async function addMemory(
   userId: string,
   text: string,
   source: Memory["source"],
-): Promise<{ ok: true; memory: Memory } | { ok: false; reason: "empty" | "full" | "duplicate" }> {
+): Promise<{ ok: true; memory: Memory } | { ok: false; reason: "empty" | "full" | "duplicate" | "secret" }> {
   const content = cleanMemory(text);
   if (content.length < 2) return { ok: false, reason: "empty" };
+  // Memory is background for every chat: never a place for passwords or keys.
+  if (findSecrets(text).length) return { ok: false, reason: "secret" };
   const existing = await listMemories(db, userId);
   if (existing.some((m) => m.content.toLowerCase() === content.toLowerCase())) return { ok: false, reason: "duplicate" };
   if (existing.length >= MEMORY_MAX_ITEMS) return { ok: false, reason: "full" };

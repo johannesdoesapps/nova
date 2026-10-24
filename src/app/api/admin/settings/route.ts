@@ -4,6 +4,7 @@ import { parsePlatformSettings, platformSettingsSchema } from "@/lib/ai/platform
 import { PROVIDER_INFO } from "@/lib/ai/provider-info";
 import { getPlatformSettings } from "@/lib/ai/settings";
 import { requireAdmin } from "@/lib/admin";
+import { changedKeys, recordAdminAction } from "@/lib/admin-audit";
 import { getAuth } from "@/lib/auth";
 import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
 import { validateBilling } from "@/lib/plans";
@@ -47,6 +48,10 @@ export async function PUT(req: Request) {
     next.pausedAgents = parsePlatformSettings(((stored as { settings?: unknown } | null)?.settings ?? {}) as Record<string, unknown>).pausedAgents;
     const { data, error } = await auth.supabase.from("app_settings").update({ settings: next, updated_by: auth.user.id }).eq("id", 1).select("id");
     if (error || !data?.length) throw new ApiError("internal", "The settings could not be saved.");
+    // Which settings changed (names only; the values stay in app_settings).
+    await recordAdminAction(auth.supabase, "settings.save", null, {
+      changed: changedKeys(parsePlatformSettings((stored as { settings?: unknown } | null)?.settings ?? {}) as unknown as Record<string, unknown>, next as unknown as Record<string, unknown>),
+    });
     return NextResponse.json(await snapshot());
   } catch (err) {
     return errorResponse(err);

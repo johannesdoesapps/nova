@@ -1,11 +1,12 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CircleAlert, RefreshCw, Search } from "lucide-react";
-import { api } from "@/components/code/api";
+import { CircleAlert, RefreshCw, Search, Square } from "lucide-react";
+import { api, post } from "@/components/code/api";
 import { useApp } from "@/components/layout/app-context";
 import { StudioHeader } from "@/components/studio/frame";
 import { ACTIVITY_STATUS_LABEL, OPEN_STATUSES, type ActivityItem, type ActivityStatus } from "@/lib/agent-platform/activity";
+import { OUTCOME_INFO, type Outcome } from "@/lib/agent-platform/outcomes";
 import { agentDef, AGENTS } from "@/lib/agent-platform/registry";
 import { ago } from "@/lib/home";
 import { cn } from "@/lib/utils";
@@ -50,6 +51,20 @@ export function ActivityView() {
   const [agent, setAgent] = useState<string>("all");
   const [query, setQuery] = useState("");
   const [attempt, setAttempt] = useState(0);
+  const [stopping, setStopping] = useState<string | null>(null);
+  // Stops the task through its own endpoint (the same one its page uses), then reloads the list from the records.
+  const stop = async (i: ActivityItem) => {
+    if (!i.cancelUrl) return;
+    setStopping(i.id);
+    try {
+      await post(i.cancelUrl, {});
+      setAttempt((n) => n + 1);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setStopping(null);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -185,7 +200,7 @@ export function ActivityView() {
                             <p className="mt-0.5 flex flex-wrap gap-x-1.5 text-[12.5px] text-s-ink-3">
                               <span className={cn("font-medium", TONE[i.status])}>{ACTIVITY_STATUS_LABEL[i.status]}</span>
                               <span aria-hidden>·</span>
-                              <span>{def?.name ?? i.agent}</span>
+                              <span>{i.kind === "workflow" ? "Workflow" : (def?.name ?? i.agent)}</span>
                               {i.projectName && (
                                 <>
                                   <span aria-hidden>·</span>
@@ -198,7 +213,19 @@ export function ActivityView() {
                               </time>
                             </p>
                             {i.detail && <p className={cn("mt-1 line-clamp-2 text-[13px]", i.status === "failed" ? "text-s-danger" : "text-s-ink-2")}>{i.detail}</p>}
+                            <TaskFacts item={i} />
                           </div>
+                          {i.cancelUrl && (
+                            <button
+                              type="button"
+                              disabled={stopping === i.id}
+                              onClick={() => void stop(i)}
+                              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-s-line-strong px-2.5 text-[12.5px] hover:bg-s-hover disabled:opacity-50"
+                            >
+                              <Square className="h-3 w-3" aria-hidden /> {stopping === i.id ? "Stopping…" : "Stop"}
+                              <span className="sr-only"> {i.title}</span>
+                            </button>
+                          )}
                         </li>
                       );
                     })}
@@ -210,5 +237,39 @@ export function ActivityView() {
         </div>
       </div>
     </>
+  );
+}
+
+const OUTCOME_TONE: Record<Outcome, string> = {
+  verified: "text-emerald-700 dark:text-emerald-400",
+  completed: "text-s-ink-2",
+  partial: "text-amber-700 dark:text-amber-400",
+  blocked: "text-amber-700 dark:text-amber-400",
+  failed: "text-s-danger",
+  unverified: "text-amber-700 dark:text-amber-400",
+};
+
+/** What the task's records show: how it ended and why, why it failed and what helps, measured progress and recorded cost. */
+function TaskFacts({ item: i }: { item: ActivityItem }) {
+  const facts: string[] = [];
+  if (i.progress) facts.push(`${i.progress.done} of ${i.progress.limit} ${i.progress.unit}`);
+  if (i.costUsd !== null) facts.push(`$${i.costUsd < 0.01 ? i.costUsd.toFixed(4) : i.costUsd.toFixed(2)} recorded`);
+  if (!i.outcome && !i.failure && !i.stalled && !facts.length) return null;
+  return (
+    <div className="mt-1 space-y-0.5 text-[12.5px]">
+      {i.outcome && (
+        <p>
+          <span className={cn("font-medium", OUTCOME_TONE[i.outcome])}>{OUTCOME_INFO[i.outcome].label}</span>
+          {i.outcomeNote && <span className="text-s-ink-3"> · {i.outcomeNote}</span>}
+        </p>
+      )}
+      {i.failure && (
+        <p className="text-s-ink-2">
+          <span className="font-medium">{i.failure.label}:</span> {i.failure.advice}
+        </p>
+      )}
+      {i.stalled && <p className="text-amber-700 dark:text-amber-400">No progress recorded for over 10 minutes. Tasks move on while their page is open: open it to continue.</p>}
+      {facts.length > 0 && <p className="text-s-ink-3">{facts.join(" · ")}</p>}
+    </div>
   );
 }

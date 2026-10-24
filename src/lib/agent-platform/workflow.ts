@@ -1,3 +1,4 @@
+import { classifyFailure, shouldRetry, type FailureInfo } from "./failures";
 import { z } from "zod";
 import type { BugInput, QaInput } from "../code/agent/profiles";
 import { bugInput } from "../code/agent/profiles";
@@ -84,6 +85,8 @@ export interface WorkflowStep {
   /** One line about how it ended, from the task's records. */
   summary: string | null;
   error: string | null;
+  /** Each attempt's error, oldest first (the last 5): an identical failure isn't retried again unchanged. */
+  errors?: string[];
 }
 
 export interface WorkflowState {
@@ -255,7 +258,10 @@ export function observe(w: WorkflowState, key: StepKey, child: ChildState, at: s
     case "failed":
     case "cancelled": {
       const error = child.state === "failed" ? child.error : "The task was stopped.";
-      next = { ...patch(w, key, { status: "failed", endedAt: at, error, drivenAt: at }), log: addLog(w.log, `${step.label}: ${child.state === "failed" ? "failed" : "stopped"}. ${error}`, at) };
+      next = {
+        ...patch(w, key, { status: "failed", endedAt: at, error, errors: [...(step.errors ?? []), error].slice(-5), drivenAt: at }),
+        log: addLog(w.log, `${step.label}: ${child.state === "failed" ? "failed" : "stopped"}. ${error}`, at),
+      };
       break;
     }
     case "done": {
@@ -287,7 +293,7 @@ export function started(w: WorkflowState, key: StepKey, taskId: string, at: stri
 /** Starting a step failed before any task existed (quota, a project busy with another task, …). */
 export function startFailed(w: WorkflowState, key: StepKey, error: string, at: string): WorkflowState {
   const step = w.steps.find((s) => s.key === key)!;
-  const next = patch(w, key, { status: "failed", attempts: step.attempts + 1, error, endedAt: at });
+  const next = patch(w, key, { status: "failed", attempts: step.attempts + 1, error, errors: [...(step.errors ?? []), error].slice(-5), endedAt: at });
   return derive({ ...next, log: addLog(w.log, `${step.label}: couldn't start. ${error}`, at) });
 }
 
@@ -299,9 +305,19 @@ export function recoveries(w: WorkflowState, key?: StepKey): Recovery[] {
   const step = key ? w.steps.find((s) => s.key === key) : w.steps.find((s) => s.status === "failed");
   if (!step || step.status !== "failed") return [];
   const out: Recovery[] = [];
-  if (step.attempts < MAX_ATTEMPTS) out.push("retry");
+  if (retryAdvice(step).retry) out.push("retry");
   if (step.optional) out.push("skip");
   return out;
+}
+
+/**
+ * Whether trying a failed step again makes sense, and why (shown to the user): only within the attempt limit,
+ * for a failure that another try can fix, and not after the same failure twice in a row.
+ */
+export function retryAdvice(step: Pick<WorkflowStep, "attempts" | "error" | "errors">): { retry: boolean; reason: string; failure: FailureInfo } {
+  const errors = step.errors?.length ? step.errors : step.error ? [step.error] : [];
+  const r = shouldRetry(errors, step.attempts, MAX_ATTEMPTS);
+  return { ...r, failure: classifyFailure(errors[errors.length - 1] ?? null) };
 }
 
 /** The failed step the user is asked about (the first one). */

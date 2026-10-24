@@ -1,0 +1,27 @@
+{
+  "description": "How failures are classified, and whether another attempt is worth it.",
+  "classify": [
+    { "error": "The request timed out", "class": "transient" },
+    { "error": "The model provider is overloaded (503)", "class": "transient" },
+    { "error": "An agent is already working on this project. Stop that task or let it finish first.", "class": "transient" },
+    { "error": "Bug Fixing isn't included in your plan. Upgrade to Pro.", "class": "permission" },
+    { "error": "Bug Fixing: An administrator has paused this agent.", "class": "permission" },
+    { "error": "No AI provider is configured on this server", "class": "setup" },
+    { "error": "The step limit was reached", "class": "limit" },
+    { "error": "You've used your weekly usage limit", "class": "limit" },
+    { "error": "Project not found.", "class": "invalid_input" },
+    { "error": "The file is too large to read", "class": "invalid_input" },
+    { "error": "The same failure three times: tests still fail", "class": "strategy" },
+    { "error": "Something odd happened", "class": "unknown" },
+    { "error": "anything", "kind": "provider_unavailable", "class": "transient" },
+    { "error": "anything", "kind": "no_model", "class": "setup" },
+    { "error": "anything", "kind": "unreadable_replies", "class": "strategy" }
+  ],
+  "retry": [
+    { "errors": ["The request timed out"], "attempts": 1, "max": 3, "retry": true },
+    { "errors": ["The request timed out"], "attempts": 3, "max": 3, "retry": false },
+    { "errors": ["Bug Fixing isn't included in your plan."], "attempts": 1, "max": 3, "retry": false },
+    { "errors": ["Tests still fail in cart.test.js (2 failing)", "Tests still fail in cart.test.js (3 failing)"], "attempts": 2, "max": 3, "retry": false },
+    { "errors": ["The request timed out", "Tests still fail"], "attempts": 2, "max": 3, "retry": true }
+  ]
+}

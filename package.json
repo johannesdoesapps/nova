@@ -13,7 +13,8 @@
     "engine": "cd engine && .venv/bin/python -m orbis_engine",
     "engine:worker": "cd engine && .venv/bin/python -m orbis_engine.worker",
     "engine:setup": "cd engine && python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt",
-    "engine:test": "cd engine && .venv/bin/python -m pytest"
+    "engine:test": "cd engine && .venv/bin/python -m pytest",
+    "eval:agents": "vitest run tests/agent-evals.test.ts --reporter=verbose"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

@@ -6,17 +6,18 @@ How Orbis's agents fit together, what each one does, how work is routed between 
 
 There are 40 agent entries in 11 systems. All of them existed before this round; none was added just to fill out the hierarchy. The catalogue (`src/lib/agent-platform/catalogue.ts`) is built from the lists each runtime already uses (the task registry, the Security Team, the Workforce and the built-in assistants), so no definition is written twice. You can browse it at **/agents/directory**.
 
-| Level | Entries | Runs under | Defined in |
-| --- | --- | --- | --- |
-| Orchestrator | Orbis Agent (chat), v2.0 | The user, in Chat | `orbis-agent.ts` |
-| Planner | Task router and planner, v1.0 (deterministic, no model call) | The Orbis Agent | `routing.ts` |
-| Specialists | Software Engineer 3.2, Code Review 1.1, Bug Fixing 1.0, QA Testing 1.0, Security Team 1.0, Deep Research 1.1, Website Builder 1.2, Data Analyst 1.0 | The user, or a proposal the user starts | `registry.ts` |
-| Sub-agents | Security: Sentinel, Threat Hunter, Code Guardian (active); Incident Responder, Threat Intelligence (planned). Pair coding: Architect, Reviewer | Their parent agent | `security/agents.ts`, `code/pair/` |
-| Multi-model tools | Verify, Council, Arena, Mission planner, Connectors, Images | The user, from their own pages | each feature's lib |
-| Chat assistants | Research, Coding, Writing, Data, Creative, General | The user | `agents/builtins.ts` |
-| Internal | Workforce: Commander + 8 active agents (administrators only); Optimizer and Visual planned | Administrators | `workforce/agents.ts` |
+| Level             | Entries                                                                                                                                             | Runs under                              | Defined in                         |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | ---------------------------------- |
+| Orchestrator      | Orbis Agent (chat), v2.0                                                                                                                            | The user, in Chat                       | `orbis-agent.ts`                   |
+| Planner           | Task router and planner, v1.0 (deterministic, no model call)                                                                                        | The Orbis Agent                         | `routing.ts`                       |
+| Specialists       | Software Engineer 3.2, Code Review 1.1, Bug Fixing 1.0, QA Testing 1.0, Security Team 1.0, Deep Research 1.1, Website Builder 1.2, Data Analyst 1.0 | The user, or a proposal the user starts | `registry.ts`                      |
+| Sub-agents        | Security: Sentinel, Threat Hunter, Code Guardian (active); Incident Responder, Threat Intelligence (planned). Pair coding: Architect, Reviewer      | Their parent agent                      | `security/agents.ts`, `code/pair/` |
+| Multi-model tools | Verify, Council, Arena, Mission planner, Connectors, Images                                                                                         | The user, from their own pages          | each feature's lib                 |
+| Chat assistants   | Research, Coding, Writing, Data, Creative, General                                                                                                  | The user                                | `agents/builtins.ts`               |
+| Internal          | Workforce: Commander + 8 active agents (administrators only); Optimizer and Visual planned                                                          | Administrators                          | `workforce/agents.ts`              |
 
 Each entry records:
+
 - its role and responsibilities, and the task types it handles;
 - what's out of scope, and what to use instead;
 - its tools, its input and output;
@@ -24,12 +25,14 @@ Each entry records:
 - what it depends on, its status, its version and the usage purpose its model calls are recorded under.
 
 **Overlaps found, and how they're resolved:**
+
 - The **Data Analyst** chat assistant and the Data Analyst task agent are the same runtime. They're one entry that points at the other, not two agents.
 - The **Coding** chat assistant and the Software Engineer overlap. The assistant only explains and suggests in chat. It can't run code, and its out-of-scope list sends real changes to the Software Engineer.
 - **Code Review** and the **Security Team** both do security work. Code Review checks code (rules, dependency advisories, AI). The Security Team scans websites and logs it can prove you own. The router sends "security" to Code Review for code and to the Security Team for a website, URL or logs.
 - **Workforce Sentinel** and **Security Team Sentinel** share a name but are separate. The Workforce is administrators-only and reviews Orbis's own changes.
 
 **Fixed during the audit:**
+
 - Direct API routes (Code Review, Deep Research, the four Security Team routes, and starting a Software Engineer task) didn't apply the plan and configuration check that the agent pages use. They now call `assertAgentAccess`, so a page, a proposal or a direct request all get the same answer.
 - Pair coding recorded its usage as `code_agent`. It now records `pair_coding`, so its cost is measured separately.
 - The usage labels showed Workforce purposes as "Security team"; they're now labelled correctly.
@@ -38,6 +41,7 @@ Each entry records:
 ## 2. Roles and boundaries
 
 `registry.ts` gives every specialist one job (`ROLES`):
+
 - `taskTypes`: the work it takes.
 - `outOfScope`: what it refuses, each with `useInstead`.
 - `input` and `output`.
@@ -49,14 +53,15 @@ Coding agents share `CODE_ESCALATION`. They stop and ask for plan approval and f
 
 Permissions are declared in the registry and enforced by the runtime, not by the prompt:
 
-| Agent | Declared | Enforced by |
-| --- | --- | --- |
-| QA Testing | `edit_tests_only` | The tool runner refuses edits outside test files, helpers and test configuration (`qaMayEdit`); files a command changes outside tests are put back |
-| Code Review, Deep Research, Security Team, Data Analyst | Read only | They have no edit or command tools |
-| Every coding agent | Commands | The command policy (safe list, ask, never) |
-| Every agent | Plan and configuration | `assertAgentAccess` on every start, whoever starts it |
+| Agent                                                   | Declared               | Enforced by                                                                                                                                        |
+| ------------------------------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| QA Testing                                              | `edit_tests_only`      | The tool runner refuses edits outside test files, helpers and test configuration (`qaMayEdit`); files a command changes outside tests are put back |
+| Code Review, Deep Research, Security Team, Data Analyst | Read only              | They have no edit or command tools                                                                                                                 |
+| Every coding agent                                      | Commands               | The command policy (safe list, ask, never)                                                                                                         |
+| Every agent                                             | Plan and configuration | `assertAgentAccess` on every start, whoever starts it                                                                                              |
 
 Delegation never widens permissions:
+
 - a proposal from the Orbis Agent is started by the user, through the same access check;
 - a workflow step starts through the same `startProfileTask` path as the agent's own page;
 - agents can't start other agents (a test checks that no runtime does).
@@ -65,14 +70,15 @@ Delegation never widens permissions:
 
 `routing.ts` reads the request with fixed patterns, with no model call, so it's free and predictable. It returns one of four modes:
 
-| Mode | When | What the Orbis Agent does |
-| --- | --- | --- |
-| `direct` | A question, an explanation, writing | Answers itself. No agent and no extra cost. |
-| `delegate` | One specialist's work | Proposes that agent as a card the user starts |
-| `plan` | Several kinds of work ("fix it, add tests and review it") | Gives the steps in order: who does each, what it waits for, what runs alongside. Matches the Fix and verify workflow when the steps fit. |
-| `gap` | Nothing in Orbis can do it (deploying, managing infrastructure, purchases, scheduled automations) | Says so plainly, and still offers any part that can be done |
+| Mode       | When                                                                                              | What the Orbis Agent does                                                                                                                |
+| ---------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `direct`   | A question, an explanation, writing                                                               | Answers itself. No agent and no extra cost.                                                                                              |
+| `delegate` | One specialist's work                                                                             | Proposes that agent as a card the user starts                                                                                            |
+| `plan`     | Several kinds of work ("fix it, add tests and review it")                                         | Gives the steps in order: who does each, what it waits for, what runs alongside. Matches the Fix and verify workflow when the steps fit. |
+| `gap`      | Nothing in Orbis can do it (deploying, managing infrastructure, purchases, scheduled automations) | Says so plainly, and still offers any part that can be done                                                                              |
 
 Planning rules:
+
 - one step per agent;
 - tests and review wait for the step that builds or fixes;
 - research comes before building;
@@ -84,6 +90,7 @@ An agent that isn't available to this user (plan, setup or pause) is never propo
 ## 4. The task protocol
 
 `protocol.ts` describes every task the same way, whichever runtime does it:
+
 - **`TaskAssignment`** contains:
   - the agent and its version;
   - the objective (the user's words, clipped);
@@ -93,6 +100,7 @@ An agent that isn't available to this user (plan, setup or pause) is never propo
   - dependencies, expected output, done-when and the runtime's limits.
 
   A delegated task's assignment is stored on its proposal. Only what the task needs is passed on, never the whole conversation.
+
 - **`TaskResult`** contains a summary, artifacts, evidence, errors, unresolved items and a next step. It's built from the task's own records (`resultFromActivity`), never from what the agent says about itself.
 - **States:** pending, ready, running, waiting for an earlier step, waiting for you, completed, failed and cancelled. Workflow steps and Activity entries map onto these.
 
@@ -100,12 +108,12 @@ An agent that isn't available to this user (plan, setup or pause) is never propo
 
 All run on the Orbis Code engine. They share its isolated computer, limits (steps, tokens, time, failed test runs), approvals, checkpoints, revert and records.
 
-| Agent | Workspace | What's different | How it's enforced |
-| --- | --- | --- | --- |
-| Software Engineer | /code | — | — |
-| Bug Fixing | /agents/bug-fixer | Bug form (summary, details, logs, how to reproduce, expected). Logs are fenced as data and long ones clipped (first 2,000 + last 3,000 characters). Instructions: reproduce first, root cause, regression test. | The report's "Before the fix" section is built from what ran before the first edit, not from the agent's words. |
-| QA Testing | /agents/qa-tester | Scope and test kinds; it reports bugs it finds instead of fixing them. | Edits outside test files, helpers and test configuration (including `package.json`, to add a test script) are refused by the tool runner. |
-| Website Builder | /code | Website guidance, templates, browser checks | — |
+| Agent             | Workspace         | What's different                                                                                                                                                                                                | How it's enforced                                                                                                                         |
+| ----------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Software Engineer | /code             | —                                                                                                                                                                                                               | —                                                                                                                                         |
+| Bug Fixing        | /agents/bug-fixer | Bug form (summary, details, logs, how to reproduce, expected). Logs are fenced as data and long ones clipped (first 2,000 + last 3,000 characters). Instructions: reproduce first, root cause, regression test. | The report's "Before the fix" section is built from what ran before the first edit, not from the agent's words.                           |
+| QA Testing        | /agents/qa-tester | Scope and test kinds; it reports bugs it finds instead of fixing them.                                                                                                                                          | Edits outside test files, helpers and test configuration (including `package.json`, to add a test script) are refused by the tool runner. |
+| Website Builder   | /code             | Website guidance, templates, browser checks                                                                                                                                                                     | —                                                                                                                                         |
 
 - Usage is recorded per purpose (`code_agent`, `bug_fix`, `qa_testing`, `pair_coding`, `code_review`, `deep_research`, `security`).
 - Approvals:
@@ -138,7 +146,7 @@ All run on the Orbis Code engine. They share its isolated computer, limits (step
 
 - **Steps form a dependency graph.** Each step has `dependsOn` and `writes`:
   - `writes` names the resource it changes (`"project"`), or is `null` for read-only steps;
-  - a step is *ready* only when everything it depends on is done;
+  - a step is _ready_ only when everything it depends on is done;
   - two steps that write the same resource never run at the same time (a lock);
   - read-only steps run alongside;
   - at most 2 steps start per advance.
@@ -148,6 +156,7 @@ All run on the Orbis Code engine. They share its isolated computer, limits (step
   3. Your decision waits for both.
 
   A fix that changed nothing skips tests and review.
+
 - **States:** pending, ready, running, waiting for you, done, failed, skipped, cancelled.
 - **Failures:** once a step fails, no new step starts. You can:
   - retry it (up to 3 attempts);
@@ -182,19 +191,19 @@ All run on the Orbis Code engine. They share its isolated computer, limits (step
 
 Names only; set them in Vercel → Project → Settings → Environment Variables.
 
-| Variable | For | Production now |
-| --- | --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Accounts and data | Set |
-| `ANTHROPIC_API_KEY` | Claude; required for Deep Research | Set |
-| `OPENAI_API_KEY` | GPT models | Set |
-| `GEMINI_API_KEY`, `XAI_API_KEY`, `DEEPSEEK_API_KEY`, `HUGGINGFACE_API_KEY` | Other providers | Not set |
-| (Vercel OIDC, automatic) or `ORBIS_SANDBOX_TOKEN` (local) | Isolated computers for coding agents | Automatic on Vercel |
-| `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY` | Import and push repositories (see GITHUB.md) | See GITHUB.md |
-| `ORBIS_CONNECTOR_KEY` + each connector's OAuth client id/secret | Connectors | See CONNECTORS.md |
-| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `SUPABASE_SERVICE_ROLE_KEY` | Payments | **Not set: paid plans can't be bought** |
-| `SEARCH_PROVIDER`, `SEARCH_API_KEY` | Web search for non-Claude models | Not set (Deep Research uses Claude's own search) |
-| `RESEND_API_KEY`, `ALERT_EMAIL`, `EMAIL_FROM` | Emails and alerts | See DEPLOY.md |
-| `SENTRY_DSN` | Error reporting | Not set |
+| Variable                                                                   | For                                          | Production now                                   |
+| -------------------------------------------------------------------------- | -------------------------------------------- | ------------------------------------------------ |
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`         | Accounts and data                            | Set                                              |
+| `ANTHROPIC_API_KEY`                                                        | Claude; required for Deep Research           | Set                                              |
+| `OPENAI_API_KEY`                                                           | GPT models                                   | Set                                              |
+| `GEMINI_API_KEY`, `XAI_API_KEY`, `DEEPSEEK_API_KEY`, `HUGGINGFACE_API_KEY` | Other providers                              | Not set                                          |
+| (Vercel OIDC, automatic) or `ORBIS_SANDBOX_TOKEN` (local)                  | Isolated computers for coding agents         | Automatic on Vercel                              |
+| `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`               | Import and push repositories (see GITHUB.md) | See GITHUB.md                                    |
+| `ORBIS_CONNECTOR_KEY` + each connector's OAuth client id/secret            | Connectors                                   | See CONNECTORS.md                                |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`  | Payments                                     | **Not set: paid plans can't be bought**          |
+| `SEARCH_PROVIDER`, `SEARCH_API_KEY`                                        | Web search for non-Claude models             | Not set (Deep Research uses Claude's own search) |
+| `RESEND_API_KEY`, `ALERT_EMAIL`, `EMAIL_FROM`                              | Emails and alerts                            | See DEPLOY.md                                    |
+| `SENTRY_DSN`                                                               | Error reporting                              | Not set                                          |
 
 ## 10. Migrations and deployment
 
@@ -202,33 +211,35 @@ Names only; set them in Vercel → Project → Settings → Environment Variable
 - New this round:
   - `20261104000000_code_reviews.sql` (applied);
   - `20261104010000_research_runs.sql` (applied);
-  - `20261105000000_agent_workflows.sql` (**not applied yet**).
+  - `20261105000000_agent_workflows.sql` (**not applied yet**);
+  - `20261106000000_admin_audit.sql` (**not applied yet**). Until it is, admin actions still happen; they just aren't recorded, and the Agent directory says so.
 - Deploy: push to `main`; Vercel builds and deploys. Check with `npx vitest run`, `npx tsc --noEmit` and `npx next build` first.
 
 ## 11. How to test each agent
 
-| Agent | Steps | Expect |
-| --- | --- | --- |
-| Software Engineer | Code → a project → ask for a change | A plan to approve, edits, tests run, a report built from what ran |
-| Bug Fixing | /agents/bug-fixer → project → describe the bug, paste the error → Start | A plan first; the report's "Before the fix" says whether a failing check ran before the first change |
-| QA Testing | /agents/qa-tester → project → what to test → Start | Only test files change; an edit to app code is refused in the activity log |
-| Code Review | /review → paste code or a GitHub link | Findings quoting the exact line; rule matches marked separately from AI findings |
-| Deep Research | /research (Pro/Max) | A cited report; uncited paragraphs counted |
-| Security Team | /agents/security | Scanner findings; a website scan needs proof of ownership |
-| Orbis Agent | Chat: "Fix the bug where … in my <project>" | A Bug Fixing card; Start creates the task and links to it; "What tasks are still running?" lists them |
-| Activity | /activity | All of the above with their statuses |
-| Agent directory | /agents/directory | Every agent by level; filters by category and status; details with boundaries, tools and dependencies; administrators also see Pause and measured cost |
-| Routing | Chat: "What is a closure?" / "Fix the login bug, add tests and review it" / "Deploy it to AWS" | Answered directly / a plan with tests and review side by side after the fix / told plainly that Orbis can't deploy |
+| Agent             | Steps                                                                                          | Expect                                                                                                                                                 |
+| ----------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Software Engineer | Code → a project → ask for a change                                                            | A plan to approve, edits, tests run, a report built from what ran                                                                                      |
+| Bug Fixing        | /agents/bug-fixer → project → describe the bug, paste the error → Start                        | A plan first; the report's "Before the fix" says whether a failing check ran before the first change                                                   |
+| QA Testing        | /agents/qa-tester → project → what to test → Start                                             | Only test files change; an edit to app code is refused in the activity log                                                                             |
+| Code Review       | /review → paste code or a GitHub link                                                          | Findings quoting the exact line; rule matches marked separately from AI findings                                                                       |
+| Deep Research     | /research (Pro/Max)                                                                            | A cited report; uncited paragraphs counted                                                                                                             |
+| Security Team     | /agents/security                                                                               | Scanner findings; a website scan needs proof of ownership                                                                                              |
+| Orbis Agent       | Chat: "Fix the bug where … in my <project>"                                                    | A Bug Fixing card; Start creates the task and links to it; "What tasks are still running?" lists them                                                  |
+| Activity          | /activity                                                                                      | All of the above with their statuses                                                                                                                   |
+| Agent directory   | /agents/directory                                                                              | Every agent by level; filters by category and status; details with boundaries, tools and dependencies; administrators also see Pause and measured cost |
+| Routing           | Chat: "What is a closure?" / "Fix the login bug, add tests and review it" / "Deploy it to AWS" | Answered directly / a plan with tests and review side by side after the fix / told plainly that Orbis can't deploy                                     |
+
 ## 12. Verified so far
 
-| What | How | Result |
-| --- | --- | --- |
-| Automated tests | `npx vitest run` | 1,306 tests in 96 files pass. `tests/agent-architecture.test.ts` covers the brief's scenarios: a simple question answered directly; research; coding; multi-step with dependencies; parallel steps; a failed step; insufficient permissions; no suitable agent; cancellation and timeout; two agents and the same project. It also checks the catalogue's validity and the permission enforcement. `tests/agent-workflow.test.ts` covers the dependency graph, locks, retries, skips, cancellation and timeout. |
-| Agent directory | Local build, browser, administrator account, stand-in database | 40 entries in 7 levels. The category and status filters work. Details show every section, the user's last failed task and its error, and measured calls/cost per purpose. **Pause** made `/api/agent-platform` report "paused", and starting a Bug Fixing task was then refused (503, with the reason). **Resume** restored it. An unknown agent id is refused (400). No accessibility violations; no sideways scrolling at 1280 and 390 px. |
-| Code Review | Live, production | Found all 6 planted bugs at the right lines, no false positives, $0.017 |
-| Deep Research | Live, production | Quick research with Haiku searches: completed in 56 s, 14 sources all cited, 68 units, $0.10 (DEEP_RESEARCH.md) |
-| Marketplace, Bug Fixing and QA forms, Activity, task card | Local build, browser | No accessibility violations at desktop and phone widths, no sideways scrolling. Starting a proposed task created the task; a second task on a busy project was refused with the reason. |
-| Bug Fixing, QA Testing, the Orbis Agent's proposals | Live, with a real model | **Not yet run**: needs a signed-in test account, which needs your permission |
+| What                                                      | How                                                            | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --------------------------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Automated tests                                           | `npx vitest run`                                               | 1,306 tests in 96 files pass. `tests/agent-architecture.test.ts` covers the brief's scenarios: a simple question answered directly; research; coding; multi-step with dependencies; parallel steps; a failed step; insufficient permissions; no suitable agent; cancellation and timeout; two agents and the same project. It also checks the catalogue's validity and the permission enforcement. `tests/agent-workflow.test.ts` covers the dependency graph, locks, retries, skips, cancellation and timeout. |
+| Agent directory                                           | Local build, browser, administrator account, stand-in database | 40 entries in 7 levels. The category and status filters work. Details show every section, the user's last failed task and its error, and measured calls/cost per purpose. **Pause** made `/api/agent-platform` report "paused", and starting a Bug Fixing task was then refused (503, with the reason). **Resume** restored it. An unknown agent id is refused (400). No accessibility violations; no sideways scrolling at 1280 and 390 px.                                                                    |
+| Code Review                                               | Live, production                                               | Found all 6 planted bugs at the right lines, no false positives, $0.017                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Deep Research                                             | Live, production                                               | Quick research with Haiku searches: completed in 56 s, 14 sources all cited, 68 units, $0.10 (DEEP_RESEARCH.md)                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Marketplace, Bug Fixing and QA forms, Activity, task card | Local build, browser                                           | No accessibility violations at desktop and phone widths, no sideways scrolling. Starting a proposed task created the task; a second task on a busy project was refused with the reason.                                                                                                                                                                                                                                                                                                                         |
+| Bug Fixing, QA Testing, the Orbis Agent's proposals       | Live, with a real model                                        | **Not yet run**: needs a signed-in test account, which needs your permission                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ## 13. Not built yet (capability gaps)
 
@@ -257,3 +268,154 @@ Names only; set them in Vercel → Project → Settings → Environment Variable
 3. Add Security Team runs and workflows to Activity, so the directory can count them.
 4. Give the Website Builder its own usage purpose, so its cost is separate from the Software Engineer's.
 5. Add a background worker so tasks continue with the page closed.
+
+## 15. Memory, verification, recovery and improvement
+
+Built on what already existed. There is no new job queue and no new service; the only new table is the optional audit log. Each part says what was already there, what was added, and what's still missing.
+
+### A. Memory and context
+
+| Kind of context                              | Where it lives                                                                          | Who can see and change it                                                        |
+| -------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Current task context                         | The task's own record: request, transcript, plan, events                                | The task's owner (row-level security)                                            |
+| Project knowledge, decisions and constraints | Project memory, with kinds instruction, architecture, decision, preference and workflow | The project's owner, in the Memory panel: add, edit, approve suggestions, delete |
+| User-approved preferences                    | Project memory "preference" notes; chat memory ("Remember…")                            | The owner: Memory panel; Settings → Memory                                       |
+| Historical task outcomes                     | The project's last 3 finished tasks, and `continueFrom`, given to a new task            | The owner, through History and Activity                                          |
+| Temporary execution state                    | The run's pending action, lock and checks                                               | Only the server                                                                  |
+
+**Added:**
+
+- **No secrets in memory.** `src/lib/secrets.ts` recognises API keys, tokens, private keys, connection strings with passwords, and "password = …" values.
+  - Project memory refuses them on add and edit, whether the user or the agent writes the note.
+  - Chat memory refuses them too, and the reply says why without repeating the secret.
+  - Refused rather than redacted: a half-kept key is still a leak.
+- **Relevant chat memories only.** While a person's memories are short (up to 1,500 characters), all of them are given. Above that, `selectMemories` gives the ones that share words with the message first, then the newest, within that budget.
+- Project memory already did this: approved notes only, "always" and instruction notes first, then by relevance, within 6,000 characters.
+
+**Limits:**
+
+- Relevance is word overlap, not semantic search.
+- There's no automatic expiry: notes stay until deleted (project memory is capped at 100 notes).
+- Chat memories can be deleted but not edited, because the table has no update policy (adding one needs a migration).
+- Users and projects are kept apart by row-level security, as before.
+
+### B. Evidence-based completion
+
+`src/lib/agent-platform/outcomes.ts` gives every task one outcome, worked out from its records:
+
+| Outcome                | Coding task                                                                 | Research                              | Review / scan                                | Workflow                              |
+| ---------------------- | --------------------------------------------------------------------------- | ------------------------------------- | -------------------------------------------- | ------------------------------------- |
+| Completed and verified | Tests or a build passed after the last change, nothing failed or was missed | Every finding cites a source it found | —                                            | Tests and review ran, you approved    |
+| Completed              | Only an inspection ran (page loads and looks right)                         | Some paragraphs uncited               | Finished (AI findings aren't confirmed bugs) | You rejected; changes undone          |
+| Partly completed       | Checks failed, went stale or were missed, or problems left open             | —                                     | A scanner didn't run                         | Approved with tests or review skipped |
+| Blocked                | A limit was reached                                                         | —                                     | —                                            | —                                     |
+| Failed                 | Error                                                                       | Error                                 | Error                                        | Error                                 |
+| Unverified             | No checks ran, or no report                                                 | No citation check, or no sources      | —                                            | —                                     |
+
+- **The coding agent's verdict already existed** (`verdict.ts`: checks are planned per task, and Orbis runs tests and a browser check itself after the agent finishes). This round makes the same vocabulary cover every agent.
+- **Where it shows:** Activity, and the Orbis Agent's answers about tasks.
+- **No outcome from the agent's words:** nothing is "verified" because an agent said so. A completed run without a report is "unverified".
+
+### C. Failure recovery
+
+- **Classification:** `src/lib/agent-platform/failures.ts` sorts failures into transient, permission, setup, invalid input, limit, strategy or unknown. The coding agent's recorded failure kind is used first, then the error text.
+- **Retry rule** (`shouldRetry`), all three must hold:
+  - the failure class is one retrying can fix (transient, strategy or unknown);
+  - attempts are left (3 per workflow step);
+  - the last two attempts didn't fail the same way. Errors are compared with numbers, ids and quoted names set aside.
+- **Workflow steps** follow this rule on the server, and the page explains why a retry isn't offered.
+- **Activity** shows each failed task's class and what to do. That advice becomes the task result's next step for the orchestrator.
+- **Already there:** the coding agent's limits, repetition detection (3 identical action sets pause the run), 3 model failures in a row, refusals, and unreadable replies. It also had interrupted-step recovery and partial results kept in the run (changes, checkpoints, report).
+
+**Limits:**
+
+- Switching to another agent or model automatically isn't done; the advice suggests it and the user decides.
+- The coding agent doesn't use the chat's provider fallback.
+
+### D. Models and resources
+
+- **Already there:**
+  - rule-based Auto routing by task complexity (`ai/router.ts`): cheapest suitable model, a reasoning model when complex;
+  - plan model tiers;
+  - each agent's model choice: coding uses Auto (coding), reviews prefer reasoning, research is fixed;
+  - token, cost, model-call and time totals per task;
+  - step, token, time and failed-test limits that pause and ask.
+- **Added:**
+  - administrators can set the default token budget and time limit for new coding tasks (Admin → Behaviour → "Default limits"). A task that reaches one still pauses and asks;
+  - each new coding task records its agent's version (`options.agentVersion`), so outcomes and costs can be compared across versions.
+
+**Limits:**
+
+- There is no per-task dollar cap; the plan budgets and the per-request cost cap apply instead.
+- Tool calls aren't counted per task.
+- `model_runs` has no task id, so per-task cost comes from each task's own totals.
+
+### E. Observability
+
+**Activity** (`/activity`) now covers:
+
+- coding tasks, reviews, research, **Security Team scans** and **workflows**, each with its outcome and why;
+- for failures, the class and advice;
+- **measured progress** (steps taken of the step limit) and **recorded cost**;
+- a **Stop** button for tasks that can be stopped (it calls that task's own cancel endpoint);
+- a **"not moving"** flag for open tasks with nothing recorded for 10 minutes. Tasks advance while their page is open, and the flag says so instead of implying progress.
+
+**Limits:**
+
+- There is no separate "pause" (waiting for the user is the pause).
+- There is no admin view of every user's tasks; admins see aggregates only.
+- Security scans run within one request, so there's nothing to stop.
+
+### F. Durability
+
+**Already there:**
+
+- task state, events, changes and checkpoints are kept in the database;
+- each step takes a lock, steps are idempotent (`expectStep`), and an interrupted tool call is reported as "interrupted, check state" rather than repeated blindly;
+- cancelling stops a running command, and the sandbox has a timeout;
+- workflows stop after 24 hours, and a Stop sent during an advance wins.
+
+**Not built:** background execution. Tasks advance only while their page is open. Making them advance with the page closed needs a worker with the Supabase service-role key (not set) and a design that keeps per-user authorisation.
+
+### G. Security and approvals
+
+- **Risk table:** `src/lib/agent-platform/risk.ts` lists 14 consequential actions with their risk, whether they can be undone, the approval each needs, and the file and line of code that enforces it.
+  - It is shown in the Agent directory.
+  - A test checks every cited line exists, and that nothing irreversible runs without approval.
+- **Admin audit log:** `admin_audit`, append-only, administrators only.
+  - It records saving platform settings (which settings changed; not their values) and pausing or resuming agents, with secrets removed.
+  - Administrators see it in the Agent directory once its migration is applied.
+- **Already there:**
+  - permission checks where each tool runs;
+  - untrusted content fenced as data;
+  - secret files withheld from the model;
+  - per-user row-level security;
+  - confirmation cards for connector writes;
+  - ownership proof before website scans.
+
+### H. Evaluation and improvement
+
+- **The suite:** `npm run eval:agents` runs `evals/agents/*.json` (77 cases: 30 routing, 27 security, 20 recovery) against `evals/agents/baseline.json`.
+  - A score below the baseline fails the normal test run (`npx vitest run`). That run is part of every release check, though Vercel doesn't run it on deploy.
+  - A better baseline is recorded on purpose (`UPDATE_AGENT_BASELINE=1`) and reviewed with the change.
+- **It already paid off:** writing it found three routing and classification mistakes, all fixed:
+  - "add integration tests for the API" was planned as a feature;
+  - "…and review it" wasn't seen as a review;
+  - "isn't included in your plan" wasn't a permission failure.
+- **Versions:**
+  - agent definitions carry versions (registry and catalogue), recorded on each coding task;
+  - configuration changes are recorded in the audit log;
+  - agents can't change permissions, settings or instructions: only administrators can, through the API, and those routes require an admin.
+
+**Limits:**
+
+- No suite runs real agent tasks against real models (they cost money and vary). The real-model check is Admin → Answer check (40 cases).
+- Feedback (`response_feedback`) isn't yet analysed into routing or prompt changes automatically; that stays a human review.
+
+### What's outstanding (infrastructure)
+
+1. Apply the two pending migrations: `agent_workflows` and `admin_audit`. Each needs the owner's confirmation in Supabase.
+2. Add a background worker so tasks continue with the page closed. This needs `SUPABASE_SERVICE_ROLE_KEY` and a design review.
+3. Add a task id on `model_runs`, and per-task tool-call counts.
+4. Add an update policy on chat memories so they can be edited.
+5. Add real-model agent evaluations with a fixed budget, run before releases.
