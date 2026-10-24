@@ -62,4 +62,10 @@ Each part is charged like a message of its size (Usage → "Code review"). Other
 - Automatic review of every PR: needs a webhook and a background worker.
 - Team-shared review history.
 - Custom rules.
-- A measured false-positive rate on real repositories. The unit tests check validation, not usefulness. A live evaluation on sample repositories with known bugs is the next step (docs/ENGINEER_AND_RESEARCH.md).
+- A measured false-positive rate on real repositories. One live sample is not a benchmark (see below).
+
+## Live test (24 October 2026, production)
+
+One JavaScript file (about 50 lines) with 6 planted bugs: an off-by-one loop, division by an empty list's length, SQL built from user input, a missing `await`, an assignment inside an `if`, and a swallowed error. The review found **6 of 6 at the correct lines, with no false positives**, and 4 findings came with a suggested-fix diff. It took 13 seconds on Sonnet 5.5: 1,337 tokens in, 1,413 out, 28.01 units, $0.0168.
+
+This is a single small sample written for the test. It shows the pipeline works end to end; it does not measure accuracy on real codebases.

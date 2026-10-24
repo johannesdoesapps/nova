@@ -192,7 +192,7 @@ export async function stepResearch(req: Request, auth: Authed, id: string): Prom
           });
         }
         const prompt = `Research question ${i + 1} of ${row.plan.questions.length}: ${question}`;
-        await enforceLimits(req, auth, 1, [model], { purpose: "deep_research", inputTokens: 40_000, maxOutputTokens: 3000 });
+        await enforceLimits(req, auth, 1, [model], { purpose: "deep_research", inputTokens: 70_000, maxOutputTokens: 3000 });
         const t = performance.now();
         const r = await provider.webResearch!({
           model,
