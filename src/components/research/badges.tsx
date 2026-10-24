@@ -62,7 +62,7 @@ export function EstimateMeter({ estimate }: { estimate: SupportEstimate | null }
         <div className="text-xs text-muted">
           Evidence match <span className="text-faint">(heuristic, {estimate.judgedBy === "rules" ? "rules" : estimate.judgedBy === "model" ? "includes model judgements" : "includes your reviews"})</span>
         </div>
-        <div className="flex gap-1" aria-label={`Evidence match: ${estimate.band}`}>
+        <div className="flex gap-1" role="img" aria-label={`Evidence match: ${estimate.band}`}>
           {[1, 2, 3].map((i) => (
             <span key={i} className={cn("h-2 w-6 rounded-full", i <= steps ? (steps === 3 ? "bg-success" : steps === 2 ? "bg-accent" : "bg-warning") : "bg-panel-2")} />
           ))}
@@ -92,7 +92,7 @@ export function SufficiencyBadge({ s }: { s: "insufficient" | "tentative" | "cle
 /** Horizontal interval bar on 0–1 with an optional 50% reference line. */
 export function IntervalBar({ low, high, point, reference = 0.5 }: { low: number; high: number; point: number; reference?: number | null }) {
   return (
-    <div className="relative h-2 w-28 rounded-full bg-panel-2" aria-label={`${Math.round(point * 100)}% (95% interval ${Math.round(low * 100)}–${Math.round(high * 100)}%)`}>
+    <div className="relative h-2 w-28 rounded-full bg-panel-2" role="img" aria-label={`${Math.round(point * 100)}% (95% interval ${Math.round(low * 100)}–${Math.round(high * 100)}%)`}>
       {reference !== null && <span className="absolute top-[-3px] h-[14px] w-px bg-border-strong" style={{ left: `${reference * 100}%` }} />}
       <span className="absolute h-2 rounded-full bg-accent/40" style={{ left: `${low * 100}%`, width: `${Math.max(1, (high - low) * 100)}%` }} />
       <span className="absolute top-[-2px] h-3 w-1 rounded bg-accent" style={{ left: `calc(${point * 100}% - 2px)` }} />

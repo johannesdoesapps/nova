@@ -227,13 +227,13 @@ export function nextActions(r: RunReport, state: TaskState): string[] {
   const by = (id: CheckItem["id"]) => items.find((c) => c.id === id);
   const tests = by("tests");
   const browser = by("browser");
-  if (tests?.status === "failed" || tests?.status === "error") out.push("Look at the failing tests below, then ask the agent to fix them or fix them yourself.");
+  if (tests?.status === "failed" || tests?.status === "error") out.push("Look at the failing tests under Checks, then ask the agent to fix them or fix them yourself.");
   if (by("build")?.status === "failed") out.push("Read the build error and ask the agent to fix it.");
   if (browser?.status === "failed") out.push("Open the preview and look at the problems the browser inspection found.");
   if (items.some((c) => c.status === "stale") || items.some((c) => c.applicable && c.status === "not_run")) out.push("Re-run the checks so they cover the final code.");
   if (tests && tests.status === "not_run" && !tests.applicable && r.files.length) out.push("There are no automated tests: try the changes yourself, or ask the agent to add tests.");
   if (browser && browser.status === "passed") out.push("The browser inspection checks loading and layout, not behaviour: click through the parts you changed.");
-  if (r.unresolved.length) out.push("Read the open points below before relying on this work.");
+  if (r.unresolved.length) out.push("Read the points under Still open before relying on this work.");
   if (state === "verified" && r.files.length) out.push("Review the changes before you publish or push them.");
   return out;
 }

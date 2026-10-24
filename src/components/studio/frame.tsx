@@ -286,6 +286,12 @@ export function StudioFrame({ children }: { children: ReactNode }) {
     <Ctx value={value}>
       <div className="studio fixed inset-x-0 top-[var(--app-top,0px)] flex h-[var(--app-h,100dvh)] flex-col overflow-hidden">
         <div className="studio-ambient" aria-hidden />
+        <a
+          href="#studio-main"
+          className="sr-only z-[90] rounded-xl bg-s-accent px-4 py-2 text-[13.5px] font-medium text-s-accent-ink focus:not-sr-only focus:fixed focus:left-3 focus:top-3"
+        >
+          Skip to content
+        </a>
 
         {/* One slim bar across the top: sidebar, Orbis and the Chat / Code switch; the page's title; the page's actions. */}
         <header className="relative z-20 flex h-12 shrink-0 items-center gap-2 border-b border-s-line px-2 pt-[env(safe-area-inset-top)] sm:px-3">
@@ -395,7 +401,9 @@ export function StudioFrame({ children }: { children: ReactNode }) {
           searchRef={searchRef}
         />
 
-        <main className="relative flex min-w-0 flex-1 flex-col">{children}</main>
+        <main id="studio-main" tabIndex={-1} className="relative flex min-w-0 flex-1 flex-col outline-none">
+          {children}
+        </main>
         </div>
 
         <div id="studio-layer" />

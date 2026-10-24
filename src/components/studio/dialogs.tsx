@@ -877,7 +877,7 @@ function PickerBody({
         </p>
       )}
       {projects === null && !error ? (
-        <div className="space-y-2" aria-label="Loading projects">
+        <div className="space-y-2" role="status" aria-label="Loading projects">
           {[0, 1, 2].map((i) => (
             <div key={i} className="s-skeleton h-10" />
           ))}
@@ -1132,7 +1132,7 @@ function ShareBody({ conv }: { conv: ConvSummary }) {
         {error}
       </p>
     ) : (
-      <div className="s-skeleton h-10 w-full" aria-label="Loading" />
+      <div className="s-skeleton h-10 w-full" role="status" aria-label="Loading" />
     );
 
   return (

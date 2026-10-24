@@ -24,7 +24,7 @@ export default async function ResetPasswordPage() {
 
   return (
     <div className={`orbis-glow grid min-h-dvh place-items-center px-4 py-10 ${serif.variable}`}>
-      <div className="w-full max-w-sm">
+      <main className="w-full max-w-sm">
         <Link href="/" className="mb-8 flex justify-center"><Logo /></Link>
         <div className="lux-card rounded-[26px] p-7">
           {auth?.mode === "authenticated" ? (
@@ -39,7 +39,7 @@ export default async function ResetPasswordPage() {
             </>
           )}
         </div>
-      </div>
+      </main>
     </div>
   );
 }

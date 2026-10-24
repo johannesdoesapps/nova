@@ -18,7 +18,7 @@
   --success: #7fd3ad;
   --warning: #e8c27a;
   --danger: #ef948c;
-  --ring: rgba(230, 228, 236, 0.38);
+  --ring: rgba(230, 228, 236, 0.62);
   --hi: rgba(255, 255, 255, 0.13);
   --edge-hi: rgba(255, 255, 255, 0.34);
   color-scheme: dark;
@@ -41,7 +41,7 @@
   --success: #237550;
   --warning: #a4721c;
   --danger: #a8443e;
-  --ring: rgba(29, 29, 33, 0.28);
+  --ring: rgba(29, 29, 33, 0.6);
   --hi: rgba(255, 255, 255, 0.95);
   --edge-hi: rgba(255, 255, 255, 1);
   color-scheme: light;

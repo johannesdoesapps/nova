@@ -199,7 +199,7 @@ export function Composer({ id }: { id: string }) {
           </div>
           <p className="mt-4 text-[11px] text-faint">Drag between handles to add a dependency. Select an edge and press Backspace to remove it.</p>
         </div>
-        <div className="h-[420px] min-h-0 lg:h-auto" aria-label="Workflow canvas">
+        <div className="h-[420px] min-h-0 lg:h-auto" role="region" aria-label="Workflow canvas">
           <ReactFlow
             nodes={flowNodes}
             edges={edges}

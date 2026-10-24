@@ -39,7 +39,7 @@ export default async function ConsentPage({ searchParams }: PageProps<"/consent"
           </p>
           <ConsentForm next={next} version={LEGAL.version} />
           <form action="/auth/signout" method="post" className="mt-4 text-center">
-            <button type="submit" className="text-xs text-muted underline-offset-2 hover:text-fg hover:underline">
+            <button type="submit" className="min-h-6 px-1 text-xs text-muted underline-offset-2 hover:text-fg hover:underline">
               Don&apos;t accept — sign out
             </button>
           </form>

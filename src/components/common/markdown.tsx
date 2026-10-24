@@ -29,6 +29,10 @@ export function Markdown({
   runnable?: boolean;
 }) {
   const blocks = parseBlocks(text);
+  // Replies usually start at "##". The top level used is announced as a level-2 heading (under the page's
+  // h1) and the rest follow on from it, so screen readers never hear a skipped level; the look is unchanged.
+  const top = Math.min(3, ...blocks.flatMap((b) => (b.type === "h" ? [b.level] : [])));
+  const ariaLevel = (level: number) => Math.min(6, 2 + Math.min(level, 3) - top);
   return (
     <div className={className}>
       {blocks.map((b, i) => {
@@ -76,7 +80,17 @@ export function Markdown({
               </div>
             );
           case "h":
-            return b.level === 1 ? <h2 key={i}>{inl(b.text)}</h2> : b.level === 2 ? <h3 key={i}>{inl(b.text)}</h3> : <h4 key={i}>{inl(b.text)}</h4>;
+            return b.level === 1 ? (
+              <h2 key={i}>{inl(b.text)}</h2>
+            ) : b.level === 2 ? (
+              <h3 key={i} aria-level={ariaLevel(2) === 3 ? undefined : ariaLevel(2)}>
+                {inl(b.text)}
+              </h3>
+            ) : (
+              <h4 key={i} aria-level={ariaLevel(b.level) === 4 ? undefined : ariaLevel(b.level)}>
+                {inl(b.text)}
+              </h4>
+            );
           case "quote":
             return <blockquote key={i}>{inl(b.text)}</blockquote>;
           case "hr":

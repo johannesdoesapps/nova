@@ -340,7 +340,7 @@ export function CodeProjectsView() {
                       width={250}
                       buttonLabel="Ideas to start from"
                       buttonTitle="Ideas to start from"
-                      buttonClassName="grid h-8 w-8 place-items-center rounded-full text-s-ink-3 transition hover:bg-s-hover hover:text-s-ink [&_svg]:h-4 [&_svg]:w-4"
+                      buttonClassName="grid h-8 w-8 shrink-0 place-items-center rounded-full text-s-ink-3 transition hover:bg-s-hover hover:text-s-ink [&_svg]:h-4 [&_svg]:w-4"
                       button={<Lightbulb />}
                     >
                       {SITE_EXAMPLES.map((x) => (

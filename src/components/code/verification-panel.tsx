@@ -180,16 +180,22 @@ export function VerificationPanel({
                       type="button"
                       onClick={() => (a.kind === "open" ? onOpenFile(a.path) : onShowChanges())}
                       title={a.kind === "open" ? `Open ${f.path}` : `${f.path} was deleted: show the changes`}
-                      className={cn("min-w-0 flex-1 truncate text-left underline-offset-2 hover:text-s-ink hover:underline", f.change === "deleted" ? "text-s-ink-3 line-through" : "text-s-ink-2")}
+                      className={cn(
+                        "min-h-6 min-w-0 flex-1 truncate text-left underline-offset-2 hover:text-s-ink hover:underline",
+                        f.change === "deleted" ? "text-s-ink-3 line-through" : "text-s-ink-2",
+                      )}
                     >
                       {f.path}
                     </button>
                     <span className="shrink-0 text-[11.5px] text-s-ink-3">{f.change === "created" ? "new" : f.change === "deleted" ? "deleted" : "edited"}</span>
-                    <span className="shrink-0 text-emerald-600 dark:text-emerald-400" aria-label={`${f.added} lines added`}>
+                    {/* aria-label isn't read on a plain span, so the counts carry hidden words instead. */}
+                    <span className="shrink-0 text-emerald-600 dark:text-emerald-400">
                       +{f.added}
+                      <span className="sr-only"> lines added</span>
                     </span>
-                    <span className="shrink-0 text-s-danger" aria-label={`${f.removed} lines removed`}>
+                    <span className="shrink-0 text-s-danger">
                       −{f.removed}
+                      <span className="sr-only"> lines removed</span>
                     </span>
                   </li>
                 );

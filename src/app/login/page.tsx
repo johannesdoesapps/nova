@@ -35,7 +35,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
 
   return (
     <div className={`orbis-glow grid min-h-dvh grid-cols-[minmax(0,1fr)] place-items-center px-4 py-10 ${serif.variable}`}>
-      <div className="w-full max-w-sm">
+      <main className="w-full max-w-sm">
         <Link href="/" className="mb-8 flex justify-center"><Logo /></Link>
         <div className="lux-card rounded-[26px] p-7">
           {message && <Notice tone={message.tone} className="mb-4">{message.text}</Notice>}
@@ -48,7 +48,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
             </Notice>
           )}
         </div>
-      </div>
+      </main>
     </div>
   );
 }

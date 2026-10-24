@@ -70,11 +70,14 @@ export function estimateRequestUsd(models: ModelInfo[], inputTokens: number, max
   return models.reduce((sum, m) => sum + (estimateCost(m, usage) ?? estimateCost({ inputPrice: fb.input, outputPrice: fb.output }, usage) ?? 0), 0);
 }
 
-/** "economy" once the premium-model budget is used (only standard models remain), "exhausted" once the whole budget is. */
+/**
+ * "economy" once the premium-model budget is used (only standard models remain), "exhausted" once the whole
+ * budget is. A plan with no advanced-model share (Free) is never "economy": there was nothing to use up.
+ */
 export function budgetState(spentUsd: number, limitUsd: number | null, premiumSpentUsd = 0, premiumLimitUsd: number | null = null): "ok" | "economy" | "exhausted" {
   if (limitUsd === null) return "ok";
   if (spentUsd >= limitUsd) return "exhausted";
-  if (premiumLimitUsd !== null && premiumSpentUsd >= premiumLimitUsd) return "economy";
+  if (premiumLimitUsd !== null && premiumLimitUsd > 0 && premiumSpentUsd >= premiumLimitUsd) return "economy";
   return "ok";
 }
 

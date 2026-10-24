@@ -308,7 +308,7 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
           ) : (
             groups.map((g) => (
               <section key={g.label} className="mt-3 first:mt-1">
-                <h3 className="px-3 pb-1 text-[11.5px] font-medium text-s-ink-3">{g.label}</h3>
+                <h2 className="px-3 pb-1 text-[11.5px] font-medium text-s-ink-3">{g.label}</h2>
                 <ul className="flex flex-col gap-px">
                   {g.items.map((c) => (
                     <HistoryItem
@@ -416,7 +416,7 @@ function RecentProjects({ signedIn, onNavigate }: { signedIn: boolean; onNavigat
   if (!projects.length) return <p className="px-3 py-3 text-[13px] leading-relaxed text-s-ink-3">No projects yet.</p>;
   return (
     <section className="mt-1">
-      <h3 className="px-3 pb-1 text-[11.5px] font-medium text-s-ink-3">Projects</h3>
+      <h2 className="px-3 pb-1 text-[11.5px] font-medium text-s-ink-3">Projects</h2>
       <ul className="flex flex-col gap-px">
         {projects.slice(0, 30).map((pr) => {
           const active = pathname === `/code/${pr.id}`;

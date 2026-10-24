@@ -45,7 +45,7 @@ export function CopyButton({ text, className }: { text: string; className?: stri
 
 export function Dots() {
   return (
-    <span className="inline-flex items-center gap-1" aria-label="Writing">
+    <span className="inline-flex items-center gap-1" role="status" aria-label="Writing">
       <span className="s-dot h-1.5 w-1.5 rounded-full bg-s-ink-2" />
       <span className="s-dot h-1.5 w-1.5 rounded-full bg-s-ink-2 [animation-delay:160ms]" />
       <span className="s-dot h-1.5 w-1.5 rounded-full bg-s-ink-2 [animation-delay:320ms]" />

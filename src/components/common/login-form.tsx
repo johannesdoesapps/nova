@@ -275,7 +275,7 @@ export function LoginForm({
               type="button"
               onClick={() => void forgotPassword()}
               disabled={resetBusy || busy}
-              className="rounded text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
+              className="inline-flex min-h-6 items-center rounded px-1 text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
             >
               {resetBusy ? "Sending link…" : "Forgot password?"}
             </button>
@@ -288,7 +288,7 @@ export function LoginForm({
           {mode === "signin" ? "Don’t have an account?" : "Already have an account?"}{" "}
           <button
             type="button"
-            className="rounded text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="inline-flex min-h-6 items-center rounded px-1 text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             onClick={() => {
               setMode(mode === "signin" ? "signup" : "signin");
               setError(null);

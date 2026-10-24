@@ -16,7 +16,7 @@ export const revalidate = 3600;
 export const metadata = pageMetadata({
   title: "Orbis — AI that builds, tests and shows its work",
   description:
-    "An AI coding agent that writes the code, runs it on its own computer, checks websites in a real browser and reports what it changed and what it couldn't verify. Claude and GPT models. Free to start.",
+    "An AI coding agent that writes code, runs it on its own computer, checks websites in a real browser and reports what it verified. Claude and GPT. Free to start.",
   path: "/",
   absoluteTitle: true,
 });

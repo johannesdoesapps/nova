@@ -1167,11 +1167,11 @@ export function CodeWorkspace({ id, pair = false }: { id: string; pair?: boolean
             )}
             {status}
             {running ? (
-              <Btn onClick={() => void sessionAction("stop")} title="Turn the project's computer off">
+              <Btn onClick={() => void sessionAction("stop")} title="Turn the project's computer off" className="max-sm:hidden">
                 <Power className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Stop</span>
               </Btn>
             ) : (
-              <Btn onClick={() => void sessionAction("start")} disabled={starting} title={`Turn on the project's private computer for ${block} minutes (to run code, tests and the preview)`}>
+              <Btn onClick={() => void sessionAction("start")} disabled={starting} title={`Turn on the project's private computer for ${block} minutes (to run code, tests and the preview)`} className="max-sm:hidden">
                 <Power className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{starting ? "Starting…" : "Start computer"}</span>
               </Btn>
             )}
@@ -1182,6 +1182,10 @@ export function CodeWorkspace({ id, pair = false }: { id: string; pair?: boolean
         }
         menu={
           <>
+            {/* Phones: the computer switch lives here, so the header has room for the project's name. */}
+            <MenuItem icon={<Power />} onClick={() => void sessionAction(running ? "stop" : "start")} disabled={starting} className="sm:hidden">
+              {running ? "Turn the computer off" : starting ? "Starting the computer…" : "Start computer"}
+            </MenuItem>
             {running && (
               <MenuItem icon={<Plus />} onClick={() => void sessionAction("extend")} disabled={starting}>
                 Keep the computer on {block} more min
@@ -1213,6 +1217,7 @@ export function CodeWorkspace({ id, pair = false }: { id: string; pair?: boolean
           onMemory={() => (wide ? setRight("memory") : setPane("memory"))}
         />
       </StudioHeader>
+      <h1 className="sr-only">{project ? `${project.name} — ${pair ? "Pair Coding" : "Code"}` : "Code project"}</h1>
 
       {error && (
         <div className="mx-3 mb-2 flex items-start gap-2 rounded-xl border border-s-line px-3 py-2 text-[13px] text-s-danger sm:mx-4" role="alert">
@@ -1413,7 +1418,7 @@ function TreeList(p: {
             >
               <FileIcon className="h-3.5 w-3.5 shrink-0 text-s-ink-3" />
               <span className="truncate">{n.name}</span>
-              {n.path in p.dirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-s-ink-3" aria-label="unsaved" />}
+              {n.path in p.dirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-s-ink-3" title="Unsaved changes"><span className="sr-only">(unsaved)</span></span>}
             </button>
             <span className="absolute right-1 top-1/2 hidden -translate-y-1/2 gap-0.5 group-focus-within:flex group-hover:flex">
               <button type="button" onClick={() => p.onRename(n.path)} aria-label={`Rename ${n.path}`} className="grid h-6 w-6 place-items-center rounded text-s-ink-3 hover:text-s-ink">

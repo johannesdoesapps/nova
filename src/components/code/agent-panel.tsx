@@ -14,8 +14,6 @@ import {
   History,
   ImageIcon,
   Lightbulb,
-  FlaskConical,
-  Globe,
   ListChecks,
   Loader2,
   MessageSquare,
@@ -37,7 +35,7 @@ import { Menu, MenuItem } from "@/components/studio/ui";
 import { isOlderView, TASK_STATE_INFO, taskState } from "@/lib/code/agent/verdict";
 import { VerificationPanel } from "./verification-panel";
 import type { ModelWithStatus } from "@/lib/ai/types";
-import { DEFAULT_STEP_LIMIT, ENDED_STATUSES, STEP_LIMIT_INCREMENT, WORKING_STATUSES, type AgentEvent, type Decision, type LimitReason, type RunOptions, type RunView } from "@/lib/code/agent/types";
+import { DEFAULT_STEP_LIMIT, ENDED_STATUSES, WORKING_STATUSES, type AgentEvent, type Decision, type LimitReason, type RunOptions, type RunView } from "@/lib/code/agent/types";
 import { formatBytes, type AttachmentMeta } from "@/lib/code/attachments";
 import { cn } from "@/lib/utils";
 import { useAttachments } from "./attachments";
@@ -686,7 +684,8 @@ export function AgentPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="s-scroll min-h-0 flex-1 overflow-y-auto" aria-live="polite">
+      {/* Not a live region: it gains every log line and test output. Screen readers hear the task's state below instead. */}
+      <div className="s-scroll min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex min-h-full w-full max-w-[780px] flex-col px-4 pb-6 pt-4 sm:px-6">
           {!loaded && <div className="s-skeleton h-24 w-full rounded-2xl" />}
 
@@ -707,6 +706,9 @@ export function AgentPanel({
                   >
                     {(busy || working) && !ended && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
                     {TASK_STATE_INFO[taskState(run)].label}
+                  </span>
+                  <span role="status" className="sr-only">
+                    Task: {TASK_STATE_INFO[taskState(run)].label}
                   </span>
                   {readOnly && (
                     <span
@@ -877,7 +879,7 @@ export function AgentPanel({
             sending={starting}
             disabled={!loaded}
             attachments={attachments}
-            placeholder={inProgress ? "Enter to queue a message for when the agent finishes" : run ? "Ask for a follow-up change — Enter to send" : "Enter to send, Shift+Enter for a new line"}
+            placeholder={inProgress ? "Queue a message for when it finishes" : run ? "Ask for a follow-up change" : "Describe what to build or fix"}
             onStop={working ? () => void stop() : undefined}
             working={busy || starting || working}
             footerLeft={
@@ -916,7 +918,7 @@ function IdeasMenu({ web, disabled, onPick }: { web?: boolean; disabled?: boolea
       disabled={disabled}
       buttonLabel="Example tasks"
       buttonTitle="Example tasks"
-      buttonClassName="grid h-8 w-8 place-items-center rounded-full text-s-ink-3 transition hover:bg-s-hover hover:text-s-ink disabled:opacity-50 [&_svg]:h-4 [&_svg]:w-4"
+      buttonClassName="grid h-8 w-8 shrink-0 place-items-center rounded-full text-s-ink-3 transition hover:bg-s-hover hover:text-s-ink disabled:opacity-50 [&_svg]:h-4 [&_svg]:w-4"
       button={<Lightbulb />}
     >
       {examples.map((e) => (
@@ -968,7 +970,7 @@ function FirstTip() {
       <span className="min-w-0 flex-1">
         Tip: press <span className="text-s-ink-2">+</span> to attach files or a screenshot of what you want. While the agent works you can keep typing — Enter queues your next message.
       </span>
-      <button type="button" onClick={dismiss} aria-label="Dismiss tip" className="shrink-0 hover:text-s-ink">
+      <button type="button" onClick={dismiss} aria-label="Dismiss tip" className="-my-1 grid h-6 w-6 shrink-0 place-items-center rounded-md hover:bg-s-hover hover:text-s-ink">
         <X className="h-3.5 w-3.5" />
       </button>
     </p>
@@ -986,7 +988,7 @@ function ModeMenu({ mode, onChange, disabled }: { mode: ModeId; onChange: (m: Mo
       disabled={disabled}
       buttonLabel={`What the agent may do: ${current.label}`}
       buttonTitle="What the agent may do"
-      buttonClassName="inline-flex h-8 max-w-full items-center gap-1 rounded-full px-2 text-[12.5px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink disabled:opacity-50"
+      buttonClassName="inline-flex h-8 min-w-0 max-w-full shrink items-center gap-1 rounded-full px-2 text-[12.5px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink disabled:opacity-50"
       button={
         <>
           <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -1406,9 +1408,9 @@ export function SessionsList({ projectId, activeId, version, onOpen, onNew }: { 
 }
 
 /**
- * Before a task: what it can use. Each step is one model call, charged like a
- * message to that model; the agent stops to ask after DEFAULT_STEP_LIMIT
- * steps. An upper bound, not a prediction: most tasks take fewer steps.
+ * Before a task: what it costs. Each step is one model call, charged like a message of its size to that
+ * model (steps carry project files, so usually more than a typical message); the agent pauses to ask
+ * after DEFAULT_STEP_LIMIT steps. No fixed total: it depends on the project and the task.
  */
 function StepEstimate({ models, modelId, readOnly }: { models: ModelWithStatus[] | null; modelId: string; readOnly: boolean }) {
   if (!models) return null;
@@ -1420,11 +1422,11 @@ function StepEstimate({ models, modelId, readOnly }: { models: ModelWithStatus[]
   const hi = Math.max(...usable.map((m) => m.units!));
   const per = auto ? (lo === hi ? `${lo}` : `${lo}–${hi}`) : chosen ? `${chosen.units}` : null;
   if (per === null) return null;
-  const max = auto ? hi * DEFAULT_STEP_LIMIT : chosen!.units! * DEFAULT_STEP_LIMIT;
   return (
     <p className="mt-1 px-2 text-[11.5px] leading-snug text-s-ink-3">
-      Each step uses {per} unit{per === "1" ? "" : "s"} ({auto ? "Auto picks the model per step" : chosen!.displayName}). It stops to ask after {DEFAULT_STEP_LIMIT} steps, so a task uses at most{" "}
-      {max} units before you decide to give it {STEP_LIMIT_INCREMENT} more{readOnly ? "" : "; computer time for running code is counted separately"}. Most tasks use fewer.
+      Each step is charged like a message of its size ({auto ? "Auto picks the model; " : `${chosen!.displayName}: `}
+      {per} unit{per === "1" ? "" : "s"} for a typical message; steps that read more files use more). It pauses to ask after {DEFAULT_STEP_LIMIT} steps
+      {readOnly ? "" : "; computer time is counted separately"}.
     </p>
   );
 }

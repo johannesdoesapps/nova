@@ -36,7 +36,7 @@ export function AgentWorkspace({ id }: { id: string }) {
         <StudioHeader>
           <BackLink />
         </StudioHeader>
-        <div className="mx-auto flex w-full max-w-[728px] flex-col items-center px-4 pt-[14vh]" aria-label="Loading agent">
+        <div className="mx-auto flex w-full max-w-[728px] flex-col items-center px-4 pt-[14vh]" role="status" aria-label="Loading agent">
           <div className="s-skeleton h-16 w-16 rounded-[20px]" />
           <div className="s-skeleton mt-6 h-8 w-64" />
           <div className="s-skeleton mt-3 h-4 w-80 max-w-full" />

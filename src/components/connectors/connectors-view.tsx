@@ -182,7 +182,7 @@ export function ConnectorsView() {
 
           {tab === "discover" ? (
             <>
-              <div className="mt-4 flex flex-wrap gap-1.5" aria-label="Categories">
+              <div className="mt-4 flex flex-wrap gap-1.5" role="group" aria-label="Categories">
                 <button type="button" onClick={() => setCategory(null)} aria-pressed={!category} className={cn("rounded-full border px-3 py-1 text-[12.5px]", !category ? "border-s-line-strong bg-s-hover text-s-ink" : "border-s-line text-s-ink-3 hover:text-s-ink")}>
                   All
                 </button>

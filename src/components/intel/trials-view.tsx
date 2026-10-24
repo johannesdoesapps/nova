@@ -159,7 +159,7 @@ export function TrialsView() {
 
 function RatingStars({ value, onChange }: { value?: number; onChange: (v: number) => void }) {
   return (
-    <div className="flex items-center gap-0.5" aria-label="Quality rating (optional)">
+    <div className="flex items-center gap-0.5" role="group" aria-label="Quality rating (optional)">
       {[1, 2, 3, 4, 5].map((n) => (
         <button key={n} type="button" onClick={() => onChange(n)} aria-label={`${n} star${n > 1 ? "s" : ""}`}>
           <Star className={cn("h-4 w-4", value && n <= value ? "fill-warning text-warning" : "text-faint")} />

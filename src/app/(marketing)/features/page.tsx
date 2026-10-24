@@ -6,7 +6,7 @@ import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
   title: "Features",
-  description: "Everything Orbis can do — AI chat, model comparison, a code workspace with a coding agent, custom agents, Mission Control, Connectors and security agents — with each feature's status.",
+  description: "Everything Orbis can do: AI chat, model comparison, a coding agent, custom agents, Mission Control, Connectors and security agents, with each feature's status.",
   path: "/features",
 });
 

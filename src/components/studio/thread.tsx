@@ -176,7 +176,7 @@ export function ConversationPane({
 
 function ThreadSkeleton() {
   return (
-    <div className="flex flex-col gap-10 pt-2" aria-label="Loading conversation">
+    <div className="flex flex-col gap-10 pt-2" role="status" aria-label="Loading conversation">
       <div className="ml-auto h-11 w-2/5 rounded-[22px] bg-s-user" />
       <div className="space-y-3">
         <div className="s-skeleton h-4 w-24" />
