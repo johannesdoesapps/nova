@@ -13,9 +13,20 @@ import { MODES, modeFor } from "./nav";
 const KEY = { chat: "orbis:last-chat", code: "orbis:last-code" } as const;
 const listeners = new Set<() => void>();
 
+/**
+ * Code's places to return to: its start page and an open project. The website builder (/code/website) is a
+ * side trip, not where Code lives, so the Code button never reopens it.
+ */
+function codePlace(pathname: string): string | null {
+  return pathname === "/code/website" || pathname.startsWith("/code/website/") ? null : pathname;
+}
+
 function read(mode: "chat" | "code"): string | null {
   try {
-    return sessionStorage.getItem(KEY[mode]);
+    const href = sessionStorage.getItem(KEY[mode]);
+    // Ignore a website-builder page remembered before codePlace existed.
+    if (mode === "code" && href && !codePlace(href.split("?")[0]!)) return null;
+    return href;
   } catch {
     return null;
   }
@@ -25,7 +36,7 @@ function read(mode: "chat" | "code"): string | null {
 export function rememberPlace(pathname: string, search: URLSearchParams) {
   const mode = modeFor(pathname);
   let href: string | null = null;
-  if (mode === "code") href = pathname;
+  if (mode === "code") href = codePlace(pathname);
   else if (pathname === "/chat" || pathname === "/home") {
     // A conversation (started on the home or in Chat) reopens in Chat; a fresh one is just Chat.
     const c = search.get("c");

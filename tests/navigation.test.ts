@@ -208,6 +208,11 @@ describe("the Chat / Code switch", () => {
     expect(store.get("orbis:last-chat")).toBe("/chat?c=xyz");
     rememberPlace("/missions", new URLSearchParams());
     expect(store.get("orbis:last-code")).toBe("/code/p1");
+    // The website builder isn't where Code lives: the Code button goes back to the project, not the templates.
+    rememberPlace("/code/website", new URLSearchParams("template=launchpad&step=describe"));
+    expect(store.get("orbis:last-code")).toBe("/code/p1");
+    rememberPlace("/code", new URLSearchParams());
+    expect(store.get("orbis:last-code")).toBe("/code");
     vi.unstubAllGlobals();
   });
 });
