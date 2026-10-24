@@ -344,7 +344,11 @@ export function ResearchDetail({ id }: { id: string }) {
           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-s-ink-3">
             <StatusPill status={run.status} />
             <span>{DEPTHS[run.depth].label}</span>
-            {run.usage.modelName && <span>{run.usage.modelName}</span>}
+            {run.usage.modelName && (
+              <span>
+                {run.usage.searchModelName && run.usage.searchModelName !== run.usage.modelName ? `${run.usage.searchModelName} searched · ${run.usage.modelName} wrote` : run.usage.modelName}
+              </span>
+            )}
             {!!run.usage.searches && <span>{run.usage.searches} web searches</span>}
             {run.hasContext && <span>with your document</span>}
           </p>

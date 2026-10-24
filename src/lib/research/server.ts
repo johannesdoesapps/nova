@@ -37,7 +37,7 @@ export interface ResearchRow {
   report_check: Omit<ReportCheck, "report"> | null;
   log: { at: string; kind: "info" | "step" | "warning" | "error"; text: string }[];
   model_id: string | null;
-  usage: { modelCalls?: number; inputTokens?: number; outputTokens?: number; searches?: number; failures?: number; modelName?: string };
+  usage: { modelCalls?: number; inputTokens?: number; outputTokens?: number; searches?: number; failures?: number; modelName?: string; searchModelName?: string };
   error: string | null;
   locked_until: string | null;
   created_at: string;
@@ -54,14 +54,21 @@ export function toView(r: ResearchRow): ResearchView {
 const now = () => new Date().toISOString();
 const entry = (kind: ResearchRow["log"][number]["kind"], text: string) => ({ at: now(), kind, text: text.slice(0, 600) });
 
-/** A Claude model the plan allows (web search with citations is Claude's for now): the strongest allowed, unless one is asked for. */
-export async function researchModel(auth: Authed, preferred: string | null): Promise<ModelWithStatus> {
+/**
+ * The Claude models for a run (web search with citations is Claude's for now), within the plan:
+ * - "search" — the research questions — uses the fastest, lowest-cost one: those steps read tens of
+ *   thousands of tokens of search results, and on Sonnet one question used more than Pro's 5-hour allowance
+ *   (measured 24 Oct 2026: 68k input tokens, 264 units);
+ * - "write" — the plan and the report, which need judgement and read only the notes — uses the strongest.
+ */
+export async function researchModel(auth: Authed, role: "search" | "write"): Promise<ModelWithStatus> {
   const tiers = (await planLimits(auth)).tiers;
   const models = (await getModels(await getPlatformSettings())).filter(
     (m) => m.provider === "anthropic" && m.available && !m.locked && tiers.includes(modelTier(m)) && !!getProvider("anthropic").webResearch,
   );
-  const rank = (m: ModelWithStatus) => (/sonnet/.test(m.id) ? 0 : /opus/.test(m.id) ? 1 : /haiku/.test(m.id) ? 2 : 3);
-  const pick = (preferred && models.find((m) => m.id === preferred)) || models.sort((a, b) => rank(a) - rank(b))[0];
+  const strength = (m: ModelWithStatus) => (/opus/.test(m.id) ? 3 : /sonnet/.test(m.id) ? 2 : /haiku/.test(m.id) ? 1 : 0);
+  // The writer is Sonnet when the plan has it (Opus costs far more for little gain on a report); the searcher the cheapest.
+  const pick = role === "search" ? [...models].sort((a, b) => strength(a) - strength(b))[0] : (models.find((m) => /sonnet/.test(m.id)) ?? [...models].sort((a, b) => strength(b) - strength(a))[0]);
   if (!pick) throw new ApiError("not_configured", "Deep Research uses Claude's web search, and no Claude model your plan includes is available on this site.");
   return pick;
 }
@@ -72,7 +79,7 @@ export async function createResearch(auth: Authed, input: { question: string; de
     throw new ApiError("quota_exceeded", "Deep Research searches the web, and your plan has no web searches left this month (Free doesn't include web search). Upgrade or wait until it renews.", {
       scope: "web_search",
     });
-  const model = await researchModel(auth, null);
+  const [writer, searcher] = await Promise.all([researchModel(auth, "write"), researchModel(auth, "search")]);
   const { data, error } = await auth.supabase
     .from("research_runs")
     .insert({
@@ -81,9 +88,9 @@ export async function createResearch(auth: Authed, input: { question: string; de
       status: "running",
       phase: "planning",
       context: input.context,
-      model_id: model.id,
-      log: [entry("info", `Started: ${DEPTHS[input.depth].label} research with ${model.displayName}.`)],
-      usage: { modelName: model.displayName },
+      model_id: writer.id,
+      log: [entry("info", `Started: ${DEPTHS[input.depth].label} research. ${searcher.displayName} searches; ${writer.displayName} plans and writes the report.`)],
+      usage: { modelName: writer.displayName, searchModelName: searcher.displayName },
     })
     .select("*")
     .single();
@@ -143,7 +150,7 @@ export async function stepResearch(req: Request, auth: Authed, id: string): Prom
   const row = locked as ResearchRow;
   try {
     try {
-      const model = await researchModel(auth, row.model_id);
+      const model = await researchModel(auth, row.phase === "researching" ? "search" : "write");
       const provider = getProvider(model.provider);
       const maxOut = (await planLimits(auth)).maxOutputTokens;
       if (row.phase === "planning") {
@@ -185,14 +192,14 @@ export async function stepResearch(req: Request, auth: Authed, id: string): Prom
           });
         }
         const prompt = `Research question ${i + 1} of ${row.plan.questions.length}: ${question}`;
-        await enforceLimits(req, auth, 1, [model], { purpose: "deep_research", inputTokens: 12_000, maxOutputTokens: 2000 });
+        await enforceLimits(req, auth, 1, [model], { purpose: "deep_research", inputTokens: 40_000, maxOutputTokens: 3000 });
         const t = performance.now();
         const r = await provider.webResearch!({
           model,
           system: researchSystem(row.question),
           prompt,
           maxSearches: DEPTHS[row.depth].searches,
-          maxOutputTokens: Math.min(2000, maxOut),
+          maxOutputTokens: Math.min(3000, maxOut),
           signal: withTimeout(SEARCH_TIMEOUT_MS, req.signal),
         });
         await recordRun(auth, {

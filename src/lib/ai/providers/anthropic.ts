@@ -180,7 +180,15 @@ export async function anthropicWebResearch(client: Anthropic, params: WebResearc
   let stop: WebResearchResult["stop"] = "other";
   for (let turn = 0; turn <= MAX_CONTINUATIONS; turn++) {
     const msg = await client.beta.messages.create(
-      { model: params.model.providerModelId, max_tokens: params.maxOutputTokens, system: params.system, messages, tools: [tool] } as Anthropic.Beta.Messages.MessageCreateParamsNonStreaming,
+      {
+        model: params.model.providerModelId,
+        max_tokens: params.maxOutputTokens,
+        system: params.system,
+        messages,
+        tools: [tool],
+        // The same effort as chat for this model (thinking tokens count against max_tokens).
+        ...(MODEL_OPTIONS[params.model.providerModelId]?.effort ? { output_config: { effort: MODEL_OPTIONS[params.model.providerModelId]!.effort } } : {}),
+      } as Anthropic.Beta.Messages.MessageCreateParamsNonStreaming,
       { signal: params.signal },
     );
     served = msg.model;
