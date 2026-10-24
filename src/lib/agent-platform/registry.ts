@@ -270,7 +270,7 @@ export const AGENTS: AgentDef[] = [
     limitations: ["Up to 20,000 rows and 50 columns per file", "No charts or database connections"],
     permissions: ["data_analysis"],
     approvals: ["Nothing: it can't take actions"],
-    requires: ["ai"],
+    requires: ["ai", "accounts"],
     plans: ["free", "pro", "max"],
     charging: "Charged like a chat message of its size.",
     historyHref: "/agents/data",
