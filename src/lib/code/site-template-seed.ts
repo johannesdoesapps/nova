@@ -6,19 +6,22 @@ import { SITE_TEMPLATE_SOURCES } from "./site-template-sources";
  * connected to an email service, submitting says so instead of pretending
  * the address was saved.
  */
-export const SIGNUP_SCRIPT = `// The sign-up form isn't connected to an email service yet. Until it is,
-// say so on submit instead of pretending the address was saved.
-document.querySelectorAll("form.signup").forEach((form) => {
+export const SIGNUP_SCRIPT = `// The forms aren't connected to an email service yet. Until they are,
+// say so on submit instead of pretending anything was saved or sent.
+document.querySelectorAll("form.signup, form.contact-form").forEach((form) => {
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    let note = form.parentElement.querySelector(".signup-note");
+    let note = form.querySelector(".form-note") || form.parentElement.querySelector(".signup-note");
     if (!note) {
       note = document.createElement("p");
-      note.className = "signup-note";
+      note.className = form.classList.contains("signup") ? "signup-note" : "form-note";
       note.setAttribute("role", "status");
-      form.after(note);
+      if (form.classList.contains("signup")) form.after(note);
+      else form.append(note);
     }
-    note.textContent = "Sign-ups aren't connected to an email service yet, so this address wasn't saved.";
+    note.textContent = form.classList.contains("signup")
+      ? "Sign-ups aren't connected to an email service yet, so this address wasn't saved."
+      : "This form isn't connected to an email service yet, so your message wasn't sent.";
   });
 });
 `;
@@ -28,7 +31,8 @@ document.querySelectorAll("form.signup").forEach((form) => {
  * bundled fonts are replaced by the same families from Google Fonts and the
  * photos point at Orbis's copies (by full address, since project files are
  * text), so the page looks the same in the project's preview and anywhere
- * it's published. Forms get the honest sign-up script.
+ * it's published. A template's own script.js comes along (the gallery's
+ * preview never runs it), and forms get the honest form script.
  */
 export function siteTemplateFiles(id: SiteTemplateId, origin: string): Record<string, string> {
   const src = SITE_TEMPLATE_SOURCES[id];
@@ -39,7 +43,8 @@ export function siteTemplateFiles(id: SiteTemplateId, origin: string): Record<st
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="${t.defaultTypography.googleFonts.replace(/&/g, "&amp;")}" />`;
   const hasForm = /<form\b/.test(src.html);
+  const script = [src.js, hasForm ? SIGNUP_SCRIPT : ""].filter(Boolean).join("\n");
   let html = src.html.replace(/<link rel="stylesheet" href="\.\.\/fonts\/[\w-]+\.css" \/>/, fonts).replace(/src="img\//g, `src="${base}`);
-  if (hasForm) html = html.replace("  </body>", `    <script src="script.js" defer></script>\n  </body>`);
-  return { "index.html": html, "style.css": src.css, ...(hasForm && { "script.js": SIGNUP_SCRIPT }) };
+  if (script) html = html.replace("  </body>", `    <script src="script.js" defer></script>\n  </body>`);
+  return { "index.html": html, "style.css": src.css, ...(script && { "script.js": script }) };
 }

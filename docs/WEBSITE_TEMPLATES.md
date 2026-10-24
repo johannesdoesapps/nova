@@ -1,6 +1,6 @@
 # Website templates (Discover → Build a website)
 
-Discover's "Build a website from a prompt" opens `/code/website`: four website templates, a preview of each, then a describe step that starts the coding agent on a new project built from the chosen template.
+Discover's "Build a website from a prompt" opens `/code/website`: five website templates (Launchpad, Atelier, Form & Found, Journal and NOVA), a preview of each, then a describe step that starts the coding agent on a new project built from the chosen template.
 
 ## Flow
 
@@ -19,14 +19,25 @@ Discover's "Build a website from a prompt" opens `/code/website`: four website t
 
 | Path | What |
 | --- | --- |
-| `public/site-templates/<id>/index.html`, `style.css`, `img/` | The four pages and their photos (WebP). `CREDITS.md` lists the CC0 sources. |
+| `public/site-templates/<id>/index.html`, `style.css`, `img/` | The pages and their photos (WebP). `CREDITS.md` lists the CC0 sources. |
+| `public/site-templates/<id>/script.js` (optional) | Enhancements for the generated site only (NOVA: scroll reveals and count-up numbers that respect reduced motion). The gallery preview never runs scripts, so every page must work without it. |
 | `public/site-templates/<id>/preview.webp`, `thumb.webp` | Card screenshots (top of the page at 1280×1080). |
 | `public/site-templates/fonts/` | Latin subsets of the OFL fonts the pages use. |
 | `src/lib/code/site-templates.ts` | The configuration: id, name, category, description, images, tokens, typography, sections, instructions. |
-| `src/lib/code/site-template-sources.ts` | Generated copy of each page's HTML and CSS for the server. Run `npm run templates:sync` after editing a template; `tests/site-templates.test.ts` fails if it's out of date. |
+| `src/lib/code/site-template-sources.ts` | Generated copy of each page's HTML, CSS and script for the server. Run `npm run templates:sync` after editing a template; `tests/site-templates.test.ts` fails if it's out of date. |
 | `src/components/code/site-templates-view.tsx` | Gallery, preview dialog and describe step. |
 
 `/site-templates/*` is served with its own headers (`next.config.ts`): a CSP with `sandbox` and `default-src 'none'`, framing allowed only by Orbis, `noindex`, and `Access-Control-Allow-Origin: *` so fonts load inside the sandboxed (originless) frame.
+
+## NOVA (`nova-creative-agency`)
+
+A creator/UGC agency template: oversized condensed type (Archivo), off-white, black and electric lime, vertical creator frames, a results band, a creator-content gallery, numbered services, case studies, process, team, FAQ and a contact form.
+
+- Statistics, logos, case-study results and people are sample content, labelled on the page as illustrative; the agent is told never to present them as verified.
+- Case-study detail views open with in-page links (`#case-01`) and CSS `:target`, so they work in the script-free preview and in the generated site.
+- The FAQ uses `<details>`, so it works with keyboard and touch without a script.
+- No fake video controls: tiles are images; a play button appears only when a real video is added.
+- The contact form says on submit that it isn't connected yet, until the user connects a form service or booking link.
 
 ## Analytics
 

@@ -18,14 +18,15 @@ import { DISCOVER } from "@/lib/home";
 const root = process.cwd();
 const pub = (p: string) => join(root, "public", p.replace(/^\//, ""));
 
-describe("the four templates", () => {
-  it("are exactly Launchpad, Atelier, Form & Found and Journal, with the brief's copy", () => {
-    expect(SITE_TEMPLATE_IDS).toEqual(["launchpad-saas", "atelier-portfolio", "form-found-store", "journal-personal"]);
+describe("the templates", () => {
+  it("are Launchpad, Atelier, Form & Found, Journal and NOVA, with the briefs' copy", () => {
+    expect(SITE_TEMPLATE_IDS).toEqual(["launchpad-saas", "atelier-portfolio", "form-found-store", "journal-personal", "nova-creative-agency"]);
     expect(SITE_TEMPLATE_LIST.map((t) => [t.name, t.category, t.description])).toEqual([
       ["Launchpad", "SaaS / Technology", "A polished landing page built to turn visitors into customers."],
       ["Atelier", "Agency / Portfolio", "A bold, editorial portfolio designed to make your work stand out."],
       ["Form & Found", "E-commerce / Retail", "A refined storefront designed to showcase products and drive sales."],
       ["Journal", "Personal Brand / Blog", "A thoughtful digital home for your ideas, stories, and expertise."],
+      ["NOVA", "Creative Agency / UGC / Marketing", "An expressive, high-impact agency website with oversized typography, creator-led visuals, bold results, and editorial case studies."],
     ]);
   });
 
@@ -37,10 +38,12 @@ describe("the four templates", () => {
       previews.add(t.previewImage.src);
       const html = readFileSync(pub(t.page), "utf8");
       const h1 = html
-        .match(/<h1>([\s\S]*?)<\/h1>/)![1]!
+        .match(/<h1[^>]*>([\s\S]*?)<\/h1>/)![1]!
         .replace(/<[^>]+>/g, "")
         .replace(/&nbsp;/g, " ")
-        .replace(/&amp;/g, "&");
+        .replace(/&amp;/g, "&")
+        .replace(/\s+/g, " ")
+        .trim();
       expect(h1).toBe(t.headline);
       for (const [, src] of html.matchAll(/src="([^"]+)"/g)) expect(existsSync(join(pub(t.page), "..", src!)), `${t.id}: ${src}`).toBe(true);
       const fontCss = html.match(/href="\.\.\/fonts\/([\w-]+\.css)"/)![1]!;
@@ -52,14 +55,48 @@ describe("the four templates", () => {
       expect(t.sectionPresets.length).toBeGreaterThan(4);
       expect(t.generationInstructions.length).toBeGreaterThan(3);
     }
-    expect(previews.size).toBe(4);
+    expect(previews.size).toBe(SITE_TEMPLATE_IDS.length);
   });
 
   it("the server's copy of each template matches public/ (run `npm run templates:sync` after editing one)", () => {
     for (const id of SITE_TEMPLATE_IDS) {
       expect(SITE_TEMPLATE_SOURCES[id]?.html, id).toBe(readFileSync(pub(`site-templates/${id}/index.html`), "utf8"));
       expect(SITE_TEMPLATE_SOURCES[id]?.css, id).toBe(readFileSync(pub(`site-templates/${id}/style.css`), "utf8"));
+      const js = pub(`site-templates/${id}/script.js`);
+      expect(SITE_TEMPLATE_SOURCES[id]?.js, id).toBe(existsSync(js) ? readFileSync(js, "utf8") : undefined);
     }
+  });
+
+  it("NOVA: every section from the brief, labelled sample figures, working case-study links and no fake video controls", () => {
+    const html = SITE_TEMPLATE_SOURCES["nova-creative-agency"]!.html;
+    for (const id of ["work", "services", "results", "about", "faq", "cases", "contact"]) expect(html, id).toContain(`id="${id}"`);
+    for (const h of [
+      "Built for brands ready to break through.",
+      "Made to stop the scroll.",
+      "Everything behind the breakthrough.",
+      "Creative that delivers.",
+      "From idea to impact.",
+      "Your next breakthrough starts here.",
+    ])
+      expect(html, h).toContain(h);
+    expect(html).toMatch(/Illustrative figures for this template/);
+    // Every in-page link points at something that exists.
+    for (const [, target] of html.matchAll(/href="#([\w-]+)"/g)) expect(html, target).toMatch(new RegExp(`id="${target}"`));
+    expect(html.match(/<details/g)).toHaveLength(6); // phone menu + five questions
+    expect(html).not.toMatch(/<video|autoplay|play-button|aria-label="Play/i);
+    expect(html).not.toMatch(/nike|adidas|vo creations|vocreations/i);
+  });
+
+  it("NOVA's script respects reduced motion and the page works without it", () => {
+    const js = SITE_TEMPLATE_SOURCES["nova-creative-agency"]!.js!;
+    expect(js).toContain("prefers-reduced-motion: reduce");
+    const css = SITE_TEMPLATE_SOURCES["nova-creative-agency"]!.css;
+    // Content is only hidden for the reveal when the script has run (html.js) and motion is welcome.
+    expect(css).toMatch(/@media \(prefers-reduced-motion: no-preference\) \{\s*\.js \.reveal \{ opacity: 0/);
+    const files = siteTemplateFiles("nova-creative-agency", "https://tryorbis.app");
+    expect(files["script.js"]).toContain(js);
+    expect(files["script.js"]).toContain("your message wasn't sent");
+    expect(files["index.html"]).toContain("family=Archivo");
   });
 
   it("the store template shows prices but no checkout, cart or payment form", () => {

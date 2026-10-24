@@ -12,7 +12,7 @@
  * a database or email delivery.
  */
 
-export const SITE_TEMPLATE_IDS = ["launchpad-saas", "atelier-portfolio", "form-found-store", "journal-personal"] as const;
+export const SITE_TEMPLATE_IDS = ["launchpad-saas", "atelier-portfolio", "form-found-store", "journal-personal", "nova-creative-agency"] as const;
 export type SiteTemplateId = (typeof SITE_TEMPLATE_IDS)[number];
 
 export function isSiteTemplateId(v: unknown): v is SiteTemplateId {
@@ -286,6 +286,85 @@ export const SITE_TEMPLATES: Record<SiteTemplateId, SiteTemplate> = {
     sampleContent: ["Nora Ellison's name, portrait, bio and email", "Article titles, dates and excerpts", "Social links"],
     promptExample:
       "Create a personal website for me, a freelance UX researcher. Include a short intro with my photo, a list of my latest articles, an about section with my experience, and a newsletter sign-up. Warm, calm and easy to read.",
+  },
+  "nova-creative-agency": {
+    id: "nova-creative-agency",
+    name: "NOVA",
+    category: "Creative Agency / UGC / Marketing",
+    description: "An expressive, high-impact agency website with oversized typography, creator-led visuals, bold results, and editorial case studies.",
+    headline: "We make brands impossible to ignore.",
+    subheadline: "NOVA combines creator-led storytelling, bold creative strategy, and performance-driven content to help ambitious brands stand out, connect, and grow.",
+    visualDirection:
+      "A bold, typography-led creator and UGC agency site: off-white and black with an electric-lime accent, huge condensed uppercase headlines, vertical creator-video frames, oversized statistics and an asymmetric case-study grid.",
+    previewImage: img("nova-creative-agency", "preview"),
+    thumbnailImage: img("nova-creative-agency", "thumb"),
+    page: "/site-templates/nova-creative-agency/index.html",
+    designTokens: {
+      colors: { background: "#f3f2ec", surface: "#fbfbf8", ink: "#0b0b0a", muted: "#6f6d66", line: "#d9d7ce", accent: "#d4ff3a", dark: "#0b0b0a" },
+      radius: "14px on media, fully rounded buttons and labels; no rounded content cards",
+      shadow: "none: contrast, scale and photography carry the depth",
+      spacing: "120px+ between sections, 1360px content width, 12-column grid with asymmetric placements",
+    },
+    defaultColorPalette: [
+      { name: "Off-white", hex: "#f3f2ec" },
+      { name: "Electric lime", hex: "#d4ff3a" },
+      { name: "Black", hex: "#0b0b0a" },
+      { name: "Stone", hex: "#6f6d66" },
+      { name: "Paper", hex: "#fbfbf8" },
+    ],
+    defaultTypography: {
+      display: "Archivo 800–900 at 72–85% width (condensed), uppercase hero, tight line-height 0.86–0.92",
+      body: "Inter 400–600, 16–18px",
+      scale: "hero 172px, section titles 96–112px, statistics 120px, card titles 20–44px",
+      googleFonts: "https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Inter:wght@400;500;600&display=swap",
+    },
+    layoutPreset:
+      "Slim sticky navigation; an oversized uppercase hero with an inline image pill and three staggered vertical creator frames beside it; a black results band with four huge numbers and a logo strip; a two-column about section with a photo collage; a black creator-content gallery of 9:16 tiles; a numbered services list with a sticky image; an asymmetric case-study grid with detail views; a three-step process; editorial team profiles; an FAQ accordion; a black contact section with a form; a minimal footer.",
+    sectionPresets: [
+      { id: "nav", label: "Navigation", purpose: "Wordmark, Work, Services, Results, About, FAQ and a lime 'Let's Talk' button; a menu on phones." },
+      {
+        id: "hero",
+        label: "Oversized hero",
+        purpose: "A huge headline with deliberate line breaks, a supporting statement, 'Let's Talk' and 'Explore Our Work', and vertical creator frames that never cover the headline.",
+      },
+      { id: "results", label: "Results", purpose: "Four oversized statistics with short labels (sample values, labelled as such) and a strip of client logo placeholders." },
+      { id: "about", label: "About", purpose: "Heading, short approach paragraph, three principles and an image collage." },
+      { id: "showcase", label: "Creator content", purpose: "Six vertical content tiles with platform label, content type and title; tiles link to a case study only when one exists." },
+      { id: "services", label: "Services", purpose: "Four numbered services with one-line descriptions and a supporting image." },
+      { id: "cases", label: "Case studies", purpose: "Three projects with image, category, oversized result metric, description and a working 'View Case Study' detail view." },
+      { id: "process", label: "How it works", purpose: "Three large numbered steps." },
+      { id: "team", label: "Team", purpose: "Two or three people with large portraits, role and a short bio." },
+      { id: "faq", label: "FAQ", purpose: "About five questions in an accessible accordion." },
+      { id: "contact", label: "Final call to action", purpose: "A big closing headline, a lime 'Let's Build Something' button and a contact form." },
+      { id: "footer", label: "Footer", purpose: "Wordmark, statement, links, social handles, contact and copyright." },
+    ],
+    responsiveBehavior: [
+      "Navigation collapses into a menu below 1080px",
+      "Hero frames move below the headline on tablets and phones",
+      "Statistics go 4 → 2 columns",
+      "Content tiles go 4 → 3 → 2 columns",
+      "Case studies, team and process stack to one column on phones",
+    ],
+    generationInstructions: [
+      ...COMMON_INSTRUCTIONS,
+      "Keep NOVA's design language even when the brand, colours or content change: oversized condensed headlines, strong contrast, big numbers, vertical creator media and asymmetric layouts. Swap the lime for the user's brand colour if they give one.",
+      "Statistics, client logos, case-study results, team members and FAQ answers are sample content: replace them with the user's own, or keep them clearly labelled as illustrative. Never present them as verified results.",
+      "Content tiles show static images. Add a play button only when a real video file or embed is provided, never fake video controls, and never autoplay sound. Link a tile only to a case study or media that exists.",
+      "Case-study detail views open with in-page links (#case-01) and need no script; keep every 'View Case Study' pointing at a detail view that exists, or remove the link.",
+      "script.js adds scroll reveals and count-up numbers that respect reduced motion, and says plainly that the contact form isn't connected yet. Keep that honesty unless the user connects a real form service or booking link; then point 'Let's Talk' at it.",
+      "Social profiles appear as plain text; make them links only when the user gives real profile addresses.",
+    ],
+    adaptation:
+      "If the request isn't an agency (for example a creator's personal brand, a product launch or an event), keep NOVA's bold type, contrast and media-led layout but rename and reorder the sections to fit: the content gallery can become a product or speaker gallery, and the case studies can become highlights or testimonials clearly labelled as samples.",
+    sampleContent: [
+      "The NOVA name, slogan and contact details",
+      "The four statistics and the client logo names",
+      "The six content tiles and three case studies with their results",
+      "Maya Ortiz and Theo Brandt",
+      "FAQ answers",
+    ],
+    promptExample:
+      "Build a website for my UGC agency, Northstar. We help beauty and wellness brands grow with creator-led TikTok and Reels content. Show our creators' work, three case studies, our services, the team and a contact form. Bold and energetic, black and white with a coral accent.",
   },
 };
 

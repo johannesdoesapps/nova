@@ -44,6 +44,7 @@ const HOSTS: Record<SiteTemplateId, string> = {
   "atelier-portfolio": "ateliernord.studio",
   "form-found-store": "formandfound.shop",
   "journal-personal": "noraellison.com",
+  "nova-creative-agency": "nova.agency",
 };
 
 interface Draft {
@@ -240,7 +241,7 @@ function Gallery({
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
           <h1 className="font-serif text-[clamp(30px,4.6vw,46px)] leading-[1.06] tracking-[-0.01em]">Choose your starting point</h1>
-          <span className="rounded-full border border-s-line px-2.5 py-0.5 text-[12px] text-s-ink-2">4 curated templates</span>
+          <span className="rounded-full border border-s-line px-2.5 py-0.5 text-[12px] text-s-ink-2">{SITE_TEMPLATE_LIST.length} curated templates</span>
         </div>
         <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-s-ink-2">Choose a starting point, describe your idea, and let AI bring your website to life.</p>
       </header>
@@ -252,9 +253,10 @@ function Gallery({
       )}
 
       <div className="@container mt-8">
-        <ul className="grid grid-cols-1 gap-6 @[520px]:grid-cols-2 @[1080px]:grid-cols-4" aria-label="Website templates">
+        {/* Rows of three (two, one on narrow screens), the last row centred. */}
+        <ul className="flex flex-wrap justify-center gap-6" aria-label="Website templates">
           {SITE_TEMPLATE_LIST.map((t, i) => (
-            <li key={t.id}>
+            <li key={t.id} className="w-full @[520px]:w-[calc(50%-12px)] @[900px]:w-[calc((100%-48px)/3)]">
               <TemplateCard template={t} selected={selected === t.id} eager={i < 2} onSelect={onSelect} onUse={onUse} onPreview={onPreview} />
             </li>
           ))}
@@ -344,7 +346,7 @@ const TemplateCard = memo(function TemplateCard({
       <div className="relative overflow-hidden rounded-[14px] border border-black/[0.06] bg-white">
         <BrowserBar host={HOSTS[t.id]} />
         <button type="button" onClick={() => onSelect(t.id)} aria-pressed={selected} aria-label={`Select ${t.name}`} className="block w-full overflow-hidden focus-visible:outline-none">
-          <Shot template={t} eager={eager} sizes="(min-width: 1400px) 300px, (min-width: 700px) 45vw, 92vw" className="transition-transform duration-200 motion-safe:group-hover:scale-[1.015]" />
+          <Shot template={t} eager={eager} sizes="(min-width: 1400px) 420px, (min-width: 700px) 45vw, 92vw" className="transition-transform duration-200 motion-safe:group-hover:scale-[1.015]" />
         </button>
         {selected && (
           <span className="pointer-events-none absolute right-2.5 top-9 inline-flex items-center gap-1 rounded-full bg-s-ink px-2.5 py-1 text-[11.5px] font-medium text-s-bg shadow">
