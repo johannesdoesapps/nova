@@ -1,1 +1,4 @@
-{ "updated": "2026-10-24", "suites": { "routing": { "score": 1, "total": 30 }, "security": { "score": 1, "total": 27 }, "recovery": { "score": 1, "total": 20 } } }
+{
+  "updated": "2026-10-24",
+  "suites": { "routing": { "score": 1, "total": 33 }, "security": { "score": 1, "total": 27 }, "recovery": { "score": 1, "total": 20 }, "natural": { "score": 1, "total": 21 } }
+}

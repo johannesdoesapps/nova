@@ -2,29 +2,32 @@
 
 Agents are specialized assistants. Each one has its own instructions, tools, model preference and conversation history. They sit next to the general chat in the studio and use the same sidebar, design and streaming pipeline.
 
-| Route | What it shows |
-| --- | --- |
-| `/agents` | Browse, search, filter, create, edit, duplicate and delete agents |
+| Route          | What it shows                                                      |
+| -------------- | ------------------------------------------------------------------ |
+| `/agents`      | Browse, search, filter, create, edit, duplicate and delete agents  |
 | `/agents/[id]` | Chat with one agent; `?c=<conversation>` opens a past conversation |
 
 ## Built-in agents
 
 Built-ins are defined in code (`src/lib/agents/builtins.ts`). Each has its own instructions, temperature, tools and starter prompts:
 
-| Agent | Tools | Temperature | Behaviour |
-| --- | --- | --- | --- |
-| Research Agent | web search, file analysis | 0.3 | Cites sources as [n], separates facts from interpretation, lists open questions |
-| Coding Agent | file analysis | 0.2 | Root cause first; code in fenced blocks; never claims to have run code |
-| Writing Agent | file analysis | 0.7 | Keeps the author's voice; finished text first, then the changes |
-| Data Analyst | file analysis, data analysis | 0.2 | Treats server-computed statistics as exact; states caveats |
-| Creative Agent | none | 0.9 | Several distinct directions before refining one |
-| General Assistant | web search, file analysis | 0.5 | Direct answer first; options and next steps |
+| Agent             | Tools                        | Temperature | Behaviour                                                                       |
+| ----------------- | ---------------------------- | ----------- | ------------------------------------------------------------------------------- |
+| Research Agent    | web search, file analysis    | 0.3         | Cites sources as [n], separates facts from interpretation, lists open questions |
+| Coding Agent      | file analysis                | 0.2         | Root cause first; code in fenced blocks; never claims to have run code          |
+| Writing Agent     | file analysis                | 0.7         | Keeps the author's voice; finished text first, then the changes                 |
+| Data Analyst      | file analysis, data analysis | 0.2         | Treats server-computed statistics as exact; states caveats                      |
+| Creative Agent    | none                         | 0.9         | Several distinct directions before refining one                                 |
+| General Assistant | web search, file analysis    | 0.5         | Direct answer first; options and next steps                                     |
+
+The Writing Agent has a **Natural writing** capability: a style (six, including matching a writing sample), a rewrite intensity (light edit, balanced rewrite, full rewrite), and a writing check that compares the rewrite with the original. See AGENT_PLATFORM.md §16.
 
 Built-ins can't be edited or deleted. "Duplicate" or "Customize a copy" creates an editable custom agent.
 
 ## Custom agents
 
 Every agent has these fields:
+
 - id and name
 - description
 - instructions (20–8,000 characters)
@@ -36,17 +39,18 @@ Every agent has these fields:
 
 The fields are validated by one Zod schema (`src/lib/agents/schema.ts`). The browser (for inline errors) and the API use the same schema.
 
-| Who | Where agents are stored |
-| --- | --- |
-| Signed in | Supabase table `agents`, with row-level security so only the owner can read or change them (`supabase/migrations/20261019000000_agents.sql`) |
+| Who                           | Where agents are stored                                                                                                                       |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Signed in                     | Supabase table `agents`, with row-level security so only the owner can read or change them (`supabase/migrations/20261019000000_agents.sql`)  |
 | Guest, no accounts configured | This browser's `localStorage`, like guest chat history. The agent's settings are sent with each chat request, because the server has no copy. |
-| Guest, accounts configured | Must sign in. The chat API returns 401. |
+| Guest, accounts configured    | Must sign in. The chat API returns 401.                                                                                                       |
 
 Deleting an agent deletes its conversations. In the database this is a foreign-key cascade.
 
 ## Conversations
 
 Agent conversations live in the existing `conversations` and `messages` tables:
+
 - `agent_id` links a conversation to a custom agent.
 - `builtin_agent` links it to a built-in agent.
 - A check constraint stops a conversation from belonging to two agents.
@@ -64,8 +68,8 @@ Every turn goes through `POST /api/agents/chat` and then `runAgentTurn` in `src/
 2. **Load its settings and the conversation history.** For guests, the history comes from the browser.
 3. **`authorizeTurn` checks permissions before anything runs.** Attachments need `file_analysis`; `useWeb` needs `web_search`. Otherwise the request fails with a 400 that says how to fix it.
 4. **Run only the tools that are authorized and configured:**
-   - *Web search:* up to 15 seconds; the sources are sent to the client and given to the model to cite.
-   - *Data analysis:* exact statistics computed for attached CSV/TSV files (`tools/csv-stats.ts`), capped at 20,000 rows and 50 columns.
+   - _Web search:_ up to 15 seconds; the sources are sent to the client and given to the model to cite.
+   - _Data analysis:_ exact statistics computed for attached CSV/TSV files (`tools/csv-stats.ts`), capped at 20,000 rows and 50 columns.
    - Each tool emits a `tool` event, which appears as an expandable row above the reply.
    - A tool failure becomes a notice. The turn continues.
 5. **Build the system prompt:**
@@ -82,11 +86,11 @@ Errors: anything that fails before streaming returns the usual JSON error. Anyth
 
 `capabilityStatus()` (`src/lib/agents/capabilities.ts`) reports what this deployment can actually do. The API refuses to save an agent with a capability that isn't available. In the editor, those capabilities are switched off and labelled "Requires setup".
 
-| Capability | Status |
-| --- | --- |
-| File analysis | Works. Text files are read as context. |
-| Data analysis | Works. Statistics are computed on the server. |
-| Web search | Works when `SEARCH_API_KEY` is set (Tavily or Brave). |
+| Capability     | Status                                                                        |
+| -------------- | ----------------------------------------------------------------------------- |
+| File analysis  | Works. Text files are read as context.                                        |
+| Data analysis  | Works. Statistics are computed on the server.                                 |
+| Web search     | Works when `SEARCH_API_KEY` is set (Tavily or Brave).                         |
 | Code execution | **Not implemented.** Needs a sandboxed runner; always shown as needing setup. |
 
 None of the current tools takes an action outside the conversation. A future tool that does, such as sending, posting or writing, should go through the AI Lab's approval-gated executor, which already requires the user to confirm the exact payload.

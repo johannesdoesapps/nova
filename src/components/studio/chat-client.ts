@@ -119,6 +119,8 @@ export interface AgentChatRequest {
   regenerate?: boolean;
   /** Guests only: a custom agent stored in this browser. */
   agent?: unknown;
+  /** The Writing Agent's Natural Writing settings, when its controls are on. */
+  natural?: import("@/lib/writing/natural").NaturalSettings;
 }
 
 /** One turn with an agent; the server runs it through the shared agent service. */

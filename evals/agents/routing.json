@@ -30,6 +30,9 @@
     { "message": "Buy the domain bakery.dev for me", "mode": "gap" },
     { "message": "Order some business cards for me", "mode": "gap" },
     { "message": "Send our customers the newsletter every Friday", "mode": "gap" },
-    { "message": "Provision a Kubernetes cluster on GCP", "mode": "gap" }
+    { "message": "Provision a Kubernetes cluster on GCP", "mode": "gap" },
+    { "message": "Make this paragraph sound more natural: Our platform leverages cutting-edge technology to deliver seamless solutions.", "mode": "direct" },
+    { "message": "Polish my README so it reads less robotic", "mode": "direct" },
+    { "message": "Rewrite my cover letter in my own voice", "mode": "direct" }
   ]
 }

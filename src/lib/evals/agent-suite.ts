@@ -1,3 +1,4 @@
+import naturalCases from "../../../evals/agents/natural.json";
 import recoveryCases from "../../../evals/agents/recovery.json";
 import routingCases from "../../../evals/agents/routing.json";
 import securityCases from "../../../evals/agents/security.json";
@@ -7,6 +8,7 @@ import { route, type AvailabilityMap } from "../agent-platform/routing";
 import { qaMayEdit } from "../code/agent/profiles";
 import { classifyCommand } from "../code/agent/policy";
 import { findSecrets } from "../secrets";
+import { checkRewrite, detectNaturalRequest } from "../writing/natural";
 
 /**
  * The agent evaluation suite: fixed, representative cases (evals/agents/*.json) for routing, security and
@@ -79,4 +81,23 @@ export function recoverySuite(): SuiteResult {
   ]);
 }
 
-export const runAgentSuites = (): SuiteResult[] => [routingSuite(), securitySuite(), recoverySuite()];
+/** Natural Writing: when it switches on (style, intensity, detector requests), and what the writing check catches. */
+export function naturalSuite(): SuiteResult {
+  const n = naturalCases;
+  return result("natural", [
+    ...n.detect.map((c: { message: string; on: boolean; style?: string; intensity?: string; evasion?: boolean }) => {
+      const d = detectNaturalRequest(c.message);
+      const ok = !!d === c.on && (!c.style || d?.style === c.style) && (!c.intensity || d?.intensity === c.intensity) && (c.evasion === undefined || d?.evasion === c.evasion);
+      return {
+        ok,
+        what: `"${c.message.slice(0, 60)}": expected ${c.on ? `on ${c.style ?? ""} ${c.intensity ?? ""}` : "off"}, got ${d ? `on ${d.style} ${d.intensity}${d.evasion ? " (detectors)" : ""}` : "off"}`,
+      };
+    }),
+    ...n.check.map((c) => {
+      const r = checkRewrite(c.original, c.rewrite, "balanced");
+      return { ok: r.passed === c.passed, what: `check "${c.rewrite.slice(0, 50)}": expected ${c.passed ? "pass" : "problems"}, got ${r.passed ? "pass" : r.issues.map((i) => i.message).join(" ")}` };
+    }),
+  ]);
+}
+
+export const runAgentSuites = (): SuiteResult[] => [routingSuite(), securitySuite(), recoverySuite(), naturalSuite()];

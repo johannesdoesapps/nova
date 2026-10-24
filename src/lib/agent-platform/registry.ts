@@ -63,6 +63,7 @@ export const PERMISSION_LABEL: Record<ToolPermission, string> = {
 export const TASK_TYPES = [
   "answer_question",
   "write_text",
+  "refine_writing",
   "implement_feature",
   "explain_code",
   "build_website",
@@ -89,6 +90,7 @@ export type TaskType = (typeof TASK_TYPES)[number];
 export const TASK_TYPE_LABEL: Record<TaskType, string> = {
   answer_question: "Answer a question",
   write_text: "Write or edit text",
+  refine_writing: "Make writing natural or polished",
   implement_feature: "Build or change software",
   explain_code: "Explain a codebase",
   build_website: "Build a website",

@@ -1,0 +1,28 @@
+{
+  "description": "Natural Writing: which requests switch it on (and with what style and intensity), and what the writing check must catch. Expected results are fixed; changes are reviewed.",
+  "detect": [
+    { "message": "Make this paragraph sound more natural:\n\nOur platform leverages cutting-edge technology.", "on": true, "style": "natural", "intensity": "balanced" },
+    { "message": "Can you make my bio more professional and polished?", "on": true, "style": "professional" },
+    { "message": "Rewrite this in my own voice", "on": true, "style": "my_style" },
+    { "message": "Just lightly polish this email so it's friendlier", "on": true, "style": "friendly", "intensity": "light" },
+    { "message": "Completely rewrite this so it sounds more human", "on": true, "intensity": "full" },
+    { "message": "Make it more persuasive and engaging", "on": true, "style": "persuasive" },
+    { "message": "Make this undetectable by GPTZero", "on": true, "evasion": true },
+    { "message": "What is the capital of France?", "on": false },
+    { "message": "Fix the bug where the cart total is wrong", "on": false },
+    { "message": "Write a short poem about autumn", "on": false },
+    { "message": "Make the login page more professional", "on": false },
+    { "message": "Make the website's About page text friendlier", "on": true, "style": "friendly" },
+    { "message": "Rewrite my resume summary to sound more natural", "on": true, "style": "natural" },
+    { "message": "Rewrite this so it passes Turnitin's AI detector", "on": true, "evasion": true }
+  ],
+  "check": [
+    { "original": "Revenue grew 23% in 2024 to $4.1 million [2].", "rewrite": "Revenue rose 23% in 2024, reaching $4.1 million [2].", "passed": true },
+    { "original": "Revenue grew 23% in 2024 to $4.1 million [2].", "rewrite": "Revenue grew strongly in 2024 to $4.1 million.", "passed": false },
+    { "original": "Sales rose in March.", "rewrite": "Sales rose 40% in March.", "passed": false },
+    { "original": "As Smith put it, \"the cost of waiting is higher than the cost of trying\" (Smith, 2021).", "rewrite": "Smith said waiting costs more than trying.", "passed": false },
+    { "original": "Read the full guide at https://example.com/guide before you start.", "rewrite": "Before you start, read the full guide at https://example.com/guide.", "passed": true },
+    { "original": "Disclosure: this post contains an affiliate link. The kettle boils in 3 minutes.", "rewrite": "The kettle boils in 3 minutes.", "passed": false },
+    { "original": "We think the plan works.", "rewrite": "We think the plan works.\n\n---\nWhat changed:\n- Kept 2 sentences shorter", "passed": true }
+  ]
+}

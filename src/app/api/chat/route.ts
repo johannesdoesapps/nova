@@ -1,3 +1,4 @@
+import { checkRewrite, checkSummary, DEFAULT_NATURAL, detectNaturalRequest, INTENSITY_INFO, naturalWritingPrompt, sourceText, STYLE_INFO } from "@/lib/writing/natural";
 import { fallbackChain, resolveModelChoice, withTimeout } from "@/lib/ai";
 import { MIN_FALLBACK_MS, modelBudget, streamWithFallback } from "@/lib/ai/fallback";
 import { estimateCost, estimateTokens } from "@/lib/ai/cost";
@@ -221,6 +222,21 @@ export async function POST(req: Request) {
         if (orbisAgent) system += `\n\n${orbisAgent.system}`;
       }
 
+      // Natural Writing (the Writing Agent's capability, see lib/writing/natural.ts): on when the message asks for
+      // natural, conversational, polished or personal writing; the reply then goes through the writing check.
+      const asked = detectNaturalRequest(body.message);
+      const natural = asked
+        ? { settings: { ...DEFAULT_NATURAL, style: asked.style, intensity: asked.intensity }, evasion: asked.evasion, original: sourceText(body.message, body.attachments ?? []) }
+        : null;
+      const keptTools: { name: string; label: string; status: "ok" | "error"; detail?: string }[] = [];
+      if (natural) {
+        system += `\n\n${naturalWritingPrompt(natural.settings, { evasion: natural.evasion })}`;
+        const tool = { name: "natural_writing", label: `Natural writing · ${INTENSITY_INFO[natural.settings.intensity].label} · ${STYLE_INFO[natural.settings.style].label}`, status: "ok" as const };
+        send({ type: "tool", tool });
+        keptTools.push(tool);
+        turnTools.push("natural_writing");
+      }
+
       // Fresh, trusted context for this turn: time, time-tool results, live-data honesty.
       const turn = buildTurnContext(body.message, { timeZone: body.timeZone, liveSources: sources.length > 0 });
       system += `\n\n${turn.system}`;
@@ -273,7 +289,7 @@ export async function POST(req: Request) {
           usage,
           status,
           conversationId,
-          purpose: "chat",
+          purpose: natural ? "natural_writing" : "chat",
           servedModel,
           requestedModel,
           routingReason: model.id === choice.model.id ? routingReason : `Fallback from ${choice.model.displayName}. ${routingReason}`,
@@ -309,6 +325,13 @@ export async function POST(req: Request) {
         }
       } else text = stripTaskBlock(text);
 
+      // Quality assurance for a rewrite: compare it with the original, which the check keeps so it can be restored.
+      if (natural?.original && text.trim() && !truncated) {
+        const tool = { name: "writing_check", ...checkSummary(checkRewrite(natural.original, text, natural.settings.intensity), natural.original) };
+        send({ type: "tool", tool });
+        keptTools.push(tool);
+      }
+
       let assistantMessageId: string | null = null;
       let userMessageId: string | null = null;
       if (auth.mode === "authenticated" && conversationId) {
@@ -320,6 +343,7 @@ export async function POST(req: Request) {
             attachments: body.attachments?.map((a) => a.name) ?? [],
             ...(actions.length ? { actions } : {}),
             ...(tasks.length ? { tasks } : {}),
+            ...(keptTools.length ? { tools: keptTools } : {}),
           };
           const rows = await addMessages(auth.supabase, conversationId, [
             ...(replacing ? [] : [{ role: "user" as const, content: body.message, usage_metadata: { attachments: body.attachments?.map((a) => a.name) ?? [] } }]),

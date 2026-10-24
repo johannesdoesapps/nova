@@ -2,6 +2,7 @@
 const FEATURES: [RegExp, string][] = [
   [/^chat$/, "Chat"],
   [/^agent$/, "Agents"],
+  [/^natural_writing$/, "Natural writing"],
   [/^council/, "Council"],
   [/^(arena|compare)/, "Arena"],
   [/^code_agent$/, "Coding agent"],

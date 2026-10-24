@@ -11,6 +11,7 @@ import { ApiError } from "../http";
 import { stripInvalidCitations } from "../search/grounding";
 import type { SearchSource } from "../search/types";
 import { webSearch } from "../search/web";
+import { checkRewrite, checkSummary, INTENSITY_INFO, naturalWritingPrompt, STYLE_INFO, type NaturalSettings } from "../writing/natural";
 import { capabilityStatus } from "./capabilities";
 import { formatSummary, summarizeDataset } from "./tools/csv-stats";
 import { CAPABILITY_INFO, RESPONSE_STYLE_INFO, type AgentConfig, type AgentCapability, type CapabilityStatus } from "./types";
@@ -26,7 +27,7 @@ export interface Attachment {
 }
 
 export interface ToolRecord extends TurnTool {
-  name: AgentCapability | "time";
+  name: AgentCapability | "time" | "natural_writing" | "writing_check";
 }
 
 export interface AgentTurnInput {
@@ -40,6 +41,8 @@ export interface AgentTurnInput {
   useWeb: boolean;
   /** The browser's time zone, for the current-time line. */
   timeZone?: string;
+  /** Natural Writing (the Writing Agent's capability): its settings, and the original text the writing check compares with. */
+  natural?: { settings: NaturalSettings; evasion: boolean; original: string | null; source: "controls" | "request" };
   /** Plan limits: longest reply and how much history is sent (characters). */
   maxOutputTokens?: number;
   historyChars?: number;
@@ -165,6 +168,19 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
     }
   }
 
+  // Natural Writing: the capability's instructions for this message, and a visible note that it's on.
+  if (input.natural) {
+    const n = input.natural;
+    extra.push("", naturalWritingPrompt(n.settings, { evasion: n.evasion }));
+    const rec: ToolRecord = {
+      name: "natural_writing",
+      label: `Natural writing · ${INTENSITY_INFO[n.settings.intensity].label} · ${STYLE_INFO[n.settings.style].label}${n.source === "request" ? " (from your request)" : ""}`,
+      status: "ok",
+    };
+    tools.push(rec);
+    send({ type: "tool", tool: rec });
+  }
+
   // Trusted context shared with the main chat: time, time tools, live-data honesty.
   const turn = buildTurnContext(input.message, { timeZone: input.timeZone, liveSources: sources.length > 0 });
   extra.push("", turn.system);
@@ -177,19 +193,13 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
   // File analysis: attached text becomes untrusted context for this turn.
   let userContent = input.message;
   if (input.attachments.length) {
-    const docs = input.attachments
-      .map((a) => `<document name="${a.name.replace(/"/g, "'")}">\n${escapeDoc(a.content)}\n</document>`)
-      .join("\n");
+    const docs = input.attachments.map((a) => `<document name="${a.name.replace(/"/g, "'")}">\n${escapeDoc(a.content)}\n</document>`).join("\n");
     userContent = `${docs}\n\n${input.message}`;
   }
 
   const kept = trimHistory(input.history, agent.historyLimit, input.historyChars);
   const omitted = omittedNote(input.history, kept);
-  const messages: ChatMessage[] = [
-    { role: "system", content: [buildAgentSystemPrompt(agent, status, extra), omitted].filter(Boolean).join("\n\n") },
-    ...kept,
-    { role: "user", content: userContent },
-  ];
+  const messages: ChatMessage[] = [{ role: "system", content: [buildAgentSystemPrompt(agent, status, extra), omitted].filter(Boolean).join("\n\n") }, ...kept, { role: "user", content: userContent }];
 
   const started = performance.now();
   let text = "";
@@ -198,11 +208,8 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
   let model = input.model;
   // The reply hit the output limit and was cut off.
   let truncated = false;
-  for await (const ev of streamWithFallback(
-    model,
-    input.fallbacks ?? [],
-    { messages, maxOutputTokens: input.maxOutputTokens ?? 2400, temperature: agent.temperature ?? undefined },
-    () => withTimeout(MODEL_TIMEOUT_MS, signal),
+  for await (const ev of streamWithFallback(model, input.fallbacks ?? [], { messages, maxOutputTokens: input.maxOutputTokens ?? 2400, temperature: agent.temperature ?? undefined }, () =>
+    withTimeout(MODEL_TIMEOUT_MS, signal),
   )) {
     if (ev.type === "delta") {
       text += ev.text;
@@ -216,6 +223,13 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
     else if (ev.type === "stop") truncated = ev.reason === "length";
   }
   if (sources.length) text = stripInvalidCitations(text, sources);
+  // Quality assurance for a rewrite: compare it with the original (kept in the check so it can be restored).
+  if (input.natural?.original && text.trim() && !truncated) {
+    const check = checkRewrite(input.natural.original, text, input.natural.settings.intensity);
+    const rec: ToolRecord = { name: "writing_check", ...checkSummary(check, input.natural.original) };
+    tools.push(rec);
+    send({ type: "tool", tool: rec });
+  }
   usage ??= { inputTokens: estimateTokens(messages), outputTokens: estimateTokens(text), estimated: true };
   return { model, text, usage, servedModel, sources, tools, latencyMs: performance.now() - started, truncated };
 }

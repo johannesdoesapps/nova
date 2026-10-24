@@ -21,6 +21,7 @@ import type { AgentInput } from "@/lib/agents/schema";
 import { CAPABILITY_INFO, type AgentConfig, type CapabilityStatus } from "@/lib/agents/types";
 import { cn, relativeTime } from "@/lib/utils";
 import { AgentEditor } from "./agent-editor";
+import { NaturalWritingBar, useNaturalWriting } from "./natural-writing-bar";
 import { AgentAvatar, CAPABILITY_ICONS } from "./agent-visuals";
 import { agentChatsKey, agentStatus, deleteAgent, findAgent, toInput, useAgents } from "./use-agents";
 
@@ -52,9 +53,7 @@ export function AgentWorkspace({ id }: { id: string }) {
         </StudioHeader>
         <div role="alert" className="s-in mx-auto mt-[14vh] flex max-w-sm flex-col items-center px-4 text-center">
           <h1 className="text-[18px] font-semibold">{state.status === "error" ? "Agents couldn’t be loaded" : "Agent not found"}</h1>
-          <p className="mt-1.5 text-[14px] text-s-ink-2">
-            {state.status === "error" ? state.message : "It may have been deleted, or it was created in another browser."}
-          </p>
+          <p className="mt-1.5 text-[14px] text-s-ink-2">{state.status === "error" ? state.message : "It may have been deleted, or it was created in another browser."}</p>
           <Link href="/agents" className="mt-5 rounded-xl border border-s-line-strong px-4 py-2 text-[13.5px] font-medium transition hover:bg-s-hover">
             Back to agents
           </Link>
@@ -67,7 +66,11 @@ export function AgentWorkspace({ id }: { id: string }) {
 
 function BackLink() {
   return (
-    <Link href="/agents" aria-label="All agents" className="inline-flex h-9 shrink-0 items-center gap-1 rounded-xl pl-1.5 pr-2.5 text-[13.5px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink">
+    <Link
+      href="/agents"
+      aria-label="All agents"
+      className="inline-flex h-9 shrink-0 items-center gap-1 rounded-xl pl-1.5 pr-2.5 text-[13.5px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink"
+    >
       <ChevronLeft className="h-4 w-4" aria-hidden />
       <span className="hidden sm:inline">Agents</span>
     </Link>
@@ -82,10 +85,7 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
   const basePath = `/agents/${agent.id}`;
 
   // This agent's own conversation history, separate from ordinary chats.
-  const store = useMemo(
-    () => (persistence === "server" ? makeServerHistory(`/api/agents/${agent.id}/conversations`) : makeLocalHistory(agentChatsKey(agent.id))),
-    [persistence, agent.id],
-  );
+  const store = useMemo(() => (persistence === "server" ? makeServerHistory(`/api/agents/${agent.id}/conversations`) : makeLocalHistory(agentChatsKey(agent.id))), [persistence, agent.id]);
   const [conversations, setConversations] = useState<ConvSummary[] | null>(null);
   const refreshConversations = useCallback(async () => {
     try {
@@ -110,17 +110,20 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
   const catalog = useCatalog();
   const models = catalog?.models ?? null;
   const [picked, setPicked] = useState<string | null>(null);
-  const saved =
-    isAutoId(agent.modelId)
-      ? catalog?.auto.enabled
-        ? agent.modelId!
-        : undefined
-      : agent.modelId && models?.some((m) => m.id === agent.modelId && m.available)
-        ? agent.modelId
-        : undefined;
+  const saved = isAutoId(agent.modelId)
+    ? catalog?.auto.enabled
+      ? agent.modelId!
+      : undefined
+    : agent.modelId && models?.some((m) => m.id === agent.modelId && m.available)
+      ? agent.modelId
+      : undefined;
   // With no model chosen the server routes each message (preferred kind for demanding requests,
   // low-cost for simple ones), so the menu shows Auto rather than a model that may not answer.
   const modelId = picked ?? saved ?? (catalog?.auto.enabled ? AUTO_MODEL_ID : defaultModelId(models));
+
+  // Natural Writing is the Writing Agent's capability; its controls show only there.
+  const nw = useNaturalWriting();
+  const naturalOn = agent.id === "writing" && nw.on;
 
   // Guests' custom agents live in the browser, so their config travels with each request.
   const transport = useCallback<ChatTransport>(
@@ -137,21 +140,14 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
           attachments: req.attachments,
           regenerate: req.regenerate,
           agent: agent.kind === "custom" && persistence === "local" ? toInput(agent) : undefined,
+          natural: naturalOn ? nw.settings : undefined,
         },
         signal,
       ),
-    [agent, persistence, picked],
+    [agent, persistence, picked, naturalOn, nw.settings],
   );
 
-  const chat = useStudioChat({
-    store,
-    defaultMode: "research",
-    modelId,
-    allowFallback: !!studio.settings.allowFallback,
-    onHistoryChanged: refreshConversations,
-    basePath,
-    transport,
-  });
+  const chat = useStudioChat({ store, defaultMode: "research", modelId, allowFallback: !!studio.settings.allowFallback, onHistoryChanged: refreshConversations, basePath, transport });
 
   const [input, setInput] = useState(() => studio.takePendingPrompt() ?? "");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
@@ -206,29 +202,32 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
 
   const empty = chat.messages.length === 0 && chat.load.status === "idle";
   const composer = (variant: "hero" | "dock") => (
-    <Composer
-      variant={variant}
-      value={input}
-      onChange={setInput}
-      onSubmit={submit}
-      busy={chat.busy}
-      onStop={chat.stop}
-      attachments={attachments}
-      onAttachments={setAttachments}
-      models={models}
-      modelId={modelId}
-      onModel={setPicked}
-      auto={catalog?.auto ?? null}
-      mode={chat.mode}
-      useWeb={chat.useWeb}
-      onUseWeb={chat.setUseWeb}
-      webAvailable={capabilities.web_search.available}
-      webAllowed={canWeb}
-      webBlockedHint="Not enabled for this agent"
-      filesAllowed={canFiles}
-      placeholder={`Message ${agent.name}`}
-      enterToSend={studio.settings.enterToSend}
-    />
+    <>
+      {agent.id === "writing" && <NaturalWritingBar nw={nw} disabled={chat.busy} />}
+      <Composer
+        variant={variant}
+        value={input}
+        onChange={setInput}
+        onSubmit={submit}
+        busy={chat.busy}
+        onStop={chat.stop}
+        attachments={attachments}
+        onAttachments={setAttachments}
+        models={models}
+        modelId={modelId}
+        onModel={setPicked}
+        auto={catalog?.auto ?? null}
+        mode={chat.mode}
+        useWeb={chat.useWeb}
+        onUseWeb={chat.setUseWeb}
+        webAvailable={capabilities.web_search.available}
+        webAllowed={canWeb}
+        webBlockedHint="Not enabled for this agent"
+        filesAllowed={canFiles}
+        placeholder={`Message ${agent.name}`}
+        enterToSend={studio.settings.enterToSend}
+      />
+    </>
   );
 
   return (
@@ -237,14 +236,7 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
         onNewChat={newConversation}
         actions={
           <>
-            <Menu
-              label={`${agent.name} conversations`}
-              align="end"
-              width={300}
-              buttonLabel="Conversation history"
-              buttonClassName={iconButtonClass()}
-              button={<Clock />}
-            >
+            <Menu label={`${agent.name} conversations`} align="end" width={300} buttonLabel="Conversation history" buttonClassName={iconButtonClass()} button={<Clock />}>
               <MenuLabel>Conversations with {agent.name}</MenuLabel>
               <MenuItem icon={<SquarePen />} onClick={newConversation}>
                 New conversation
@@ -256,13 +248,7 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
                 <p className="px-2.5 py-2 text-[13px] text-s-ink-3">No conversations yet.</p>
               ) : (
                 conversations.map((c) => (
-                  <MenuItem
-                    key={c.id}
-                    role="menuitemradio"
-                    checked={c.id === chat.conversationId}
-                    hint={relativeTime(c.updated_at)}
-                    onClick={() => router.push(`${basePath}?c=${c.id}`)}
-                  >
+                  <MenuItem key={c.id} role="menuitemradio" checked={c.id === chat.conversationId} hint={relativeTime(c.updated_at)} onClick={() => router.push(`${basePath}?c=${c.id}`)}>
                     {c.title}
                   </MenuItem>
                 ))
@@ -321,17 +307,13 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
         <div className="s-scroll min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex min-h-full w-full max-w-[728px] flex-col items-center justify-center px-4 pb-16 pt-8 sm:px-6">
             <AgentAvatar agent={agent} size="lg" className="s-in" />
-            <h2 className="s-in mt-6 text-balance text-center font-serif text-[clamp(32px,5.5vw,46px)] leading-[1.08] tracking-[-0.01em] [animation-delay:60ms]">
-              {agent.name}
-            </h2>
+            <h2 className="s-in mt-6 text-balance text-center font-serif text-[clamp(32px,5.5vw,46px)] leading-[1.08] tracking-[-0.01em] [animation-delay:60ms]">{agent.name}</h2>
             <p className="s-in mt-2 flex items-center gap-2 text-[13px] text-s-ink-3 [animation-delay:90ms]">
               {agent.kind === "custom" ? "Custom agent" : agent.category}
               <span aria-hidden>·</span>
               <span className={cn(status.tone === "warn" && "text-[#c98a1c]")}>{status.tone === "warn" ? status.detail : status.label}</span>
             </p>
-            {agent.description && (
-              <p className="s-in mt-3 max-w-md text-balance text-center text-[15.5px] leading-relaxed text-s-ink-2 [animation-delay:120ms]">{agent.description}</p>
-            )}
+            {agent.description && <p className="s-in mt-3 max-w-md text-balance text-center text-[15.5px] leading-relaxed text-s-ink-2 [animation-delay:120ms]">{agent.description}</p>}
             <ul className="s-in mt-4 flex flex-wrap justify-center gap-1.5 [animation-delay:150ms]" aria-label="Capabilities">
               {agent.capabilities.length === 0 ? (
                 <li className="rounded-full border border-s-line px-2.5 py-1 text-[12px] text-s-ink-3">Conversation only · no tools</li>
@@ -371,7 +353,11 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
                 ))}
               </ul>
             )}
-            {demo && <p className="s-in mt-7 text-center text-[12.5px] text-s-ink-3 [animation-delay:380ms]">Demo mode: replies are simulated until an AI provider key is added on the server. Tools such as data analysis still run for real.</p>}
+            {demo && (
+              <p className="s-in mt-7 text-center text-[12.5px] text-s-ink-3 [animation-delay:380ms]">
+                Demo mode: replies are simulated until an AI provider key is added on the server. Tools such as data analysis still run for real.
+              </p>
+            )}
           </div>
         </div>
       ) : (
@@ -416,9 +402,7 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
       <ConfirmDialog
         open={confirm !== null}
         title={confirm === "agent" ? `Delete ${agent.name}?` : "Delete this conversation?"}
-        description={
-          confirm === "agent" ? "The agent and all of its conversations will be permanently deleted." : `“${chat.title ?? "This conversation"}” will be permanently deleted.`
-        }
+        description={confirm === "agent" ? "The agent and all of its conversations will be permanently deleted." : `“${chat.title ?? "This conversation"}” will be permanently deleted.`}
         confirmLabel={confirm === "agent" ? "Delete agent" : "Delete"}
         onClose={() => setConfirm(null)}
         onConfirm={async () => {

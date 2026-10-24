@@ -24,7 +24,7 @@ export const LEVEL_INFO: Record<Level, { label: string; description: string; ord
   orchestrator: { label: "Orchestrator", description: "Receives the request, answers simple ones itself, and hands specialist work to the right agent.", order: 0 },
   planner: { label: "Planning", description: "Breaks a request into steps for specific agents, in order, with what can run side by side.", order: 1 },
   specialist: { label: "Specialist agents", description: "Do one kind of real work with real tools, each in its own task with approvals and records.", order: 2 },
-  sub_agent: { label: "Sub-agents", description: "Parts of a specialist agent, run by it; not started on their own.", order: 3 },
+  sub_agent: { label: "Sub-agents and capabilities", description: "Parts of another agent, run by it; not started on their own.", order: 3 },
   pipeline: { label: "Multi-model tools", description: "Fixed pipelines across several models (compare, verify, plan); started from their own pages.", order: 4 },
   assistant: { label: "Chat assistants", description: "Text-only helpers with their own instructions. They can't run code or take actions; they point to the agent that can.", order: 5 },
   internal: { label: "Internal (administrators)", description: "Orbis's own engineering team, run by its Commander for administrators only.", order: 6 },
@@ -96,12 +96,13 @@ const ORCHESTRATOR: CatalogueEntry = {
   responsibilities: [
     "Classify the request with the router (routing.ts) and the agent list",
     "Answer questions and writing requests itself, without delegating",
+    "Switch on Natural Writing (the Writing Agent's capability) when a message asks for natural, conversational, polished or personal writing, and run the writing check on the result",
     "Propose one specialist task at a time as a card the user reviews and starts",
     "For multi-step work, follow the planner's order (or the Fix and verify workflow)",
     "Say plainly when no Orbis agent can do something",
     "Answer questions about tasks from the user's task records, never from memory",
   ],
-  taskTypes: ["answer_question", "write_text"],
+  taskTypes: ["answer_question", "write_text", "refine_writing"],
   outOfScope: [{ what: "Starting tasks by itself: every task is started by the user", useInstead: null }],
   tools: ["The chat model", "The agent list and the user's available agents", "The user's projects (names fenced as data)", "The user's task records"],
   input: "The user's chat message",
@@ -114,7 +115,11 @@ const ORCHESTRATOR: CatalogueEntry = {
   doneWhen: "The reply is sent; a proposed task is only 'started' once the user presses Start and the server accepts it",
   runsUnder: "user",
   parent: null,
-  dependsOn: ["planner:router", ...AGENTS.filter((a) => ["engineer", "bug_fixer", "qa_tester", "code_review", "deep_research"].includes(a.id)).map((a) => `task:${a.id}`)],
+  dependsOn: [
+    "planner:router",
+    ...AGENTS.filter((a) => ["engineer", "bug_fixer", "qa_tester", "code_review", "deep_research"].includes(a.id)).map((a) => `task:${a.id}`),
+    "writing:natural-writing-agent",
+  ],
   status: "active",
   statusNote: null,
   version: "2.0",
@@ -463,7 +468,7 @@ const ASSISTANT_HANDOFF: Record<BuiltinAgentId, { category: Category; taskTypes:
     ],
     dependsOn: ["task:engineer"],
   },
-  writing: { category: "Writing", taskTypes: ["write_text"], outOfScope: [{ what: "Sending email or posting", useInstead: null }], dependsOn: [] },
+  writing: { category: "Writing", taskTypes: ["write_text", "refine_writing"], outOfScope: [{ what: "Sending email or posting", useInstead: null }], dependsOn: ["writing:natural-writing-agent"] },
   data: { category: "Data", taskTypes: ["analyse_data"], outOfScope: [{ what: "Databases and charts", useInstead: null }], dependsOn: [] },
   creative: { category: "Writing", taskTypes: ["write_text"], outOfScope: [{ what: "Creating images", useInstead: "pipeline:images" }], dependsOn: [] },
   general: { category: "Writing", taskTypes: ["answer_question", "write_text"], outOfScope: [{ what: "Real work with tools", useInstead: "orchestrator:orbis_agent" }], dependsOn: [] },
@@ -546,7 +551,61 @@ const workforce = WORKFORCE_AGENTS.map(
   }),
 );
 
-export const CATALOGUE: CatalogueEntry[] = [ORCHESTRATOR, PLANNER, ...AGENTS.map(taskEntry), ...securitySub, ...PAIR, ...PIPELINES, ...assistants, ...workforce];
+/**
+ * Natural Writing: a capability of the Writing Agent, not a separate agent (it has no conversations or page of
+ * its own). It runs inside the Writing Agent when its controls are on or the request asks for it, and inside
+ * the Orbis Agent's chat when a message asks for natural, conversational, polished or personal writing. Its
+ * styles, intensities, instructions and writing check live in one module (src/lib/writing/natural.ts).
+ */
+const NATURAL_WRITING: CatalogueEntry = {
+  id: "writing:natural-writing-agent",
+  name: "Natural Writing",
+  level: "sub_agent",
+  category: "Writing",
+  role: "Turn stiff, generic or robotic text into natural writing for its audience, without changing what it says",
+  responsibilities: [
+    "Rewrite robotic, repetitive, overly formal or generic paragraphs in natural language",
+    "Vary sentence length, rhythm, structure and transitions",
+    "Replace clichés, filler, needless headings and predictable wording with specific language",
+    "Adapt to the chosen style (natural, professional, friendly, persuasive, academic, or the author's own) and audience",
+    "Match the author's voice from a writing sample when one is given",
+    "Keep meaning, facts, numbers, technical terms, quotations, citations, links, disclosures and formatting",
+    "Explain the main changes briefly when asked",
+  ],
+  taskTypes: ["refine_writing"],
+  outOfScope: [
+    { what: "Writing new content from scratch (the Writing Agent does that)", useInstead: "assistant:writing" },
+    { what: "Checking whether the text's claims are true", useInstead: "pipeline:verify" },
+    { what: "Getting text past AI detectors or hiding who wrote it", useInstead: null },
+    { what: "Adding experiences, credentials, sources or statistics the original doesn't have", useInstead: null },
+  ],
+  tools: [
+    "The chat model",
+    "The writing check (compares the rewrite with the original: numbers, citations, quotations, links, disclosures, length, generic phrasing)",
+    "A writing sample, when given (as data)",
+  ],
+  input: "Text to rewrite (in the message or an attached file), a style, a rewrite intensity (light edit, balanced rewrite, full rewrite), optionally a writing sample",
+  output: "The rewritten text, a short note on what changed, and the writing check with the original kept to compare or restore",
+  escalation: [
+    "No text to rewrite: it asks for it",
+    "The writing check finds lost or added facts: shown as problems to fix before using the text",
+    "AI-detector requests: it improves the writing and says it can't promise detector results",
+  ],
+  doneWhen: "The rewrite is returned and, when there was an original, the writing check has compared them",
+  runsUnder: "user",
+  parent: "assistant:writing",
+  dependsOn: ["pipeline:verify"],
+  status: "active",
+  statusNote: "Part of the Writing Agent: switch it on there, or ask in chat for natural, conversational, polished or personal writing.",
+  version: "1.0",
+  purposes: ["natural_writing"],
+  access: "Everyone with an account (the Writing Agent), and in chat",
+  href: "/agents/writing",
+  taskAgent: null,
+  source: "src/lib/writing/natural.ts",
+};
+
+export const CATALOGUE: CatalogueEntry[] = [ORCHESTRATOR, PLANNER, ...AGENTS.map(taskEntry), ...securitySub, ...PAIR, ...PIPELINES, ...assistants, NATURAL_WRITING, ...workforce];
 
 export function catalogueEntry(id: string): CatalogueEntry | null {
   return CATALOGUE.find((e) => e.id === id) ?? null;
@@ -574,7 +633,7 @@ export function catalogueProblems(entries: CatalogueEntry[] = CATALOGUE): string
     ids.add(e.id);
   }
   for (const e of entries) {
-    if (!/^[a-z]+:[a-z_]+$/.test(e.id)) out.push(`${e.id}: id must look like kind:name`);
+    if (!/^[a-z]+:[a-z_-]+$/.test(e.id)) out.push(`${e.id}: id must look like kind:name`);
     for (const k of ["name", "role", "input", "output", "doneWhen", "access", "source"] as const) if (!e[k]?.trim()) out.push(`${e.id}: missing ${k}`);
     if (!/^\d+\.\d+(\.\d+)?$/.test(e.version)) out.push(`${e.id}: version "${e.version}" isn't like 1.0`);
     for (const t of e.taskTypes) if (!(TASK_TYPES as readonly string[]).includes(t)) out.push(`${e.id}: unknown task type ${t}`);

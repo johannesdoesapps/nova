@@ -419,3 +419,92 @@ Built on what already existed. There is no new job queue and no new service; the
 3. Add a task id on `model_runs`, and per-task tool-call counts.
 4. Add an update policy on chat memories so they can be edited.
 5. Add real-model agent evaluations with a fixed budget, run before releases.
+
+## 16. Natural Writing (part of the Writing Agent)
+
+**What it is:** Natural Writing rewrites stiff, generic or robotic text so it reads naturally for its audience, without changing what it says.
+
+- It is a **capability of the existing Writing Agent**, not a separate agent: it has no page or conversations of its own.
+- The catalogue lists it as `writing:natural-writing-agent` (agent id `natural-writing-agent`), part of `assistant:writing`.
+
+**Where it lives:** all of it is in `src/lib/writing/natural.ts`:
+
+- the styles and intensities;
+- request detection;
+- the instructions;
+- the writing check.
+
+Adding a style or an intensity is one table entry; nothing else in the agent system changes.
+
+### How it's switched on
+
+| Where                                  | How                                                                                                                                                                                                                         |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Writing Agent page (`/agents/writing`) | The **Natural writing** controls above the message box. Saved in the browser and validated by the server. The settings are: style, rewrite intensity, "Explain changes", and a writing sample for "Match my writing style". |
+| Writing Agent, without the controls    | Automatically, when the message asks for natural, conversational, polished or personal writing. The reply shows "(from your request)".                                                                                      |
+| Chat (the Orbis Agent)                 | The router classifies the request as `refine_writing` and answers directly in chat with Natural Writing on. It doesn't delegate to another agent.                                                                           |
+
+**Styles:**
+
+- Natural and conversational
+- Professional and polished
+- Friendly and approachable
+- Persuasive and engaging
+- Academic and precise
+- Match my writing style
+
+**Intensities:**
+
+- **Light edit:** keeps the structure and most wording.
+- **Balanced rewrite:** rephrases freely and keeps paragraph order and every point.
+- **Full rewrite:** rewrites from the meaning up and keeps every fact and point.
+
+**Not switched on for design requests:** a request about a page, app or design ("make the login page more professional") doesn't turn it on, unless it mentions the text.
+
+### Rules it follows
+
+The rules are in the instructions; the writing check enforces part of them.
+
+- Keep the message, facts, numbers, names, technical terms, quotations, citations, links, formatting and disclosures.
+- Never invent experiences, credentials, sources, statistics or evidence.
+- No deliberate mistakes or artificial imperfections.
+- **AI detectors:** no promises about detector results. When a user asks about detectors, it improves the writing and says plainly that detectors are unreliable, and that the aim isn't to hide authorship.
+- **Writing samples:** a sample is fenced as data, so instructions inside it are ignored.
+- **No text given:** it asks for the text rather than inventing some.
+
+### Quality assurance: the writing check
+
+When there's an original to compare (the text after the instruction, or an attached file), the reply is checked by `checkRewrite`.
+
+- **Errors:** numbers lost or added, citations lost or added, quotations changed, links lost, disclosures lost.
+- **Warnings:** a length far outside the intensity's range, and generic phrasing still present.
+
+**How it's shown:** the result appears as a "Writing check" row under the reply, and is saved with the message in the Writing Agent and in chat.
+
+- The row also holds **the original text, to compare or copy back**.
+- The original also stays in the conversation as the user's message.
+- The note after `---` ("What changed") isn't checked as part of the text.
+
+**Cost:** turns with Natural Writing are recorded under the purpose `natural_writing`, so their cost is measured separately.
+
+### Connections the brief asked for
+
+| Brief                                           | Here                                                                                                                                                                                                                                      |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Writing Agent sends drafts for refinement       | Same agent: the controls or the request switch the capability on                                                                                                                                                                          |
+| Research Agent verifies facts                   | The writing check catches changed or invented numbers, citations and quotes. To check whether claims are _true_, the catalogue hands off to Verify (`pipeline:verify`); it isn't run automatically because each check costs a model call. |
+| Brand Voice Agent                               | There isn't one. "Match my writing style" with a sample covers the author's voice. A shared brand voice could later come from project memory "preference" notes.                                                                          |
+| Quality Assurance Agent                         | The writing check, which is rule-based. Orbis's QA Testing agent tests code, so it isn't used for prose.                                                                                                                                  |
+| Orchestrator routes suitable text automatically | `refine_writing` in the router, and detection in chat                                                                                                                                                                                     |
+
+### Tests and evaluation
+
+- `tests/natural-writing.test.ts` covers settings, detection, instructions, the writing check, and a full Writing Agent turn with the instructions in the prompt, the visible row and the check. It also checks the catalogue still has one Writing Agent.
+- The evaluation suite has a **natural** suite: 21 cases for detection, style, intensity and detector requests, plus check results. It also has three routing cases.
+- Writing the suite found five detection gaps, all fixed: "more professional and polished", "friendlier", "more persuasive and engaging", "passes Turnitin", and "make the login page more professional" (which should not trigger it).
+
+### Limits
+
+- The writing check compares facts and wording mechanically. It can't judge whether the meaning changed the way a reader can, and it says so.
+- It isn't run on a live model in this round: quality depends on the chosen model, and no real-model writing evaluation has been run yet.
+- There is no side-by-side diff view; the original is shown in the check row.

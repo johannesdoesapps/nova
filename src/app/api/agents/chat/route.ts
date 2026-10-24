@@ -13,6 +13,7 @@ import { ApiError, errorResponse, ndjsonStream, parseJsonBody } from "@/lib/http
 import { reportError } from "@/lib/observability";
 import { enforceLimits, planLimits, recordRun, releaseUsage, shouldSaveAllowance } from "@/lib/usage";
 import { isAutoId } from "@/lib/ai/platform";
+import { DEFAULT_NATURAL, detectNaturalRequest, sourceText } from "@/lib/writing/natural";
 
 export const maxDuration = 60;
 
@@ -45,6 +46,20 @@ export async function POST(req: Request) {
 
     const attachments = body.attachments ?? [];
     authorizeTurn(agent, { attachments, useWeb: !!body.useWeb });
+
+    // Natural Writing is the Writing Agent's capability: on from its controls, or when the request asks for natural,
+    // conversational, polished or personal writing.
+    if (body.natural && agent.id !== "writing") throw new ApiError("bad_request", "Natural Writing is part of the Writing Agent.");
+    const asked = agent.id === "writing" ? detectNaturalRequest(body.message) : null;
+    const natural =
+      agent.id === "writing" && (body.natural || asked)
+        ? {
+            settings: body.natural ?? { ...DEFAULT_NATURAL, style: asked!.style, intensity: asked!.intensity },
+            evasion: !!asked?.evasion,
+            original: sourceText(body.message, attachments),
+            source: body.natural ? ("controls" as const) : ("request" as const),
+          }
+        : undefined;
 
     // Model: the user's pick for this conversation, else the agent's saved model, else the site default.
     // (An assistant's modelPreference is descriptive only: it isn't used to choose a model, so an assistant
@@ -152,6 +167,7 @@ export async function POST(req: Request) {
           attachments,
           useWeb: !!body.useWeb && !searchesUsed,
           timeZone: body.timeZone,
+          natural,
           maxOutputTokens: limits.maxOutputTokens,
           historyChars: limits.historyChars,
           signal,
@@ -173,7 +189,7 @@ export async function POST(req: Request) {
             : { inputTokens: null, outputTokens: null, estimated: true },
           status: "error",
           conversationId,
-          purpose: "agent",
+          purpose: natural ? "natural_writing" : "agent",
           requestedModel,
           routingReason,
           error: err instanceof Error ? err.message : "failed",
@@ -188,7 +204,7 @@ export async function POST(req: Request) {
         usage: result.usage,
         status: "success",
         conversationId,
-        purpose: "agent",
+        purpose: natural ? "natural_writing" : "agent",
         servedModel: result.servedModel,
         requestedModel,
         routingReason: model.id === choice.model.id ? routingReason : `Fallback from ${choice.model.displayName}. ${routingReason}`,

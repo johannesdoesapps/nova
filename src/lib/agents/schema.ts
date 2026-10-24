@@ -1,3 +1,4 @@
+import { naturalSettings } from "../writing/natural";
 import { z } from "zod";
 import { ALLOWED_ATTACHMENT_EXT, MAX_ATTACHMENT_CHARS } from "../limits";
 import { AGENT_ACCENTS, AGENT_CAPABILITIES, AGENT_ICONS, HISTORY_LIMITS, RESPONSE_STYLES } from "./types";
@@ -6,11 +7,7 @@ import { AGENT_ACCENTS, AGENT_CAPABILITIES, AGENT_ICONS, HISTORY_LIMITS, RESPONS
 export const agentInput = z.object({
   name: z.string().trim().min(1, "Give the agent a name.").max(80, "Keep the name under 80 characters."),
   description: z.string().trim().max(300, "Keep the description under 300 characters.").default(""),
-  instructions: z
-    .string()
-    .trim()
-    .min(20, "Describe the agent's role in at least 20 characters.")
-    .max(8000, "Instructions can be at most 8,000 characters."),
+  instructions: z.string().trim().min(20, "Describe the agent's role in at least 20 characters.").max(8000, "Instructions can be at most 8,000 characters."),
   icon: z.enum(AGENT_ICONS).default("bot"),
   accent: z.enum(AGENT_ACCENTS).default("violet"),
   modelId: z.string().min(1).max(120).nullable().default(null),
@@ -47,6 +44,8 @@ export const agentChatRequest = z.object({
   requestId: z.uuid().optional(),
   /** The user allows another compatible model to answer if the chosen one fails (also needs the admin setting). */
   allowFallback: z.boolean().optional(),
+  /** Natural Writing (Writing Agent only): style and rewrite intensity chosen in the page's controls. */
+  natural: naturalSettings.optional(),
   /** Guests only: prior turns, since the server keeps no guest history. */
   history: z
     .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(20_000) }))

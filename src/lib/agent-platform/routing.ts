@@ -1,3 +1,4 @@
+import { detectNaturalRequest } from "../writing/natural";
 import { CAPABILITY_GAPS, catalogueEntry, entriesFor, type CatalogueEntry } from "./catalogue";
 import { DELEGABLE, type DelegableAgent } from "./delegation";
 import { TASK_TYPE_LABEL, type AgentId, type TaskType } from "./registry";
@@ -74,6 +75,14 @@ export function classify(message: string): TaskType[] {
     if (!PATTERNS.find(([t]) => t === "implement_feature")![1].test(rest)) found.delete("implement_feature");
   }
   if (found.has("write_tests") || found.has("write_docs")) found.delete("write_text");
+  // "Make this sound more natural", "polish my bio", "rewrite it in my voice": the Writing Agent's Natural Writing
+  // capability (the same detection the chat uses, so a design request like "make the page more professional" isn't one).
+  if (detectNaturalRequest(message)) found.add("refine_writing");
+  // Making existing text read naturally is one thing, not also writing new text or docs.
+  if (found.has("refine_writing")) {
+    found.delete("write_text");
+    found.delete("write_docs");
+  }
   // A security audit of code is a code review with the security focus; keep both, the router merges them on one agent.
   // Asking to send/post isn't also a writing task.
   if (found.has("send_message")) found.delete("write_text");
@@ -90,6 +99,7 @@ const STAGE: Record<TaskType, number> = {
   generate_image: 0,
   answer_question: 0,
   write_text: 0,
+  refine_writing: 0,
   explain_code: 1,
   implement_feature: 2,
   build_website: 2,
@@ -140,7 +150,7 @@ export type Route =
 /** Whether each task agent is available to this user here (from availability.ts); missing means unknown, treated as unavailable. */
 export type AvailabilityMap = Partial<Record<AgentId, { available: boolean; message?: string }>>;
 
-const DIRECT_TYPES: TaskType[] = ["answer_question", "write_text"];
+const DIRECT_TYPES: TaskType[] = ["answer_question", "write_text", "refine_writing"];
 
 /** Websites, domains and logs are the Security Team's; security in code is Code Review's. */
 const SECURITY_TEAM_TARGETS = /\b(website|web ?site|site|url|domain|https?:\/\/\S+|logs?|log files?|headers?|cookies?)\b/i;
