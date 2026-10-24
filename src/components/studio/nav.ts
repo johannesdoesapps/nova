@@ -56,8 +56,8 @@ export interface NavEntry {
   label: string;
   href: string;
   icon: LucideIcon;
-  /** mode: Chat and Code, switched in the top bar (not the sidebar); main: everyday work; tools: more ways to use the models; admin: administrators only. */
-  group: "mode" | "main" | "tools" | "admin";
+  /** mode: Chat and Code, switched in the top bar (not the sidebar); bar: a button in the top bar, next to search (not the sidebar); main: everyday work; tools: more ways to use the models; admin: administrators only. */
+  group: "mode" | "bar" | "main" | "tools" | "admin";
   /** What it's for, in a few words (tooltips and the command palette). */
   hint: string;
   /** Reached from another entry's page rather than the sidebar (Missions from Projects); that entry is shown active. */
@@ -69,7 +69,7 @@ export const NAV_ENTRIES: NavEntry[] = [
   { id: "chat", label: "Chat", href: "/chat", icon: MessagesSquare, group: "mode", hint: "Ask, research and write with AI" },
   { id: "code", label: "Code", href: "/code", icon: Code2, group: "mode", hint: "Build and fix software with the coding agent" },
   { id: "agents", label: "Agents", href: "/agents", icon: Bot, group: "main", hint: "Specialised assistants, including the Security Team" },
-  { id: "projects", label: "Projects", href: "/projects", icon: FolderKanban, group: "main", hint: "Ongoing work: code projects, missions and their tasks" },
+  { id: "projects", label: "Projects", href: "/projects", icon: FolderKanban, group: "bar", hint: "Ongoing work: code projects, missions and their tasks" },
   { id: "activity", label: "Activity", href: "/activity", icon: Activity, group: "main", hint: "Every agent task: what's running, waiting for you, done or failed" },
   { id: "templates", label: "Templates", href: "/templates", icon: LayoutTemplate, group: "main", hint: "Ready-made workflows for common tasks" },
   { id: "discover", label: "Discover", href: "/discover", icon: Compass, group: "tools", hint: "What Orbis can do, with ways to try it" },
@@ -93,10 +93,13 @@ export function navFor(isAdmin: boolean): NavEntry[] {
   return NAV_ENTRIES.filter((e) => e.group !== "admin" || isAdmin);
 }
 
-/** The sidebar's entries: everything except Chat and Code (in the top bar's switcher) and pages reached from another entry. */
+/** The sidebar's entries: everything except what's in the top bar (Chat and Code, Projects) and pages reached from another entry. */
 export function sidebarFor(isAdmin: boolean): NavEntry[] {
-  return navFor(isAdmin).filter((e) => e.group !== "mode" && !e.parent);
+  return navFor(isAdmin).filter((e) => e.group !== "mode" && e.group !== "bar" && !e.parent);
 }
+
+/** The top bar's buttons beside search (Projects). */
+export const BAR_ENTRIES = NAV_ENTRIES.filter((e) => e.group === "bar");
 
 /** The sidebar entry to show as current for a section (Missions → Projects). */
 export function activeEntryFor(section: Section): Section {

@@ -13,7 +13,7 @@ let pathname = "/chat";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {}, replace: () => {}, refresh: () => {} }), usePathname: () => pathname }));
 vi.mock("next/link", () => ({ default: ({ href, children, ...rest }: { href: string; children: unknown } & Record<string, unknown>) => createElement("a", { href, ...rest }, children as never) }));
 
-const { MODES, NAV_ENTRIES, modeFor, navFor, sectionFor, sidebarFor } = await import("@/components/studio/nav");
+const { activeEntryFor, BAR_ENTRIES, MODES, NAV_ENTRIES, modeFor, navFor, sectionFor, sidebarFor } = await import("@/components/studio/nav");
 const { ModeSwitch, rememberPlace } = await import("@/components/studio/mode-switch");
 const { Sidebar } = await import("@/components/studio/sidebar");
 
@@ -126,9 +126,9 @@ describe("the sidebar", () => {
   });
 
   it("marks the current destination with aria-current", () => {
-    const projects = render({ section: "projects" });
-    expect(projects).toMatch(/href="\/projects"[^>]*aria-current="page"/);
-    expect(projects).not.toMatch(/href="\/home"[^>]*aria-current="page"/);
+    const activity = render({ section: "activity" });
+    expect(activity).toMatch(/href="\/activity"[^>]*aria-current="page"/);
+    expect(activity).not.toMatch(/href="\/home"[^>]*aria-current="page"/);
   });
 
   it("is about chats in Chat and about projects in Code", () => {
@@ -213,12 +213,14 @@ describe("the Chat / Code switch", () => {
 });
 
 describe("the redesigned sidebar", () => {
-  it("is Home, Agents, Projects, Templates, then Tools; Missions lives under Projects", () => {
+  it("is Home, Agents, Activity, Templates, then Tools; Projects is in the top bar beside search, Missions under it", () => {
+    expect(BAR_ENTRIES.map((e) => e.id)).toEqual(["projects"]);
+    expect(sidebarFor(false).some((e) => e.id === "projects")).toBe(false);
     expect(
       sidebarFor(false)
         .filter((e) => e.group === "main")
         .map((e) => e.id),
-    ).toEqual(["home", "agents", "projects", "activity", "templates"]);
+    ).toEqual(["home", "agents", "activity", "templates"]);
     expect(
       sidebarFor(false)
         .filter((e) => e.group === "tools")
@@ -229,9 +231,10 @@ describe("the redesigned sidebar", () => {
     expect(navFor(false).filter((e) => e.id === "missions")).toHaveLength(1);
   });
 
-  it("shows Projects as current on a mission page, and a Tools toggle", () => {
+  it("on a mission page the top bar's Projects is current (not the sidebar), and there's a Tools toggle", () => {
     const html = render({ section: "missions" });
-    expect(html).toMatch(/href="\/projects"[^>]*aria-current="page"/);
+    expect(activeEntryFor("missions")).toBe("projects");
+    expect(links(html, "/projects")).toBe(0);
     expect(links(html, "/missions")).toBe(0);
     expect(navHtml(html)).toMatch(/>Tools</);
     expect(navHtml(html)).not.toMatch(/>More</);

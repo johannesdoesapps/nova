@@ -13,7 +13,7 @@ import { ArchivedDialog, DeleteDialog, MoveChatDialog, PromptsDialog, SettingsDi
 import { downloadConversation, localHistory, serverHistory, type ConvSummary, type HistoryStore } from "./history";
 import { useFeedback, useSavedPrompts, useSettings, useTheme, type Feedback, type StudioSettings } from "./prefs";
 import { forgetPlace, ModeSwitch, rememberPlace } from "./mode-switch";
-import { sectionFor } from "./nav";
+import { activeEntryFor, BAR_ENTRIES, sectionFor } from "./nav";
 import { Sidebar } from "./sidebar";
 import { IconButton, iconButtonClass, Menu, MenuItem, MenuSeparator } from "./ui";
 import { InfinityMark } from "@/components/brand/infinity";
@@ -311,6 +311,25 @@ export function StudioFrame({ children }: { children: ReactNode }) {
           <div ref={setCenter} className="flex min-w-0 max-w-[50%] shrink items-center justify-center gap-2" />
           <div className="flex flex-1 basis-0 items-center justify-end gap-0.5">
             <div ref={setRight} className="flex items-center justify-end gap-0.5" />
+            {BAR_ENTRIES.map((e) => {
+              const Icon = e.icon;
+              const here = activeEntryFor(sectionFor(pathname)) === e.id;
+              return (
+                <Link
+                  key={e.id}
+                  href={e.href}
+                  title={e.hint}
+                  aria-current={here ? "page" : undefined}
+                  className={cn(
+                    "order-first inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[13px] transition [&_svg]:h-4 [&_svg]:w-4",
+                    here ? "bg-s-hover text-s-ink" : "text-s-ink-2 hover:bg-s-hover hover:text-s-ink",
+                  )}
+                >
+                  <Icon aria-hidden />
+                  <span className="sr-only sm:not-sr-only">{e.label}</span>
+                </Link>
+              );
+            })}
             <button
               type="button"
               onClick={() => setPaletteOpen(true)}
