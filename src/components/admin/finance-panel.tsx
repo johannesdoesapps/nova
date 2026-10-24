@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CircleAlert, RefreshCw } from "lucide-react";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import type { FinanceReport } from "@/lib/billing/finance";
+import type { Metric, UnitEconomics } from "@/lib/billing/unit-economics";
 import { cn } from "@/lib/utils";
 
 const usd = (x: number, d = 2) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: d, maximumFractionDigits: d }).format(x);
@@ -13,21 +14,26 @@ const pct = (x: number | null) => (x === null ? "—" : `${Math.round(x * 100)}%
 /** Admin finance: revenue, AI costs, margins, model usage, heavy users, projections and alerts. */
 export function FinancePanel() {
   const [report, setReport] = useState<FinanceReport | null>(null);
+  const [economics, setEconomics] = useState<UnitEconomics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
 
   const fetchReport = useCallback(
     (d: number) =>
-      jsonFetch<{ report: FinanceReport }>(`/api/admin/finance?days=${d}`)
-        .then(
+      Promise.all([
+        jsonFetch<{ report: FinanceReport }>(`/api/admin/finance?days=${d}`).then(
           (r) => {
             setReport(r.report);
             setError(null);
           },
           (e: Error) => setError(e.message),
-        )
-        .finally(() => setLoading(false)),
+        ),
+        jsonFetch<{ economics: UnitEconomics }>(`/api/admin/unit-economics?days=${d}`).then(
+          (r) => setEconomics(r.economics),
+          () => setEconomics(null),
+        ),
+      ]).finally(() => setLoading(false)),
     [],
   );
   const load = (d: number) => {
@@ -270,10 +276,77 @@ export function FinancePanel() {
               </table>
             </div>
           </div>
+          {economics && <UnitEconomicsView e={economics} />}
         </div>
       )}
       {!report && !error && <div className="s-skeleton mt-4 h-32 rounded-xl" />}
     </section>
+  );
+}
+
+const metricValue = (m: Metric) => (m.value === null ? "Not enough data" : m.unit === "usd" ? usd(m.value, 4) : m.unit === "share" ? `${Math.round(m.value * 1000) / 10}%` : m.value.toLocaleString("en-US"));
+
+/** Unit economics from measured records, each figure with its definition, and what's still missing. */
+function UnitEconomicsView({ e }: { e: UnitEconomics }) {
+  return (
+    <div>
+      <h3 className="text-[13px] font-medium">Unit economics ({e.periodDays} days)</h3>
+      <p className="mt-0.5 text-[12px] text-s-ink-3">Measured records only. A figure without enough data says so rather than being estimated. Administrators only.</p>
+      <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+        {e.metrics.map((m) => (
+          <div key={m.label} className="rounded-xl border border-s-line px-3 py-2">
+            <dt className="flex justify-between gap-3 text-[13px]">
+              <span className="font-medium">{m.label}</span>
+              <span className={cn("tabular-nums", m.value === null && "text-s-ink-3")}>{metricValue(m)}</span>
+            </dt>
+            <dd className="mt-0.5 text-[11.5px] leading-snug text-s-ink-3">{m.definition}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[560px] text-left text-[12.5px] tabular-nums">
+          <thead className="text-[12px] text-s-ink-3">
+            <tr>
+              {["Who", "Active users", "Model calls", "Model cost", "Sandbox cost", "Per active user", "Collected", "Gross margin"].map((h) => (
+                <th key={h} className="px-2 py-1.5 font-medium">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {e.plans.map((p) => (
+              <tr key={p.plan} className="border-t border-s-line">
+                <td className="px-2 py-1.5 font-medium">{p.label}</td>
+                <td className="px-2 py-1.5">{p.activeUsers}</td>
+                <td className="px-2 py-1.5">{p.calls.toLocaleString("en-US")}</td>
+                <td className="px-2 py-1.5">{usd(p.modelCostUsd, 4)}</td>
+                <td className="px-2 py-1.5">{usd(p.sandboxCostUsd, 4)}</td>
+                <td className="px-2 py-1.5">{p.costPerActiveUserUsd === null ? "—" : usd(p.costPerActiveUserUsd, 4)}</td>
+                <td className="px-2 py-1.5">{usd(p.revenueUsd)}</td>
+                <td className={cn("px-2 py-1.5", (p.grossMarginPct ?? 0) < 0 && "text-s-danger")}>{p.grossMarginPct === null ? "—" : `${p.grossMarginPct}%`}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="mt-1 text-[11.5px] text-s-ink-3">Gross margin = (collected − model and sandbox cost) ÷ collected. Payment fees and hosting are in the plan table above, not here.</p>
+      </div>
+      {e.costByFeature.length > 0 && (
+        <p className="mt-2 text-[12px] text-s-ink-3">
+          Cost by feature: {e.costByFeature.slice(0, 8).map((f) => `${f.feature} ${usd(f.costUsd, 4)} (${f.calls})`).join(" · ")}
+        </p>
+      )}
+      {e.gaps.length > 0 && (
+        <div className="mt-3 rounded-xl border border-s-line-strong px-3 py-2">
+          <h4 className="text-[12.5px] font-medium">Missing data</h4>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[12px] text-s-ink-2">
+            {e.gaps.map((g) => (
+              <li key={g}>{g}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 

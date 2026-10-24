@@ -32,6 +32,9 @@ export interface UsageRow {
   status: "success" | "error";
   errorCode: string | null;
   notCounted: boolean;
+  /** Why it used these units (usage-explain.ts), worked out on the server from the record. */
+  why?: string;
+  paidWithCredits?: boolean;
 }
 
 /** Totals by a key (day, model or feature), largest first; units only from the records. */

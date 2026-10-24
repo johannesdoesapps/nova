@@ -439,7 +439,7 @@ export const FAQ: { q: string; a: string }[] = [
   { q: "Does the coding agent really run my tests?", a: "Yes — on the project's own short-lived computer. You see each command, its exit code and its output. If a command couldn't run, the agent says so instead of claiming it passed." },
   {
     q: "Can I build a whole website on the Free plan?",
-    a: `You can start one. A full site usually takes 10 to 20 agent steps, each counted like a message, plus a few minutes of computer time. Free allows ${PLANS.free.windowUnits} units per 5 hours and ${PLANS.free.workspaceMinutesPerPeriod} computer minutes a month, so a larger site may have to continue after your limit resets, or on Pro.`,
+    a: `You can start one. A full site usually takes 10 to 20 agent steps, each charged like a message of its size (steps carry the project's files, so often more than one typical message), plus a few minutes of computer time. Free allows ${PLANS.free.windowUnits} units per 5 hours and ${PLANS.free.workspaceMinutesPerPeriod} computer minutes a month, so a larger site may have to continue after your limit resets, or on Pro.`,
   },
   { q: "Does the coding agent deploy or publish anything?", a: "No. Pushing to GitHub, publishing packages and deploying are blocked for the agent, even if asked. You can push a project's changes to GitHub yourself from Changes, or download the project as a .zip." },
   { q: "Are the screenshots and the run on this page real?", a: "Yes. They're captures of real sessions on tryorbis.app with a test account, and each caption says when it was taken. The steps of the run are copied from its activity log. Nothing on the page is a simulation." },

@@ -4,6 +4,10 @@ import { getAllModels } from "@/lib/ai";
 import { requireUser } from "@/lib/auth";
 import { ApiError, errorResponse, parseQuery } from "@/lib/http";
 import { reportError } from "@/lib/observability";
+import { getPlatformSettings } from "@/lib/ai/settings";
+import { entitlementFor } from "@/lib/entitlements";
+import { modelUnits } from "@/lib/plans";
+import { explainCharge } from "@/lib/usage-explain";
 
 const query = z.object({ days: z.coerce.number().int().min(1).max(90).default(30) });
 
@@ -21,13 +25,20 @@ export async function GET(req: Request) {
     const [{ data, error }, models] = await Promise.all([
       auth.supabase
         .from("model_runs")
-        .select("created_at, model_id, requested_model, served_model, fallback_from, purpose, units, status, error_code, entitlement")
+        .select("created_at, model_id, requested_model, served_model, fallback_from, purpose, units, status, error_code, entitlement, input_tokens, output_tokens, paid_with_credits")
         .eq("user_id", auth.user.id)
         .gte("created_at", since)
         .order("created_at", { ascending: false })
         .limit(500),
       getAllModels(),
     ]);
+    const [settings, entitlement] = await Promise.all([getPlatformSettings(), entitlementFor(auth)]);
+    const byId = new Map(models.map((m) => [m.id, m]));
+    // A typical message's units for each model, by the same rule the charge used (recordRun in usage.ts).
+    const baseUnits = (id: string) => {
+      const m = byId.get(id);
+      return m ? modelUnits(m, settings.modelUnits[m.id], entitlement?.billing.tierUnits) : null;
+    };
     if (error) {
       reportError(error, { where: "usage.history" });
       throw new ApiError("internal", "Your usage history couldn't be loaded right now.");
@@ -44,6 +55,9 @@ export async function GET(req: Request) {
       status: string;
       error_code: string | null;
       entitlement: string | null;
+      input_tokens: number | null;
+      output_tokens: number | null;
+      paid_with_credits: boolean | null;
     };
     const rows = ((data ?? []) as Row[]).map((r) => ({
       at: r.created_at,
@@ -55,6 +69,17 @@ export async function GET(req: Request) {
       status: r.status === "success" ? "success" : "error",
       errorCode: r.error_code,
       notCounted: r.entitlement === "admin_unlimited",
+      paidWithCredits: !!r.paid_with_credits,
+      why: explainCharge({
+        feature: r.purpose ?? "chat",
+        status: r.status === "success" ? "success" : "error",
+        units: r.units === null ? null : Number(r.units),
+        baseUnits: baseUnits(r.model_id),
+        inputTokens: r.input_tokens,
+        outputTokens: r.output_tokens,
+        paidWithCredits: !!r.paid_with_credits,
+        notCounted: r.entitlement === "admin_unlimited",
+      }),
     }));
     return NextResponse.json({ days: q.days, rows, truncated: rows.length === 500 }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {

@@ -25,6 +25,12 @@ Every signed-in user also has the per-minute rate limit (`ORBIS_RATE_LIMIT_PER_M
 - **Refunds:** a call that failed before producing any output is charged 0 units. A reply cut off part-way is charged, because the provider bills it.
 - **Not charged:** requests refused before a model ran (validation, limits, duplicates).
 
+## What users see (Usage page)
+
+- **Why each request used what it did** (`src/lib/usage-explain.ts`, shown under each row in Requests): the model's units for a typical message, how much larger or smaller this request was (tokens read and written), whether it was paid from extra usage, and "Not charged" for failed calls and background steps. It explains the recorded charge; it never recomputes it.
+- **Monthly allowances** (`src/lib/allowances.ts`): workspace computer minutes (10-minute blocks), code runs, code projects and web searches, read with the same database functions that enforce them (`code_run_status`, `code_workspace_status`). Amber at 80%, red when used up; "Couldn't be read right now" instead of a guessed number.
+- Internal costs (USD) are never shown to ordinary users; they're on Admin → Finance only (docs/UNIT_ECONOMICS.md).
+
 ## How it's enforced (`src/lib/usage.ts`, migration `20261019130000_usage_ledger.sql`)
 
 1. **Reserve.** Before calling a model, `usage_reserve_v5()` (migration `20261027100000_usage_limits_v5.sql`; v4 is kept for older callers) takes a per-user lock, checks the monthly AI budget and its advanced-model part, the daily spending cap, the site-wide emergency cap, daily messages and monthly tokens (spend plus in-flight estimates), counts charged runs plus requests still in flight, and refuses if the request would exceed the 5-hour limit, the weekly limit or (Max, premium models) the premium weekly limit. Otherwise it places a hold for the request's units.

@@ -86,6 +86,7 @@ export function PairSettingsForm({ value, onChange }: { value: PairSettingsInput
           Run tests in the project&apos;s computer
         </label>
       </div>
+      <PairCostNote value={value} models={catalog?.models ?? null} />
       {value.architect === value.reviewer && value.architect !== CODE_AUTO && (
         <p className="sm:col-span-2 text-[12px] text-amber-700 dark:text-amber-300">Both agents use the same model. A different model for the Reviewer usually catches more.</p>
       )}
@@ -888,5 +889,29 @@ function FinalCard({
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * How much a pair task can use, before it starts: the most calls each agent makes with these settings, and
+ * what one costs in units with the chosen models. Agent steps carry the project's files: Orbis's measured
+ * average step is about 1.5× a typical message (see the pricing page). Auto picks per request, so no number.
+ */
+function PairCostNote({ value, models }: { value: PairSettingsInput; models: { id: string; displayName: string; units?: number }[] | null }) {
+  const r = value.maxRounds;
+  const architectCalls = r + 2;
+  const reviewerCalls = r;
+  const unitsOf = (id: string) => models?.find((m) => m.id === id)?.units;
+  const a = unitsOf(value.architect);
+  const b = unitsOf(value.reviewer);
+  const most = a !== undefined && b !== undefined ? Math.round((architectCalls * a + reviewerCalls * b) * 1.5) : null;
+  return (
+    <p className="sm:col-span-2 text-[12px] leading-relaxed text-s-ink-3">
+      With up to {r} round{r === 1 ? "" : "s"}: at most {architectCalls} Architect calls and {reviewerCalls} Reviewer call{reviewerCalls === 1 ? "" : "s"}, each charged like a coding-agent step of its
+      size.
+      {most !== null
+        ? ` With these models that's roughly up to ${most.toLocaleString("en-US")} units for an average-sized project; big projects use more, and it often finishes in fewer rounds.`
+        : " With Auto, each call uses a coding model within your plan; the model menu shows each model's units for a typical message."}
+    </p>
   );
 }

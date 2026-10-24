@@ -11,6 +11,7 @@ import { StudioHeader, useStudio } from "./frame";
 import { BillingButton } from "@/components/common/billing-button";
 import { formatReset, UsageMeters, type PlanInfo, type UsageState } from "./usage";
 import { ExtraUsage } from "./extra-usage";
+import type { MonthlyAllowances } from "@/lib/allowances";
 
 type View = "requests" | "day" | "model" | "feature";
 const VIEWS: { id: View; label: string }[] = [
@@ -29,7 +30,7 @@ const VIEWS: { id: View; label: string }[] = [
 export function UsagePage() {
   const { user, integrations } = useApp();
   const studio = useStudio();
-  const [overview, setOverview] = useState<{ usage: UsageState | null; plan: PlanInfo | null } | "error" | null>(null);
+  const [overview, setOverview] = useState<{ usage: UsageState | null; plan: PlanInfo | null; allowances: MonthlyAllowances | null } | "error" | null>(null);
   const [history, setHistory] = useState<{ rows: UsageRow[]; truncated: boolean; days: number } | { error: string } | null>(null);
   const [days, setDays] = useState(30);
   const [view, setView] = useState<View>("requests");
@@ -62,8 +63,8 @@ export function UsagePage() {
   useEffect(() => {
     if (!user) return;
     let alive = true;
-    jsonFetch<{ usage: Omit<UsageState, "budget" | "info"> | null; budget: UsageState["budget"]; plan: PlanInfo | null }>("/api/usage")
-      .then((j) => alive && setOverview({ usage: j.usage ? { ...j.usage, budget: j.budget, info: j.plan } : null, plan: j.plan }))
+    jsonFetch<{ usage: Omit<UsageState, "budget" | "info"> | null; budget: UsageState["budget"]; plan: PlanInfo | null; allowances?: MonthlyAllowances | null }>("/api/usage")
+      .then((j) => alive && setOverview({ usage: j.usage ? { ...j.usage, budget: j.budget, info: j.plan } : null, plan: j.plan, allowances: j.allowances ?? null }))
       .catch(() => alive && setOverview("error"));
     return () => {
       alive = false;
@@ -175,6 +176,8 @@ export function UsagePage() {
                   <p className="text-[13.5px] text-s-ink-2">No allowance information for your account.</p>
                 )}
               </section>
+
+              {overview && overview !== "error" && overview.allowances && <Monthly a={overview.allowances} plan={overview.plan} />}
 
               <section aria-labelledby="usage-history" className="mt-6">
                 <div className="flex flex-wrap items-center gap-2">
@@ -298,6 +301,7 @@ function Requests({ rows }: { rows: UsageRow[] }) {
             <span className="text-s-ink-3"> · {r.model}</span>
             {r.fallbackFrom && <span className="block text-[12px] text-s-ink-3">Backup for {r.fallbackFrom}</span>}
             {r.requested && !r.fallbackFrom && <span className="block text-[12px] text-s-ink-3">Chosen by Auto</span>}
+            {r.why && <span className="block text-[12px] leading-snug text-s-ink-3">{r.why}</span>}
           </span>
           <span className={cn("shrink-0 text-[12px]", r.status === "error" ? "text-s-danger" : "text-s-ink-3")}>
             {r.status === "error" ? `Failed${r.errorCode ? ` (${r.errorCode})` : ""}` : "Done"}
@@ -358,6 +362,71 @@ function PaymentIssue({ issue, inGrace }: { issue: NonNullable<PlanInfo["payment
           Update payment details
         </BillingButton>
       </div>
+    </section>
+  );
+}
+
+/**
+ * The monthly allowances that aren't usage units, counted by the same server functions that enforce them:
+ * code runs, workspace computer minutes, code projects and web searches.
+ */
+export function Monthly({ a, plan }: { a: MonthlyAllowances; plan: PlanInfo | null }) {
+  const rows: { label: string; used: number | null; limit: number | null; note: string }[] = [
+    {
+      label: "Workspace computer",
+      used: a.workspaceMinutes?.used ?? null,
+      limit: a.workspaceMinutes?.limit ?? null,
+      note: a.workspaceMinutes ? `minutes, counted in ${a.workspaceMinutes.blockMinutes}-minute blocks while a project's computer is on` : "minutes",
+    },
+    { label: "Code runs", used: a.codeRuns?.used ?? null, limit: a.codeRuns?.limit ?? null, note: "runs of code from chat replies" },
+    { label: "Code projects", used: a.codeProjects?.used ?? null, limit: a.codeProjects?.limit ?? null, note: "kept at once (not a monthly count)" },
+    ...(plan?.webSearches
+      ? [
+          {
+            label: "Web searches",
+            used: plan.webSearchesLeft === null ? null : Math.max(0, plan.webSearches - plan.webSearchesLeft),
+            limit: plan.webSearches,
+            note: "searches by Orbis while answering",
+          },
+        ]
+      : []),
+  ];
+  return (
+    <section aria-labelledby="usage-monthly" className="glass mt-6 rounded-[22px] p-4 sm:p-5">
+      <h3 id="usage-monthly" className="text-[14px] font-semibold">
+        Monthly allowances
+      </h3>
+      <p className="mt-0.5 text-[12.5px] text-s-ink-3">Separate from usage units. Renew on {new Date(a.resetsAt).toLocaleDateString([], { month: "long", day: "numeric" })}.</p>
+      <ul className="mt-3 space-y-3">
+        {rows.map((r) => {
+          const share = r.used !== null && r.limit ? Math.min(1, r.used / r.limit) : 0;
+          return (
+            <li key={r.label} className="text-[13px]">
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-medium text-s-ink">{r.label}</span>
+                <span className="text-s-ink-3">{r.note}</span>
+                <span className="ml-auto tabular-nums text-s-ink-2">
+                  {r.limit === 0
+                    ? "Not included in your plan"
+                    : r.used === null || r.limit === null
+                      ? "Couldn't be read right now"
+                      : `${r.used.toLocaleString("en-US")} of ${r.limit.toLocaleString("en-US")}`}
+                </span>
+              </div>
+              {!!r.limit && r.used !== null && (
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-s-hover" role="progressbar" aria-label={`${r.label} used`} aria-valuemin={0} aria-valuemax={r.limit} aria-valuenow={r.used}>
+                  <div className={cn("h-full rounded-full", share >= 1 ? "bg-s-danger" : share >= 0.8 ? "bg-amber-500" : "bg-s-accent")} style={{ width: `${share * 100}%` }} />
+                </div>
+              )}
+              {!!r.limit && r.used !== null && share >= 0.8 && (
+                <p className="mt-1 text-[12px] text-amber-700 dark:text-amber-300">
+                  {share >= 1 ? "Used up for this month." : "Over 80% used."} {plan?.upgradeTo ? `${plan.upgradeTo.label} includes more.` : ""}
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }

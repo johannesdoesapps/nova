@@ -10,6 +10,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DEFAULT_MODELS } from "@/lib/ai/registry";
 import { financeReport, type FinanceSummary } from "@/lib/billing/finance";
+import { unitEconomics, type UnitEconomicsRaw } from "@/lib/billing/unit-economics";
 import { budgetPeriod } from "@/lib/budget";
 import { estimateCost } from "@/lib/ai/cost";
 import { DAYS_PER_MONTH, messageCostUsd, modelCostTable, planCapacity, planScenario } from "@/lib/billing/scenarios";
@@ -203,7 +204,7 @@ beforeAll(async () => {
 }, 60_000);
 
 beforeEach(async () => {
-  await db.exec("delete from public.usage_holds; delete from public.model_runs; delete from public.admins; delete from public.subscriptions; delete from public.billing_ledger;");
+  await db.exec("delete from public.code_agent_runs; delete from public.code_projects; delete from public.usage_holds; delete from public.model_runs; delete from public.admins; delete from public.subscriptions; delete from public.billing_ledger;");
 });
 
 describe("usage_reserve_v2 (budget, atomically)", () => {
@@ -382,6 +383,62 @@ describe("admin finance summary", () => {
     expect(r.contribution.fixedOverheadUsd).toBe(300);
     expect(r.contribution.operatingResultUsd).toBeCloseTo(r.contribution.contributionUsd - 300, 2);
     expect(r.alerts.map((a) => a.text).join(" ")).toMatch(/payment attempt failed/);
+  });
+});
+
+describe("admin unit economics", () => {
+  it("refuses non-administrators", async () => {
+    await expect(as(ALICE, () => db.query("select public.admin_unit_economics(now() - interval '30 days')"))).rejects.toThrow(/Administrators only/);
+  });
+
+  it("aggregates cost by plan, coding tasks, revenue and concentration from records only", async () => {
+    await db.exec(`insert into public.admins (user_id) values ('${BOB}')`);
+    await as(ALICE, () =>
+      db.query(`insert into public.model_runs (model_id, status, units, estimated_cost, entitlement, purpose) values
+        ('m', 'success', 1, 0.10, 'plan:pro', 'chat'), ('m', 'error', 0, 0.02, 'plan:pro', 'code_agent'), ('sandbox', 'success', 0, 0.05, 'plan:pro', 'code_workspace')`),
+    );
+    await as(BOB, () => db.query("insert into public.model_runs (model_id, status, units, estimated_cost, entitlement, purpose) values ('m', 'success', 0, 1.00, 'admin_unlimited', 'chat')"));
+    const pid = (await as(ALICE, () => db.query<{ id: string }>("insert into public.code_projects (name) values ('p') returning id"))).rows[0]!.id;
+    await as(ALICE, () =>
+      db.query(
+        `insert into public.code_agent_runs (project_id, request, status, usage, report) values
+          ($1, 'a', 'completed', '{"costUsd": 0.3}', '{"state": "verified", "usage": {"costUsd": 0.4}}'),
+          ($1, 'b', 'completed', '{"costUsd": 0.2}', '{"verification": "passed"}'),
+          ($1, 'c', 'completed', '{"costUsd": 0.1}', '{"state": "unverified"}'),
+          ($1, 'd', 'failed', '{"costUsd": 0.25}', null),
+          ($1, 'e', 'cancelled', '{"costUsd": 0.05}', null),
+          ($1, 'f', 'running', '{}', null)`,
+        [pid],
+      ),
+    );
+    await db.exec(`insert into public.billing_ledger (stripe_object_id, user_id, kind, plan, amount_usd) values ('in_ue1', '${ALICE}', 'payment', 'pro', 20), ('re_ue1', '${ALICE}', 'refund', 'pro', 5)`);
+
+    const raw = await as(BOB, async () => (await db.query<{ r: UnitEconomicsRaw }>("select public.admin_unit_economics(now() - interval '30 days') as r")).rows[0]!.r);
+    const pro = raw.by_plan.find((p) => p.entitlement === "plan:pro")!;
+    expect(pro).toMatchObject({ active_users: 1, calls: 2, failed_calls: 1 });
+    expect(Number(pro.model_cost_usd)).toBeCloseTo(0.12);
+    expect(Number(pro.sandbox_cost_usd)).toBeCloseTo(0.05);
+    expect(raw.tasks).toMatchObject({ total: 6, completed: 3, succeeded: 2, failed: 1, cancelled: 1, open: 1, pair: 0 });
+    // The final report's cost wins over the running total (0.4, not 0.3).
+    expect(Number(raw.tasks.succeeded_cost_usd)).toBeCloseTo(0.6);
+    expect(Number(raw.tasks.cost_usd)).toBeCloseTo(1.0);
+    expect(Number(raw.tasks.failed_or_cancelled_cost_usd)).toBeCloseTo(0.3);
+    // Administrators are left out of concentration.
+    expect(raw.concentration).toMatchObject({ paying_or_free_users: 1 });
+    expect(Number(raw.concentration.total_cost_usd)).toBeCloseTo(0.17);
+
+    const ue = unitEconomics(raw, 30);
+    const m = (label: string) => ue.metrics.find((x) => x.label === label)!.value;
+    expect(m("Cost per successful coding task")).toBeCloseTo(0.3);
+    expect(m("All task cost per successful task")).toBeCloseTo(0.5);
+    expect(m("Variable cost per active user")).toBeCloseTo(0.17);
+    expect(m("Top user's share of cost")).toBe(1);
+    const proPlan = ue.plans.find((p) => p.plan === "plan:pro")!;
+    expect(proPlan.revenueUsd).toBe(15);
+    expect(proPlan.grossMarginPct).toBeCloseTo(((15 - 0.17) / 15) * 100, 0);
+    expect(ue.plans.find((p) => p.plan === "admin_unlimited")!.grossMarginPct).toBeNull();
+    expect(ue.gaps.join(" ")).toMatch(/administrator accounts/);
+    expect(ue.gaps.join(" ")).not.toMatch(/No payments/);
   });
 });
 

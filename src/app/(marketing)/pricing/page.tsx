@@ -7,7 +7,7 @@ import { getAuth } from "@/lib/auth";
 import { billingConfigured } from "@/lib/billing/stripe";
 import { entitlementFor } from "@/lib/entitlements";
 import { planCapacity } from "@/lib/billing/scenarios";
-import { DEFAULT_BILLING, PLAN_IDS, chargeUsd, modelTier, planOf, resolveBilling, type ModelTier } from "@/lib/plans";
+import { DEFAULT_BILLING, PLAN_IDS, chargeUsd, modelTier, planOf, resolveBilling, sizedUnits, type ModelTier } from "@/lib/plans";
 import { pageMetadata } from "@/lib/seo";
 import { creditsForSale } from "@/lib/usage";
 import { DEFAULT_STEP_LIMIT } from "@/lib/code/agent/types";
@@ -20,6 +20,20 @@ export const metadata = pageMetadata({
   description: `Orbis is free to start. Pro is $${d.pro.priceUsd} and Max $${d.max.priceUsd} per month (USD), with more usage and access to larger Claude and GPT models.`,
   path: "/pricing",
 });
+
+/**
+ * The coding agent's measured average step: 6,217 tokens read and 530 written, over its 106 recorded steps
+ * (20–21 October 2026). Steps carry the project's files, so they're bigger than a typical chat message.
+ * Used only to show what a step costs under the same sizing rule that charges it.
+ */
+const AGENT_STEP = { inputTokens: 6217, outputTokens: 530 };
+
+/** Who each plan is for, in a line. */
+const FOR_WHOM: Record<PricingPlan["id"], string> = {
+  free: "Trying Orbis, and occasional questions with fast models",
+  pro: "Regular use: larger models, coding projects and agents most days",
+  max: "Heavy use: premium models, long coding and agent sessions",
+};
 
 const BLURBS: Record<PricingPlan["id"], string> = {
   free: "Try Orbis with the fastest, lowest-cost models.",
@@ -76,7 +90,18 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
   const fmt = (n: number) => n.toLocaleString("en-US");
   const words = (tokens: number) => `about ${fmt(Math.round((tokens * 0.75) / 50) * 50)} words`;
   const tierNames: Record<ModelTier, string> = { standard: "fast", advanced: "advanced", premium: "premium" };
+  // What a measured average agent step uses, by the sizing rule that charges it (rounded; real steps vary).
+  const stepUnits = (tier: ModelTier) => {
+    const m = live.filter((x) => modelTier(x) === tier).sort((a, b) => (a.inputPrice ?? 1e9) - (b.inputPrice ?? 1e9))[0];
+    if (!m) return null;
+    const u = sizedUnits(m, tu[tier], AGENT_STEP, billing.scenario);
+    return { name: m.displayName, units: u < 10 ? Math.round(u * 10) / 10 : Math.round(u) };
+  };
+  const fastStep = stepUnits("standard");
+  const advancedStep = stepUnits("advanced");
+  const stepText = [fastStep && `about ${fastStep.units} units with ${fastStep.name}`, advancedStep && `about ${advancedStep.units} with ${advancedStep.name}`].filter(Boolean).join("; ");
   const ROWS: { label: string; cells: (id: (typeof PLAN_IDS)[number]) => string }[] = [
+    { label: "Who it's for", cells: (id) => FOR_WHOM[id] },
     { label: "Price", cells: (id) => (P[id].priceUsd === 0 ? "Free" : `$${fmt(P[id].priceUsd)}/month or $${fmt(chargeUsd(P[id], "year"))}/year`) },
     { label: "Usage per 5 hours", cells: (id) => `${fmt(P[id].windowUnits)} units` },
     { label: "Usage per week", cells: (id) => `${fmt(P[id].weeklyUnits)} units` },
@@ -87,7 +112,9 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
     { label: "Run code in chat", cells: (id) => `${fmt(P[id].codeRunsPerPeriod)} runs/month` },
     { label: "Code projects", cells: (id) => fmt(P[id].codeProjects) },
     { label: "Workspace computer", cells: (id) => `${fmt(P[id].workspaceMinutesPerPeriod)} min/month` },
-    { label: "Coding agent", cells: () => "Included (each step counts as a message)" },
+    { label: "Coding agent", cells: () => "Included. Each step is charged like a message of its size; steps include project files, so they're usually larger than a chat message" },
+    { label: "Pair Coding (two models)", cells: () => "Included. Each Architect or Reviewer call is charged like a coding-agent step" },
+    { label: "Extra usage", cells: (id) => (id === "free" ? "Not available" : creditsOnSale ? "Optional, bought separately; used only when a limit is reached" : "Not on sale yet") },
     { label: "Web searches", cells: (id) => (P[id].webSearchesPerPeriod > 0 ? `${fmt(P[id].webSearchesPerPeriod)}/month, once search is enabled` : "Not included") },
     { label: "Agents, Council, Arena, Mission Control, Connectors", cells: () => "Included" },
   ];
@@ -192,7 +219,14 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
             ["A long conversation, or one with big attachments", "More, in proportion to how much text is sent and written: twice the size uses about twice the units, up to 20 times a typical message."],
             ["A Council with three models", `One message per model's answer, plus the chair model's summary (and the models' reviews of each other in Deep mode). With three fast models in Quick mode: ${4 * tu.standard} units.`],
             ["An Arena comparison of two fast models", `${2 * tu.standard} units. An agreement analysis, final answer or evaluation afterwards is one more message each, to the model that writes it.`],
-            ["A coding agent run", `One message per step the agent takes (a small bug fix is typically a handful of steps). It stops to ask before going past ${DEFAULT_STEP_LIMIT} steps. Running code on the project's computer uses workspace time, counted in 10-minute blocks.`],
+            [
+              "A coding agent run",
+              `Each step the agent takes is charged by its size. Steps carry the project's files: Orbis's measured average step (about ${fmt(Math.round((AGENT_STEP.inputTokens * 0.75) / 100) * 100)} words read, ${fmt(Math.round((AGENT_STEP.outputTokens * 0.75) / 10) * 10)} written) uses ${stepText || "about 1.5 typical messages"}. A small fix is typically a handful of steps; a website more. It stops to ask before going past ${DEFAULT_STEP_LIMIT} steps. Running code on the project's computer uses workspace minutes, counted in 10-minute blocks.`,
+            ],
+            [
+              "A Pair Coding task",
+              "Two models take turns: a plan, a first version and a final summary (3 calls), plus about 3 calls for each review round (review, revision, check), each charged like a coding-agent step. The rounds you allow (1 to 5) cap it.",
+            ],
             ["Running code from a chat reply", "One code run from your monthly runs. It uses no usage units."],
           ].map(([k, v]) => (
             <div key={k} className="grid gap-1 px-5 py-4 sm:grid-cols-[1fr_1.4fr] sm:gap-6">
@@ -218,6 +252,14 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
             from your account.
           </li>
           <li>Upgrades are charged pro-rata right away; downgrades are credited to your next invoice.</li>
+          <li>
+            Moving to a smaller plan: its limits apply from the change. Your code projects are kept; while you have more than the new plan allows, you can&rsquo;t create new ones.
+          </li>
+          <li>
+            Stopped or failed work: model calls that already answered are charged (the provider bills them), so a coding task you stop keeps the steps it took. A call that failed before replying
+            isn&rsquo;t charged, and a refused request (over a limit, a duplicate) uses nothing.
+          </li>
+          <li>Workspace minutes and code runs are monthly: when they&rsquo;re used up, the project&rsquo;s computer or the Run button waits until they renew; chat keeps working.</li>
         </ul>
       </section>
       <CtaBand />
