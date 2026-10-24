@@ -37,6 +37,7 @@ import {
   type TranscriptMessage,
 } from "./protocol";
 import { classifyCommand } from "./policy";
+import { agentPurpose, profileGuidance, profileReport, qaMayEdit } from "./profiles";
 import { buildReport } from "./report";
 import {
   addEvents,
@@ -237,7 +238,12 @@ export async function saveChanges(auth: Authed, runId: string, projectId: string
 }
 
 /** Run a command in the project's computer, wait for it, and copy back the files it changed. */
-export async function execCommand(auth: Authed, runId: string, projectId: string, command: string): Promise<CommandOutcome> {
+/** Which files a run's commands may change; the rest are put back (QA Testing may only change tests). */
+export function commandKeeps(row: Pick<RunRow, "options">): ((path: string) => boolean) | undefined {
+  return runOptions(row).agent === "qa_tester" ? qaMayEdit : undefined;
+}
+
+export async function execCommand(auth: Authed, runId: string, projectId: string, command: string, keep?: (path: string) => boolean): Promise<CommandOutcome> {
   const box = await optionalBox(auth, projectId);
   if (!box) throw new ApiError("conflict", "The project's computer isn't running.", { scope: "workspace_stopped" });
   const before = await getFiles(auth, projectId);
@@ -293,6 +299,12 @@ export async function execCommand(auth: Authed, runId: string, projectId: string
       const prior = new Map(before.map((f) => [f.path, f.content]));
       changed = [...sync.changed, ...sync.deleted].map((path) => ({ path, before: prior.get(path) ?? null, after: after.get(path) ?? null })).filter((c) => c.before !== c.after);
       await recordChanges(auth, runId, changed);
+      const refused = keep ? changed.filter((c) => !keep(c.path)) : [];
+      if (refused.length) {
+        await saveChanges(auth, runId, projectId, refused.map((c) => ({ path: c.path, before: c.after, after: c.before })));
+        changed = changed.filter((c) => keep!(c.path));
+        skipped = [...skipped, ...refused.map((c) => `${c.path} (put back: this agent may only change test files)`)];
+      }
     } catch (err) {
       reportError(err, { where: "code.agent.sync" });
       skipped = ["(files changed by this command couldn't be copied back)"];
@@ -333,7 +345,7 @@ function realEnv(c: EnvContext): AgentEnv {
     files: () => getFiles(auth, project.id),
     save: (changes) => saveChanges(auth, run.id, project.id, changes),
     computer: async () => Boolean(await optionalBox(auth, project.id)),
-    exec: (command) => execCommand(auth, run.id, project.id, command),
+    exec: (command) => execCommand(auth, run.id, project.id, command, commandKeeps(run)),
     changes: async () => (await listChanges(auth, run.id)).map((ch) => ({ path: ch.path, before: ch.before, after: ch.after })),
     checkpoints: { list: () => listCheckpoints(auth, run.id), create: (label, files) => createCheckpoint(auth, run.id, label, files) },
     project: { runCommand: project.runCommand },
@@ -429,6 +441,8 @@ async function finalize(auth: Authed, runId: string, unresolved: string[] = [], 
     });
     report.timing = runTiming(row, events);
     if (failure) report.failure = failure;
+    const profile = runOptions(row).agent;
+    if (profile) report.profile = profileReport(profile, events, report.files);
     logRunEnd(row, report);
     return await updateRun(auth, runId, { report });
   } catch (err) {
@@ -657,10 +671,11 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
   const replyChars = maxOutputTokens * 3;
   const web = opts.web ?? isWebTask(row.request, [], project.template);
   const system = `${systemPrompt({ ...ctx, planning: !readOnly && !planApproved, reviewEdits: opts.reviewEdits, native, web, replyChars })}
-- Keep each reply under about ${replyChars.toLocaleString("en-US")} characters. A file that wouldn't fit: split it into several files, or write the first part and add the rest with edit_file in the next step.`;
+- Keep each reply under about ${replyChars.toLocaleString("en-US")} characters. A file that wouldn't fit: split it into several files, or write the first part and add the rest with edit_file in the next step.${opts.agent ? `\n\n${profileGuidance(opts.agent, ctx)}` : ""}`;
   const history = trimTranscript(transcript, Math.max(24_000, limits.historyChars));
   const promptChars = system.length + history.reduce((n, m) => n + messageSize(m), 0);
-  await enforceLimits(req, auth, 1, [model], { purpose: "code_agent", inputTokens: Math.ceil(promptChars / 3.5) + 200, maxOutputTokens });
+  const purpose = agentPurpose(opts.agent);
+  await enforceLimits(req, auth, 1, [model], { purpose, inputTokens: Math.ceil(promptChars / 3.5) + 200, maxOutputTokens });
 
   // The model call isn't tied to the browser's request: a closed tab doesn't cut a step off half way.
   const started = performance.now();
@@ -725,7 +740,7 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
       latencyMs,
       usage: callUsage,
       status: "success",
-      purpose: "code_agent",
+      purpose,
       category: "coding",
       servedModel,
       requestedModel: opts.modelId ?? "auto:coding",
@@ -790,7 +805,7 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
 
   const env = realEnv({ auth, run: row, project, docs, github, webSearches, deadline });
   if (reply.thought) await addEvents(auth, row.id, [{ kind: "note", title: clipText(reply.thought, 380) }]);
-  const outcome = await runActions(reply, { planApproved, approvePlans: opts.approvePlans, reviewEdits: opts.reviewEdits, commands: ctx.commands, lastTests: row.tests?.last ?? null, readOnly }, env);
+  const outcome = await runActions(reply, { planApproved, approvePlans: opts.approvePlans, reviewEdits: opts.reviewEdits, commands: ctx.commands, lastTests: row.tests?.last ?? null, readOnly, testsOnly: opts.agent === "qa_tester" }, env);
   record(webSearches.count ? ["web_search"] : []);
 
   const tests = outcome.tests.length ? addTests(row.tests, outcome.tests) : row.tests;
@@ -1141,7 +1156,7 @@ async function continueAfterLimit(row: RunRow, reason: LimitReason, done: (patch
 /** Run a command the user approved, and put the result in the conversation. */
 async function runApproved(auth: Authed, row: RunRow, command: string, lead: NewEvent[]): Promise<RunRow> {
   if (lead.length) await addEvents(auth, row.id, lead);
-  const out = await execCommand(auth, row.id, row.project_id, command);
+  const out = await execCommand(auth, row.id, row.project_id, command, commandKeeps(row));
   const test = isTestCommand(command) ? testResult({ command, ...out }) : null;
   const transcript = appendUser(row.transcript ?? [], `The user approved \`${command}\`. Result:\n${commandResultText(command, out, test)}`);
   await addEvents(auth, row.id, [commandEvent(command, out, test)]);

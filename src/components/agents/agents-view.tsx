@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ArrowRight, CircleAlert, Code2, Copy, Crosshair, Ellipsis, Pencil, Plus, Radar, Search, Trash2 } from "lucide-react";
+import { ArrowRight, CircleAlert, Copy, Ellipsis, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useModels } from "@/components/common/model-picker";
 import { useApp } from "@/components/layout/app-context";
 import { ConfirmDialog } from "@/components/studio/dialogs";
@@ -11,6 +11,7 @@ import { iconButtonClass, Menu, MenuItem, MenuSeparator } from "@/components/stu
 import type { AgentInput } from "@/lib/agents/schema";
 import { CAPABILITY_INFO, type AgentConfig, type CapabilityStatus } from "@/lib/agents/types";
 import { cn } from "@/lib/utils";
+import { TaskAgents } from "@/components/agent-platform/marketplace";
 import { AgentEditor } from "./agent-editor";
 import { AgentAvatar, CAPABILITY_ICONS } from "./agent-visuals";
 import { agentStatus, deleteAgent, loadAgents, toInput, useAgents, type AgentStatus } from "./use-agents";
@@ -67,7 +68,7 @@ export function AgentsView() {
           <div className="s-in flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
             <div>
               <h1 className="font-serif text-[clamp(34px,5vw,46px)] leading-[1.05] tracking-[-0.01em]">AI Agents</h1>
-              <p className="mt-2 text-[15.5px] text-s-ink-2">Your specialized AI assistants, ready to work.</p>
+              <p className="mt-2 text-[15.5px] text-s-ink-2">Assign real work to an agent, or chat with a specialised assistant.</p>
             </div>
             <button
               type="button"
@@ -75,49 +76,31 @@ export function AgentsView() {
               disabled={!ready || blockedGuest}
               className="inline-flex h-10 items-center gap-2 rounded-xl bg-s-accent px-4 text-[14px] font-medium text-s-accent-ink shadow-[0_8px_24px_-10px_var(--s-accent)] transition hover:-translate-y-px hover:brightness-110 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
             >
-              <Plus className="h-4 w-4" /> Create agent
+              <Plus className="h-4 w-4" /> Create assistant
             </button>
           </div>
 
-          <Link
-            href="/agents/security"
-            className="glass-strong glass-edge s-in group mt-7 flex flex-col gap-4 overflow-hidden rounded-[24px] p-5 transition duration-300 [animation-delay:40ms] hover:-translate-y-0.5 hover:shadow-[var(--s-shadow)] sm:flex-row sm:items-center sm:p-6"
-          >
-            <div className="flex shrink-0 -space-x-2">
-              {[
-                [Radar, "from-sky-500/25 text-sky-600 dark:text-sky-300"],
-                [Crosshair, "from-amber-500/25 text-amber-600 dark:text-amber-300"],
-                [Code2, "from-violet-500/25 text-violet-600 dark:text-violet-300"],
-              ].map(([Icon, cls], i) => {
-                const I = Icon as typeof Radar;
-                return (
-                  <span key={i} className={cn("grid h-11 w-11 place-items-center rounded-[14px] border border-s-line bg-s-bg bg-gradient-to-br to-transparent", cls as string)}>
-                    <I className="h-5 w-5" aria-hidden />
-                  </span>
-                );
-              })}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[16px] font-semibold tracking-[-0.01em]">Security Team</p>
-              <p className="mt-0.5 text-[13.5px] text-s-ink-2">Orbis Sentinel, Threat Hunter and Code Guardian — website checks, log investigations and secure code review that work together.</p>
-            </div>
-            <span className="inline-flex h-9 shrink-0 items-center gap-1.5 self-start rounded-xl border border-s-line-strong px-3.5 text-[13px] font-medium transition group-hover:border-transparent group-hover:bg-s-accent group-hover:text-s-accent-ink sm:self-center">
-              Open security workspace <ArrowRight className="h-3.5 w-3.5" />
-            </span>
-          </Link>
-
-          <div className="s-in mt-7 flex flex-col gap-3 [animation-delay:60ms] lg:flex-row lg:items-center">
-            <div className="relative w-full lg:max-w-[320px]">
+          <div className="s-in mt-6 [animation-delay:30ms]">
+            <div className="relative w-full sm:max-w-[360px]">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-s-ink-3" />
               <input
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search agents"
+                placeholder="Search agents and assistants"
                 aria-label="Search agents"
                 className="glass h-10 w-full rounded-xl pl-10 pr-3 text-[14px] text-s-ink outline-none transition placeholder:text-s-ink-3 focus:border-s-line-strong focus-visible:outline-none [&::-webkit-search-cancel-button]:hidden"
               />
             </div>
+          </div>
+
+          <TaskAgents query={query} />
+
+          <div className="s-in mt-10 [animation-delay:60ms]">
+            <h2 className="text-[18px] font-semibold tracking-[-0.01em]">Chat assistants</h2>
+            <p className="mt-0.5 text-[13.5px] text-s-ink-2">Specialised conversations with their own instructions and tools. Create your own or customise a copy.</p>
+          </div>
+          <div className="s-in mt-4 flex flex-col gap-3 [animation-delay:60ms] lg:flex-row lg:items-center">
             <div role="tablist" aria-label="Filter agents" className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:mx-0 lg:px-0 lg:pb-0">
               {filters.map((f) => (
                 <button
@@ -168,7 +151,7 @@ export function AgentsView() {
             ) : state.status === "error" ? (
               <div role="alert" className="glass mx-auto flex max-w-md flex-col items-center rounded-[22px] px-6 py-10 text-center">
                 <CircleAlert className="h-6 w-6 text-s-danger" />
-                <h2 className="mt-3 text-[16px] font-semibold">Agents couldn’t be loaded</h2>
+                <h3 className="mt-3 text-[16px] font-semibold">Assistants couldn’t be loaded</h3>
                 <p className="mt-1 text-[14px] text-s-ink-2">{state.message}</p>
                 <button type="button" onClick={() => void loadAgents()} className="mt-5 rounded-xl border border-s-line-strong px-4 py-2 text-[13.5px] font-medium transition hover:bg-s-hover">
                   Try again
@@ -178,15 +161,15 @@ export function AgentsView() {
               <div className="mx-auto flex max-w-md flex-col items-center rounded-[22px] border border-dashed border-s-line-strong px-6 py-12 text-center">
                 {filter === "mine" && !query ? (
                   <>
-                    <h2 className="text-[16px] font-semibold">No agents of your own yet</h2>
+                    <h3 className="text-[16px] font-semibold">No assistants of your own yet</h3>
                     <p className="mt-1 text-[14px] text-s-ink-2">Create one with its own instructions and tools, or duplicate a built-in agent and adjust it.</p>
                     <button type="button" onClick={create} disabled={blockedGuest} className="mt-5 inline-flex h-10 items-center gap-2 rounded-xl bg-s-accent px-4 text-[14px] font-medium text-s-accent-ink transition hover:brightness-110 disabled:opacity-50">
-                      <Plus className="h-4 w-4" /> Create agent
+                      <Plus className="h-4 w-4" /> Create assistant
                     </button>
                   </>
                 ) : (
                   <>
-                    <h2 className="text-[16px] font-semibold">No agents match</h2>
+                    <h3 className="text-[16px] font-semibold">No assistants match</h3>
                     <p className="mt-1 text-[14px] text-s-ink-2">Try another search or filter.</p>
                     <button
                       type="button"
@@ -287,11 +270,11 @@ function AgentCard({
       <div className="flex items-start gap-3.5">
         <AgentAvatar agent={agent} />
         <div className="min-w-0 flex-1 pt-0.5">
-          <h2 className="truncate text-[15.5px] font-semibold tracking-[-0.01em]">
+          <h3 className="truncate text-[15.5px] font-semibold tracking-[-0.01em]">
             <Link href={`/agents/${agent.id}`} className="outline-none after:absolute after:inset-0 after:rounded-[22px] focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-[var(--s-ring)]">
               {agent.name}
             </Link>
-          </h2>
+          </h3>
           <p className="mt-1 flex min-w-0 items-center gap-x-2 whitespace-nowrap text-[12.5px] text-s-ink-3">
             <span>{custom ? "Custom" : agent.category}</span>
             <span aria-hidden>·</span>

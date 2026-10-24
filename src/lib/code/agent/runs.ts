@@ -170,11 +170,12 @@ export async function listRuns(auth: Authed, projectId: string, limit = 30): Pro
  */
 export async function listTasks(
   auth: Authed,
-  o: { statuses?: RunStatus[]; states?: string[]; pattern?: string | null; projectId?: string | null; pairOnly?: boolean; sort: "activity" | "newest" | "oldest"; offset: number; limit: number },
+  o: { statuses?: RunStatus[]; states?: string[]; pattern?: string | null; projectId?: string | null; pairOnly?: boolean; agent?: string | null; sort: "activity" | "newest" | "oldest"; offset: number; limit: number },
 ): Promise<{ rows: (RunRow & { project: { name: string } | null })[]; more: boolean }> {
   let q = auth.supabase.from("code_agent_runs").select(`${LIST_COLS}, project:code_projects(name)`).eq("user_id", auth.user.id);
   if (o.projectId) q = q.eq("project_id", requireUuid(o.projectId));
   if (o.pairOnly) q = q.not("pair", "is", null);
+  if (o.agent) q = q.eq("options->>agent", o.agent);
   if (o.statuses?.length) q = q.in("status", o.statuses);
   if (o.states?.length) q = q.in("report->>state", o.states);
   if (o.pattern) q = q.or(`request.ilike.${o.pattern},summary.ilike.${o.pattern}`);

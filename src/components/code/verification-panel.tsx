@@ -3,6 +3,7 @@ import { useState } from "react";
 import { AlertTriangle, CircleCheck, Wrench, CircleDashed, CircleX, Clock3, FileCode2, Globe, Loader2, RotateCcw, ShieldAlert, ShieldCheck, Square, Undo2 } from "lucide-react";
 import { assessReport, CHECK_STATUS_LABEL, checklistOf, fixRequest, nextActions, TASK_STATE_INFO, taskState } from "@/lib/code/agent/verdict";
 import type { CheckItem, CheckStatus, RunReport, RunView, TaskState } from "@/lib/code/agent/types";
+import { REPRODUCTION_LABEL, type ProfileReport } from "@/lib/code/agent/profiles";
 import { cn } from "@/lib/utils";
 
 /**
@@ -129,9 +130,11 @@ export function VerificationPanel({
       {!r && run.status === "completed" && <p className="mt-2 text-[13px] text-s-ink-2">The session&apos;s record of checks is missing, so its work can&apos;t be treated as verified.</p>}
 
       <div className="mt-3">
-        <h3 className={heading}>The task</h3>
+        <h3 className={heading}>{run.options.agent === "bug_fixer" ? "The bug, as reported" : run.options.agent === "qa_tester" ? "What to test" : "The task"}</h3>
         <p className="mt-1 line-clamp-4 whitespace-pre-wrap text-s-ink-2">{run.request}</p>
       </div>
+
+      {r?.profile && <ProfileSection report={r.profile} heading={heading} onOpenFile={onOpenFile} />}
 
       {run.summary && (
         <div className="mt-3">
@@ -276,6 +279,47 @@ export function VerificationPanel({
         </p>
       )}
     </section>
+  );
+}
+
+/** Bug Fixing: whether the bug was reproduced before the fix (from what ran). QA Testing: the test files it wrote. */
+function ProfileSection({ report: p, heading, onOpenFile }: { report: ProfileReport; heading: string; onOpenFile: (path: string) => void }) {
+  if (p.reproduction) {
+    const rep = p.reproduction;
+    return (
+      <div className="mt-3">
+        <h3 className={heading}>Before the fix</h3>
+        <p className={cn("mt-1", rep.state === "failed_before_fix" ? "text-s-ink" : "text-amber-700 dark:text-amber-400")}>{REPRODUCTION_LABEL[rep.state]}</p>
+        {rep.command && (
+          <p className="mt-0.5 text-[12.5px] text-s-ink-3">
+            <code className="font-mono">{rep.command}</code>
+            {rep.detail ? ` · ${rep.detail}` : ""}
+          </p>
+        )}
+        {rep.state !== "failed_before_fix" && <p className="mt-0.5 text-[12.5px] text-s-ink-3">Without a failing check before the change, the tests below can&apos;t show the fix is what made the difference.</p>}
+      </div>
+    );
+  }
+  const tests = p.testFiles ?? [];
+  const other = p.otherFiles ?? [];
+  return (
+    <div className="mt-3">
+      <h3 className={heading}>Tests written</h3>
+      {tests.length === 0 ? (
+        <p className="mt-1 text-[13px] text-s-ink-3">No test files were added or changed.</p>
+      ) : (
+        <ul className="mt-1 space-y-0.5 font-mono text-[12.5px]">
+          {tests.map((path) => (
+            <li key={path}>
+              <button type="button" onClick={() => onOpenFile(path)} className="min-h-6 truncate text-left text-s-ink-2 underline-offset-2 hover:text-s-ink hover:underline">
+                {path}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {other.length > 0 && <p className="mt-1 text-[12.5px] text-s-ink-3">Test setup changed: {other.join(", ")}</p>}
+    </div>
   );
 }
 

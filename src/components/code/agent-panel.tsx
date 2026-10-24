@@ -1,4 +1,6 @@
 "use client";
+import Link from "next/link";
+import { agentDef, PROFILE_SLUG } from "@/lib/agent-platform/registry";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   AlertTriangle,
@@ -502,6 +504,30 @@ export function AgentPanel({
     }
   };
 
+  /** Run a Bug Fixing / QA Testing task again with its own form, so it keeps its agent's instructions and permissions. */
+  const restartProfile = async (prior: RunView): Promise<boolean> => {
+    if (starting || !prior.options.agent || !prior.options.agentInput) return false;
+    setStarting(true);
+    setError(null);
+    try {
+      const { agent, agentInput, modelId: m, approvePlans, reviewEdits, commands } = prior.options;
+      const r = await post<{ run: RunView }>("/api/agent-platform/tasks", { agent, projectId, input: agentInput, options: { modelId: m, approvePlans, reviewEdits, commands: commands === "off" ? "safe" : commands } });
+      lastSeq.current = 0;
+      setEvents([]);
+      setRunAttachments([]);
+      latestView.current = r.run;
+      setRun(r.run);
+      runChanged.current(r.run);
+      void drive(r.run.id);
+      return true;
+    } catch (e) {
+      setError(e as CodeApiError);
+      return false;
+    } finally {
+      setStarting(false);
+    }
+  };
+
   const respond = async (decision: Decision, text?: string) => {
     if (!run) return;
     setAnswering(true);
@@ -720,7 +746,13 @@ export function AgentPanel({
                       <ShieldCheck className="h-3 w-3" aria-hidden /> Read-only
                     </span>
                   )}
-                  {runMode && <span className="text-[11.5px] text-s-ink-3">{runMode.label}</span>}
+                  {run.options.agent ? (
+                    <Link href={`/agents/${PROFILE_SLUG[run.options.agent]}`} className="rounded-full border border-s-line px-2 text-[11.5px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink">
+                      {agentDef(run.options.agent)?.name} agent
+                    </Link>
+                  ) : (
+                    runMode && <span className="text-[11.5px] text-s-ink-3">{runMode.label}</span>
+                  )}
                   {!ended && (
                     <button
                       type="button"
@@ -785,7 +817,7 @@ export function AgentPanel({
                   onRerun={rerun}
                   onUndo={undoAll}
                   onOpenPreview={onOpenPreview}
-                  onRetry={() => void start(run.request, modeOf(run.options)?.id ?? mode, run.options.modelId ?? modelId)}
+                  onRetry={() => void (run.options.agent ? restartProfile(run) : start(run.request, modeOf(run.options)?.id ?? mode, run.options.modelId ?? modelId))}
                   onAskFix={(request) => {
                     setText(request);
                     requestAnimationFrame(() => box.current?.focus());

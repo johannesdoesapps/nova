@@ -46,6 +46,12 @@ export interface RunOptions {
   continueFrom?: string;
   /** Pair coding: two agents (an Architect and a Reviewer) with these settings. */
   pair?: import("../pair/protocol").PairSettings;
+  /** A task agent built on this engine (Bug Fixing, QA Testing); unset for the Software Engineer. */
+  agent?: import("../../agent-platform/registry").CodeProfile;
+  /** The form the task was started from, kept so it can be retried. */
+  agentInput?: import("./profiles").BugInput | import("./profiles").QaInput;
+  /** The workflow this task is a step of. */
+  workflowId?: string;
 }
 
 export const DEFAULT_OPTIONS: RunOptions = { modelId: null, approvePlans: true, reviewEdits: false, commands: "safe", readOnly: false };
@@ -203,6 +209,8 @@ export interface RunReport {
   timing?: { totalMs: number; firstProgressMs: number | null; verifyMs: number | null };
   /** Why the run failed (failed runs only). */
   failure?: FailureKind;
+  /** Bug Fixing / QA Testing: their section, from the records. */
+  profile?: import("./profiles").ProfileReport;
 }
 
 /** How a check ended. "not_run" is never shown as success; "stale" ran before the last change; "error" couldn't complete. */

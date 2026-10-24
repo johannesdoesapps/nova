@@ -9,6 +9,7 @@ import { classifyCommand, classifyServerCommand, isServerCommand } from "./polic
 import { clipText, tailText, type ActionResult, type AgentReply } from "./protocol";
 import type { NewEvent } from "./runs";
 import { describeTestResult, detectTestCommand, isTestCommand, testResult, type TestResult } from "./test-results";
+import { qaMayEdit } from "./profiles";
 import { EDIT_TOOLS, isToolName, MAX_READ_FILES, TOOL_DEFS } from "./tool-specs";
 import type { AgentPlan, BuildCheck, CommandMode, Pending, PreviewCheckRecord, RunStatus, ServerCheck } from "./types";
 
@@ -95,6 +96,8 @@ export interface StepState {
   lastTests?: TestResult | null;
   /** A read-only run: every edit, restore, checkpoint, command and plan is refused. */
   readOnly?: boolean;
+  /** QA Testing: only test files, test helpers and test configuration may change. */
+  testsOnly?: boolean;
 }
 
 export interface StepOutcome {
@@ -435,6 +438,11 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
       case "delete_file": {
         if (!state.planApproved) {
           result(id, tool, false, "Not allowed yet: you have read-only access until the user approves your plan. Propose it first.");
+          break;
+        }
+        if (state.testsOnly && !qaMayEdit(String(a.path ?? ""))) {
+          result(id, tool, false, `Not allowed: as the QA Testing agent you may only change test files, test helpers and test configuration, not ${String(a.path ?? "this file")}. If the application code is wrong, report it as a bug found.`);
+          await log({ kind: "note", title: `Refused an edit to ${String(a.path ?? "a file").slice(0, 200)} (QA may only change tests)` });
           break;
         }
         const base = state.reviewEdits ? applyProposed(await current(), proposed) : await current();

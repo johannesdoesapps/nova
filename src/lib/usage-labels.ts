@@ -5,6 +5,8 @@ const FEATURES: [RegExp, string][] = [
   [/^council/, "Council"],
   [/^(arena|compare)/, "Arena"],
   [/^code_agent$/, "Coding agent"],
+  [/^bug_fix$/, "Bug fixing"],
+  [/^qa_testing$/, "QA testing"],
   [/^code_ai$/, "Code quick edit"],
   [/^code_run$/, "Run code"],
   [/^code_workspace$/, "Code computer time"],

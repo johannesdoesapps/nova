@@ -1,3 +1,4 @@
+import type { CodeProfile } from "../../agent-platform/registry";
 import { ENDED_STATUSES, type RunStatus, type RunView, type TaskState } from "./types";
 import { taskState } from "./verdict";
 
@@ -118,6 +119,8 @@ export interface TaskSummary {
   continuation: Continuation;
   /** Pair coding (an Architect and a Reviewer): opened in Pair Coding rather than Code. */
   pair: boolean;
+  /** The task agent that ran it (Bug Fixing, QA Testing), or null for the Software Engineer. */
+  agent: CodeProfile | null;
 }
 
 export function toTaskSummary(run: RunView, projectName: string, filesChanged: number): TaskSummary {
@@ -139,5 +142,6 @@ export function toTaskSummary(run: RunView, projectName: string, filesChanged: n
     filesChanged,
     continuation: continuation(run.status),
     pair: !!run.options.pair,
+    agent: run.options.agent ?? null,
   };
 }
