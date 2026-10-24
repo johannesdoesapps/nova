@@ -23,19 +23,28 @@ const PATTERNS: [TaskType, RegExp][] = [
   ["fix_bug", /\b(fix(es|ing)?|debug|broken|crash(es|ing)?|\w*error\b|\w*exception|stack ?trace|traceback|doesn'?t work|not working|failing|regression|bugs?)\b/i],
   ["write_tests", /\b((write|add|create|generate|run)\b[^.?!]{0,30}\btests?|unit tests?|integration tests?|test coverage|qa)\b/i],
   ["review_code", /\b((review|audit|check)\b[^.?!]{0,30}\b(code|pr|pull request|repo|repository|diff|changes|project)|code review)\b/i],
-  ["security_audit", /\b(security|vulnerab\w*|leaked secrets?|cves?|owasp|pentest|penetration test|xss|sql injection|security headers)\b/i],
-  ["web_research", /\b(research|investigate|market (size|analysis|research)|competitors?|literature|state of the art|latest developments|cited report)\b/i],
+  // "Security" alone ("social security", "job security") isn't a request for an audit; it needs a target or an action.
+  [
+    "security_audit",
+    /\b(vulnerab\w*|leaked secrets?|cves?|owasp|pentest|penetration test|xss|sql injection|security (audit|review|scan|check|headers|issues?|holes?|problems?|flaws?|risks?|bugs?)|(audit|check|scan|review|test|harden|improve)\b[^.?!]{0,30}\bsecurity|(site|app|code|website|api|server|repo)'?s? security|(is|are) (my|this|the|our) [\w-]+ (secure|safe from attacks|hackable))\b/i,
+  ],
+  // "Investigate why my app crashes" is debugging, not web research.
+  ["web_research", /\b(research|market (size|analysis|research)|competitors?|literature|state of the art|latest developments|cited report)\b/i],
   ["build_website", /\b(build|create|make|design|launch|set up)\b[^.?!]{0,40}\b(website|landing page|web ?page|homepage|portfolio site|online store|storefront|web ?site)\b/i],
   [
     "implement_feature",
-    /\b((implement|build|add|create|refactor|migrate|change|update|extend)\b[^.?!]{0,40}\b(feature|function|endpoint|api|app|application|component|module|code|button|form|integration|login|sign-?in|auth\w*|page|screen|cli|script|service)|refactor\w*)\b/i,
+    /\b((implement|build|add|create|refactor|migrate|change|update|extend)\b[^.?!]{0,40}\b(feature|function|endpoint|api|app|application|component|module|code|button|form|integration|login|sign-?in|auth(entication|orization)?|page|screen|cli|script|service)|refactor\w*)\b/i,
   ],
   ["explain_code", /\b(explain\b[^.?!]{0,20}\b(code|codebase|project|repo|repository|function|file)|how does (this|my|the) (code|project|repo|app) work|walk me through (the|my) (code|codebase))\b/i],
   ["analyse_data", /\b(csv|tsv|spreadsheet|dataset|data ?set|descriptive statistics|analy[sz]e (this|my|the|these) (data|numbers|results))\b/i],
   ["verify_claims", /\b(fact[- ]?check|verify (this|these|the|my) (claims?|facts?|statements?)|check (this|these) claims?)\b/i],
   ["compare_models", /\b(compare|which is better|side by side)\b[^.?!]{0,30}\b(models?|gpt\S*|claude|gemini|llms?|ai answers)\b/i],
   ["plan_project", /\b(plan|roadmap|milestones?|break (it|this) down)\b[^.?!]{0,30}\b(project|launch|goal|product|mission)\b/i],
-  ["generate_image", /\b(generate|create|draw|make|design)\b[^.?!]{0,20}\b(an? )?(image|picture|illustration|logo|icon|poster)\b/i],
+  // A new picture ("make a logo", "generate images of …"), not a change to one ("make the icon bigger").
+  [
+    "generate_image",
+    /\b((generate|create|draw|make|design)( me)? (an?|some|new|a new)\b[^.?!]{0,20}\b(image|picture|illustration|logo|icon|poster)s?|(generate|draw)\b[^.?!]{0,20}\b(images?|pictures?|illustrations?))\b/i,
+  ],
   ["design_ui", /\b((design|redesign|mock ?up|wireframe)\b[^.?!]{0,30}\b(ui|ux|page|screen|app|interface|layout|dashboard)|improve (the )?(ui|ux|layout|design))\b/i],
   ["write_docs", /\b(write|update|create|generate|add)\b[^.?!]{0,30}\b(docs|documentation|readme|api reference|changelog)\b/i],
   ["deploy", /\b(deploy\w*|go live|host (it|this|my \w+)|push (it )?to production|release (it )?to production|put (it|this|my \w+) online|publish (it|this|my (site|app|website)))\b/i],
@@ -44,8 +53,13 @@ const PATTERNS: [TaskType, RegExp][] = [
     /\b(send (an? |the )?(email|e-mail|message|newsletter|dm|slack message)|post (it |this )?(on|to) (slack|twitter|x|linkedin|instagram)|email (my|the|our) (team|customers|clients|subscribers))\b/i,
   ],
   ["manage_infrastructure", /\b(provision|scale|configure|set up|manage|restart)\b[^.?!]{0,30}\b(servers?|kubernetes|k8s|aws|gcp|azure|terraform|ec2|database cluster|dns records?|load balancer)\b/i],
-  ["make_purchase", /\b(buy|purchase|order|pay for)\b[^.?!]{0,30}\b(for me|domain|licen[cs]e|subscription|ticket|tickets|product|item|it)\b/i],
-  ["schedule_automation", /\b(every (day|week|morning|evening|hour|monday|tuesday|wednesday|thursday|friday)|on a schedule|cron job|automatically each|daily at|weekly on)\b/i],
+  // "In order to" isn't an order.
+  ["make_purchase", /\b(buy|purchase|pay for|order (a|an|the|some|me|my|it|tickets?))\b[^.?!]{0,30}\b(for me|domain|licen[cs]e|subscription|ticket|tickets|product|item|it)\b/i],
+  // Something to do on a schedule, not a description of when something happens ("I run this every day and it fails").
+  [
+    "schedule_automation",
+    /\b(on a schedule|cron job|automatically (each|every)|(schedule|automate) (it|this|a|an|my|the)\b|remind me (every|each|daily|weekly)|^\s*(please |can you |could you )?(send|post|email|run|check|generate|back up|remind me)\b[^.?!]{0,60}\b(every (day|week|morning|evening|hour|monday|tuesday|wednesday|thursday|friday)|daily at|weekly on))\b/i,
+  ],
   ["write_text", /\b(write|draft|rewrite|proofread|summari[sz]e|translate|edit)\b[^.?!]{0,30}\b(email|essay|post|article|letter|paragraph|summary|copy|blog|tweet|bio|cover letter|speech|story)\b/i],
 ];
 

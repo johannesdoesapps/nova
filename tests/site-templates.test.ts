@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { appendSuggestion, isSiteTemplateId, PROMPT_SUGGESTIONS, SITE_TEMPLATE_IDS, SITE_TEMPLATE_LIST, SITE_TEMPLATES, siteTemplateGuidance, templateRequest } from "@/lib/code/site-templates";
 import { SITE_TEMPLATE_SOURCES } from "@/lib/code/site-template-sources";
-import { SIGNUP_SCRIPT, siteTemplateFiles } from "@/lib/code/site-template-seed";
+import { MENU_SCRIPT, SIGNUP_SCRIPT, siteTemplateFiles } from "@/lib/code/site-template-seed";
 import { newProjectBody } from "@/lib/code/projects";
 import { DISCOVER } from "@/lib/home";
 
@@ -119,10 +119,20 @@ describe("a new project from a template", () => {
     expect(html).toContain('<script src="script.js" defer></script>');
   });
 
-  it("a page without a form gets no script; the sign-up script never claims an address was saved", () => {
-    expect(Object.keys(siteTemplateFiles("launchpad-saas", "https://tryorbis.app"))).toEqual(["index.html", "style.css"]);
+  it("a page with no form and no phone menu gets no script; the sign-up script never claims an address was saved", () => {
+    expect(Object.keys(siteTemplateFiles("atelier-portfolio", "https://tryorbis.app"))).toEqual(["index.html", "style.css"]);
+    expect(Object.keys(siteTemplateFiles("journal-personal", "https://tryorbis.app")).sort()).toEqual(["index.html", "script.js", "style.css"]);
     expect(SIGNUP_SCRIPT).toContain("wasn't saved");
     expect(SIGNUP_SCRIPT).not.toMatch(/thank|subscribed|success/i);
+  });
+
+  it("every phone menu closes after a link is chosen (once, not twice for NOVA)", () => {
+    for (const id of ["launchpad-saas", "form-found-store"] as const) {
+      const files = siteTemplateFiles(id, "https://tryorbis.app");
+      expect(files["script.js"], id).toContain(MENU_SCRIPT);
+      expect(files["index.html"], id).toContain('<script src="script.js" defer></script>');
+    }
+    expect(siteTemplateFiles("nova-creative-agency", "https://tryorbis.app")["script.js"]).not.toContain(MENU_SCRIPT);
   });
 
   it("the projects API accepts a template only for a website project", () => {

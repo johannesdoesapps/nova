@@ -12,7 +12,7 @@ create table if not exists public.agent_workflows (
   template text not null check (template in ('fix_and_verify')),
   title text not null check (char_length(title) between 1 and 300),
   -- The form it was started from (the bug report and options).
-  input jsonb not null check (octet_length(input::text) <= 20000),
+  input jsonb not null check (octet_length(input::text) <= 100000),
   status text not null default 'running' check (status in ('running', 'waiting', 'needs_approval', 'completed', 'failed', 'cancelled')),
   current int not null default 0 check (current between 0 and 20),
   -- [{key, agent, kind, status, taskId, attempts, startedAt, endedAt, summary, error}].

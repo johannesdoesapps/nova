@@ -27,6 +27,7 @@ import {
   runnable,
   started,
   startFailed,
+  tasksToUndo,
   templateProblems,
   TEMPLATE_INFO,
   timeOut,
@@ -187,6 +188,18 @@ describe("waiting, failing and recovering", () => {
     const exhausted: WorkflowState = { ...failed, steps: failed.steps.map((s) => (s.key === "fix" ? { ...s, attempts: MAX_ATTEMPTS } : s)) };
     expect(recoveries(exhausted)).toEqual([]);
     expect(recover(exhausted, "retry", AT)).toBeNull();
+  });
+
+  it("a retried step keeps its earlier attempts' tasks: rejecting undoes them all, newest first, and review sees them", () => {
+    let w = started(fresh(), "fix", "fix-1", AT);
+    w = observe(w, "fix", { state: "failed", error: "Tests still fail" }, AT);
+    w = recover(w, "retry", AT)!;
+    w = started(w, "fix", "fix-2", LATER);
+    expect(w.steps.find((s) => s.key === "fix")).toMatchObject({ taskId: "fix-2", earlierTaskIds: ["fix-1"], attempts: 2 });
+    w = observe(w, "fix", done(["src/cart.js"]), LATER);
+    expect(reviewTaskIds(w)).toEqual(["fix-1", "fix-2"]);
+    for (const s of runnable(w)) w = started(w, s.key, `${s.key}-1`, LATER);
+    expect(tasksToUndo(w.steps).map((t) => t.taskId)).toEqual(["test-1", "fix-2", "fix-1"]);
   });
 
   it("skipping a failed optional step lets the workflow go on to the decision", () => {

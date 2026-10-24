@@ -4,9 +4,9 @@
   --bg-soft: #f6f7fb;
   --ink: #0b1020;
   --ink-2: #3b4256;
-  --muted: #697089;
+  --muted: #656b83;
   --line: #e6e8f0;
-  --accent: #5b5bf6;
+  --accent: #5454f6;
   --accent-2: #8b5cf6;
   --accent-soft: #eef0ff;
   --radius: 14px;
@@ -70,7 +70,7 @@ p { margin: 0; }
 .ws { display: flex; align-items: center; gap: 8px; font-weight: 700; padding: 4px 8px 14px; }
 .ws b { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: var(--ink); color: #fff; font-size: 12px; }
 .ws small { color: var(--muted); }
-.side-label { margin: 14px 8px 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #9aa1b5; }
+.side-label { margin: 14px 8px 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #616b85; }
 .app-side a { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; color: var(--ink-2); font-weight: 500; }
 .app-side a.on { background: var(--accent-soft); color: var(--accent); }
 .app-side svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
@@ -87,7 +87,7 @@ p { margin: 0; }
 .stat { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
 .stat p { font-size: 12.5px; color: var(--muted); }
 .stat b { display: block; margin-top: 4px; font-size: 22px; letter-spacing: -0.02em; }
-.up { font-size: 12px; font-weight: 600; color: #16a34a; }
+.up { font-size: 12px; font-weight: 600; color: #12863d; }
 .grid2 { margin-top: 14px; display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; }
 .card { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
 .card-head { display: flex; justify-content: space-between; font-size: 13px; }
@@ -103,7 +103,7 @@ p { margin: 0; }
 
 .logos { padding: 56px 0 24px; }
 .logos p { text-align: center; font-size: 14px; color: var(--muted); font-weight: 500; }
-.logos ul { list-style: none; padding: 0; margin: 26px 0 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 24px 40px; color: #8a90a6; }
+.logos ul { list-style: none; padding: 0; margin: 26px 0 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 24px 40px; color: #6b728d; }
 .logos li { font-size: 22px; font-weight: 700; letter-spacing: -0.03em; }
 .l3 { letter-spacing: 0.18em !important; font-size: 17px !important; }
 .l4 { font-weight: 500 !important; font-style: italic; }

@@ -51,6 +51,9 @@ export function WorkflowDetail({ id }: { id: string }) {
   const alive = useRef(true);
   const driving = useRef(false);
 
+  // Only the first load names the project; later answers keep that name.
+  const keep = useCallback((next: View) => setW((prev) => ({ ...next, projectName: next.projectName ?? prev?.projectName ?? null })), []);
+
   const drive = useCallback(async () => {
     if (driving.current) return;
     driving.current = true;
@@ -71,7 +74,12 @@ export function WorkflowDetail({ id }: { id: string }) {
           continue;
         }
         if (!alive.current) return;
-        setW(cur);
+        keep(cur);
+        // Another tab (or an earlier visit) is moving it on: wait instead of asking again straight away.
+        if (cur.busy) {
+          await new Promise((r) => setTimeout(r, 3000));
+          continue;
+        }
         if (cur.status === "running") continue;
         if (cur.status === "waiting") {
           await new Promise((r) => setTimeout(r, 5000));
@@ -82,7 +90,7 @@ export function WorkflowDetail({ id }: { id: string }) {
     } finally {
       driving.current = false;
     }
-  }, [id]);
+  }, [id, keep]);
 
   useEffect(() => {
     alive.current = true;
@@ -102,7 +110,7 @@ export function WorkflowDetail({ id }: { id: string }) {
     setError(null);
     try {
       const r = await post<{ workflow: View }>(url, body);
-      setW(r.workflow);
+      keep(r.workflow);
       if (r.workflow.status === "running" || r.workflow.status === "waiting") void drive();
     } catch (e) {
       setError((e as CodeApiError).message);

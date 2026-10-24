@@ -72,6 +72,8 @@ export interface WorkflowStep {
   needsChanges: boolean;
   status: StepStatus;
   taskId: string | null;
+  /** Tasks from earlier attempts: their changes stay in the project, so rejecting undoes them too. */
+  earlierTaskIds?: string[];
   attempts: number;
   startedAt: string | null;
   endedAt: string | null;
@@ -135,7 +137,19 @@ export function templateProblems(steps: StepDef[]): string[] {
 
 export function newSteps(template: WorkflowTemplate): WorkflowStep[] {
   return settle(
-    TEMPLATE_INFO[template].steps.map((d) => ({ ...d, status: "pending", taskId: null, attempts: 0, startedAt: null, endedAt: null, drivenAt: null, changedFiles: [], summary: null, error: null })),
+    TEMPLATE_INFO[template].steps.map((d) => ({
+      ...d,
+      status: "pending",
+      taskId: null,
+      earlierTaskIds: [],
+      attempts: 0,
+      startedAt: null,
+      endedAt: null,
+      drivenAt: null,
+      changedFiles: [],
+      summary: null,
+      error: null,
+    })),
   );
 }
 
@@ -265,7 +279,8 @@ export function observe(w: WorkflowState, key: StepKey, child: ChildState, at: s
 /** A step was started: its task exists. */
 export function started(w: WorkflowState, key: StepKey, taskId: string, at: string): WorkflowState {
   const step = w.steps.find((s) => s.key === key)!;
-  const next = patch(w, key, { status: "running", taskId, attempts: step.attempts + 1, startedAt: at, endedAt: null, drivenAt: at, error: null, summary: null });
+  const earlierTaskIds = step.taskId ? [...(step.earlierTaskIds ?? []), step.taskId] : (step.earlierTaskIds ?? []);
+  const next = patch(w, key, { status: "running", taskId, earlierTaskIds, attempts: step.attempts + 1, startedAt: at, endedAt: null, drivenAt: at, error: null, summary: null });
   return derive({ ...next, log: addLog(w.log, `${step.label}: started.`, at) });
 }
 
@@ -346,7 +361,15 @@ export function regressionTests(bug: BugInput, changed: string[]): QaInput {
 export function reviewTaskIds(w: Pick<WorkflowState, "steps">, key: StepKey = "review"): string[] {
   const step = w.steps.find((s) => s.key === key);
   const deps = step ? step.dependsOn : [];
-  return w.steps.filter((s) => deps.includes(s.key) && s.kind === "code_run" && s.status === "done" && s.taskId).map((s) => s.taskId!);
+  return w.steps.filter((s) => deps.includes(s.key) && s.kind === "code_run" && s.status === "done" && s.taskId).flatMap((s) => [...(s.earlierTaskIds ?? []), s.taskId!]);
+}
+
+/** Every coding task the workflow started, newest first (later steps, then each step's latest attempt first): what rejecting undoes. */
+export function tasksToUndo(steps: WorkflowStep[]): { label: string; taskId: string }[] {
+  return steps
+    .filter((s) => s.kind === "code_run")
+    .reverse()
+    .flatMap((s) => [s.taskId, ...[...(s.earlierTaskIds ?? [])].reverse()].filter((id): id is string => !!id).map((taskId) => ({ label: s.label, taskId })));
 }
 
 /** Files changed by the steps a step depends on. */

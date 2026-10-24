@@ -7,6 +7,7 @@ import { ApiError } from "../http";
 import { cancelReview, createReview, getReview, stepReview } from "../review/server";
 import { assertAgentAccess } from "./server";
 import { startProfileTask } from "./tasks";
+import { clipLog } from "../code/agent/profiles";
 import {
   cancel,
   changedBefore,
@@ -24,6 +25,7 @@ import {
   runnable,
   started,
   startFailed,
+  tasksToUndo,
   timeOut,
   TEMPLATE_INFO,
   addLog,
@@ -90,6 +92,24 @@ async function save(auth: Authed, id: string, w: WorkflowState, extra: Record<st
   return data as WorkflowRow;
 }
 
+/**
+ * An advance's save: only while the workflow is still running or waiting, so a Stop that arrived during the
+ * advance isn't overwritten. When it was stopped meanwhile, the tasks this advance started are stopped too.
+ */
+async function saveAdvance(auth: Authed, id: string, w: WorkflowState): Promise<WorkflowRow> {
+  const { data, error } = await auth.supabase
+    .from("agent_workflows")
+    .update({ status: w.status, current: w.current, steps: w.steps, log: w.log, error: w.error, updated_at: nowIso(), locked_until: null })
+    .eq("id", id)
+    .in("status", ["running", "waiting"])
+    .select(COLS)
+    .maybeSingle();
+  if (error) throw new ApiError("internal", "Couldn't save the workflow.");
+  if (data) return data as WorkflowRow;
+  await stopTasks(auth, w.steps);
+  return getWorkflow(auth, id);
+}
+
 /** The database error for a table that doesn't exist yet (the workflows migration hasn't been applied). */
 const missingTable = (e: { code?: string; message?: string } | null) => !!e && (e.code === "PGRST205" || e.code === "42P01" || /does not exist|could not find the table/i.test(e.message ?? ""));
 const NOT_SET_UP = "Workflows aren't set up on this Orbis deployment yet (their database table hasn't been created).";
@@ -126,7 +146,8 @@ export async function createWorkflow(auth: Authed, input: WorkflowInput): Promis
       project_id: project.id,
       template: input.template,
       title: `${TEMPLATE_INFO[input.template].name}: ${input.bug.summary}`.slice(0, 300),
-      input: { bug: input.bug, options: input.options ?? {} },
+      // Long logs are kept as the agent sees them (start and end), like a Bug Fixing task's own form.
+      input: { bug: { ...input.bug, logs: clipLog(input.bug.logs) }, options: input.options ?? {} },
       status: "running",
       current: 0,
       steps: newSteps(input.template),
@@ -230,10 +251,10 @@ export async function advanceWorkflow(req: Request, auth: Authed, id: string): P
     }
   } catch (err) {
     // A failure while driving a step (the provider, the computer) leaves the step as it was, to be tried again.
-    await save(auth, id, w, { locked_until: null });
+    await saveAdvance(auth, id, w);
     throw err;
   }
-  return save(auth, id, w, { locked_until: null });
+  return saveAdvance(auth, id, w);
 }
 
 export async function recoverWorkflow(auth: Authed, id: string, action: Recovery, key?: StepKey): Promise<WorkflowRow> {
@@ -253,15 +274,14 @@ export async function decideWorkflow(auth: Authed, id: string, action: Decision,
   const w = decide(stateOf(row), action, at);
   if (!w) throw new ApiError("conflict", "This workflow isn't waiting for your decision.");
   if (action === "reject") {
-    const runs = row.steps.filter((s) => s.kind === "code_run" && s.taskId).reverse();
     const undone: string[] = [];
-    for (const s of runs) {
-      const r = await revertRun(auth, s.taskId!);
+    for (const s of tasksToUndo(row.steps)) {
+      const r = await revertRun(auth, s.taskId);
       if (!r.ok) {
         const before = undone.length ? ` (already undone: ${undone.join("; ")})` : "";
         throw new ApiError("conflict", `Couldn't undo “${s.label}”: ${r.conflicts.join(", ")} changed since the task${before}. Undo those files in Code, then reject again.`);
       }
-      undone.push(s.label);
+      if (!undone.includes(s.label)) undone.push(s.label);
     }
   }
   return save(auth, id, w, { decision: { action, at, ...(note ? { note: note.slice(0, 1000) } : {}) } });

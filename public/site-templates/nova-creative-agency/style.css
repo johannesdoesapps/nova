@@ -224,7 +224,7 @@ h1, h2, h3 { font-family: var(--display); font-stretch: 78%; font-weight: 800; l
 .foot nav { display: flex; flex-wrap: wrap; gap: 10px 24px; align-content: start; }
 .foot nav a:hover { color: var(--lime); }
 .foot-contact p + p { margin-top: 6px; }
-.legal { margin-top: 48px; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 13px; color: #6f6d66; }
+.legal { margin-top: 48px; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 13px; color: #7e7b73; }
 
 /* Scroll reveals: only when the page's script runs and motion is welcome. */
 @media (prefers-reduced-motion: no-preference) {

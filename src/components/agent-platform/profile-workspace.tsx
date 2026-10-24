@@ -58,12 +58,13 @@ export function ProfileWorkspace({ profile }: { profile: CodeProfile }) {
   // Workflows are only offered where they can run (their database table exists).
   const [workflowsReady, setWorkflowsReady] = useState(false);
   useEffect(() => {
-    if (profile !== "bug_fixer") return;
+    // Workflows are for signed-in users only; asking while signed out is just a 401.
+    if (profile !== "bug_fixer" || !user) return;
     fetch("/api/workflows?check=1", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : { ready: false }))
       .then((j: { ready?: boolean }) => setWorkflowsReady(!!j.ready))
       .catch(() => setWorkflowsReady(false));
-  }, [profile]);
+  }, [profile, user]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);

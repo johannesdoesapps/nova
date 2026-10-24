@@ -397,7 +397,10 @@ const PHONE = 390;
 function LiveFrame({ template, device }: { template: SiteTemplate; device: "desktop" | "mobile" }) {
   const box = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
-  const [loaded, setLoaded] = useState(false);
+  // Which page and size has finished loading, so switching to the other size shows "Loading…" again.
+  const view = `${template.id}:${device}`;
+  const [loadedView, setLoadedView] = useState<string | null>(null);
+  const loaded = loadedView === view;
   useEffect(() => {
     const el = box.current;
     if (!el) return;
@@ -427,7 +430,7 @@ function LiveFrame({ template, device }: { template: SiteTemplate; device: "desk
               sandbox=""
               referrerPolicy="no-referrer"
               loading="lazy"
-              onLoad={() => setLoaded(true)}
+              onLoad={() => setLoadedView(view)}
               className="absolute left-0 top-0 origin-top-left border-0 bg-white"
               style={{ width: pageWidth, height: size.h / scale, transform: `scale(${scale})` }}
             />

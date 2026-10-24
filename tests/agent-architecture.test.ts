@@ -178,6 +178,27 @@ describe("routing by capability (the brief's scenarios)", () => {
     expect(classify("Compare GPT and Claude on this prompt")).toContain("compare_models");
     expect(classify("Run this every Monday morning")).toEqual(["schedule_automation"]);
   });
+
+  it("everyday phrases aren't mistaken for work (review findings)", () => {
+    const cls = (m: string) => classify(m).sort();
+    expect(cls("Refactor the auth module in order to make it testable")).toEqual(["implement_feature"]);
+    expect(cls("I run this script every day and it throws an error")).toEqual(["fix_bug"]);
+    expect(cls("What is social security?")).toEqual([]);
+    expect(route("What is social security?", ALL).mode).toBe("direct");
+    expect(cls("Investigate why my app crashes")).toEqual(["fix_bug"]);
+    expect(cls("Make the icon bigger in the navbar")).not.toContain("generate_image");
+    expect(cls("Change the author name")).not.toContain("implement_feature");
+    // …while the real requests still match.
+    expect(cls("Check my website's security")).toContain("security_audit");
+    expect(cls("Scan my code for vulnerabilities")).toContain("security_audit");
+    expect(cls("Create a logo for my bakery")).toContain("generate_image");
+    expect(cls("Generate images of a sunset")).toContain("generate_image");
+    expect(cls("Buy the domain orbis.dev for me")).toContain("make_purchase");
+    expect(cls("Order some business cards for me")).toContain("make_purchase");
+    expect(cls("Add authentication to my app")).toContain("implement_feature");
+    expect(cls("Research the market size for vegan snacks")).toContain("web_research");
+    expect(cls("Send our customers the newsletter every Friday")).toContain("schedule_automation");
+  });
 });
 
 describe("the task protocol", () => {
