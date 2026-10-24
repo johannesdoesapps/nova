@@ -146,6 +146,21 @@ export function TaskAgents({ query }: { query: string }) {
         )}
       </div>
 
+      <Link
+        href="/agents/workflows"
+        className="glass group mt-4 flex flex-col gap-2 rounded-[22px] p-5 transition hover:border-s-line-strong hover:bg-s-glass-strong sm:flex-row sm:items-center sm:justify-between"
+      >
+        <span>
+          <span className="block text-[15px] font-semibold tracking-[-0.01em]">Workflow: Fix and verify</span>
+          <span className="mt-0.5 block text-[13.5px] text-s-ink-2">
+            Bug Fixing → QA Testing → Code Review → your decision. Each step is a normal task with its own approvals; nothing is pushed or deployed.
+          </span>
+        </span>
+        <span className="inline-flex h-9 shrink-0 items-center gap-1.5 self-start rounded-xl border border-s-line-strong px-3.5 text-[13px] font-medium transition group-hover:border-transparent group-hover:bg-s-accent group-hover:text-s-accent-ink sm:self-center">
+          Workflows <ArrowRight className="h-3.5 w-3.5" />
+        </span>
+      </Link>
+
       <AgentDetails listing={details} onClose={() => setDetails(null)} />
     </section>
   );

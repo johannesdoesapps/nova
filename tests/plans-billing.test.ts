@@ -204,7 +204,7 @@ beforeAll(async () => {
 }, 60_000);
 
 beforeEach(async () => {
-  await db.exec("delete from public.code_agent_runs; delete from public.code_projects; delete from public.usage_holds; delete from public.model_runs; delete from public.admins; delete from public.subscriptions; delete from public.billing_ledger;");
+  await db.exec("delete from public.agent_workflows; delete from public.code_agent_runs; delete from public.code_projects; delete from public.usage_holds; delete from public.model_runs; delete from public.admins; delete from public.subscriptions; delete from public.billing_ledger;");
 });
 
 describe("usage_reserve_v2 (budget, atomically)", () => {
@@ -460,6 +460,41 @@ describe("code reviews are private to their owner", () => {
     expect((await as(BOB, () => db.query("delete from public.code_reviews where id = $1 returning id", [id]))).rows).toHaveLength(0);
     await expect(as(BOB, () => db.query(`insert into public.code_reviews (user_id, title, source) values ('${ALICE}', 'forged', '{}')`))).rejects.toThrow();
     expect((await as(ALICE, () => db.query<{ title: string }>("select title from public.code_reviews where id = $1", [id]))).rows[0]!.title).toBe("mine");
+  });
+});
+
+describe("agent workflows are private to their owner", () => {
+  const steps = JSON.stringify([{ key: "fix", status: "pending" }]);
+  const insert = (pid: string, owner?: string) =>
+    `insert into public.agent_workflows (${owner ? "user_id, " : ""}project_id, template, title, input, steps) values (${owner ? `'${owner}', ` : ""}'${pid}', 'fix_and_verify', 'Fix: total', '{"bug":{"summary":"total"}}', '${steps}') returning id`;
+
+  it("another user can't read, change or delete a workflow, or start one on someone else's project", async () => {
+    const pid = (await as(ALICE, () => db.query<{ id: string }>("insert into public.code_projects (name) values ('shop') returning id"))).rows[0]!.id;
+    const id = (await as(ALICE, () => db.query<{ id: string }>(insert(pid)))).rows[0]!.id;
+    expect((await as(BOB, () => db.query("select id from public.agent_workflows"))).rows).toHaveLength(0);
+    expect((await as(BOB, () => db.query("update public.agent_workflows set status = 'cancelled' where id = $1 returning id", [id]))).rows).toHaveLength(0);
+    expect((await as(BOB, () => db.query("delete from public.agent_workflows where id = $1 returning id", [id]))).rows).toHaveLength(0);
+    // Bob can't attach a workflow to Alice's project, in his name or hers.
+    await expect(as(BOB, () => db.query(insert(pid)))).rejects.toThrow();
+    await expect(as(BOB, () => db.query(insert(pid, ALICE)))).rejects.toThrow();
+    // Alice can't move her workflow onto Bob's project either.
+    const bobs = (await as(BOB, () => db.query<{ id: string }>("insert into public.code_projects (name) values ('bob') returning id"))).rows[0]!.id;
+    await expect(as(ALICE, () => db.query("update public.agent_workflows set project_id = $1 where id = $2", [bobs, id]))).rejects.toThrow();
+    expect((await as(ALICE, () => db.query<{ status: string }>("select status from public.agent_workflows where id = $1", [id]))).rows[0]!.status).toBe("running");
+  });
+
+  it("only known templates and statuses are stored", async () => {
+    const pid = (await as(ALICE, () => db.query<{ id: string }>("insert into public.code_projects (name) values ('p2') returning id"))).rows[0]!.id;
+    await expect(as(ALICE, () => db.query(insert(pid).replace("'fix_and_verify'", "'deploy_everything'")))).rejects.toThrow();
+    const id = (await as(ALICE, () => db.query<{ id: string }>(insert(pid)))).rows[0]!.id;
+    await expect(as(ALICE, () => db.query("update public.agent_workflows set status = 'merged' where id = $1", [id]))).rejects.toThrow();
+  });
+
+  it("anonymous visitors have no access, and nobody can truncate the table", async () => {
+    await db.exec("reset role; set role anon;");
+    await expect(db.query("select id from public.agent_workflows")).rejects.toThrow();
+    await db.exec("reset role");
+    await expect(as(ALICE, () => db.query("truncate public.agent_workflows"))).rejects.toThrow();
   });
 });
 

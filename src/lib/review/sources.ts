@@ -2,6 +2,8 @@ import "server-only";
 import { z } from "zod";
 import { isAdmin } from "../admin";
 import type { Authed } from "../code/server";
+import { getRun, listChanges } from "../code/agent/runs";
+import { unifiedDiff } from "../code/diff";
 import { getFiles, getProjectRow } from "../code/server";
 import { installationToken, repoFile, repoTree, safePath } from "../github/app";
 import { githubContext } from "../github/server";
@@ -32,6 +34,8 @@ export const sourceInput = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("zip"), name: z.string().max(200).optional(), data: z.string().max(Math.ceil((LIMITS.zipBytes * 4) / 3) + 8) }),
   z.object({ kind: z.literal("github"), url: z.string().trim().min(3).max(400) }),
   z.object({ kind: z.literal("project"), projectId: z.string().uuid() }),
+  // The changes agent tasks made in a project (a Bug Fixing patch, QA's tests): reviewed as a diff of the files now.
+  z.object({ kind: z.literal("changes"), projectId: z.string().uuid(), taskIds: z.array(z.string().uuid()).min(1).max(5) }),
 ]);
 export type SourceInput = z.infer<typeof sourceInput>;
 
@@ -162,6 +166,39 @@ async function loadRepo(auth: Authed, url: string, signal: AbortSignal): Promise
   }
 }
 
+/**
+ * What one or more agent tasks changed in a project: each changed file as it is now (marked changed), and
+ * a diff from before the first task touched it, so findings on the new lines are flagged as in the change.
+ * The tasks must be the user's (row-level security) and in this project.
+ */
+async function loadChanges(auth: Authed, projectId: string, taskIds: string[]): Promise<LoadedSource> {
+  const project = await getProjectRow(auth, projectId);
+  const before = new Map<string, string | null>();
+  for (const id of taskIds) {
+    const run = await getRun(auth, id);
+    if (run.project_id !== project.id) throw new ApiError("bad_request", "That task belongs to another project.");
+    for (const c of await listChanges(auth, id)) if (!before.has(c.path)) before.set(c.path, c.before);
+  }
+  const now = new Map((await getFiles(auth, project.id)).map((f) => [f.path, f.content]));
+  const changed = [...before.entries()].filter(([path, was]) => (now.get(path) ?? null) !== was);
+  if (!changed.length) throw new ApiError("bad_request", "Those tasks left no changes to review (nothing changed, or the changes were undone).");
+  const notes: string[] = [];
+  const files = capFiles(
+    changed.filter(([path]) => now.has(path)).map(([path]) => ({ path, content: now.get(path)!, changed: true })),
+    notes,
+  );
+  const diff = changed.map(([path, was]) => unifiedDiff(path, was, now.get(path) ?? null)).join("\n");
+  const deleted = changed.filter(([path]) => !now.has(path)).length;
+  if (deleted) notes.push(`${deleted} deleted file${deleted === 1 ? " is" : "s are"} only in the diff.`);
+  return {
+    title: `Changes in ${project.name}`.slice(0, 200),
+    source: { kind: "changes", label: `${project.name}: ${changed.length} changed file${changed.length === 1 ? "" : "s"}`, projectId: project.id },
+    files,
+    diff: diff.slice(0, 600_000),
+    notes,
+  };
+}
+
 export async function loadSource(auth: Authed, input: SourceInput, signal: AbortSignal): Promise<LoadedSource> {
   const notes: string[] = [];
   switch (input.kind) {
@@ -202,6 +239,8 @@ export async function loadSource(auth: Authed, input: SourceInput, signal: Abort
       const pr = parsePullUrl(input.url);
       return pr ? loadPull(pr, signal) : loadRepo(auth, input.url, signal);
     }
+    case "changes":
+      return loadChanges(auth, input.projectId, input.taskIds);
     case "project": {
       const project = await getProjectRow(auth, input.projectId);
       const files = capFiles(await getFiles(auth, input.projectId), notes);

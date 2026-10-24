@@ -753,6 +753,11 @@ export function AgentPanel({
                   ) : (
                     runMode && <span className="text-[11.5px] text-s-ink-3">{runMode.label}</span>
                   )}
+                  {run.options.workflowId && (
+                    <Link href={`/agents/workflows/${run.options.workflowId}`} className="rounded-full border border-s-line px-2 text-[11.5px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink">
+                      Back to the workflow
+                    </Link>
+                  )}
                   {!ended && (
                     <button
                       type="button"
