@@ -5,6 +5,7 @@ import { useLocalStorage } from "@/hooks/use-local-storage";
 import { LogOut, Moon, Sun } from "lucide-react";
 import { Button, Input } from "@/components/ui/primitives";
 import { jsonFetch } from "@/hooks/use-ndjson";
+import { forgetAccountData } from "@/lib/sign-out";
 
 export function SettingsClient({ email, displayName, themeOnly }: { email?: string | null; displayName?: string | null; themeOnly?: boolean }) {
   const router = useRouter();
@@ -59,7 +60,7 @@ export function SettingsClient({ email, displayName, themeOnly }: { email?: stri
       </div>
       <p className="mt-2 text-xs text-faint">Signed in as {email}{msg ? ` · ${msg}` : ""}</p>
       {themeRow}
-      <form action="/auth/signout" method="post" className="mt-4 border-t border-border pt-4">
+      <form action="/auth/signout" method="post" onSubmit={() => forgetAccountData()} className="mt-4 border-t border-border pt-4">
         <Button variant="secondary" type="submit"><LogOut className="h-4 w-4" /> Sign out</Button>
       </form>
     </>

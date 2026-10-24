@@ -11,6 +11,7 @@ import type { ThemePref } from "./prefs";
 import { IconButton, iconButtonClass, Kbd, Menu, MenuItem, MenuSeparator, Segmented } from "./ui";
 import { InfinityMark } from "@/components/brand/infinity";
 import { wordmarkFont } from "@/components/brand/fonts";
+import { forgetAccountData } from "@/lib/sign-out";
 
 export interface SidebarProps {
   collapsed: boolean;
@@ -669,7 +670,13 @@ function ProfileMenu(p: Omit<SidebarProps, "searchRef"> & { rail: boolean }) {
             {p.accountsEnabled && <MenuSeparator />}
             {p.accountsEnabled &&
               (p.user ? (
-                <MenuItem icon={<LogOut />} onClick={() => signOutRef.current?.requestSubmit()}>
+                <MenuItem
+                  icon={<LogOut />}
+                  onClick={() => {
+                    forgetAccountData();
+                    signOutRef.current?.requestSubmit();
+                  }}
+                >
                   Sign out
                 </MenuItem>
               ) : (

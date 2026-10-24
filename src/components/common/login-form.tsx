@@ -105,7 +105,9 @@ export function LoginForm({
               },
             }
           : // Only the public profile and email; repository access is granted separately, per repository.
-            { provider: "github", options: { redirectTo: oauthRedirectTo(origin(), next, "github"), scopes: "read:user user:email" } },
+            // GitHub's account picker every time: otherwise GitHub sends back whoever is signed in there
+            // without asking, so signing out of Orbis and back in would look like it never signed out.
+            { provider: "github", options: { redirectTo: oauthRedirectTo(origin(), next, "github"), scopes: "read:user user:email", queryParams: { prompt: "select_account" } } },
       );
       if (error) throw error;
       // The browser is now leaving for the provider; keep the button busy until it does.

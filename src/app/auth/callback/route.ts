@@ -4,6 +4,7 @@ import { LEGAL } from "@/content/legal-meta";
 import { hasAccepted, PENDING_COOKIE, recordAcceptance } from "@/lib/legal";
 import { afterSignIn, exchangeFailureCode, oauthErrorCode, safeNext, type LoginMessageCode } from "@/lib/auth-flow";
 import { isSupabaseConfigured } from "@/lib/env";
+import { SIGNED_OUT_COOKIE } from "@/lib/sign-out";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 /**
@@ -46,6 +47,7 @@ export async function GET(req: Request) {
     const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code, flowId ? { flowId } : undefined);
     if (!exchangeError) {
       const res = NextResponse.redirect(new URL(afterSignIn(next), url.origin));
+      res.cookies.set(SIGNED_OUT_COOKIE, "", { path: "/", expires: new Date(0) });
       // Signed up with Google or GitHub after ticking both boxes: record the acceptance now.
       const pending = readCookie(req, PENDING_COOKIE);
       if (pending) {

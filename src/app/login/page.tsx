@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Instrument_Serif } from "next/font/google";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/common/login-form";
 import { Logo } from "@/components/layout/logo";
@@ -9,6 +10,7 @@ import { getAuth } from "@/lib/auth";
 import { afterSignIn, loginMessage } from "@/lib/auth-flow";
 import { authProviders } from "@/lib/auth-providers";
 import { publicEnv } from "@/lib/env";
+import { SIGNED_OUT_COOKIE } from "@/lib/sign-out";
 
 export const metadata: Metadata = {
   title: "Sign in or create an account",
@@ -30,6 +32,8 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   }
   // Only known message codes are shown, never free text from the URL.
   const message = loginMessage(sp.msg);
+  // Just signed out: say so, and that Google or GitHub may still be signed in on this device.
+  const signedOut = !message && (await cookies()).get(SIGNED_OUT_COOKIE)?.value === "1";
   const initialMode = sp.mode === "signup" ? "signup" : "signin";
   const providers = configured ? await authProviders() : { google: false, github: false };
 
@@ -39,6 +43,11 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         <Link href="/" className="mb-8 flex justify-center"><Logo /></Link>
         <div className="lux-card rounded-[26px] p-7">
           {message && <Notice tone={message.tone} className="mb-4">{message.text}</Notice>}
+          {signedOut && (
+            <Notice tone="info" className="mb-4">
+              You&apos;re signed out of Orbis. Google and GitHub keep their own sign-in, so they&apos;ll ask you to choose an account.
+            </Notice>
+          )}
           {configured ? (
             <LoginForm url={publicEnv.supabaseUrl!} supabaseKey={publicEnv.supabaseKey!} next={next} siteUrl={publicEnv.siteUrl} initialMode={initialMode} google={providers.google} github={providers.github === true} />
           ) : (

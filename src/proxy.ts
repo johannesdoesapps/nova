@@ -22,6 +22,8 @@ export async function proxy(request: NextRequest) {
   const key =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
   if (!url || !key) return NextResponse.next({ request });
+  // Signing out ends the session: refreshing it here would send a fresh session cookie in the same response.
+  if (request.nextUrl.pathname === "/auth/signout") return NextResponse.next({ request });
 
   let response = NextResponse.next({ request });
   const supabase = createServerClient(url, key, {
