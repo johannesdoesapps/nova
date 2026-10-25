@@ -36,6 +36,12 @@ export interface OAuthConfig {
   scopeSeparator?: string;
   /** Scopes always asked for (sign-in identity, offline access…), besides the connector's own. */
   baseScopes?: string[];
+  /**
+   * "base": only baseScopes go in the authorization URL. For services whose permissions are set on the app itself
+   * (GitHub Apps, Vercel Apps) rather than requested as OAuth scopes; the connector's permissions are then recorded
+   * as asked for, and the service still enforces the app's real permissions on every call.
+   */
+  urlScopes?: "all" | "base";
   pkce: boolean;
   /** How the token endpoint wants the client credentials. */
   clientAuth: "body" | "basic";

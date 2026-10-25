@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowUpRight, CircleAlert, CircleCheck, KeyRound, Search, X } from "lucide-react";
 import { useApp } from "@/components/layout/app-context";
@@ -64,7 +64,6 @@ function ConnectorCard({ c, onOpen }: { c: CatalogEntry; onOpen: () => void }) {
 export function ConnectorsView() {
   const { user } = useApp();
   const params = useSearchParams();
-  const router = useRouter();
   const [data, setData] = useState<CatalogResponse | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<"discover" | "connected">(params.get("tab") === "connected" ? "connected" : "discover");
@@ -90,12 +89,13 @@ export function ConnectorsView() {
     api<CatalogResponse>("/api/connectors")
       .then((d) => alive && setData(d))
       .catch((e: Error) => alive && setLoadError(e.message));
-    // Drop the one-time ?connected / ?error from the address bar.
-    if (params.get("connected") || params.get("error")) router.replace("/connectors", { scroll: false });
+    // Drop the one-time ?connected / ?error from the address bar. The browser's history API (not a router
+    // navigation), so the page isn't re-rendered from scratch and the message about the connection stays visible.
+    if (params.get("connected") || params.get("error")) window.history.replaceState(window.history.state, "", "/connectors");
     return () => {
       alive = false;
     };
-  }, [params, router]);
+  }, [params]);
 
   const all = useMemo(() => data?.connectors ?? [], [data]);
   const connected = all.filter((c) => c.connection && c.connection.status !== "disconnected");

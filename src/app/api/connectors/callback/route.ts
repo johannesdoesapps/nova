@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getAuth } from "@/lib/auth";
 import { publicEnv } from "@/lib/env";
 import { ConnectorError } from "@/lib/connectors/http";
-import { checkCallback, exchangeCode, grantedScopes, STATE_COOKIE } from "@/lib/connectors/oauth";
+import { checkCallback, exchangeCode, recordedScopes, STATE_COOKIE } from "@/lib/connectors/oauth";
 import { connector } from "@/lib/connectors/registry";
 import { saveConnection } from "@/lib/connectors/runtime";
 import { reportError } from "@/lib/observability";
@@ -45,8 +45,10 @@ export async function GET(req: Request) {
     const who = c.account ? await c.account({ token: tokens.accessToken, extra: tokens.extra, fetch }, tokens) : { label: c.meta.name };
     tokens.extra = { ...tokens.extra, ...who.extra };
     const requested = [...c.meta.readScopes, ...(check.payload.w ? c.meta.writeScopes : [])].map((p) => p.scope);
-    // Use what the service says it granted (people can untick permissions); fall back to what was asked for.
-    const granted = grantedScopes(requested, tokens.scopes);
+    // Use what the service says it granted (people can untick permissions); fall back to what was asked for. Services
+    // whose permissions live on the app (GitHub Apps, Vercel Apps) report no such scopes: they enforce the app's
+    // permissions on every call, so Orbis records what it asked for.
+    const granted = recordedScopes(c, requested, tokens.scopes);
     const writeEnabled = check.payload.w && c.meta.writeScopes.some((p) => granted.includes(p.scope));
     await saveConnection(auth, c, { label: who.label, scopes: granted, writeEnabled, tokens });
     return done({ connected: c.meta.id });

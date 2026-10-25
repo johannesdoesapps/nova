@@ -19,8 +19,8 @@ export const CATEGORIES = [
 ] as const;
 export type CategoryId = (typeof CATEGORIES)[number]["id"];
 
-/** How a connector signs in: OAuth 2.0, Orbis's GitHub App, or no account at all (public data). */
-export type AuthKind = "oauth2" | "github_app" | "none";
+/** How a connector signs in: OAuth 2.0, or no account at all (public data). */
+export type AuthKind = "oauth2" | "none";
 export type Access = "read" | "write";
 
 export interface Permission {
@@ -60,6 +60,8 @@ export interface ConnectorMeta {
   };
   /** Shares its OAuth app with other connectors of the same group (Google, Microsoft). */
   group?: "google" | "microsoft";
+  /** Extra links the page shows when they're set up (resolved on the server, e.g. GitHub's repository chooser). */
+  links?: { id: string; label: string }[];
 }
 
 const LIVE = "Orbis reads from this service only when you ask something it's needed for, or when you search it here. Results are shown to you and passed to the AI model answering your request; nothing is copied into Orbis or kept after the answer. Orbis stores only the connection (encrypted) and the account name.";
@@ -201,28 +203,71 @@ export const CONNECTORS: ConnectorMeta[] = [
     name: "GitHub",
     vendor: "GitHub",
     category: "development",
-    tagline: "Repositories, files, issues and pull requests.",
-    description: "Read files from the repositories you choose and search their issues and pull requests, through Orbis's GitHub App. If you allow it, Orbis can open an issue after you review it.",
+    tagline: "Repositories, files, branches, commits and pull requests.",
+    description:
+      "Sign in with GitHub and choose which repositories Orbis may use. Orbis can read files, branches, issues and pull requests in them and, if you allow it, create branches, commit file changes and open pull requests or issues — each one only after you review and confirm it. Orbis never commits straight to a default branch.",
     featured: true,
-    auth: "github_app",
+    auth: "oauth2",
     capabilities: [
-      { label: "List the repositories you shared", access: "read" },
-      { label: "Read files", access: "read" },
-      { label: "Search issues and pull requests", access: "read" },
-      { label: "Open an issue after you confirm", access: "write" },
+      { label: "List the repositories you chose", access: "read" },
+      { label: "Read files and list branches", access: "read" },
+      { label: "Search issues; list pull requests", access: "read" },
+      { label: "Create a branch and commit file changes to it", access: "write" },
+      { label: "Open a pull request or an issue", access: "write" },
     ],
     readScopes: [
-      { scope: "contents:read", label: "Read files in the repositories you choose", access: "read" },
+      { scope: "contents:read", label: "Read files and branches in the repositories you choose", access: "read" },
       { scope: "issues:read", label: "Read issues", access: "read" },
       { scope: "pull_requests:read", label: "Read pull requests", access: "read" },
     ],
-    writeScopes: [{ scope: "issues:write", label: "Open issues", access: "write" }],
+    writeScopes: [
+      { scope: "contents:write", label: "Create branches and commit changes (never to the default branch)", access: "write" },
+      { scope: "pull_requests:write", label: "Open pull requests", access: "write" },
+      { scope: "issues:write", label: "Open issues", access: "write" },
+    ],
     dataUse: LIVE,
-    keywords: ["github", "repo", "repository", "repositories", "issue", "issues", "pull request", "pr", "prs", "commit", "code", "branch", "bug"],
+    keywords: ["github", "repo", "repository", "repositories", "issue", "issues", "pull request", "pr", "prs", "commit", "branch", "merge", "readme"],
     setup: {
-      env: ["GITHUB_APP_ID", "GITHUB_APP_SLUG", "GITHUB_APP_PRIVATE_KEY"],
+      env: ["GITHUB_APP_CLIENT_ID", "GITHUB_APP_CLIENT_SECRET", "GITHUB_APP_SLUG"],
       console: { label: "GitHub → Settings → Developer settings → GitHub Apps", url: "https://github.com/settings/apps" },
-      notes: ["See docs/GITHUB.md. For issues and pull requests, give the app Issues: Read and Pull requests: Read (Issues: Read and write to open issues)."],
+      notes: [
+        "Use a GitHub App (not an OAuth App): Callback URL = the redirect URL below; keep “Expire user authorization tokens” on; Setup URL = https://tryorbis.app/connectors?connector=github; Webhook off.",
+        "Repository permissions: Contents, Issues and Pull requests: Read and write; Metadata: Read-only. Nothing else.",
+        "Copy the Client ID, generate a client secret, and note the app's slug (github.com/apps/<slug>). See docs/CONNECTORS_GITHUB_VERCEL.md.",
+      ],
+    },
+    links: [{ id: "github_install", label: "Choose repositories on GitHub" }],
+  },
+  {
+    id: "vercel",
+    name: "Vercel",
+    vendor: "Vercel",
+    category: "development",
+    tagline: "Projects, deployments, build logs and redeploys.",
+    description:
+      "Sign in with Vercel and choose which accounts and teams Orbis may use. Orbis can list your projects and deployments, show their status and URLs, and read build logs to explain failures and, if you allow it, redeploy after you review and confirm it.",
+    featured: true,
+    auth: "oauth2",
+    capabilities: [
+      { label: "List projects and their production URLs", access: "read" },
+      { label: "List deployments and their status", access: "read" },
+      { label: "Read build logs", access: "read" },
+      { label: "Redeploy (to preview or production) after you confirm", access: "write" },
+    ],
+    readScopes: [
+      { scope: "read:project", label: "See your projects", access: "read" },
+      { scope: "read:deployment", label: "See deployments, their status and build logs", access: "read" },
+    ],
+    writeScopes: [{ scope: "write:deployment", label: "Create deployments (redeploy)", access: "write" }],
+    dataUse: LIVE,
+    keywords: ["vercel", "deploy", "deploys", "deployment", "deployments", "redeploy", "build log", "build logs", "build failed", "preview url", "production url", "hosting"],
+    setup: {
+      env: ["ORBIS_VERCEL_CLIENT_ID", "ORBIS_VERCEL_CLIENT_SECRET"],
+      console: { label: "Vercel → Team Settings → Apps", url: "https://vercel.com/dashboard" },
+      notes: [
+        "Create a Vercel App (Sign in with Vercel). Authorization Callback URL = the redirect URL below. Scopes: openid, email, profile, offline_access.",
+        "Permissions: Projects (read) and Deployments (read and write). Install the app on your team so its projects can be reached. See docs/CONNECTORS_GITHUB_VERCEL.md.",
+      ],
     },
   },
   {
@@ -382,6 +427,8 @@ export interface CatalogEntry extends ConnectorMeta {
   available: boolean;
   /** For administrators: what's missing. */
   missing?: string[];
+  /** Resolved extra links (see ConnectorMeta.links). */
+  linkUrls?: { label: string; url: string }[];
   connection: ConnectionView | null;
 }
 

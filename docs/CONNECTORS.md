@@ -20,7 +20,8 @@ Every connector below has a working implementation against the service's officia
 | Google Calendar | Google OAuth | list and search events; free/busy | add an event (no invitations sent) | needs Google setup |
 | Slack | Slack OAuth (user token) | search messages | post a message as the user | needs Slack setup |
 | Notion | Notion OAuth (public connection) | search pages shared with Orbis; read pages | — | needs Notion setup |
-| GitHub | Orbis's GitHub App (docs/GITHUB.md) | list repositories, read files, search issues and PRs | open an issue | needs the GitHub App |
+| GitHub | GitHub App user sign-in (docs/CONNECTORS_GITHUB_VERCEL.md) | list repositories, files, branches, PRs; read files; search issues | create a branch, commit a file to a branch (never the default branch), open a PR or an issue | needs GitHub setup |
+| Vercel | Sign in with Vercel (docs/CONNECTORS_GITHUB_VERCEL.md) | list projects and deployments; deployment status, URLs and build logs | redeploy (preview or production) | needs Vercel setup |
 | Microsoft OneDrive | Microsoft OAuth | search; read text files | — | needs Microsoft setup |
 | Microsoft Outlook | Microsoft OAuth | search; read messages | save a draft (never sends) | needs Microsoft setup |
 | HubSpot | HubSpot OAuth | search contacts, companies, deals | — | needs HubSpot setup |
@@ -62,7 +63,7 @@ Until the site owner sets a connector up, it shows as **Not set up yet** and can
    - records which permissions were **actually granted** (people can untick some);
    - saves the connection.
 5. Nothing is marked connected unless every step worked.
-6. GitHub uses the existing GitHub App flow instead (link the GitHub account, then choose repositories).
+6. GitHub and Vercel use the same flow; their permissions are set on Orbis's GitHub App and Vercel App rather than requested as scopes (see docs/CONNECTORS_GITHUB_VERCEL.md).
 7. Wikipedia has no account; the user only turns it on.
 
 ### Statuses
@@ -104,7 +105,8 @@ Actions run only after the user confirms them in a card under the reply. These a
 - save a Gmail or Outlook draft;
 - add a Google Calendar event;
 - post a Slack message;
-- open a GitHub issue.
+- open a GitHub issue, create a branch, commit a file to a branch, or open a pull request;
+- redeploy on Vercel.
 
 How an action reaches the user:
 
@@ -132,7 +134,7 @@ Some limits are built into the actions themselves:
 - **Least privilege.** Read-only is the default, write scopes are requested only on opt-in, and each connector asks only for its own scopes.
 - **Provider error text is never shown or stored.** It can contain account details, so the user sees a message based on the status code instead.
 - **Disconnecting** deletes the tokens and revokes access at the provider where possible:
-  - Google and Slack revoke the token.
+  - Google, Slack, GitHub and Vercel revoke the token (GitHub: the whole app authorization).
   - Google revokes the whole grant of a client, so Orbis doesn't revoke while other Google connectors still use it, and says so.
   - Microsoft, Notion, HubSpot and Figma have no revoke API for apps, so the page tells the user where to remove Orbis.
 - **Rate limits:**

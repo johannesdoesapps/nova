@@ -7,6 +7,7 @@ const SLUG: Record<string, string> = {
   google_calendar: "googlecalendar",
   notion: "notion",
   github: "github",
+  vercel: "vercel",
   figma: "figma",
   hubspot: "hubspot",
   wikipedia: "wikipedia",

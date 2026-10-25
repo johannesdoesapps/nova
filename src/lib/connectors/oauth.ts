@@ -23,7 +23,6 @@ export function oauthClient(cfg: OAuthConfig, env: Record<string, string | undef
 /** What's missing before a connector can be used on this site (empty when ready). */
 export function missingSetup(c: Connector, env: Record<string, string | undefined> = process.env): string[] {
   if (c.meta.auth === "none") return [];
-  if (c.meta.auth === "github_app") return c.meta.setup.env.filter((k) => !env[k]?.trim());
   const missing = c.meta.setup.env.filter((k) => !env[k]?.trim());
   if (!connectorKeyConfigured(env)) missing.unshift("ORBIS_CONNECTOR_KEY");
   return missing;
@@ -52,6 +51,7 @@ export function scopesFor(c: Connector, write: boolean): string[] {
   const own = [...c.meta.readScopes, ...(write ? c.meta.writeScopes : [])].map((p) => p.scope);
   // Notion's permissions are set on the connection itself, not requested in the URL.
   if (c.meta.id === "notion") return [];
+  if (c.oauth?.urlScopes === "base") return [...(c.oauth.baseScopes ?? [])];
   return [...new Set([...(c.oauth?.baseScopes ?? []), ...own])];
 }
 
@@ -150,4 +150,9 @@ export function grantedScopes(requested: string[], reported: string[] | null | u
   if (!reported?.length) return requested;
   const have = reported.map((s) => s.toLowerCase());
   return requested.filter((s) => have.some((h) => h === s.toLowerCase() || h.endsWith(`/${s.toLowerCase()}`)));
+}
+
+/** The permissions to record for a new connection: what the service reports, or what was asked for when its permissions live on the app. */
+export function recordedScopes(c: Connector, requested: string[], reported: string[] | null | undefined): string[] {
+  return c.oauth?.urlScopes === "base" ? requested : grantedScopes(requested, reported);
 }

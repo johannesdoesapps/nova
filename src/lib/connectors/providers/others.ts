@@ -1,11 +1,10 @@
 import "server-only";
 import { z } from "zod";
-import { listRepos, REPO_RE, repoFile, safePath } from "@/lib/github/app";
 import { connectorMeta } from "../catalog";
 import { callJson, clip, ConnectorError, htmlToText } from "../http";
 import type { ActionDef, Connector, ToolDef } from "../types";
 
-/** HubSpot CRM, Figma, Wikipedia and GitHub. */
+/** HubSpot CRM, Figma and Wikipedia. */
 
 // ---------------------------------------------------------------- HubSpot
 
@@ -202,108 +201,4 @@ export const wikipedia: Connector = {
   tools: [wikiSearch as ToolDef, wikiRead as ToolDef],
   actions: [],
   defaultSearch: "wikipedia_search",
-};
-
-// ---------------------------------------------------------------- GitHub (Orbis's GitHub App)
-
-const GH = "https://api.github.com";
-const ghHeaders = { accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28" };
-
-const ghRepos: ToolDef<Record<string, never>> = {
-  name: "github_list_repos",
-  description: "List the GitHub repositories the user shared with Orbis.",
-  access: "read",
-  input: z.object({}).strict() as unknown as z.ZodType<Record<string, never>>,
-  args: "{}",
-  async run(ctx) {
-    const repos = await listRepos(ctx.token!, ctx.fetch);
-    return {
-      summary: `${repos.length} repositor${repos.length === 1 ? "y" : "ies"}`,
-      items: repos.slice(0, 30).map((r) => ({ connectorId: "github", title: r.fullName, url: `https://github.com/${r.fullName}`, snippet: `${r.private ? "Private" : "Public"} · default branch ${r.defaultBranch}` })),
-    };
-  },
-};
-
-const ghFile: ToolDef<{ repo: string; path: string }> = {
-  name: "github_read_file",
-  description: "Read a text file from one of the user's shared GitHub repositories (default branch).",
-  access: "read",
-  input: z.object({ repo: z.string().regex(REPO_RE, "Use owner/name."), path: z.string().max(400).refine(safePath, "Use a plain path like src/index.ts.") }),
-  args: '{"repo": "owner/name", "path": file path}',
-  async run(ctx, { repo, path }) {
-    const f = await repoFile(ctx.token!, repo, path, ctx.fetch);
-    return {
-      summary: `Read ${repo}/${clip(path, 60)}`,
-      items: [{ connectorId: "github", title: `${repo}: ${path}`, url: `https://github.com/${repo}/blob/HEAD/${path}`, snippet: clip(f.content.replace(/\s+/g, " "), 240) }],
-      text: clip(f.content, 20_000),
-    };
-  },
-};
-
-/** Search query with repo: qualifiers for the shared repositories, within GitHub's 256-character limit. */
-export function scopedQuery(query: string, repos: string[], kind?: "issue" | "pr", state?: "open" | "closed"): string {
-  let q = query.replace(/\brepo:\S+/g, "").trim();
-  if (kind) q += ` is:${kind}`;
-  if (state) q += ` is:${state}`;
-  for (const r of repos) {
-    if ((q + ` repo:${r}`).length > 256) break;
-    q += ` repo:${r}`;
-  }
-  return q.trim();
-}
-
-const ghIssues: ToolDef<{ query: string; repo?: string; kind?: "issue" | "pr"; state?: "open" | "closed"; limit?: number }> = {
-  name: "github_search_issues",
-  description: "Search issues and pull requests in the user's shared GitHub repositories. Returns titles, numbers, state, authors and links.",
-  access: "read",
-  input: z.object({ query: z.string().trim().max(200), repo: z.string().regex(REPO_RE).optional(), kind: z.enum(["issue", "pr"]).optional(), state: z.enum(["open", "closed"]).optional(), limit: z.number().int().min(1).max(20).optional() }),
-  args: '{"query": words, "repo"?: "owner/name", "kind"?: "issue" | "pr", "state"?: "open" | "closed", "limit"?: 1-20}',
-  async run(ctx, i) {
-    const shared = (await listRepos(ctx.token!, ctx.fetch)).map((r) => r.fullName);
-    if (i.repo && !shared.includes(i.repo)) throw new ConnectorError("permission", `${i.repo} isn't one of the repositories you shared with Orbis.`);
-    const q = scopedQuery(i.query, i.repo ? [i.repo] : shared, i.kind, i.state);
-    const r = await callJson<{ items?: { title: string; number: number; html_url: string; state: string; user?: { login?: string }; pull_request?: unknown; updated_at?: string; repository_url?: string }[] }>(
-      `${GH}/search/issues?${new URLSearchParams({ q, per_page: String(i.limit ?? 10), sort: "updated" })}`,
-      { token: ctx.token, headers: ghHeaders, service: "GitHub", signal: ctx.signal },
-      ctx.fetch,
-    );
-    const items = r.items ?? [];
-    return {
-      summary: `${items.length} issue${items.length === 1 ? "" : "s"} or pull request${items.length === 1 ? "" : "s"}`,
-      items: items.map((x) => ({
-        connectorId: "github",
-        title: `${x.pull_request ? "PR" : "Issue"} #${x.number}: ${x.title}`,
-        url: x.html_url,
-        snippet: `${x.repository_url?.split("/repos/")[1] ?? ""} · ${x.state} · by ${x.user?.login ?? "?"} · updated ${x.updated_at?.slice(0, 10) ?? "?"}`,
-      })),
-    };
-  },
-};
-
-const ghCreateIssue: ActionDef<{ repo: string; title: string; body: string }> = {
-  name: "github_create_issue",
-  description: "Open an issue in one of the user's shared GitHub repositories.",
-  access: "write",
-  scope: "issues:write",
-  input: z.object({ repo: z.string().regex(REPO_RE), title: z.string().trim().min(1).max(250), body: z.string().max(20_000) }),
-  args: '{"repo": "owner/name", "title": text, "body": Markdown}',
-  fields: [
-    { key: "repo", label: "Repository" },
-    { key: "title", label: "Title" },
-    { key: "body", label: "Description", multiline: true },
-  ],
-  describe: (i) => `Open a new issue in ${i.repo}. Everyone with access to the repository will see it.`,
-  async run(ctx, i) {
-    const shared = (await listRepos(ctx.token!, ctx.fetch)).map((r) => r.fullName);
-    if (!shared.includes(i.repo)) throw new ConnectorError("permission", `${i.repo} isn't one of the repositories you shared with Orbis.`);
-    const r = await callJson<{ html_url: string; number: number }>(`${GH}/repos/${i.repo}/issues`, { method: "POST", token: ctx.token, headers: ghHeaders, json: { title: i.title, body: i.body }, service: "GitHub", signal: ctx.signal, retries: 0 }, ctx.fetch);
-    return { summary: `Opened issue #${r.number} in ${i.repo}.`, url: r.html_url };
-  },
-};
-
-export const github: Connector = {
-  meta: connectorMeta("github")!,
-  tools: [ghRepos as ToolDef, ghFile as ToolDef, ghIssues as ToolDef],
-  actions: [ghCreateIssue as unknown as ActionDef],
-  defaultSearch: "github_search_issues",
 };

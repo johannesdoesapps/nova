@@ -60,9 +60,8 @@ export async function DELETE(_req: Request, ctx: Ctx) {
       }
     } else if (c.meta.auth === "oauth2") {
       note = `Orbis deleted its copy of the sign-in. ${c.meta.vendor} has no way for apps to revoke access, so you can also remove Orbis in your ${c.meta.vendor} account settings.`;
-    } else if (c.meta.auth === "github_app") {
-      note = "To stop Orbis reading your repositories entirely, uninstall the Orbis app in GitHub → Settings → Applications.";
     }
+    if (c.meta.id === "github") note = [note, "To also remove the repositories you shared, uninstall Orbis in GitHub → Settings → Applications."].filter(Boolean).join(" ");
     await forgetConnection(auth, c.meta.id);
     return NextResponse.json({ ok: true, revoked, note });
   } catch (err) {

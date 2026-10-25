@@ -2,13 +2,15 @@ import "server-only";
 import { gmail, googleCalendar, googleDrive } from "./providers/google";
 import { oneDrive, outlook } from "./providers/microsoft";
 import { notion } from "./providers/notion";
-import { figma, github, hubspot, wikipedia } from "./providers/others";
+import { figma, hubspot, wikipedia } from "./providers/others";
+import { github } from "./providers/github";
+import { vercel } from "./providers/vercel";
 import { slack } from "./providers/slack";
 import type { ActionDef, Connector, ToolDef } from "./types";
 
 /** Every connector with a server implementation, by id. */
 export const REGISTRY: Record<string, Connector> = Object.fromEntries(
-  [googleDrive, gmail, googleCalendar, slack, notion, github, oneDrive, outlook, hubspot, figma, wikipedia].map((c) => [c.meta.id, c]),
+  [googleDrive, gmail, googleCalendar, slack, notion, github, vercel, oneDrive, outlook, hubspot, figma, wikipedia].map((c) => [c.meta.id, c]),
 );
 
 export function connector(id: string): Connector | null {

@@ -2,7 +2,7 @@ import "server-only";
 import { isAdmin } from "@/lib/admin";
 import { requireUser, type AuthContext } from "@/lib/auth";
 import { publicEnv } from "@/lib/env";
-import { githubAppConfig } from "@/lib/github/app";
+import { githubInstallUrl } from "./providers/github";
 import { ApiError } from "@/lib/http";
 import { limiter } from "@/lib/rate-limit";
 import type { CatalogEntry } from "./catalog";
@@ -27,8 +27,15 @@ export function connectorOr404(id: string): Connector {
 
 /** Whether the connector can be connected on this site now. */
 export function available(c: Connector): boolean {
-  if (c.meta.auth === "github_app") return !!githubAppConfig();
   return missingSetup(c).length === 0;
+}
+
+/** Extra links a connector shows once they're set up (GitHub: where people choose repositories). */
+function linkUrls(c: Connector): { label: string; url: string }[] {
+  return (c.meta.links ?? []).flatMap((l) => {
+    const url = l.id === "github_install" ? githubInstallUrl() : null;
+    return url ? [{ label: l.label, url }] : [];
+  });
 }
 
 /** Every connector with its availability and, for a signed-in user, their connection. Missing setup is shown to administrators only. */
@@ -37,7 +44,7 @@ export async function catalogFor(auth: AuthContext): Promise<{ connectors: Catal
   const [rows, admin] = signedIn ? await Promise.all([listConnections(auth), isAdmin(auth)]) : [[], false];
   const connectors = Object.values(REGISTRY).map((c) => {
     const row = rows.find((r) => r.connector_id === c.meta.id);
-    const entry: CatalogEntry = { ...c.meta, available: available(c), connection: row ? toView(row) : null };
+    const entry: CatalogEntry = { ...c.meta, available: available(c), connection: row ? toView(row) : null, linkUrls: linkUrls(c) };
     if (admin) entry.missing = missingSetup(c);
     return entry;
   });

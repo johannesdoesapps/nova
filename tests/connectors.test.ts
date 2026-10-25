@@ -22,6 +22,7 @@ const { REGISTRY, toolByName, actionByName } = await import("@/lib/connectors/re
 const google = await import("@/lib/connectors/providers/google");
 const notionMod = await import("@/lib/connectors/providers/notion");
 const others = await import("@/lib/connectors/providers/others");
+const githubProvider = await import("@/lib/connectors/providers/github");
 const router = await import("@/lib/connectors/router");
 
 type Call = { url: string; method: string; headers: Record<string, string>; body: string | null };
@@ -281,9 +282,9 @@ describe("providers (official API shapes)", () => {
     expect(w.calls[0]!.headers["user-agent"]).toMatch(/^Orbis\//);
     expect((await toolByName("wikipedia_read")!.tool.run({ token: null, fetch: w.f }, { pageId: 974 })).text).toBe("Augusta Ada King…");
 
-    const q = others.scopedQuery("login bug repo:evil/x", ["acme/app", "acme/api"], "issue", "open");
+    const q = githubProvider.scopedQuery("login bug repo:evil/x", ["acme/app", "acme/api"], "issue", "open");
     expect(q).toBe("login bug is:issue is:open repo:acme/app repo:acme/api");
-    expect(others.scopedQuery("x", Array.from({ length: 40 }, (_, i) => `owner/repository-number-${i}`)).length).toBeLessThanOrEqual(256);
+    expect(githubProvider.scopedQuery("x", Array.from({ length: 40 }, (_, i) => `owner/repository-number-${i}`)).length).toBeLessThanOrEqual(256);
   });
 });
 

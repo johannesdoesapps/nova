@@ -6,8 +6,6 @@ import { detectInjection, injectionNote } from "@/lib/bastion/guards";
 import { integrationAllowed } from "@/lib/bastion/customer/policy";
 import { guard, workspacePolicy } from "@/lib/bastion/server";
 import { redactAll } from "@/lib/secrets";
-import { githubAppConfig } from "@/lib/github/app";
-import { requireRepoAccess } from "@/lib/github/server";
 import type { AiMode, ConnectionView, ConnectorItem } from "./catalog";
 import { open, seal, tokenBinding } from "./crypto";
 import { ConnectorError, type Fetch } from "./http";
@@ -132,13 +130,6 @@ export function storedTokens(auth: Authed, row: ConnectionRow): TokenSet {
 /** A usable access token for a connection: refreshed (and re-saved) when it's about to expire. */
 export async function accessToken(auth: Authed, c: Connector, row: ConnectionRow, f: Fetch = fetch): Promise<{ token: string | null; extra?: Record<string, string> }> {
   if (c.meta.auth === "none") return { token: null };
-  if (c.meta.auth === "github_app") {
-    try {
-      return { token: await requireRepoAccess() };
-    } catch (err) {
-      throw new ConnectorError("auth", err instanceof Error ? err.message : "GitHub isn't connected.");
-    }
-  }
   let tokens = storedTokens(auth, row);
   if (needsRefresh(tokens)) {
     tokens = await refreshTokens(c, tokens, f);
@@ -166,7 +157,6 @@ const CACHE_MS = 60_000;
 /** Whether a connector can be used by this user now (set up on the site and connected). */
 export function usable(c: Connector, row: ConnectionRow | null): boolean {
   if (missingSetup(c).length) return false;
-  if (c.meta.auth === "github_app") return !!githubAppConfig() && row?.status === "connected";
   return row?.status === "connected";
 }
 
@@ -224,7 +214,7 @@ export async function runTool(
     const result = await (tool as ToolDef<unknown>).run({ token, extra, fetch: opts.fetch ?? fetch, signal: opts.signal }, parsed.data);
     cache.set(key, { at: Date.now(), result });
     if (cache.size > 300) cache.delete(cache.keys().next().value!);
-    if (c.meta.auth !== "github_app") void updateConnection(auth, c.meta.id, { last_used_at: new Date().toISOString(), ...(row!.last_error ? { last_error: null } : {}) });
+    void updateConnection(auth, c.meta.id, { last_used_at: new Date().toISOString(), ...(row!.last_error ? { last_error: null } : {}) });
     return { connectorId: c.meta.id, tool: name, ok: true, result: cleanResult(result) };
   } catch (err) {
     await noteFailure(auth, c.meta.id, err);

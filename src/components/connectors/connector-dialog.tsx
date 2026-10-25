@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { ArrowUpRight, Eye, Lock, PenLine, RefreshCw, Search } from "lucide-react";
 import { Dialog } from "@/components/studio/ui";
-import { oauthRedirectTo } from "@/lib/auth-flow";
 import { AI_MODES, type AiMode, type CatalogEntry, type ConnectionStatus, type ConnectorItem } from "@/lib/connectors/catalog";
 import { cn } from "@/lib/utils";
 import { BrandIcon } from "./brand-icon";
@@ -14,9 +13,16 @@ export function statusOf(c: CatalogEntry): ConnectionStatus {
 
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—");
 
+/** What the person chooses on the service's own pages, for connectors where that matters. */
+const CHOOSE: Record<string, string> = {
+  github:
+    "On GitHub you'll approve Orbis's app, then choose which repositories it may use (all, or only the ones you pick). Orbis can't see any other repository, and you can change the choice on GitHub at any time.",
+  vercel:
+    "On Vercel you'll approve Orbis and choose the account or team it may use, and what it may see (projects and deployments). You can change or remove that in your Vercel settings at any time.",
+};
+
 const HOW: Record<CatalogEntry["auth"], (name: string, vendor: string) => string> = {
   oauth2: (name, vendor) => `You'll go to ${vendor}'s own sign-in page, see exactly what Orbis is asking for, and choose whether to allow it. Orbis never sees your ${vendor} password. You come back here when it's done.`,
-  github_app: () => "First connect your GitHub account, then choose which repositories Orbis may read on GitHub. You can change that choice on GitHub at any time.",
   none: () => "There's no account to connect: this uses public data only. Turning it on lets Orbis use it in your chats.",
 };
 
@@ -66,25 +72,6 @@ export function ConnectorDialog({
     if (c.auth === "none") return void wrap("connect", async () => {
       await api(`/api/connectors/${c.id}/enable`, { method: "POST" });
       onChanged({ tone: "ok", text: `${c.name} is on.` });
-    });
-    // GitHub: link the account, install the app, then confirm.
-    void wrap("connect", async () => {
-      const s = await api<{ configured: boolean; linked: boolean; installed: boolean; installUrl: string | null }>("/api/github/status");
-      if (!s.configured) throw new Error("GitHub isn't set up on this site yet.");
-      if (!s.linked) {
-        const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-        const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-        if (!url || !key) throw new Error("Accounts aren't set up on this site.");
-        const { error } = await (await import("@/lib/supabase/client")).browserSupabase(url, key).auth.linkIdentity({ provider: "github", options: { redirectTo: oauthRedirectTo(location.origin, "/connectors?connector=github", "github-link"), scopes: "read:user user:email" } });
-        if (error) throw new Error(/manual linking/i.test(error.message) ? "Connecting GitHub to an existing account isn't switched on for this site yet." : "GitHub couldn't be connected. Please try again.");
-        return;
-      }
-      if (!s.installed) {
-        if (s.installUrl) window.open(s.installUrl, "_blank", "noopener");
-        throw new Error("On GitHub, choose the repositories Orbis may read, then press Connect again.");
-      }
-      await api(`/api/connectors/${c.id}/enable`, { method: "POST" });
-      onChanged({ tone: "ok", text: "GitHub connected." });
     });
   };
 
@@ -217,6 +204,11 @@ export function ConnectorDialog({
               <button type="button" onClick={() => void check()} disabled={!!busy} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-s-line px-3 text-[12.5px] hover:border-s-line-strong disabled:opacity-50">
                 <RefreshCw className={cn("h-3.5 w-3.5", busy === "check" && "animate-spin")} /> Check connection
               </button>
+              {c.linkUrls?.map((l) => (
+                <a key={l.url} href={l.url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-full border border-s-line px-3 text-[12.5px] hover:border-s-line-strong">
+                  {l.label} <ArrowUpRight className="h-3.5 w-3.5" />
+                </a>
+              ))}
               {c.auth === "oauth2" && (
                 <button type="button" onClick={connect} disabled={!!busy || !c.available} className="h-8 rounded-full border border-s-line px-3 text-[12.5px] hover:border-s-line-strong disabled:opacity-50">
                   Reconnect{write && !c.connection?.writeEnabled ? " with write access" : ""}
@@ -294,6 +286,7 @@ export function ConnectorDialog({
           <section className="space-y-3 rounded-2xl border border-s-line p-4">
             <h3 className="text-[14px] font-medium">{c.auth === "none" ? "Turn on" : "Connect"}</h3>
             <p className="leading-relaxed text-s-ink-2">{HOW[c.auth](c.name, c.vendor)}</p>
+            {CHOOSE[c.id] && <p className="leading-relaxed text-s-ink-2">{CHOOSE[c.id]}</p>}
             {c.available && c.writeScopes.length > 0 && c.auth === "oauth2" && (
               <label className="flex items-start gap-2 text-[13px]">
                 <input type="checkbox" checked={write} onChange={(e) => setWrite(e.target.checked)} className="mt-0.5" />
