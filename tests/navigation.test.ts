@@ -218,19 +218,19 @@ describe("the Chat / Code switch", () => {
 });
 
 describe("the redesigned sidebar", () => {
-  it("is Home, Agents, Activity, Templates, then Tools; Projects is in the top bar beside search, Missions under it", () => {
+  it("is Home, Agents, Activity, Templates, Connectors, then Tools; Projects is in the top bar beside search, Missions under it", () => {
     expect(BAR_ENTRIES.map((e) => e.id)).toEqual(["projects"]);
     expect(sidebarFor(false).some((e) => e.id === "projects")).toBe(false);
     expect(
       sidebarFor(false)
         .filter((e) => e.group === "main")
         .map((e) => e.id),
-    ).toEqual(["home", "agents", "activity", "templates"]);
+    ).toEqual(["home", "agents", "activity", "templates", "connectors"]);
     expect(
       sidebarFor(false)
         .filter((e) => e.group === "tools")
         .map((e) => e.id),
-    ).toEqual(["discover", "research", "review", "pair", "council", "arena", "images", "verify", "connectors"]);
+    ).toEqual(["discover", "research", "review", "pair", "council", "arena", "images", "verify"]);
     expect(sidebarFor(true).some((e) => e.id === "missions")).toBe(false);
     // Still one command-palette destination.
     expect(navFor(false).filter((e) => e.id === "missions")).toHaveLength(1);

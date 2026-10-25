@@ -81,7 +81,7 @@ export const NAV_ENTRIES: NavEntry[] = [
   { id: "arena", label: "Arena", href: "/arena", icon: Swords, group: "tools", hint: "Compare models side by side, blind if you like" },
   { id: "images", label: "Images", href: "/images", icon: ImageIcon, group: "tools", hint: "Create an image from a description" },
   { id: "verify", label: "Verify", href: "/verify", icon: ShieldCheck, group: "tools", hint: "Check claims against sources" },
-  { id: "connectors", label: "Connectors", href: "/connectors", icon: Plug, group: "tools", hint: "Connect Gmail, GitHub, Drive and more" },
+  { id: "connectors", label: "Connectors", href: "/connectors", icon: Plug, group: "main", hint: "Connect GitHub, Vercel, Cloudflare, Gmail, Drive and more" },
   { id: "team", label: "Team", href: "/team", icon: Users, group: "main", hint: "One subscription for your team: seats and members", parent: "home" },
   { id: "usage", label: "Usage", href: "/usage", icon: Gauge, group: "main", hint: "Your allowance, resets and usage history", parent: "home" },
   { id: "workforce", label: "Workforce", href: "/workforce", icon: Workflow, group: "admin", hint: "Internal AI engineers" },

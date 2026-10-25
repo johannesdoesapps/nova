@@ -246,6 +246,7 @@ export const CONNECTORS: ConnectorMeta[] = [
     tagline: "Check DDoS, WAF, bot, TLS and Access protection on your zones.",
     description:
       "Connect with a Cloudflare API token you create and scope yourself (read-only is enough). Orbis's Security Team inspects your zones' TLS and HTTPS settings, WAF and rate-limiting rules, DDoS and bot protection, DNS records that bypass Cloudflare and Zero Trust Access policies, and reports what's missing. If you also give the token permission to edit zone settings, Orbis can apply a TLS fix you approve, one change at a time, and checks it afterwards.",
+    featured: true,
     auth: "api_token",
     capabilities: [
       { label: "Read zones, TLS/HTTPS and security settings", access: "read" },
