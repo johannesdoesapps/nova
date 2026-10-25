@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { WebOnly } from "@/components/common/native-bridge";
 import { BillingButton } from "@/components/common/billing-button";
 
 export interface PlanInfo {
@@ -142,12 +143,12 @@ function UpgradeLink({ usage }: { usage: UsageState }) {
   const up = usage.info?.upgradeTo;
   if (!up) return null;
   return (
-    <>
+    <WebOnly>
       {" "}
       <a href={`/pricing?plan=${up.id}`} className="font-medium text-s-accent underline-offset-2 hover:underline">
         Upgrade to {up.label}
       </a>
-    </>
+    </WebOnly>
   );
 }
 
@@ -187,9 +188,11 @@ export function UsageMeters({ usage, billing = false }: { usage: UsageState; bil
         {billing && (
           <div className="flex flex-wrap gap-2">
             {info?.upgradeTo && (
-              <a href={`/pricing?plan=${info.upgradeTo.id}`} className={cn(btn, "border-transparent bg-s-accent text-white hover:bg-s-accent hover:brightness-110")}>
-                Upgrade to {info.upgradeTo.label} · ${info.upgradeTo.priceUsd}/month
-              </a>
+              <WebOnly>
+                <a href={`/pricing?plan=${info.upgradeTo.id}`} className={cn(btn, "border-transparent bg-s-accent text-white hover:bg-s-accent hover:brightness-110")}>
+                  Upgrade to {info.upgradeTo.label} · ${info.upgradeTo.priceUsd}/month
+                </a>
+              </WebOnly>
             )}
             {paid && (
               <BillingButton action="manage" className={btn}>

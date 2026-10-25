@@ -2,6 +2,7 @@
 import { Check } from "lucide-react";
 import { useState, type KeyboardEvent } from "react";
 import { BillingButton } from "@/components/common/billing-button";
+import { NativePurchaseNote, useNativePlatform } from "@/components/common/native-bridge";
 import { PrimaryCta } from "@/components/marketing/parts";
 import { cn } from "@/lib/utils";
 
@@ -53,8 +54,11 @@ export function PricingPlans({
   };
   const discount = Math.max(...plans.map((p) => p.annualDiscountPct));
   const subscribed = !!current && current.plan !== "free";
+  // Inside the store apps the plans are shown for reference only (see NativePurchaseNote).
+  const native = useNativePlatform();
   return (
     <div>
+      {native && <NativePurchaseNote className="mx-auto mb-6 max-w-xl rounded-xl border border-border bg-panel-2 p-4 text-center text-sm leading-relaxed text-muted" />}
       <div className="mb-8 flex justify-center">
         <div role="radiogroup" aria-label="Billing period" onKeyDown={onRadioKey} className="inline-flex rounded-full border border-border bg-panel p-1 text-[14px]">
           {(["month", "year"] as const).map((i) => (
@@ -103,7 +107,7 @@ export function PricingPlans({
                   </li>
                 ))}
               </ul>
-              <div className="mt-8">
+              <div className={cn("mt-8", native && "hidden")}>
                 {p.id === "free" ? (
                   subscribed ? (
                     <BillingButton

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
+import { NativeBridge } from "@/components/common/native-bridge";
 import { SiteAnalytics } from "@/components/common/site-analytics";
 import { SITE_NAME, siteUrl } from "@/lib/seo";
 import "./globals.css";
@@ -22,6 +23,11 @@ export const viewport: Viewport = {
   themeColor: "#07070b",
   width: "device-width",
   initialScale: 1,
+  // Draw under the notch and home indicator so the safe-area spacing (env(safe-area-inset-*)) the shell already
+  // uses takes effect on iPhones and in the mobile app; the on-screen keyboard resizes the page so the chat
+  // composer stays above it.
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -37,6 +43,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="min-h-dvh">
         {children}
+        <NativeBridge />
         <SiteAnalytics />
       </body>
     </html>

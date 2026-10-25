@@ -7,6 +7,8 @@ import { track } from "@vercel/analytics";
 import { LEGAL } from "@/content/legal-meta";
 import { PENDING_COOKIE } from "@/lib/legal";
 import { browserSupabase } from "@/lib/supabase/client";
+import { nativeOAuthRedirect, nativePlatform } from "@/lib/native/bridge";
+import { openExternal } from "./native-bridge";
 import { friendlyAuthError, LOGIN_MESSAGES, oauthErrorCode, oauthRedirectTo, RESET_PASSWORD_PATH } from "@/lib/auth-flow";
 import { Button, Input, Notice } from "@/components/ui/primitives";
 
@@ -93,6 +95,20 @@ export function LoginForm({
     try {
       // Supabase runs the OAuth flow with PKCE and checks state (and, for
       // Google, the OpenID nonce); Orbis never sees Google or GitHub credentials.
+      // Inside the Orbis app, Google refuses sign-in in an embedded web view: open it in the system browser and
+      // come back through the app's deep link (the web view keeps the PKCE verifier, so the server can finish it).
+      if (provider === "google" && nativePlatform()) {
+        const { data, error } = await browserSupabase(url, supabaseKey).auth.signInWithOAuth({
+          provider: "google",
+          options: { redirectTo: nativeOAuthRedirect(next, "google"), skipBrowserRedirect: true, queryParams: { prompt: "select_account" } },
+        });
+        if (error) throw error;
+        if (!data?.url) throw new Error("No sign-in address was returned.");
+        await openExternal(data.url);
+        googleStarted.current = false;
+        setProviderBusy(false);
+        return;
+      }
       const { error } = await browserSupabase(url, supabaseKey).auth.signInWithOAuth(
         provider === "google"
           ? {

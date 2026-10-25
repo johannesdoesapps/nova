@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { NativePurchaseNote, useNativePlatform } from "@/components/common/native-bridge";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Check, Copy, Loader2, Trash2, UserPlus, Users } from "lucide-react";
@@ -103,6 +104,7 @@ export function TeamPage() {
 }
 
 function StartTeam({ offer, pending }: { offer: Offer; pending: Team | null }) {
+  const native = useNativePlatform();
   const [name, setName] = useState(pending?.name ?? "");
   const [plan, setPlan] = useState<"pro" | "max">(pending?.plan ?? "pro");
   const [interval, setInterval] = useState<"month" | "year">(pending?.interval ?? "month");
@@ -122,6 +124,7 @@ function StartTeam({ offer, pending }: { offer: Offer; pending: Team | null }) {
       setBusy(false);
     }
   };
+  if (native) return <NativePurchaseNote className="text-[13px] leading-relaxed text-s-ink-3" />;
   return (
     <section aria-labelledby="start-team" className="glass mt-6 rounded-[22px] p-4 sm:p-6">
       <h3 id="start-team" className="text-[16px] font-semibold">

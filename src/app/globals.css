@@ -203,3 +203,18 @@ body {
   .loop-float, .s-status-in { animation: none; }
   .s-status-out { animation: none; opacity: 0; }
 }
+
+/* Phones and the mobile app: keep content clear of the notch and rounded corners in landscape, and make the
+   browser's own checkboxes and radio buttons large enough to tap. */
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+@media (pointer: coarse) {
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+}
+

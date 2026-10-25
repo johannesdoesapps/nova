@@ -44,7 +44,7 @@ export default async function SharedChatPage({ params }: PageProps<"/share/chat/
 
   return (
     <div className="studio min-h-dvh bg-s-bg text-s-ink">
-      <header className="sticky top-0 z-10 border-b border-s-line bg-s-bg/90 backdrop-blur">
+      <header className="sticky top-0 z-10 border-b pt-[env(safe-area-inset-top)] border-s-line bg-s-bg/90 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-[768px] items-center justify-between gap-3 px-4 sm:px-8">
           <Link href="/" aria-label="Orbis home">
             <Logo />

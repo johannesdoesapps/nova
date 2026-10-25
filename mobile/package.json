@@ -1,0 +1,26 @@
+{
+  "name": "orbis-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Orbis iOS and Android apps (Capacitor shell around https://tryorbis.app). See docs/MOBILE_APPS.md.",
+  "scripts": {
+    "sync": "cap sync",
+    "assets": "capacitor-assets generate --iconBackgroundColor '#07070b' --iconBackgroundColorDark '#07070b' --splashBackgroundColor '#07070b' --splashBackgroundColorDark '#07070b'",
+    "android:debug": "cap sync android && cd android && ./gradlew assembleDebug",
+    "android:release": "cap sync android && cd android && ./gradlew bundleRelease",
+    "ios:open": "cap sync ios && cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/browser": "8.0.5",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/ios": "8.5.3",
+    "@capacitor/splash-screen": "8.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "3.0.5",
+    "@capacitor/cli": "8.5.3",
+    "typescript": "^5.9.3"
+  }
+}

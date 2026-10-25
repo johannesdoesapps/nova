@@ -123,7 +123,7 @@ describe("browser storage on sign-out", () => {
 
 describe("signing in again asks which account", () => {
   const form = readFileSync(join(process.cwd(), "src/components/common/login-form.tsx"), "utf8");
-  it("Google and GitHub both show their account picker", () => {
-    expect(form.match(/queryParams: \{ prompt: "select_account" \}/g)).toHaveLength(2);
+  it("Google (web and in the mobile app) and GitHub all show their account picker", () => {
+    expect(form.match(/queryParams: \{ prompt: "select_account" \}/g)).toHaveLength(3);
   });
 });

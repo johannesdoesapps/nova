@@ -11,6 +11,7 @@ import { DEFAULT_BILLING, PLAN_IDS, chargeUsd, modelTier, planOf, resolveBilling
 import { pageMetadata } from "@/lib/seo";
 import { creditsForSale } from "@/lib/usage";
 import { DEFAULT_STEP_LIMIT } from "@/lib/code/agent/types";
+import { WebOnly } from "@/components/common/native-bridge";
 
 export const dynamic = "force-dynamic";
 
@@ -145,9 +146,11 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
               invites people by email and adds or removes seats; changes are pro-rated.
             </p>
           </div>
-          <Link href="/team" className="mt-4 inline-flex h-10 shrink-0 items-center rounded-full border border-border-strong px-5 text-[14px] font-medium text-fg transition hover:bg-panel sm:mt-0">
-            Start a team
-          </Link>
+          <WebOnly>
+            <Link href="/team" className="mt-4 inline-flex h-10 shrink-0 items-center rounded-full border border-border-strong px-5 text-[14px] font-medium text-fg transition hover:bg-panel sm:mt-0">
+              Start a team
+            </Link>
+          </WebOnly>
         </div>
       </section>
 

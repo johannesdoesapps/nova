@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { NativePurchaseNote, useNativePlatform } from "@/components/common/native-bridge";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import { Switch } from "./ui";
 
@@ -12,6 +13,7 @@ type Offer = { available: boolean; paidPlan: boolean; pack: { units: number; pri
  * pack is on sale, a Buy button (Stripe Checkout; credits arrive by webhook).
  */
 export function ExtraUsage({ credits, bought, onChanged }: { credits: { balance: number; auto: boolean }; bought: boolean; onChanged: () => void }) {
+  const native = useNativePlatform();
   const [offer, setOffer] = useState<Offer | null>(null);
   const [auto, setAuto] = useState(credits.auto);
   const [packs, setPacks] = useState(1);
@@ -71,7 +73,9 @@ export function ExtraUsage({ credits, bought, onChanged }: { credits: { balance:
         />
         Use extra usage automatically when a limit is reached
       </label>
-      {offer?.available && offer.pack ? (
+      {native ? (
+        <NativePurchaseNote className="mt-3 text-[13px] leading-relaxed text-s-ink-3" />
+      ) : offer?.available && offer.pack ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <label className="sr-only" htmlFor="extra-packs">
             Number of packs
@@ -118,6 +122,7 @@ type TopupState = {
  * charged to a card saved for this. The exact terms are shown before agreeing, and it can be turned off any time.
  */
 function AutoTopup({ pack }: { pack: { units: number; priceUsd: number } }) {
+  const native = useNativePlatform();
   const [state, setState] = useState<TopupState | null>(null);
   const [editing, setEditing] = useState(false);
   const [packs, setPacks] = useState(1);
@@ -146,7 +151,7 @@ function AutoTopup({ pack }: { pack: { units: number; priceUsd: number } }) {
     };
   }, [reload]);
 
-  if (!state?.available) return null;
+  if (!state?.available || native) return null;
   const on = !!state.settings?.enabled;
   const price = Math.round(pack.priceUsd * packs * 100) / 100;
   const units = pack.units * packs;

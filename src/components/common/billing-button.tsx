@@ -1,5 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
+import { NativePurchaseNote, useNativePlatform } from "@/components/common/native-bridge";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,8 @@ export function BillingButton({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  // Store rules: no purchases or plan changes inside the iOS/Android app.
+  const native = useNativePlatform();
   const go = async () => {
     if (confirm && !window.confirm(confirm)) return;
     setBusy(true);
@@ -61,6 +64,7 @@ export function BillingButton({
       setBusy(false);
     }
   };
+  if (native) return <NativePurchaseNote />;
   const label = action === "manage" ? "Manage subscription" : action === "change" ? "Change plan" : "Upgrade";
   return (
     <div>

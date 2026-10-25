@@ -41,7 +41,7 @@ export function Welcome({
       {recent && (
         <Link
           href={`/chat?c=${recent.id}`}
-          className="s-in mt-5 inline-flex max-w-full items-center gap-1.5 text-[13px] text-s-ink-3 underline-offset-4 [animation-delay:200ms] hover:text-s-ink hover:underline"
+          className="s-in mt-5 inline-flex min-h-11 max-w-full items-center gap-1.5 text-[13px] text-s-ink-3 underline-offset-4 [animation-delay:200ms] hover:text-s-ink hover:underline"
         >
           <span className="shrink-0">Continue:</span>
           <span className="truncate text-s-ink-2">{recent.title}</span>
