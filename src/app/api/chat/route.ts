@@ -10,12 +10,11 @@ import type { ChatMessage, Usage } from "@/lib/ai/types";
 import { requireUserIfConfigured, type AuthContext } from "@/lib/auth";
 import { addMessages, createConversation, deleteMessage, deleteMessages, editedTurns, getConversation, regeneratedReply, updateConversation } from "@/lib/db";
 import { replyInstruction, replyTokens } from "@/lib/ai/reply-settings";
-import { serverEnv } from "@/lib/env";
 import { ApiError, errorResponse, ndjsonStream, parseJsonBody } from "@/lib/http";
 import { reportError } from "@/lib/observability";
 import { stripInvalidCitations } from "@/lib/search/grounding";
 import type { SearchSource } from "@/lib/search/types";
-import { webSearch } from "@/lib/search/web";
+import { searchBackend, searchWeb } from "@/lib/search/live";
 import { extractLinks } from "@/lib/links/parse";
 import { readLink } from "@/lib/links/read";
 import { limiter } from "@/lib/rate-limit";
@@ -174,7 +173,7 @@ export async function POST(req: Request) {
       // Optional web grounding in Research mode, or always when the Smart Router's Research mode is on.
       let sources: SearchSource[] = [];
       const routerResearch = choice.routing?.mode === "research";
-      const searchReady = !!serverEnv().searchKey && ["tavily", "brave"].includes(serverEnv().searchProvider);
+      const searchReady = searchBackend() !== null;
       if (routerResearch && !searchReady) {
         send({
           type: "notice",
@@ -187,9 +186,8 @@ export async function POST(req: Request) {
         send({ type: "notice", level: "info", message: "Your plan's web searches for this month are used up, so this answer comes from the model's own knowledge." });
       }
       if (wantsSearch && limits.webSearchesLeft !== 0) {
-        const env = serverEnv();
         try {
-          const r = await webSearch(body.message.slice(0, 400), { provider: env.searchProvider, apiKey: env.searchKey }, withTimeout(15_000, signal));
+          const r = await searchWeb(body.message.slice(0, 400), { auth, signal: withTimeout(30_000, signal), purpose: "chat_search" });
           sources = r.sources;
           send({ type: "sources", sources });
           if (sources.length) {

@@ -1,5 +1,6 @@
 import "server-only";
 import { estimateCost } from "./ai/cost";
+import { alertOwner } from "./alerts";
 import { cheapestModel } from "./ai/router";
 import type { ModelInfo, ModelWithStatus } from "./ai/types";
 import type { AuthContext } from "./auth";
@@ -195,17 +196,21 @@ export function checkModelAccess(entitlement: Entitlement | null, requested: Mod
 
 let siteSpendCache: { at: number; month: number; usd: number } | null = null;
 
-/** Refuse new AI requests once the whole site's monthly spend reaches ORBIS_MONTHLY_AI_BUDGET_USD (service role; cached a minute). */
-export async function checkSiteCap(all: ModelInfo[], now = Date.now()): Promise<void> {
+/**
+ * The hard monthly ceiling: refuse new AI requests from everyone (administrators included) once the whole site's
+ * recorded AI spend this calendar month reaches ORBIS_MONTHLY_AI_BUDGET_USD. Every recorded run counts, including
+ * failed calls (their tokens were billed) and helper calls such as web-search steps. Service role; cached a minute.
+ */
+export async function checkSiteCap(all: ModelInfo[], now = Date.now(), admin = false): Promise<void> {
   const cap = serverEnv().monthlyAiBudgetUsd;
   if (cap === null) return;
   const d = new Date(now);
   const month = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
   let usd = siteSpendCache && siteSpendCache.month === month && now - siteSpendCache.at < 60_000 ? siteSpendCache.usd : null;
   if (usd === null) {
-    const admin = serviceSupabase();
-    if (!admin) return;
-    const { data, error } = await admin.from("model_runs").select("estimated_cost, input_tokens, output_tokens").gte("created_at", new Date(month).toISOString()).gt("units", 0).limit(500_000);
+    const db = serviceSupabase();
+    if (!db) return;
+    const { data, error } = await db.from("model_runs").select("estimated_cost, input_tokens, output_tokens").gte("created_at", new Date(month).toISOString()).limit(500_000);
     if (error) {
       reportError(error, { where: "checkSiteCap" });
       return;
@@ -213,7 +218,16 @@ export async function checkSiteCap(all: ModelInfo[], now = Date.now()): Promise<
     usd = costOfRuns((data ?? []) as RunCost[], all);
     siteSpendCache = { at: now, month, usd };
   }
-  if (usd >= cap) throw new ApiError("quota_exceeded", "Orbis has reached its AI usage limit for this month. Please try again next month.", { scope: "site", budget: true });
+  if (usd >= cap) {
+    alertOwner("site_ceiling", "Orbis: the monthly AI spending ceiling was reached", `This month's recorded AI cost is $${usd.toFixed(2)}, which reached the $${cap} ceiling (ORBIS_MONTHLY_AI_BUDGET_USD). New AI requests are refused for everyone, administrators included, until next month. To continue, raise ORBIS_MONTHLY_AI_BUDGET_USD in Vercel and redeploy.`);
+    throw new ApiError(
+      "quota_exceeded",
+      admin
+        ? `Orbis has reached this month's AI spending ceiling ($${usd.toFixed(2)} of $${cap}). To continue, raise ORBIS_MONTHLY_AI_BUDGET_USD in Vercel and redeploy.`
+        : "Orbis has reached its AI usage limit for this month. Please try again next month.",
+      { scope: "site", budget: true },
+    );
+  }
 }
 
 /** The lowest-cost model the plan may use (what economy mode allows). */

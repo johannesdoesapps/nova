@@ -1,10 +1,8 @@
 "use client";
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, CircleAlert, Lock, ShieldCheck, ShieldOff } from "lucide-react";
-import { useApp } from "@/components/layout/app-context";
-import { StudioHeader, useStudio } from "@/components/studio/frame";
-import { Segmented, Switch } from "@/components/studio/ui";
+import { CircleAlert, Lock, ShieldCheck, ShieldOff } from "lucide-react";
+import { useStudio } from "@/components/studio/frame";
+import { Switch } from "@/components/studio/ui";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import type { EnforcementPoint } from "@/lib/bastion/coverage";
 import { CAPABILITIES, OPERATIONS, RISKS, type BastionControls, type Capability, type OperationId, type Risk } from "@/lib/bastion/policy";

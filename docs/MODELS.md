@@ -10,6 +10,7 @@ Orbis talks to several AI providers through one server-side layer. Browsers neve
 | Model router | `src/lib/ai/router.ts` | Auto mode: classifies the message (everyday, summary, writing, analysis, coding, long document) with published rules and picks an available model with the needed capabilities |
 | Agent service | `src/lib/agents/*` | Agent instructions, tools, response style and memory; agents keep a capability preference, not a model name |
 | Tool registry | `src/lib/agents/capabilities.ts`, `execute.ts` | Web search, file analysis, data analysis; code execution is listed but needs a sandbox |
+| Web search | `src/lib/search/live.ts` | One entry point for every feature: Tavily/Brave when `SEARCH_API_KEY` is set, otherwise Claude's web search (one search per call on the cheapest Claude model) |
 | Conversations | `src/lib/db` | Saved per user and per agent, protected by row-level security |
 | Usage and cost | `src/lib/usage.ts`, `src/lib/plans.ts` | Token usage and cost per run (when the provider reports it), 5-hour and weekly allowances (administrators have none) |
 

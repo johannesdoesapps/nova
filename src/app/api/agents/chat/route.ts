@@ -177,6 +177,7 @@ export async function POST(req: Request) {
           message: body.message,
           attachments,
           useWeb: !!body.useWeb && !searchesUsed,
+          auth,
           timeZone: body.timeZone,
           natural,
           maxOutputTokens: limits.maxOutputTokens,

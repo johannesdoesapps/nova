@@ -1,4 +1,6 @@
+import type { AuthContext } from "../auth";
 import "server-only";
+import { searchWeb } from "../search/live";
 import { withTimeout } from "../ai";
 import { streamWithFallback } from "../ai/fallback";
 import { buildTurnContext, type TurnTool } from "../ai/turn-context";
@@ -6,11 +8,9 @@ import { estimateTokens } from "../ai/cost";
 import { ASSISTANT_BASE } from "../ai/modes";
 import { omittedNote, trimHistory } from "../ai/trim";
 import type { ChatMessage, ModelWithStatus, Usage } from "../ai/types";
-import { serverEnv } from "../env";
 import { ApiError } from "../http";
 import { stripInvalidCitations } from "../search/grounding";
 import type { SearchSource } from "../search/types";
-import { webSearch } from "../search/web";
 import { checkRewrite, checkSummary, INTENSITY_INFO, naturalWritingPrompt, STYLE_INFO, type NaturalSettings } from "../writing/natural";
 import { capabilityStatus } from "./capabilities";
 import { formatSummary, summarizeDataset } from "./tools/csv-stats";
@@ -39,6 +39,8 @@ export interface AgentTurnInput {
   message: string;
   attachments: Attachment[];
   useWeb: boolean;
+  /** Who is asking: web search through Claude is recorded against them. */
+  auth?: AuthContext | null;
   /** The browser's time zone, for the current-time line. */
   timeZone?: string;
   /** Natural Writing (the Writing Agent's capability): its settings, and the original text the writing check compares with. */
@@ -64,7 +66,7 @@ export interface AgentTurnResult {
 }
 
 const DATA_FILE = /\.(csv|tsv)$/i;
-const WEB_TIMEOUT_MS = 15_000;
+const WEB_TIMEOUT_MS = 30_000;
 const MODEL_TIMEOUT_MS = 50_000;
 
 function escapeDoc(s: string) {
@@ -118,9 +120,8 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
     if (!can("web_search")) {
       send({ type: "notice", level: "warning", message: `Web search isn't set up on this server. ${status.web_search.reason ?? ""}`.trim() });
     } else {
-      const env = serverEnv();
       try {
-        const r = await webSearch(input.message.slice(0, 400), { provider: env.searchProvider, apiKey: env.searchKey }, withTimeout(WEB_TIMEOUT_MS, signal));
+        const r = await searchWeb(input.message.slice(0, 400), { auth: input.auth ?? null, signal: withTimeout(WEB_TIMEOUT_MS, signal), purpose: "agent_search" });
         sources = r.sources;
         send({ type: "sources", sources });
         const rec: ToolRecord = { name: "web_search", label: `Searched the web · ${sources.length} source${sources.length === 1 ? "" : "s"}`, status: "ok" };

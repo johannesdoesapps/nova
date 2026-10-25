@@ -68,3 +68,12 @@ The Supabase security advisor lists `usage_reserve`, `usage_finish`, `usage_stat
 - `admin_request_log_v2` refuses anyone who isn't in `admins`.
 
 `tests/usage-ledger.test.ts` covers both.
+
+## Hard monthly ceiling
+
+`ORBIS_MONTHLY_AI_BUDGET_USD` (Vercel env) is the owner's hard ceiling on the whole site's AI spend per calendar
+month (UTC). Once the recorded cost of every model call this month (including failed calls and helper steps such
+as web-search model calls) reaches it, new AI requests are refused for everyone — administrators and guests too —
+and the owner gets an email. The daily check emails at 80%. Raise it in Vercel and redeploy to continue. The
+softer, admin-editable cap in Admin → Plans → Spending protection still applies to non-administrators.
+

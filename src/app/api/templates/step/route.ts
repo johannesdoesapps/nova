@@ -1,14 +1,13 @@
 import { getProvider, resolveModelChoice, withTimeout } from "@/lib/ai";
+import { searchBackend, searchWeb } from "@/lib/search/live";
 import { estimateCost, estimateTokens } from "@/lib/ai/cost";
 import { systemPromptFor } from "@/lib/ai/modes";
 import { autoIdFor, isAutoId } from "@/lib/ai/platform";
 import { withTimeContext } from "@/lib/ai/turn-context";
 import type { ChatMessage, Usage } from "@/lib/ai/types";
 import { requireUserIfConfigured } from "@/lib/auth";
-import { serverEnv } from "@/lib/env";
 import { ApiError, errorResponse, ndjsonStream, parseJsonBody } from "@/lib/http";
 import type { SearchSource } from "@/lib/search/types";
-import { webSearch } from "@/lib/search/web";
 import { checkInputs, findTemplate, renderPrompt } from "@/lib/templates/registry";
 import { templateStepRequest } from "@/lib/templates/schema";
 import { enforceLimits, planLimits, recordRunLater, shouldSaveAllowance } from "@/lib/usage";
@@ -62,14 +61,13 @@ export async function POST(req: Request) {
       // Web sources, when the step uses them and search is available.
       let sources: SearchSource[] = [];
       if (step.web) {
-        const env = serverEnv();
-        const ready = !!env.searchKey && ["tavily", "brave"].includes(env.searchProvider);
+        const ready = searchBackend() !== null;
         if (!ready) send({ type: "notice", message: "Web search isn't set up on this site, so this step uses the model's own knowledge, which may be out of date." });
         else if (limits.webSearchesLeft === 0) send({ type: "notice", message: "Your plan's web searches for this month are used up, so this step uses the model's own knowledge." });
         else {
           try {
             const query = renderPrompt(step.searchQuery ?? "{{topic}}", body.inputs).slice(0, 400);
-            sources = (await webSearch(query, { provider: env.searchProvider, apiKey: env.searchKey }, withTimeout(15_000, signal))).sources;
+            sources = (await searchWeb(query, { auth, signal: withTimeout(30_000, signal), purpose: "template" })).sources;
             send({ type: "sources", sources });
             if (sources.length)
               system += `\n\nWeb sources (cite as [n]):\n<sources>\n${sources.map((s) => `<source id="${s.index}" url="${s.url}">${escapeDoc(s.title)} — ${escapeDoc(s.snippet)}</source>`).join("\n")}\n</sources>`;

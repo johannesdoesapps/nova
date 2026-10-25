@@ -1,14 +1,13 @@
 import { getProvider, resolveModel, withTimeout } from "@/lib/ai";
+import { searchWeb } from "@/lib/search/live";
 import { estimateCost, estimateTokens } from "@/lib/ai/cost";
 import type { Usage } from "@/lib/ai/types";
 import { requireUserIfConfigured } from "@/lib/auth";
 import { saveSearchSession } from "@/lib/db";
-import { serverEnv } from "@/lib/env";
 import { ApiError, errorResponse, ndjsonStream, parseJsonBody } from "@/lib/http";
 import { reportError } from "@/lib/observability";
 import { buildSearchMessages, splitFollowUps, stripInvalidCitations, usedCitations } from "@/lib/search/grounding";
 import type { SearchSource } from "@/lib/search/types";
-import { webSearch } from "@/lib/search/web";
 import { enforceLimits, planLimits, recordRun } from "@/lib/usage";
 import { searchRequest } from "@/lib/validation";
 import { withTimeContext } from "@/lib/ai/turn-context";
@@ -27,7 +26,6 @@ export async function POST(req: Request) {
     await enforceLimits(req, auth, 1, [model], { purpose: "search", inputTokens: 4000 });
     // Signed-in plans have a monthly number of searches (guest demo mode has its own per-IP limits).
     const searchesLeft = auth.mode === "authenticated" ? (await planLimits(auth)).webSearchesLeft : null;
-    const env = serverEnv();
 
     return ndjsonStream(async (send, signal) => {
       send({ type: "meta", model: { id: model.id, displayName: model.displayName, provider: model.provider } });
@@ -38,11 +36,7 @@ export async function POST(req: Request) {
       if (searchesLeft === 0) {
         send({ type: "notice", level: "warning", code: "quota_exceeded", message: "Your plan's web searches for this month are used up, so this answer is not grounded in live sources." });
       } else try {
-        const result = await webSearch(
-          body.query,
-          { provider: env.searchProvider, apiKey: env.searchKey },
-          withTimeout(15_000, signal),
-        );
+        const result = await searchWeb(body.query, { auth, signal: withTimeout(30_000, signal), purpose: "search" });
         sources = result.sources;
         searchProvider = result.provider;
       } catch (err) {

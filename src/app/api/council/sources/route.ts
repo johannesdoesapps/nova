@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
+import { searchBackend, searchWeb } from "@/lib/search/live";
 import { z } from "zod";
 import { resolveModel, withTimeout } from "@/lib/ai";
 import { requireUserIfConfigured } from "@/lib/auth";
 import { serverEnv } from "@/lib/env";
 import { ApiError, clientIp, errorResponse, parseJsonBody } from "@/lib/http";
 import { limiter } from "@/lib/rate-limit";
-import { webSearch } from "@/lib/search/web";
 import { enforceLimits, planLimits, recordRun, releaseUsage } from "@/lib/usage";
 
 const body = z.object({ question: z.string().trim().min(2).max(2000) });
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     const { question } = await parseJsonBody(req, body);
     const auth = await requireUserIfConfigured();
     const env = serverEnv();
-    if (!env.searchKey || !["tavily", "brave"].includes(env.searchProvider)) {
+    if (!searchBackend()) {
       return NextResponse.json({ available: false, reason: "Web search isn't set up on this site (SEARCH_PROVIDER and SEARCH_API_KEY).", sources: [] });
     }
     const who = auth.mode === "authenticated" ? `u:${auth.user.id}` : `ip:${clientIp(req)}`;
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     }
     await enforceLimits(req, auth, 1, undefined, { purpose: "web_search", inputTokens: 0, maxOutputTokens: 0 });
     const started = performance.now();
-    const r = await webSearch(question.slice(0, 400), { provider: env.searchProvider, apiKey: env.searchKey }, withTimeout(15_000, req.signal)).catch(async (err) => {
+    const r = await searchWeb(question.slice(0, 400), { auth, signal: withTimeout(30_000, req.signal), purpose: "council" }).catch(async (err) => {
       await releaseUsage(auth);
       throw err;
     });

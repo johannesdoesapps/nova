@@ -150,10 +150,11 @@ export function integrationStatus(): IntegrationStatus[] {
     },
     {
       id: "search",
-      label: `Web search (${env.searchProvider})`,
-      configured: Boolean(env.searchKey) && ["tavily", "brave"].includes(env.searchProvider),
-      envVars: ["SEARCH_PROVIDER", "SEARCH_API_KEY"],
-      purpose: "Live web sources and citations for AI Search",
+      // A search API key when set (cheapest per search); otherwise Claude's own web search (src/lib/search/live.ts).
+      label: env.searchKey && ["tavily", "brave"].includes(env.searchProvider) ? `Web search (${env.searchProvider})` : env.anthropicKey ? "Web search (Claude)" : "Web search",
+      configured: (Boolean(env.searchKey) && ["tavily", "brave"].includes(env.searchProvider)) || Boolean(env.anthropicKey),
+      envVars: ["SEARCH_PROVIDER", "SEARCH_API_KEY", "ANTHROPIC_API_KEY"],
+      purpose: "Live web sources and citations for chat, AI Search, agents, Council, Verify and the coding agent",
     },
     {
       id: "engine",

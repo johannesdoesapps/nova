@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { searchBackend, searchWeb } from "@/lib/search/live";
 import { getProvider, resolveModel, withTimeout } from "@/lib/ai";
 import { isAutoId } from "@/lib/ai/platform";
 import { requireUserIfConfigured } from "@/lib/auth";
@@ -8,7 +9,6 @@ import { serverEnv } from "@/lib/env";
 import { ApiError, clientIp, errorResponse, parseJsonBody } from "@/lib/http";
 import { reportError } from "@/lib/observability";
 import { limiter } from "@/lib/rate-limit";
-import { webSearch } from "@/lib/search/web";
 import { enforceLimits, planLimits, recordRun } from "@/lib/usage";
 import { runCheck, textToCheck, type CheckDeps } from "@/lib/verify/check";
 import { verifyRequest } from "@/lib/verify/schema";
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     const body = await parseJsonBody(req, verifyRequest, 300_000);
     const auth = await requireUserIfConfigured();
     const env = serverEnv();
-    const searchReady = !!env.searchKey && ["tavily", "brave"].includes(env.searchProvider);
+    const searchReady = searchBackend() !== null;
     const willSearch = body.web && searchReady;
     const hasClaims = extractClaims(textToCheck(body).text).claims.length > 0;
     const mayJudge = hasClaims && (willSearch || !!body.documents?.length);
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
 
     let modelUsed = false;
     const deps: CheckDeps = {
-      search: willSearch ? async (q) => (await webSearch(q, { provider: env.searchProvider, apiKey: env.searchKey }, withTimeout(15_000, req.signal))).sources : null,
+      search: willSearch ? async (q) => (await searchWeb(q, { auth, signal: withTimeout(30_000, req.signal), purpose: "verify" })).sources : null,
       judge: realJudge
         ? async (claims, sources) => {
             const messages = buildJudgeMessages(claims, sources);

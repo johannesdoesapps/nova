@@ -1,4 +1,5 @@
 import "server-only";
+import { searchBackend, searchWeb } from "../../search/live";
 import { createHash } from "node:crypto";
 import { getProvider, resolveModelChoice, withTimeout } from "@/lib/ai";
 import { estimateCost } from "@/lib/ai/cost";
@@ -6,10 +7,8 @@ import { autoIdFor } from "@/lib/ai/platform";
 import type { ModelInfo, Usage } from "@/lib/ai/types";
 import { getConnection, runTool, usable } from "@/lib/connectors/runtime";
 import { connector } from "@/lib/connectors/registry";
-import { serverEnv } from "@/lib/env";
 import { ApiError } from "@/lib/http";
 import { reportError } from "@/lib/observability";
-import { webSearch } from "@/lib/search/web";
 import { enforceLimits, planLimits, recordRunLater, releaseUsage } from "@/lib/usage";
 import type { FileChange, ProjectFile, ProjectSummary } from "../projects";
 import { summarizeCheck } from "../preview-check";
@@ -434,9 +433,8 @@ function realEnv(c: EnvContext): AgentEnv {
   };
   if (c.docs) {
     env.lookupDocs = async (query) => {
-      const e = serverEnv();
       c.webSearches.count++;
-      const r = await webSearch(query, { provider: e.searchProvider, apiKey: e.searchKey }, withTimeout(15_000));
+      const r = await searchWeb(query, { auth, signal: withTimeout(30_000), purpose: "code_docs" });
       return r.sources.slice(0, 6).map((s) => ({ title: s.title, url: s.url, snippet: s.snippet }));
     };
   }
@@ -642,8 +640,7 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
     return finishStep(auth, row.id, { status: "failed", error: message, pending: null }, [], [], "no_model");
   }
 
-  const e = serverEnv();
-  const docs = Boolean(e.searchKey) && ["tavily", "brave"].includes(e.searchProvider) && limits.webSearchesLeft !== 0;
+  const docs = searchBackend() !== null && limits.webSearchesLeft !== 0;
   const github = await githubUsable(auth);
   let transcript: TranscriptMessage[] = row.transcript ?? [];
   if (!transcript.length) {

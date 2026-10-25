@@ -1,5 +1,5 @@
 import "server-only";
-import { serverEnv } from "../env";
+import { searchBackend } from "../search/live";
 import { ApiError } from "../http";
 import { CAPABILITY_INFO, type AgentCapability, type CapabilityStatus } from "./types";
 
@@ -8,11 +8,8 @@ import { CAPABILITY_INFO, type AgentCapability, type CapabilityStatus } from "./
  * that are implemented and configured here; the UI shows the rest as needing setup.
  */
 export function capabilityStatus(): CapabilityStatus {
-  const env = serverEnv();
   return {
-    web_search: env.searchKey
-      ? { available: true }
-      : { available: false, reason: "Needs SEARCH_API_KEY (Tavily or Brave) on the server." },
+    web_search: searchBackend() ? { available: true } : { available: false, reason: "Needs ANTHROPIC_API_KEY (Claude web search) or SEARCH_API_KEY (Tavily or Brave) on the server." },
     file_analysis: { available: true },
     data_analysis: { available: true },
     code_execution: { available: false, reason: "Needs a sandboxed code runner, which isn't set up in this deployment." },

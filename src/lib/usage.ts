@@ -149,6 +149,7 @@ async function enforceLimitsInner(
   if (auth.mode !== "authenticated") {
     const day = limiter("day", env.dailyRequestLimit, 86_400_000).check(who, cost);
     if (!day.ok) throw new ApiError("quota_exceeded", `Daily guest limit of ${env.dailyRequestLimit} requests reached.`);
+    await checkSiteCap(await getAllModels(await getPlatformSettings()));
     return { requestId, units: 0, entitlement: null, estCostUsd: 0 };
   }
 
@@ -161,10 +162,9 @@ async function enforceLimitsInner(
 
   // Plan access and the site-wide cap first, with a clear explanation.
   checkModelAccess(entitlement, models, available);
-  if (!unlimited) {
-    if (billing.aiPaused) throw new ApiError("quota_exceeded", "AI requests are paused on Orbis for a moment while we check something. Please try again later.", { scope: "paused" });
-    await checkSiteCap(all);
-  }
+  if (!unlimited && billing.aiPaused) throw new ApiError("quota_exceeded", "AI requests are paused on Orbis for a moment while we check something. Please try again later.", { scope: "paused" });
+  // The hard monthly ceiling (ORBIS_MONTHLY_AI_BUDGET_USD) applies to everyone, administrators included.
+  await checkSiteCap(all, Date.now(), unlimited);
 
   // Worst-case cost of this request, held against the budget while it runs.
   const economy = economyModel(entitlement, available);
