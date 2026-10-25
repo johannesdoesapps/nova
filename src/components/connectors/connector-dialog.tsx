@@ -23,8 +23,82 @@ const CHOOSE: Record<string, string> = {
 
 const HOW: Record<CatalogEntry["auth"], (name: string, vendor: string) => string> = {
   oauth2: (name, vendor) => `You'll go to ${vendor}'s own sign-in page, see exactly what Orbis is asking for, and choose whether to allow it. Orbis never sees your ${vendor} password. You come back here when it's done.`,
+  api_token: (name, vendor) =>
+    `${vendor} doesn't offer sign-in for apps, so you create an API token in your own ${vendor} dashboard, choose exactly what it may read, and paste it here. Orbis checks it with ${vendor}, stores it encrypted, and never shows it again. You can revoke it in ${vendor} at any time.`,
   none: () => "There's no account to connect: this uses public data only. Turning it on lets Orbis use it in your chats.",
 };
+
+/** Paste-a-token connect form (services without OAuth). The token goes straight to Orbis's server and isn't kept in the page. */
+function TokenForm({ c, replacing, onDone }: { c: CatalogEntry; replacing: boolean; onDone: (notice: { tone: "ok" | "error"; text: string }) => void }) {
+  const [token, setToken] = useState("");
+  const [write, setWrite] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api<{ label: string }>(`/api/connectors/${c.id}/token`, { method: "POST", body: JSON.stringify({ token: token.trim(), write }) });
+      setToken("");
+      onDone({ tone: "ok", text: `${c.name} connected (${r.label}).` });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (token.trim()) void submit();
+      }}
+    >
+      <ol className="list-decimal space-y-1 pl-5 text-[13px] text-s-ink-2">
+        <li>
+          Open{" "}
+          <a href={c.setup.console.url} target="_blank" rel="noreferrer" className="underline">
+            {c.setup.console.label}
+          </a>{" "}
+          and create a custom token.
+        </li>
+        <li>Give it read permissions: {c.readScopes.map((r) => r.label).join(", ")}. Leave out anything you don&apos;t want Orbis to see; those areas will be reported as not checked.</li>
+        {c.writeScopes.length > 0 && <li>Only if you want Orbis to apply fixes you approve, also add: {c.writeScopes.map((w) => w.label).join(", ")}.</li>}
+        <li>Limit it to the zones you want checked, set an expiry if you like, then copy the token (it&apos;s shown once).</li>
+      </ol>
+      <label className="block">
+        <span className="mb-1 block text-[12.5px] font-medium text-s-ink-2">API token</span>
+        <input
+          type="password"
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          maxLength={300}
+          className="h-10 w-full rounded-xl border border-s-line bg-transparent px-3 font-mono text-[13px] outline-none focus:border-s-line-strong"
+        />
+      </label>
+      {c.writeScopes.length > 0 && (
+        <label className="flex items-start gap-2 text-[13px]">
+          <input type="checkbox" checked={write} onChange={(e) => setWrite(e.target.checked)} className="mt-0.5" />
+          <span>
+            This token can edit zone settings, and Orbis may use that for changes I approve.
+            <span className="block text-[12px] text-s-ink-3">Off by default. Every change is shown first (current and new value, impact, how to undo it) and runs only after you confirm.</span>
+          </span>
+        </label>
+      )}
+      {error && (
+        <p role="alert" className="text-[13px] text-s-danger">
+          {error}
+        </p>
+      )}
+      <button type="submit" disabled={busy || !token.trim()} className="h-10 rounded-full bg-s-accent px-5 text-[13.5px] font-medium text-s-accent-ink disabled:opacity-50">
+        {busy ? "Checking the token…" : replacing ? "Replace token" : `Connect ${c.name}`}
+      </button>
+    </form>
+  );
+}
 
 export function ConnectorDialog({
   entry: c,
@@ -47,6 +121,7 @@ export function ConnectorDialog({
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [confirmOff, setConfirmOff] = useState(false);
+  const [replace, setReplace] = useState(false);
   const [q, setQ] = useState("");
   const [found, setFound] = useState<{ items: ConnectorItem[]; note: string | null } | null>(null);
 
@@ -214,6 +289,11 @@ export function ConnectorDialog({
                   Reconnect{write && !c.connection?.writeEnabled ? " with write access" : ""}
                 </button>
               )}
+              {c.auth === "api_token" && (
+                <button type="button" onClick={() => setReplace(!replace)} disabled={!!busy} className="h-8 rounded-full border border-s-line px-3 text-[12.5px] hover:border-s-line-strong disabled:opacity-50">
+                  Replace token
+                </button>
+              )}
               {c.connection?.writeEnabled && (
                 <button type="button" onClick={() => void writeOff()} disabled={!!busy} className="h-8 rounded-full border border-s-line px-3 text-[12.5px] hover:border-s-line-strong disabled:opacity-50">
                   Make read-only
@@ -238,6 +318,7 @@ export function ConnectorDialog({
                 </span>
               )}
             </div>
+            {replace && c.auth === "api_token" && <TokenForm c={c} replacing onDone={(n) => { setReplace(false); onChanged(n); }} />}
             {c.writeScopes.length > 0 && !c.connection?.writeEnabled && c.auth === "oauth2" && (
               <label className="flex items-start gap-2 text-[12.5px] text-s-ink-2">
                 <input type="checkbox" checked={write} onChange={(e) => setWrite(e.target.checked)} className="mt-0.5" />
@@ -300,6 +381,8 @@ export function ConnectorDialog({
               <a href="/login?next=/connectors" className="inline-flex h-10 items-center rounded-full bg-s-accent px-5 text-[13.5px] font-medium text-s-accent-ink">
                 Sign in to connect
               </a>
+            ) : c.available && c.auth === "api_token" ? (
+              <TokenForm c={c} replacing={false} onDone={(n) => onChanged(n)} />
             ) : c.available ? (
               <button type="button" onClick={connect} disabled={!!busy} className="h-10 rounded-full bg-s-accent px-5 text-[13.5px] font-medium text-s-accent-ink disabled:opacity-50">
                 {busy === "connect" ? "Connecting…" : c.auth === "none" ? `Turn on ${c.name}` : `Connect ${c.name}`}

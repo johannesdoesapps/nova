@@ -18,6 +18,7 @@ const TILES: Record<string, { letter: string; bg: string }> = {
   slack: { letter: "S", bg: "#4A154B" },
   onedrive: { letter: "O", bg: "#0364B8" },
   outlook: { letter: "O", bg: "#0F6CBD" },
+  cloudflare: { letter: "C", bg: "#F38020" },
 };
 
 export function BrandIcon({ id, size = 40, className }: { id: string; size?: number; className?: string }) {

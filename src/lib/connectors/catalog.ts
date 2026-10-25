@@ -19,8 +19,8 @@ export const CATEGORIES = [
 ] as const;
 export type CategoryId = (typeof CATEGORIES)[number]["id"];
 
-/** How a connector signs in: OAuth 2.0, or no account at all (public data). */
-export type AuthKind = "oauth2" | "none";
+/** How a connector signs in: OAuth 2.0, a scoped API token the person creates on the service, or no account (public data). */
+export type AuthKind = "oauth2" | "api_token" | "none";
 export type Access = "read" | "write";
 
 export interface Permission {
@@ -237,6 +237,38 @@ export const CONNECTORS: ConnectorMeta[] = [
       ],
     },
     links: [{ id: "github_install", label: "Choose repositories on GitHub" }],
+  },
+  {
+    id: "cloudflare",
+    name: "Cloudflare",
+    vendor: "Cloudflare",
+    category: "development",
+    tagline: "Check DDoS, WAF, bot, TLS and Access protection on your zones.",
+    description:
+      "Connect with a Cloudflare API token you create and scope yourself (read-only is enough). Orbis's Security Team inspects your zones' TLS and HTTPS settings, WAF and rate-limiting rules, DDoS and bot protection, DNS records that bypass Cloudflare and Zero Trust Access policies, and reports what's missing. If you also give the token permission to edit zone settings, Orbis can apply a TLS fix you approve, one change at a time, and checks it afterwards.",
+    auth: "api_token",
+    capabilities: [
+      { label: "Read zones, TLS/HTTPS and security settings", access: "read" },
+      { label: "Read WAF, rate-limiting and DDoS rules", access: "read" },
+      { label: "Read DNS records (to find origins that bypass Cloudflare)", access: "read" },
+      { label: "Read Zero Trust Access applications and policies", access: "read" },
+      { label: "Change a zone's TLS settings after you approve it", access: "write" },
+    ],
+    readScopes: [
+      { scope: "zone:read", label: "Zone: Read", access: "read" },
+      { scope: "zone_settings:read", label: "Zone Settings: Read", access: "read" },
+      { scope: "dns:read", label: "DNS: Read", access: "read" },
+      { scope: "firewall:read", label: "Zone WAF / Firewall Services: Read", access: "read" },
+      { scope: "access:read", label: "Access: Apps and Policies Read (account)", access: "read" },
+    ],
+    writeScopes: [{ scope: "zone_settings:edit", label: "Zone Settings: Edit (only for fixes you approve)", access: "write" }],
+    dataUse: "Orbis reads your Cloudflare configuration only when you run a Security Team check. Findings and the settings they're based on are saved to your security history; DNS record contents and rule expressions are kept only as needed for evidence. The token is stored encrypted and never shown again, sent to an AI model or written to logs.",
+    keywords: ["cloudflare", "waf", "ddos", "zero trust", "cloudflare access", "bot management", "dns proxy"],
+    setup: {
+      env: [],
+      console: { label: "Cloudflare → My Profile → API Tokens", url: "https://dash.cloudflare.com/profile/api-tokens" },
+      notes: ["Nothing to set up on the site besides ORBIS_CONNECTOR_KEY: each person creates their own scoped token in Cloudflare."],
+    },
   },
   {
     id: "vercel",

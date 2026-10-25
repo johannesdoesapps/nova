@@ -225,6 +225,76 @@ function DeploymentPanel({ s }: { s: DeployStats }) {
   );
 }
 
+interface CloudflareStats {
+  complete: boolean;
+  cloudflare: {
+    zones: { name: string; plan: string; status: string; coverage: Record<string, string>; ssl: string | null; alwaysHttps: string | null; minTls: string | null; waf: string[] | null; customRules: number | null; rateLimits: number | null; ddos: string | null; botFightMode: boolean | null; dnsOnly: number | null; events: { action: string; source: string; count: number }[] | null }[];
+    accounts: { name: string; status: string; apps: number; fix: string | null }[];
+    gaps: { scope: string; area: string; status: string; fix: string | null }[];
+  };
+}
+
+const CF_AREAS: [string, string][] = [
+  ["tls", "TLS/HTTPS"],
+  ["waf", "WAF"],
+  ["ratelimit", "Rate limiting"],
+  ["ddos", "HTTP DDoS"],
+  ["bot", "Bots"],
+  ["dns", "DNS proxying"],
+  ["events", "Events (24h)"],
+];
+
+/** Cloudflare review: what was checked per zone, what the settings are, and what couldn't be read (never "secure"). */
+function CloudflarePanel({ s }: { s: CloudflareStats }) {
+  const c = s.cloudflare;
+  const shown = (v: string | number | boolean | null | undefined, fmt?: (x: never) => string) => (v == null ? "not checked" : fmt ? fmt(v as never) : String(v));
+  return (
+    <section className="glass rounded-[20px] p-5">
+      <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-[0.06em] text-s-ink-3">Cloudflare coverage</h2>
+      {s.complete ? (
+        <p className="text-[13.5px] text-s-ink-2">Every area was read for the zones below.</p>
+      ) : (
+        <div className="rounded-xl border border-amber-500/40 p-3 text-[13.5px]">
+          <p className="font-medium">Incomplete review: some areas couldn&apos;t be read, so nothing is said about them.</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-s-ink-2">
+            {c.gaps.map((g, i) => (
+              <li key={i}>
+                {g.scope}: {g.area} — {g.fix ? `add “${g.fix}” to the token` : g.status.replace("_", " ")}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <div className="mt-4 space-y-4">
+        {c.zones.map((z) => (
+          <div key={z.name}>
+            <p className="text-[14px] font-medium">
+              {z.name} <span className="font-normal text-s-ink-3">· {z.plan} · {z.status}</span>
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {CF_AREAS.map(([k, label]) => (
+                <span key={k} className={cn("rounded-full border px-2 py-0.5 text-[12px]", z.coverage[k] === "checked" ? "border-s-line text-s-ink-2" : "border-amber-500/50 text-amber-700 dark:text-amber-300")}>
+                  {label}: {z.coverage[k] === "checked" ? "checked" : (z.coverage[k] ?? "not checked").replace("_", " ")}
+                </span>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[13px] text-s-ink-2">
+              SSL mode {shown(z.ssl)} · Always HTTPS {shown(z.alwaysHttps)} · minimum TLS {shown(z.minTls)} · managed WAF {z.waf == null ? "not checked" : z.waf.length ? z.waf.join(", ") : "none"} · custom rules {shown(z.customRules)} · rate limits {shown(z.rateLimits)} · HTTP DDoS{" "}
+              {shown(z.ddos)} · Bot Fight Mode {shown(z.botFightMode, (b: boolean) => (b ? "on" : "off"))} · DNS-only records {shown(z.dnsOnly)}
+            </p>
+            {z.events && z.events.length > 0 && <p className="mt-1 text-[12.5px] text-s-ink-3">Last 24 h: {z.events.map((e) => `${e.count} ${e.action} (${e.source})`).join(", ")}</p>}
+          </div>
+        ))}
+        {c.accounts.length > 0 && (
+          <p className="text-[13px] text-s-ink-2">
+            Zero Trust Access: {c.accounts.map((a) => `${a.name} — ${a.status === "checked" ? `${a.apps} application(s) reviewed` : `not checked${a.fix ? ` (needs ${a.fix})` : ""}`}`).join("; ")}. Orbis never changes Access policies.
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function VerificationNote({ v }: { v: VerificationStats }) {
   const total = v.counts.confirmed + v.counts.likely + v.counts.unverified + v.counts.disproven;
   if (!total) return null;
@@ -328,6 +398,7 @@ export function RunView({ id }: { id: string }) {
               postedUrl={(data.history.find((h) => h.action === "pr.comment")?.detail?.url as string | undefined) ?? null}
             />
           )}
+          {run.action === "cloudflare" && run.stats.cloudflare != null && <CloudflarePanel s={run.stats as unknown as CloudflareStats} />}
           {run.action === "deployment" && run.stats.deployGate != null && <DeploymentPanel s={run.stats as unknown as DeployStats} />}
           {run.stats.verification != null && <VerificationNote v={run.stats.verification as VerificationStats} />}
           {run.error && (

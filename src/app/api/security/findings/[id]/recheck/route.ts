@@ -2,7 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { getFinding, listTargets } from "@/lib/db/security";
 import { ApiError, errorResponse, ndjsonStream, requireUuid } from "@/lib/http";
 import { PR_ASSET_RE } from "@/lib/security/pr";
-import { checkRunLimit, runGuardianAgent, runSentinelAgent } from "@/lib/security/runners";
+import { checkRunLimit, runCloudflareAudit, runDeploymentAudit, runGuardianAgent, runSentinelAgent } from "@/lib/security/runners";
 
 // An audit maps the site (crawl capped at 45 s by its budget) before the AI report, so allow up to two minutes.
 export const maxDuration = 120;
@@ -17,6 +17,17 @@ export async function POST(req: Request, ctx: RouteContext<"/api/security/findin
     const auth = await requireUser();
     const id = requireUuid((await ctx.params).id);
     const { finding } = await getFinding(auth.supabase, auth.user.id, id);
+    // Application Protection findings are re-checked by reading the same configuration again.
+    if (finding.agent === "sentinel" && (finding.asset.startsWith("cloudflare:") || finding.asset.startsWith("cloudflare-account:"))) {
+      checkRunLimit(req, auth);
+      const zone = finding.asset.startsWith("cloudflare:") ? finding.asset.slice("cloudflare:".length) : null;
+      return ndjsonStream((send, signal) => runCloudflareAudit({ req, auth, send, signal }, { zone }).then(() => {}), req.signal);
+    }
+    const vercel = /^vercel:(personal|team_[A-Za-z0-9]+)\/([A-Za-z0-9._-]+)$/.exec(finding.asset);
+    if (finding.agent === "sentinel" && vercel) {
+      checkRunLimit(req, auth);
+      return ndjsonStream((send, signal) => runDeploymentAudit({ req, auth, send, signal }, { project: vercel[2]!, teamId: vercel[1] === "personal" ? null : vercel[1]!, siteChecks: false }).then(() => {}), req.signal);
+    }
     if (finding.agent === "sentinel") {
       const target = (await listTargets(auth.supabase, auth.user.id)).find((t) => t.hostname === finding.asset);
       if (!target) throw new ApiError("bad_request", `${finding.asset} is no longer in your targets. Add and verify it to re-check.`);

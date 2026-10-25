@@ -293,6 +293,7 @@ export function FindingView({ id }: { id: string }) {
             <Section title="How to fix it">
               <p className="whitespace-pre-wrap text-[14px] leading-relaxed">{f.remediation}</p>
             </Section>
+            {CF_FIXABLE.has(f.rule_id) && !["fixed", "verified", "false_positive", "accepted_risk"].includes(f.status) && <CloudflareFix findingId={f.id} onApplied={() => setVersion((v) => v + 1)} />}
             <Section title="Verify the fix">
               <ol className="list-decimal space-y-1 pl-5 text-[13.5px] text-s-ink-2">
                 {data.details.verify.map((v, i) => (
@@ -493,6 +494,115 @@ export function FindingView({ id }: { id: string }) {
         </div>
       </div>
     </>
+  );
+}
+
+/** Cloudflare findings Orbis can fix with one approved setting change (see CF_CHANGES on the server). */
+const CF_FIXABLE = new Set(["cloudflare.tls.ssl-off", "cloudflare.tls.ssl-flexible", "cloudflare.tls.ssl-full-unvalidated", "cloudflare.tls.http-allowed", "cloudflare.tls.min-tls-old"]);
+
+interface CfProposal {
+  zone: string;
+  setting: string;
+  label: string;
+  current: string;
+  proposed: string;
+  needed: boolean;
+  impact: string;
+  rollback: string;
+  canApply: boolean;
+}
+
+/** Proposal-first: shows the live current value, the change, its impact and how to undo it; applies only on confirm. */
+function CloudflareFix({ findingId, onApplied }: { findingId: string; onApplied: () => void }) {
+  const [p, setP] = useState<CfProposal | null>(null);
+  const [state, setState] = useState<{ phase: "idle" | "loading" | "confirm" | "applying" | "done" | "error"; text?: string }>({ phase: "idle" });
+  const load = async () => {
+    setState({ phase: "loading" });
+    try {
+      const r = await jsonFetch<{ proposal: CfProposal }>(`/api/security/cloudflare/changes?findingId=${findingId}`);
+      setP(r.proposal);
+      setState({ phase: "confirm" });
+    } catch (e) {
+      setState({ phase: "error", text: (e as Error).message });
+    }
+  };
+  const apply = async () => {
+    if (!p) return;
+    setState({ phase: "applying" });
+    try {
+      const r = await jsonFetch<{ ok: boolean; readBack: string | null }>("/api/security/cloudflare/changes", { method: "POST", body: JSON.stringify({ findingId, confirm: true, expectCurrent: p.current }) });
+      setState(
+        r.ok
+          ? { phase: "done", text: `Done: Cloudflare now reports ${p.setting} = "${r.readBack}". The finding is marked fixed, awaiting verification; run Re-check to confirm it's gone.` }
+          : { phase: "error", text: `Cloudflare accepted the request but reports "${r.readBack ?? "unknown"}", so the change isn't confirmed. Check the setting in Cloudflare.` },
+      );
+      if (r.ok) onApplied();
+    } catch (e) {
+      setState({ phase: "error", text: (e as Error).message });
+    }
+  };
+  return (
+    <Section title="Fix it in Cloudflare">
+      {state.phase === "idle" || (state.phase === "error" && !p) ? (
+        <>
+          <p className="text-[13.5px] text-s-ink-2">Orbis can make this one setting change through your Cloudflare connection, after you review it. Nothing changes until you confirm.</p>
+          <button type="button" onClick={() => void load()} className="mt-3 h-9 rounded-full border border-s-line-strong px-4 text-[13px] font-medium transition hover:bg-s-hover">
+            Review the change…
+          </button>
+        </>
+      ) : state.phase === "loading" ? (
+        <p className="flex items-center gap-2 text-[13.5px] text-s-ink-2">
+          <Loader2 className="h-4 w-4 animate-spin" /> Reading the current setting from Cloudflare…
+        </p>
+      ) : p ? (
+        <div className="space-y-2 text-[13.5px]">
+          <p className="font-medium">{p.label}</p>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+            <dt className="text-s-ink-3">Zone</dt>
+            <dd>{p.zone}</dd>
+            <dt className="text-s-ink-3">Setting</dt>
+            <dd className="font-mono text-[12.5px]">{p.setting}</dd>
+            <dt className="text-s-ink-3">Now</dt>
+            <dd className="font-mono text-[12.5px]">{p.current}</dd>
+            <dt className="text-s-ink-3">After</dt>
+            <dd className="font-mono text-[12.5px]">{p.proposed}</dd>
+          </dl>
+          <p className="text-s-ink-2">
+            <span className="font-medium text-s-ink">Impact: </span>
+            {p.impact}
+          </p>
+          <p className="text-s-ink-2">
+            <span className="font-medium text-s-ink">Undo: </span>
+            {p.rollback}
+          </p>
+          {!p.needed ? (
+            <p className="text-s-ink-2">Cloudflare already reports a different value, so there&apos;s nothing to change. Run Re-check to update this finding.</p>
+          ) : !p.canApply ? (
+            <p className="rounded-xl border border-s-line p-3 text-s-ink-2">
+              Changes are off for your Cloudflare connection. To let Orbis apply it, replace the token on the{" "}
+              <a href="/connectors" className="underline underline-offset-2">
+                Connectors page
+              </a>{" "}
+              with one that also has Zone Settings: Edit, and tick the change permission. Or make the change yourself in Cloudflare.
+            </p>
+          ) : state.phase === "done" ? null : (
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button type="button" disabled={state.phase === "applying"} onClick={() => void apply()} className="h-9 rounded-full bg-s-accent px-4 text-[13px] font-medium text-s-accent-ink disabled:opacity-60">
+                {state.phase === "applying" ? "Applying…" : "Approve and apply"}
+              </button>
+              <button type="button" disabled={state.phase === "applying"} onClick={() => setState({ phase: "idle" })} className="h-9 rounded-full border border-s-line px-4 text-[13px]">
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      ) : null}
+      {state.text && (
+        <p role={state.phase === "error" ? "alert" : "status"} className={cn("mt-2 text-[13px]", state.phase === "error" ? "text-s-danger" : "text-s-ink-2")}>
+          {state.text}
+        </p>
+      )}
+    </Section>
   );
 }
 

@@ -633,3 +633,75 @@ export function deploymentBody(v: DeploymentValue) {
   return { project, teamId: team === "personal" ? null : team, gate: { mode: v.gateMode, blockSeverities: v.blockSeverities }, siteChecks: v.siteChecks };
 }
 export const deploymentReady = (v: DeploymentValue) => v.pick.includes(":") && v.blockSeverities.length > 0;
+
+/* ------------------------------------------------------ Cloudflare review */
+
+export interface CloudflareValue {
+  /** Zone name, or "" for the first five active zones. */
+  zone: string;
+  ready: boolean;
+}
+
+export function CloudflareForm({ value, onChange }: { value: CloudflareValue; onChange: (v: CloudflareValue) => void }) {
+  const [data, setData] = useState<{ connection: { status: string; account: string | null }; zones: { id: string; name: string; status: string; plan: string }[] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    jsonFetch<NonNullable<typeof data>>("/api/security/cloudflare/zones")
+      .then((r) => {
+        if (!live) return;
+        setData(r);
+        onChange({ ...value, ready: r.connection.status === "connected" && r.zones.length > 0 });
+      })
+      .catch((e: Error) => live && setError(e.message));
+    return () => {
+      live = false;
+    };
+    // Load once; the parent's value is only updated with what was found.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  if (error)
+    return (
+      <p role="alert" className="text-[13.5px] text-s-danger">
+        {error}
+      </p>
+    );
+  if (!data)
+    return (
+      <p className="flex items-center gap-2 text-[13.5px] text-s-ink-2">
+        <Loader2 className="h-4 w-4 animate-spin" /> Checking your Cloudflare connection…
+      </p>
+    );
+  if (data.connection.status !== "connected")
+    return (
+      <p className="rounded-xl border border-s-line p-3 text-[13.5px] text-s-ink-2">
+        Cloudflare isn&apos;t connected{data.connection.status === "reauth_required" ? " (the token stopped working)" : ""}. Connect it on the{" "}
+        <a href="/connectors" className="underline underline-offset-2">
+          Connectors page
+        </a>{" "}
+        with a read-only API token you create in Cloudflare.
+      </p>
+    );
+  return (
+    <div className="space-y-3">
+      <div>
+        <label htmlFor="cf-zone" className={labelCls}>
+          Zone
+        </label>
+        <select id="cf-zone" value={value.zone} onChange={(e) => onChange({ ...value, zone: e.target.value })} className={inputCls}>
+          <option value="">First five active zones</option>
+          {data.zones.map((z) => (
+            <option key={z.id} value={z.name}>
+              {z.name} · {z.plan}
+              {z.status !== "active" ? ` · ${z.status}` : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+      <p className="text-[12.5px] text-s-ink-3">
+        Read-only: TLS and HTTPS settings, WAF, rate-limiting and HTTP DDoS rules, bot protection, DNS records that bypass Cloudflare, and Zero Trust Access policies. Areas the token can&apos;t read are listed
+        as not checked, with the permission to add. Nothing is changed; fixes are offered on each finding for you to approve.
+      </p>
+    </div>
+  );
+}

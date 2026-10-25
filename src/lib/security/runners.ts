@@ -16,6 +16,7 @@ import { checkDependencies, parseManifests } from "./deps";
 import { githubReadToken, requireService } from "./connections";
 import { asOpenFindings, configFindings, DEFAULT_DEPLOY_GATE, deployGate, previewProbe, productionHost, readVercelProject, VERCEL_CHECKED, vercelAsset, type DeployGateConfig } from "./vercel-audit";
 import { ConnectorError } from "../connectors/http";
+import { accessFindings, AREA_LABEL, AREA_PREFIX, coverageGaps, listZones, MANAGED_RULESETS, readAccess, readZone, zoneAsset, accountAsset, zoneFindings, type Area, type ZoneSnapshot } from "./cloudflare-audit";
 import { safeRequest } from "./net";
 import { applyVerification, parseVerification, selectForVerification, verificationMessages } from "./verify";
 import { fetchPullRequest, prAsset, prCovers, prEvidence, scopeToPr, type PrInfo } from "./pr";
@@ -348,6 +349,118 @@ export async function runDeploymentAudit(ctx: RunContext, input: { project: stri
     await store.audit(db, user.id, "deployment_audit.finished", { runId, detail: { ...base, decision: gate.decision } });
     ctx.send({ type: "done", agent: "sentinel", runId });
     return { runId, findings: all, gate };
+  });
+}
+
+/* ------------------------------------------------------- Cloudflare review */
+
+/**
+ * Application Protection on Cloudflare (Workflow G): read-only review of up to five zones (or one chosen zone) and
+ * their accounts' Access policies through the person's scoped API token. Areas the token can't read are listed as not
+ * checked, and the audit says it's incomplete; their earlier findings are left as they were.
+ */
+export async function runCloudflareAudit(ctx: RunContext, input: { zone?: string | null }) {
+  const { supabase: db, user } = ctx.auth;
+  const runId = await store.startRun(db, user.id, { agent: "sentinel", action: "cloudflare", asset: input.zone ? zoneAsset(input.zone) : "cloudflare:all zones", scope: "passive", parentId: ctx.parentId });
+  ctx.send({ type: "run", agent: "sentinel", runId });
+  const steps = new Steps(ctx.send, "sentinel");
+  return guarded(ctx, runId, "sentinel", steps, async () => {
+    let t = steps.start("connect", "Cloudflare connection");
+    const { ctx: cctx, row } = await requireService(ctx.auth, "cloudflare", ctx.signal);
+    const wrap = (err: unknown) => (err instanceof ConnectorError ? new ApiError(err.kind === "auth" || err.kind === "permission" ? "forbidden" : "upstream_error", err.message) : err);
+    const all = await listZones(cctx).catch((err) => {
+      throw wrap(err);
+    });
+    const chosen = input.zone ? all.filter((z) => z.name === input.zone || z.id === input.zone) : all.filter((z) => z.status === "active").slice(0, 5);
+    if (!chosen.length) throw new ApiError("not_found", input.zone ? `The token can't see the zone ${input.zone}.` : "The token can't see any active zones. Give it Zone: Read for the zones to check.");
+    steps.finish("connect", "Cloudflare connection", "ok", `${row.account_label ?? "API token"}: ${all.length} zone(s) visible; checking ${chosen.map((z) => z.name).join(", ")}${!input.zone && all.length > chosen.length ? ` (the first ${chosen.length} active)` : ""}. Read-only.`, t);
+    await store.audit(db, user.id, "cloudflare_review.started", { runId, detail: { zones: chosen.map((z) => z.name) } });
+
+    const findings: FindingDraft[] = [];
+    const snaps: ZoneSnapshot[] = [];
+    for (const z of chosen) {
+      t = steps.start(`zone-${z.id}`, `Zone ${z.name}`);
+      const snap = await readZone(cctx, z).catch((err) => {
+        throw wrap(err);
+      });
+      snaps.push(snap);
+      const fs = zoneFindings(snap);
+      findings.push(...fs);
+      const gaps = coverageGaps(snap.coverage).filter((g) => g.area !== "access");
+      steps.finish(
+        `zone-${z.id}`,
+        `Zone ${z.name}`,
+        gaps.some((g) => g.area !== "events") ? "failed" : "ok",
+        `${z.plan} plan · ${fs.length} finding(s)${gaps.length ? ` · not checked: ${gaps.map((g) => `${AREA_LABEL[g.area]}${g.fix ? ` (needs ${g.fix})` : ` (${g.status.replace("_", " ")})`}`).join("; ")}` : " · every area checked"}`,
+        t,
+      );
+    }
+
+    const accounts = [...new Map(chosen.filter((z) => z.accountId).map((z) => [z.accountId!, z.accountName ?? z.accountId!])).entries()];
+    const accessResults: { id: string; name: string; status: string; apps: number; fix: string | null }[] = [];
+    for (const [id, name] of accounts.slice(0, 3)) {
+      t = steps.start(`access-${id}`, `Zero Trust Access · ${name}`);
+      const r = await readAccess(cctx, id);
+      if (r.ok) {
+        const fs = accessFindings(name, r.value ?? []);
+        findings.push(...fs);
+        accessResults.push({ id, name, status: "checked", apps: r.value?.length ?? 0, fix: null });
+        steps.finish(`access-${id}`, `Zero Trust Access · ${name}`, "ok", `${r.value?.length ?? 0} application(s), ${fs.length} finding(s). Policies are reviewed only; Orbis never changes them.`, t);
+      } else {
+        accessResults.push({ id, name, status: r.status, apps: 0, fix: r.status === "missing_permission" ? "Access: Apps and Policies Read" : null });
+        steps.finish(`access-${id}`, `Zero Trust Access · ${name}`, r.status === "missing_permission" ? "skipped" : "failed", r.status === "missing_permission" ? "Not checked: the token needs Access: Apps and Policies Read." : `Not checked: ${r.detail}`, t);
+      }
+    }
+
+    const saved = await store.saveFindings(db, user.id, runId, findings);
+    let resolved = 0;
+    for (const s of snaps) {
+      const checked = (Object.keys(AREA_PREFIX) as Exclude<Area, "events">[]).filter((a) => s.coverage[a]?.status === "checked").map((a) => AREA_PREFIX[a]);
+      resolved += await store.markNotDetected(db, user.id, runId, "sentinel", zoneAsset(s.zone.name), checked);
+    }
+    for (const a of accessResults.filter((x) => x.status === "checked")) resolved += await store.markNotDetected(db, user.id, runId, "sentinel", accountAsset(a.name), [AREA_PREFIX.access]);
+    ctx.send({ type: "findings", agent: "sentinel", count: findings.length, bySeverity: countBy(findings), resolved, reopened: saved.reopened });
+
+    const gaps = [
+      ...snaps.flatMap((s) => coverageGaps(s.coverage).filter((g) => g.area !== "access" && g.area !== "events").map((g) => ({ scope: s.zone.name, ...g }))),
+      ...accessResults.filter((a) => a.status !== "checked").map((a) => ({ scope: a.name, area: "access" as Area, status: a.status, fix: a.fix })),
+    ];
+    const complete = gaps.length === 0;
+    const report = await writeReport(
+      ctx,
+      steps,
+      "sentinel",
+      `Cloudflare configuration review of ${chosen.map((z) => z.name).join(", ")} (read-only, via the person's API token). ${complete ? "Every area was checked." : `INCOMPLETE — not checked: ${gaps.map((g) => `${g.scope} ${AREA_LABEL[g.area]}`).join("; ")}.`} Unchecked areas must not be described as protected.`,
+      findings,
+    );
+    const base = { findings: findings.length, bySeverity: countBy(findings), created: saved.created, resolved, reopened: saved.reopened, complete };
+    const stats = fitStats({
+      ...base,
+      cloudflare: {
+        zones: snaps.map((s) => ({
+          name: s.zone.name,
+          plan: s.zone.plan,
+          status: s.zone.paused ? "paused" : s.zone.status,
+          coverage: Object.fromEntries(Object.entries(s.coverage).filter(([a]) => a !== "access").map(([a, c]) => [a, c.status])),
+          ssl: s.settings ? String(s.settings.ssl ?? "?") : null,
+          alwaysHttps: s.settings ? String(s.settings.always_use_https ?? "?") : null,
+          minTls: s.settings ? String(s.settings.min_tls_version ?? "?") : null,
+          waf: s.phases.http_request_firewall_managed === undefined ? null : (s.phases.http_request_firewall_managed ?? []).filter((r) => r.enabled && r.executes && MANAGED_RULESETS[r.executes]).map((r) => MANAGED_RULESETS[r.executes!]!),
+          customRules: s.phases.http_request_firewall_custom === undefined ? null : (s.phases.http_request_firewall_custom ?? []).filter((r) => r.enabled).length,
+          rateLimits: s.phases.http_ratelimit === undefined ? null : (s.phases.http_ratelimit ?? []).filter((r) => r.enabled).length,
+          ddos: s.phases.ddos_l7 === undefined ? null : s.phases.ddos_l7 == null ? "default" : `${s.phases.ddos_l7.length} override(s)`,
+          botFightMode: s.bot?.fightMode ?? null,
+          dnsOnly: s.dns ? s.dns.filter((d) => !d.proxied && (d.type === "A" || d.type === "AAAA" || d.type === "CNAME")).length : null,
+          events: s.events?.slice(0, 10) ?? null,
+        })),
+        accounts: accessResults,
+        gaps,
+      },
+    });
+    await store.finishRun(db, runId, { status: "completed", summary: report.summary, tools: steps.tools, stats, modelId: report.modelId });
+    await store.audit(db, user.id, "cloudflare_review.finished", { runId, detail: { ...base, gaps: gaps.length } });
+    ctx.send({ type: "done", agent: "sentinel", runId });
+    return { runId, findings, complete };
   });
 }
 
