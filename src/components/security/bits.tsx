@@ -1,14 +1,23 @@
 "use client";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
-import { Check, CircleAlert, CircleDashed, CircleX, Code2, Crosshair, Globe, Loader2, Radar, Siren, SkipForward } from "lucide-react";
+import { Check, CircleAlert, CircleDashed, CircleX, Code2, Crosshair, Globe, Loader2, Network, Radar, ShieldCheck, Siren, SkipForward } from "lucide-react";
 import { Markdown } from "@/components/common/markdown";
 import { postNdjson } from "@/hooks/use-ndjson";
 import type { SecurityAgentDef } from "@/lib/security/agents";
 import type { StoredAnalysis } from "@/lib/security/audit-report";
 import { cn } from "@/lib/utils";
 
-export const AGENT_ICON: Record<SecurityAgentDef["icon"] | "coordinated", typeof Radar> = { radar: Radar, crosshair: Crosshair, code: Code2, siren: Siren, globe: Globe, coordinated: Radar };
+export const AGENT_ICON: Record<SecurityAgentDef["icon"] | "coordinated" | "network" | "shield", typeof Radar> = {
+  radar: Radar,
+  crosshair: Crosshair,
+  code: Code2,
+  siren: Siren,
+  globe: Globe,
+  coordinated: Radar,
+  network: Network,
+  shield: ShieldCheck,
+};
 export const AGENT_TINT: Record<string, string> = {
   sentinel: "from-sky-500/25 to-cyan-400/5 text-sky-600 dark:text-sky-300",
   threat_hunter: "from-amber-500/25 to-orange-400/5 text-amber-600 dark:text-amber-300",
@@ -16,6 +25,8 @@ export const AGENT_TINT: Record<string, string> = {
   incident_responder: "from-rose-500/15 to-rose-400/5 text-s-ink-3",
   threat_intel: "from-emerald-500/15 to-emerald-400/5 text-s-ink-3",
   coordinated: "from-s-accent/25 to-transparent text-s-ink",
+  aegis: "from-emerald-500/25 to-teal-400/5 text-emerald-600 dark:text-emerald-300",
+  bastion: "from-rose-500/25 to-red-400/5 text-rose-600 dark:text-rose-300",
 };
 export const AGENT_NAME: Record<string, string> = {
   sentinel: "Orbis Sentinel",

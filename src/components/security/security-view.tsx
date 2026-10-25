@@ -50,6 +50,50 @@ interface Overview {
 
 type Tab = "findings" | "history" | "targets" | "tools";
 
+/** Aegis (coordination) and Bastion (protection) sit above the agents; shown in the same card style. */
+const LAYERS = [
+  {
+    id: "aegis",
+    icon: "network",
+    name: "Orbis Aegis",
+    role: "Security command center",
+    state: "Ready",
+    href: "/agents/security/aegis",
+    action: "Open command center",
+    description: "One prioritised view across every security agent: what matters now, attack-path hypotheses, investigations, remediation that only counts as fixed after a re-check, and what isn't covered.",
+    capabilities: [
+      "One ranked list of risks from every agent, with the points behind each rank",
+      "Attack-path hypotheses across agents, marked as not reproduced",
+      "Investigations, tasks and remediation (fixed only after a re-check)",
+      "Facts you declare per asset: criticality, exposure, data held, links",
+      "Coverage: assessed, partial, stale, or not available yet",
+      "Executive, technical and operational reports",
+    ],
+    toolsLabel: "Draws on",
+    tools: ["Sentinel", "Threat Hunter", "Code Guardian", "CISA KEV"],
+  },
+  {
+    id: "bastion",
+    icon: "shield",
+    name: "Orbis Bastion",
+    role: "Workspace security and protection layer",
+    state: "Enforcing",
+    href: "/agents/security/bastion",
+    action: "Open Bastion",
+    description: "Your agents, connected services and projects: what they can do, what's wrong, and rules you add. Every agent's actions are checked on Orbis's servers before they run.",
+    capabilities: [
+      "Checks every agent action on the server before it runs",
+      "Stops credentials in code, secret-file reads and private-network requests",
+      "Asks for your approval on risky actions; refuses critical ones",
+      "Agent inventory: pause, limit to projects, restrict tools",
+      "Workspace checks, code checks and a pre-deployment gate",
+      "Your own stricter rules, team roles and a signed audit log",
+    ],
+    toolsLabel: "Built in",
+    tools: ["Policy engine", "Secret and path guards", "Signed audit log"],
+  },
+] as const;
+
 export function SecurityView() {
   const { user, integrations } = useApp();
   const [data, setData] = useState<Overview | null>(null);
@@ -123,7 +167,7 @@ export function SecurityView() {
           <div className="s-in flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
             <div>
               <h1 className="font-serif text-[clamp(34px,5vw,46px)] leading-[1.05] tracking-[-0.01em]">Security Team</h1>
-              <p className="mt-2 max-w-2xl text-[15.5px] text-s-ink-2">Three specialised agents that check what you own using real scanners and data, explain the results, and help you fix them. Nothing is changed without your approval.</p>
+              <p className="mt-2 max-w-2xl text-[15.5px] text-s-ink-2">Three specialised agents that check what you own using real scanners and data, explain the results, and help you fix them, coordinated by Aegis and protected by Bastion. Nothing is changed without your approval.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button
@@ -154,33 +198,42 @@ export function SecurityView() {
             </div>
           )}
 
-          <div className="mt-7 grid gap-3 md:grid-cols-2">
-            <Link href="/agents/security/aegis" className="glass group flex items-start gap-3.5 rounded-[22px] p-5 transition hover:border-s-line-strong hover:shadow-[var(--s-shadow)]">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-s-line text-s-ink-2">
-                <Network className="h-5 w-5" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[16px] font-semibold tracking-[-0.01em] group-hover:underline">Aegis</span>
-                <span className="block text-[12.5px] text-s-ink-3">Command center</span>
-                <span className="mt-2 block text-[13.5px] leading-relaxed text-s-ink-2">
-                  One prioritised view across every security agent: what matters now, attack-path hypotheses, investigations, remediation that only counts as fixed after a re-check, and what
-                  isn&apos;t covered.
-                </span>
-              </span>
-            </Link>
-            <Link href="/agents/security/bastion" className="glass group flex items-start gap-3.5 rounded-[22px] p-5 transition hover:border-s-line-strong hover:shadow-[var(--s-shadow)]">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-s-line text-s-ink-2">
-                <ShieldCheck className="h-5 w-5" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[16px] font-semibold tracking-[-0.01em] group-hover:underline">Bastion</span>
-                <span className="block text-[12.5px] text-s-ink-3">Workspace security and protection layer</span>
-                <span className="mt-2 block text-[13.5px] leading-relaxed text-s-ink-2">
-                  Your agents, connected services and projects: what they can do, what&apos;s wrong, and rules you add. Every agent&apos;s actions are checked on Orbis&apos;s servers before
-                  they run.
-                </span>
-              </span>
-            </Link>
+          <div className="mt-7 grid gap-4 md:grid-cols-2">
+            {LAYERS.map((l, i) => (
+              <article key={l.id} className="glass relative flex flex-col rounded-[22px] p-5 transition duration-300 hover:border-s-line-strong hover:shadow-[var(--s-shadow)]" style={{ animation: `s-in .34s cubic-bezier(.2,.7,.2,1) ${i * 50}ms both` }}>
+                <div className="flex items-start gap-3.5">
+                  <AgentBadge agent={l.id} icon={l.icon} />
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-[16px] font-semibold tracking-[-0.01em]">{l.name}</h2>
+                    <p className="text-[12.5px] text-s-ink-3">{l.role}</p>
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 text-[12px] text-emerald-600 dark:text-emerald-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden /> {l.state}
+                  </span>
+                </div>
+                <p className="mt-3.5 text-[13.5px] leading-relaxed text-s-ink-2">{l.description}</p>
+                <ul className="mt-3 space-y-1">
+                  {l.capabilities.map((c) => (
+                    <li key={c} className="flex items-start gap-2 text-[12.5px] text-s-ink-2">
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-s-ink-3" /> {c}
+                    </li>
+                  ))}
+                </ul>
+                <ul className="mt-4 flex flex-wrap gap-1.5" aria-label={l.toolsLabel}>
+                  {l.tools.map((t) => (
+                    <li key={t} className="inline-flex items-center gap-1.5 rounded-full border border-s-line px-2.5 py-1 text-[11.5px] text-s-ink-2">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
+                      {t}
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-auto pt-5">
+                  <Link href={l.href} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-s-line-strong text-[14px] font-medium transition hover:border-transparent hover:bg-s-accent hover:text-s-accent-ink">
+                    {l.action} <ChevronRight className="h-4 w-4" />
+                  </Link>
+                </div>
+              </article>
+            ))}
           </div>
 
           <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
