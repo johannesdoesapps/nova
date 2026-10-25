@@ -31,7 +31,9 @@ export async function fetchRepoFiles(
       headers: { authorization: `Bearer ${opts.token}`, accept: "application/vnd.github+json", "user-agent": "orbis-code-guardian" },
       signal: opts.signal,
     });
-  } else {
+  }
+  // Without a token, or when the token can't see it (a public repository outside the person's GitHub connection), read it anonymously.
+  if (!res || res.status === 404) {
     for (const r of ref ? [ref] : ["HEAD", "main", "master"]) {
       res = await f(`https://codeload.github.com/${owner}/${repo}/tar.gz/${r.split("/").map(encodeURIComponent).join("/")}`, { signal: opts.signal });
       usedRef = r;
@@ -41,7 +43,7 @@ export async function fetchRepoFiles(
   if (!res || !res.ok) {
     throw new Error(
       res?.status === 404
-        ? "Repository not found. It may be private — private repositories need GITHUB_TOKEN, which only administrators can use."
+        ? "Repository not found. If it's private, connect GitHub on the Connectors page and choose this repository there."
         : `GitHub returned HTTP ${res?.status ?? "error"}.`,
     );
   }

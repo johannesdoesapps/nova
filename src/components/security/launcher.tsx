@@ -51,7 +51,7 @@ function LauncherBody({ mode, onClose, targets, onTargetsChanged, onFinished }: 
   const [modelId, setModelId] = useState<string>("auto:deep");
   const [sentinel, setSentinel] = useState<SentinelValue>({ targetId: targets.find((t) => t.verified_at)?.id ?? targets[0]?.id ?? "", scope: "passive", authorized: false });
   const [hunter, setHunter] = useState<HunterValue>({ files: [], pasted: "", indicators: "", asset: "" });
-  const [guardian, setGuardian] = useState<GuardianValue>({ mode: "upload", files: [], repo: "", asset: "", aiReview: true, proposeFixes: false });
+  const [guardian, setGuardian] = useState<GuardianValue>({ mode: "upload", files: [], repo: "", prNumber: "", asset: "", aiReview: true, proposeFixes: false });
   const [include, setInclude] = useState<Record<AgentKey, boolean>>({ sentinel: true, threat_hunter: mode !== "audit", code_guardian: true });
   const [auditMode, setAuditMode] = useState<AuditMode>("deep");
   const [timeBudget, setTimeBudget] = useState<TimeBudget>("standard");

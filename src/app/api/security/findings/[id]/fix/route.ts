@@ -5,6 +5,7 @@ import { codeContext, createProject } from "@/lib/code/server";
 import { byteLength, MAX_FILE_BYTES, projectLimits, validProjectPath } from "@/lib/code/projects";
 import { ApiError, errorResponse, requireUuid } from "@/lib/http";
 import { findingDetails, securityFixTask } from "@/lib/security/details";
+import { githubReadToken } from "@/lib/security/connections";
 import { fetchRepoFiles } from "@/lib/security/github";
 import { engineeringKind, isEngineering } from "@/lib/security/guardian/categories";
 import { buildGraph } from "@/lib/security/guardian/graph";
@@ -31,7 +32,7 @@ export async function POST(_req: Request, ctx: RouteContext<"/api/security/findi
     if (!finding.asset.startsWith("github:"))
       throw new ApiError("bad_request", "This finding came from uploaded files, which Orbis doesn't keep. Open the code in Orbis Code (or audit it from GitHub) to fix it with the coding agent.");
     const admin = await isAdmin(auth);
-    const repo = await fetchRepoFiles(finding.asset.slice(7), { token: admin ? (process.env.GITHUB_TOKEN ?? "").trim() || null : null }).catch((e: Error) => {
+    const repo = await fetchRepoFiles(finding.asset.slice(7), { token: (await githubReadToken(auth)).token }).catch((e: Error) => {
       throw new ApiError("bad_request", e.message);
     });
     const limits = projectLimits(admin);

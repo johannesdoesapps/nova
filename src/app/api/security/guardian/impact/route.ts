@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isAdmin } from "@/lib/admin";
 import { assertAgentAccess } from "@/lib/agent-platform/server";
 import { requireUser } from "@/lib/auth";
 import { audit } from "@/lib/db/security";
 import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
+import { githubReadToken } from "@/lib/security/connections";
 import { fetchRepoFiles } from "@/lib/security/github";
 import { buildGraph } from "@/lib/security/guardian/graph";
 import { analyseImpact } from "@/lib/security/guardian/impact";
@@ -27,8 +27,7 @@ export async function POST(req: Request) {
     await assertAgentAccess(auth, "security");
     const input = await parseJsonBody(req, body, 20_000);
     checkRunLimit(req, auth);
-    const admin = await isAdmin(auth);
-    const repo = await fetchRepoFiles(input.repo.replace(/^github:/, ""), { token: admin ? (process.env.GITHUB_TOKEN ?? "").trim() || null : null, signal: req.signal }).catch((e: Error) => {
+    const repo = await fetchRepoFiles(input.repo.replace(/^github:/, ""), { token: (await githubReadToken(auth, req.signal)).token, signal: req.signal }).catch((e: Error) => {
       throw new ApiError("bad_request", e.message);
     });
     const have = new Set(repo.files.map((f) => f.path));

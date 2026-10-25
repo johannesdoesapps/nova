@@ -75,12 +75,12 @@ export function ConfidenceBadge({ confidence }: { confidence: string }) {
 
 export const FINDING_STATUS_LABEL: Record<string, string> = {
   open: "Open",
-  investigating: "Investigating",
+  investigating: "In progress",
   fix_proposed: "Fix proposed",
-  fixed: "Fixed",
+  fixed: "Awaiting verification",
   accepted_risk: "Accepted risk",
-  verified: "Verified fixed",
-  false_positive: "False positive",
+  verified: "Fixed (verified by re-check)",
+  false_positive: "False positive / disproven",
 };
 export function FindingStatus({ status }: { status: string }) {
   return (

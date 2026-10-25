@@ -42,6 +42,7 @@ export const guardianRequest = z
     source: z.discriminatedUnion("type", [
       z.object({ type: z.literal("upload"), files: z.array(z.object({ path: filePath, content: z.string().max(1_000_000) })).min(1).max(800) }),
       z.object({ type: z.literal("github"), repo: z.string().trim().min(3).max(300) }),
+      z.object({ type: z.literal("github_pr"), repo: z.string().trim().regex(/^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}$/, "Use owner/name."), number: z.number().int().min(1).max(9_999_999) }),
     ]),
     asset: z.string().trim().max(120).default(""),
     aiReview: z.boolean().default(true),
@@ -76,8 +77,13 @@ export const coordinateStart = z
   .refine((b) => b.audit || b.plan.length >= 2, "Choose at least two agents.");
 export const coordinateReport = z.object({ modelId });
 
+/**
+ * People can't set "verified": a fix counts only when a re-check (or a newer scan) no longer detects the finding.
+ * Marking it "fixed" means "awaiting verification" until then.
+ */
+export const PERSON_STATUSES = FINDING_STATUSES.filter((s) => s !== "verified") as unknown as readonly ["open", "investigating", "fix_proposed", "fixed", "accepted_risk", "false_positive"];
 export const findingPatch = z.object({
-  status: z.enum(FINDING_STATUSES).optional(),
+  status: z.enum(PERSON_STATUSES, { message: "A finding is marked verified only by a re-check that no longer detects it." }).optional(),
   severity: z.enum(SEVERITIES).optional(),
   confidence: z.enum(CONFIDENCES).optional(),
   user_note: z.string().max(4000).nullable().optional(),

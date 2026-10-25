@@ -38,6 +38,8 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/security/findi
       const { finding: target } = await getFinding(auth.supabase, auth.user.id, body.duplicate_of);
       if (target.duplicate_of) throw new ApiError("bad_request", "Choose the original finding, not another duplicate.");
     }
+    // Accepting a risk is a decision on record: it needs a reason (the note) from the person making it.
+    if (body.status === "accepted_risk" && !(body.user_note ?? before.user_note)?.trim()) throw new ApiError("bad_request", "Add a note saying why this risk is accepted before accepting it.");
     const patch = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined));
     if (!Object.keys(patch).length) throw new ApiError("bad_request", "Nothing to change.");
     const finding = await updateFinding(auth.supabase, auth.user.id, id, patch);

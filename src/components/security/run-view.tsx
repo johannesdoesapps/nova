@@ -55,7 +55,105 @@ interface Detail {
   run: Run;
   children: Run[];
   findings: (FindingSummary & { run_id: string | null; last_run_id: string | null; rule_id: string })[];
-  history: { id: number; action: string; created_at: string }[];
+  history: { id: number; action: string; detail?: Record<string, unknown> | null; created_at: string }[];
+}
+
+interface PrStats {
+  repo: string;
+  number: number;
+  url: string;
+  headSha: string;
+  headRef: string;
+  baseRef: string;
+  changedFiles: number;
+  filesTruncated: boolean;
+  patchesMissing: number;
+  introduced: number;
+  existing: number;
+}
+interface VerificationStats {
+  model: string;
+  counts: Record<"confirmed" | "likely" | "unverified" | "disproven", number>;
+}
+
+/** What a pull-request audit covered, plus posting its summary on the pull request (only after the person confirms). */
+function PrPanel({ runId, pr, done, postedUrl }: { runId: string; pr: PrStats; done: boolean; postedUrl: string | null }) {
+  const [state, setState] = useState<{ phase: "idle" | "confirm" | "posting" | "posted" | "error"; url?: string; error?: string }>(postedUrl ? { phase: "posted", url: postedUrl } : { phase: "idle" });
+  const post = async () => {
+    setState({ phase: "posting" });
+    try {
+      const r = await jsonFetch<{ url: string }>(`/api/security/runs/${runId}/pr-comment`, { method: "POST", body: JSON.stringify({ confirm: true }) });
+      setState({ phase: "posted", url: r.url });
+    } catch (e) {
+      setState({ phase: "error", error: (e as Error).message });
+    }
+  };
+  return (
+    <section className="glass rounded-[20px] p-5">
+      <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-[0.06em] text-s-ink-3">Pull request</h2>
+      <p className="text-[14px]">
+        <a href={pr.url} target="_blank" rel="noreferrer" className="font-medium underline underline-offset-2">
+          {pr.repo}#{pr.number}
+        </a>{" "}
+        <span className="text-s-ink-2">
+          · {pr.headRef} → {pr.baseRef} · commit {pr.headSha.slice(0, 7)}
+        </span>
+      </p>
+      <p className="mt-1.5 text-[13.5px] text-s-ink-2">
+        {pr.changedFiles} changed file{pr.changedFiles === 1 ? "" : "s"} checked. {pr.introduced} finding{pr.introduced === 1 ? "" : "s"} on lines this pull request adds, {pr.existing} in code it touches but didn&apos;t add.
+        {pr.filesTruncated ? " GitHub listed more changed files than Orbis reads (300), so some weren't checked." : ""}
+        {pr.patchesMissing ? ` GitHub didn't provide the diff for ${pr.patchesMissing} file(s), so new and existing findings there aren't told apart.` : ""} Findings in files the pull request doesn&apos;t change aren&apos;t reported here.
+      </p>
+      {done && (
+        <div className="mt-3">
+          {state.phase === "posted" ? (
+            <p className="text-[13.5px]">
+              Summary posted.{" "}
+              <a href={state.url} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                View the comment on GitHub
+              </a>
+            </p>
+          ) : state.phase === "confirm" || state.phase === "posting" ? (
+            <div className="rounded-xl border border-s-line p-3 text-[13.5px]">
+              <p>
+                Post a comment on {pr.repo}#{pr.number} as you, through your GitHub connection? Everyone who can see the pull request will see it. It lists titles, severities and file locations only (no evidence, code or secrets), and a link to this page.
+              </p>
+              <div className="mt-2.5 flex gap-2">
+                <button type="button" disabled={state.phase === "posting"} onClick={() => void post()} className="h-9 rounded-full bg-s-accent px-4 text-[13px] font-medium text-s-accent-ink disabled:opacity-60">
+                  {state.phase === "posting" ? "Posting…" : "Post comment"}
+                </button>
+                <button type="button" disabled={state.phase === "posting"} onClick={() => setState({ phase: "idle" })} className="h-9 rounded-full border border-s-line px-4 text-[13px]">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <button type="button" onClick={() => setState({ phase: "confirm" })} className="h-9 rounded-full border border-s-line px-4 text-[13px] font-medium transition hover:bg-s-hover">
+                Post summary to the pull request…
+              </button>
+              {state.phase === "error" && (
+                <p role="alert" className="mt-2 text-[13px] text-s-danger">
+                  {state.error}
+                </p>
+              )}
+              <p className="mt-1.5 text-[12.5px] text-s-ink-3">Needs GitHub connected with write access (Pull requests: write). Nothing is posted until you confirm.</p>
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function VerificationNote({ v }: { v: VerificationStats }) {
+  const total = v.counts.confirmed + v.counts.likely + v.counts.unverified + v.counts.disproven;
+  if (!total) return null;
+  return (
+    <p className="rounded-xl border border-s-line px-3 py-2 text-[13.5px] text-s-ink-2">
+      Independent verification ({v.model}) re-checked {total} serious finding{total === 1 ? "" : "s"} against the surrounding code: {v.counts.confirmed} confirmed, {v.counts.likely} likely, {v.counts.unverified} unverified, {v.counts.disproven} disproven. Confirmed and disproven verdicts needed an exact quote from the code. Disproven findings are kept as false positives, and you can reopen them.
+    </p>
+  );
 }
 
 const SEV_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
@@ -143,6 +241,15 @@ export function RunView({ id }: { id: string }) {
             </p>
           )}
           {analysis && <PostureStrip analysis={analysis} />}
+          {run.agent === "code_guardian" && run.stats.pr != null && (
+            <PrPanel
+              runId={run.id}
+              pr={run.stats.pr as PrStats}
+              done={run.status === "completed"}
+              postedUrl={(data.history.find((h) => h.action === "pr.comment")?.detail?.url as string | undefined) ?? null}
+            />
+          )}
+          {run.stats.verification != null && <VerificationNote v={run.stats.verification as VerificationStats} />}
           {run.error && (
             <p role="alert" className="rounded-xl border border-s-line px-3 py-2 text-[13.5px] text-s-danger">
               {run.error}

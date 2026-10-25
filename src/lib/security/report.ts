@@ -28,12 +28,12 @@ interface ExportFinding {
 
 const STATUS_LABEL: Record<string, string> = {
   open: "Open",
-  investigating: "Investigating",
+  investigating: "In progress",
   fix_proposed: "Fix proposed",
-  fixed: "Fixed",
+  fixed: "Awaiting verification",
   accepted_risk: "Accepted risk",
-  verified: "Verified fixed",
-  false_positive: "False positive",
+  verified: "Fixed (verified by re-check)",
+  false_positive: "False positive / disproven",
 };
 
 /** A shareable Markdown report. Counts are plain tallies of the listed findings; there is no score. */

@@ -1,6 +1,6 @@
 "use client";
-import { useRef, useState } from "react";
-import { Check, Copy, FileUp, FolderUp, GitBranch, Globe, Loader2, Plus, ShieldCheck, Trash2, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, Copy, FileUp, FolderUp, GitBranch, GitPullRequest, Globe, Loader2, Plus, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import { cn } from "@/lib/utils";
 import { Segmented, Switch } from "@/components/studio/ui";
@@ -284,9 +284,11 @@ export function hunterBody(v: HunterValue) {
 /* ----------------------------------------------------------- Code Guardian */
 
 export interface GuardianValue {
-  mode: "upload" | "github";
+  mode: "upload" | "github" | "pr";
   files: { path: string; content: string }[];
   repo: string;
+  /** The pull request to audit (mode "pr"). */
+  prNumber: string;
   asset: string;
   aiReview: boolean;
   proposeFixes: boolean;
@@ -312,6 +314,7 @@ export function GuardianForm({ value, onChange }: { value: GuardianValue; onChan
         options={[
           { value: "upload", label: "Upload files", icon: <Upload /> },
           { value: "github", label: "GitHub repository", icon: <GitBranch /> },
+          { value: "pr", label: "Pull request", icon: <GitPullRequest /> },
         ]}
       />
       {value.mode === "upload" ? (
@@ -337,13 +340,7 @@ export function GuardianForm({ value, onChange }: { value: GuardianValue; onChan
           {note && <p className="mt-1 text-[12.5px] text-s-ink-3">{note} Include package-lock.json to check dependencies.</p>}
         </div>
       ) : (
-        <div>
-          <label htmlFor="guardian-repo" className={labelCls}>
-            Repository
-          </label>
-          <input id="guardian-repo" value={value.repo} onChange={(e) => onChange({ ...value, repo: e.target.value })} placeholder="owner/repo or https://github.com/owner/repo" className={inputCls} />
-          <p className="mt-1.5 text-[12.5px] text-s-ink-3">A read-only snapshot is downloaded; nothing is cloned, run or changed. Private repositories need GITHUB_TOKEN (administrators only).</p>
-        </div>
+        <GitHubSource value={value} onChange={onChange} />
       )}
       {value.mode === "upload" && (
         <div>
@@ -374,15 +371,145 @@ export function GuardianForm({ value, onChange }: { value: GuardianValue; onChan
   );
 }
 
+interface GitHubState {
+  connection: { available: boolean; status: string; account: string | null; lastError: string | null };
+  repos: { fullName: string; private: boolean; defaultBranch: string }[];
+}
+interface PullSummary {
+  number: number;
+  title: string;
+  draft: boolean;
+  author: string | null;
+  head: string;
+  base: string;
+}
+
+/** Repository (and pull request) picker: the person's shared repositories when GitHub is connected, or any public repository by name. */
+function GitHubSource({ value, onChange }: { value: GuardianValue; onChange: (v: GuardianValue) => void }) {
+  const [gh, setGh] = useState<GitHubState | null>(null);
+  const [ghError, setGhError] = useState<string | null>(null);
+  const [pulls, setPulls] = useState<{ repo: string; list: PullSummary[]; error: string | null } | null>(null);
+  useEffect(() => {
+    let live = true;
+    jsonFetch<GitHubState>("/api/security/github/repos")
+      .then((r) => live && setGh(r))
+      .catch((e: Error) => live && setGhError(e.message));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const repo = normalizeRepo(value.repo);
+  const shared = !!repo && !!gh?.repos.some((r) => r.fullName.toLowerCase() === repo.toLowerCase());
+  useEffect(() => {
+    if (value.mode !== "pr" || !shared || !repo) return;
+    let live = true;
+    jsonFetch<{ pulls: PullSummary[] }>(`/api/security/github/pulls?repo=${encodeURIComponent(repo)}`)
+      .then((r) => live && setPulls({ repo, list: r.pulls, error: null }))
+      .catch((e: Error) => live && setPulls({ repo, list: [], error: e.message }));
+    return () => {
+      live = false;
+    };
+  }, [value.mode, shared, repo]);
+  const connected = gh?.connection.status === "connected";
+  return (
+    <div className="space-y-3">
+      <div>
+        <label htmlFor="guardian-repo" className={labelCls}>
+          Repository
+        </label>
+        <input
+          id="guardian-repo"
+          list="guardian-repos"
+          value={value.repo}
+          onChange={(e) => onChange({ ...value, repo: e.target.value, prNumber: "" })}
+          placeholder={connected ? "Choose or type owner/repo" : "owner/repo or https://github.com/owner/repo"}
+          className={inputCls}
+        />
+        <datalist id="guardian-repos">
+          {gh?.repos.map((r) => (
+            <option key={r.fullName} value={r.fullName}>
+              {r.private ? "Private" : "Public"} · {r.defaultBranch}
+            </option>
+          ))}
+        </datalist>
+        <p className="mt-1.5 text-[12.5px] text-s-ink-3">
+          {connected
+            ? `GitHub connected${gh?.connection.account ? ` as ${gh.connection.account}` : ""}: ${gh?.repos.length ?? 0} repositor${gh?.repos.length === 1 ? "y" : "ies"} shared with Orbis. `
+            : gh?.connection.status === "error" || gh?.connection.status === "reauth_required"
+              ? `Your GitHub connection needs attention${gh.connection.lastError ? ` (${gh.connection.lastError})` : ""}. Only public repositories can be read until it's fixed on the `
+              : ghError
+                ? `Couldn't check your GitHub connection (${ghError}). Public repositories still work. `
+                : "Public repositories work without signing in. For private ones, connect GitHub on the "}
+          {!connected && (
+            <a href="/connectors" className="underline underline-offset-2">
+              Connectors page
+            </a>
+          )}
+          {!connected && ". "}A read-only snapshot is downloaded; nothing is cloned, run or changed.
+        </p>
+      </div>
+      {value.mode === "pr" && (
+        <div>
+          <label htmlFor="guardian-pr" className={labelCls}>
+            Pull request
+          </label>
+          {shared && pulls?.repo === repo && pulls.list.length > 0 ? (
+            <select id="guardian-pr" value={value.prNumber} onChange={(e) => onChange({ ...value, prNumber: e.target.value })} className={inputCls}>
+              <option value="">Choose an open pull request</option>
+              {pulls.list.map((p) => (
+                <option key={p.number} value={String(p.number)}>
+                  #{p.number} {p.title}
+                  {p.draft ? " (draft)" : ""} — {p.head} → {p.base}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              id="guardian-pr"
+              inputMode="numeric"
+              value={value.prNumber}
+              onChange={(e) => onChange({ ...value, prNumber: e.target.value.replace(/[^0-9]/g, "").slice(0, 7) })}
+              placeholder="Pull request number, e.g. 42"
+              className={inputCls}
+            />
+          )}
+          <p className="mt-1.5 text-[12.5px] text-s-ink-3">
+            {shared && pulls?.repo !== repo
+              ? "Loading open pull requests…"
+              : pulls?.error && pulls.repo === repo
+                ? `Couldn't list pull requests: ${pulls.error}`
+                : shared && pulls?.repo === repo && pulls.list.length === 0
+                  ? "No open pull requests; type a number to audit a closed one."
+                  : null}{" "}
+            Orbis reads the whole repository at the pull request&apos;s latest commit for context, but reports only what touches the files it changes, and says whether each finding is new.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** "owner/name" from a typed repository or GitHub URL, or null. */
+export function normalizeRepo(input: string): string | null {
+  const m = /^(?:https?:\/\/(?:www\.)?github\.com\/)?([A-Za-z0-9-]{1,39})\/([A-Za-z0-9._-]{1,100}?)(?:\.git)?\/?$/.exec(input.trim());
+  return m ? `${m[1]}/${m[2]}` : null;
+}
+
 export function guardianBody(v: GuardianValue) {
   return {
-    source: v.mode === "github" ? { type: "github", repo: v.repo.trim() } : { type: "upload", files: v.files },
+    source:
+      v.mode === "pr"
+        ? { type: "github_pr", repo: normalizeRepo(v.repo) ?? v.repo.trim(), number: Number(v.prNumber) }
+        : v.mode === "github"
+          ? { type: "github", repo: v.repo.trim() }
+          : { type: "upload", files: v.files },
     asset: v.asset.trim(),
     aiReview: v.aiReview,
     proposeFixes: v.proposeFixes,
   };
 }
 
-export const guardianReady = (v: GuardianValue) => (v.mode === "github" ? v.repo.trim().length > 2 : v.files.length > 0 && totalSize(v.files) <= MAX_TOTAL);
+export const guardianReady = (v: GuardianValue) =>
+  v.mode === "pr" ? !!normalizeRepo(v.repo) && Number(v.prNumber) > 0 : v.mode === "github" ? v.repo.trim().length > 2 : v.files.length > 0 && totalSize(v.files) <= MAX_TOTAL;
 export const hunterReady = (v: HunterValue) => (v.files.length > 0 || v.pasted.trim().length > 0 || v.indicators.trim().length > 0) && totalSize(v.files) + v.pasted.length <= MAX_TOTAL;
 export const sentinelReady = (v: SentinelValue) => !!v.targetId && v.authorized;

@@ -1,6 +1,5 @@
 import "server-only";
 import { z } from "zod";
-import { isAdmin } from "../admin";
 import type { Authed } from "../code/server";
 import { getRun, listChanges } from "../code/agent/runs";
 import { unifiedDiff } from "../code/diff";
@@ -8,6 +7,7 @@ import { getFiles, getProjectRow } from "../code/server";
 import { installationToken, repoFile, repoTree, safePath } from "../github/app";
 import { githubContext } from "../github/server";
 import { ApiError } from "../http";
+import { githubReadToken } from "../security/connections";
 import { fetchRepoFiles } from "../security/github";
 import { parseUnifiedDiff, type ReviewFile } from "./review";
 import { unzip } from "./unzip";
@@ -141,8 +141,7 @@ async function loadPull(pr: { owner: string; repo: string; number: number }, sig
 async function loadRepo(auth: Authed, url: string, signal: AbortSignal): Promise<LoadedSource> {
   const notes: string[] = [];
   try {
-    const admin = await isAdmin(auth);
-    const r = await fetchRepoFiles(url, { token: admin ? (process.env.GITHUB_TOKEN ?? "").trim() || null : null, signal });
+    const r = await fetchRepoFiles(url, { token: (await githubReadToken(auth, signal)).token, signal });
     if (r.truncated) notes.push("The repository was larger than the snapshot limit; some files were skipped.");
     return { title: r.label, source: { kind: "github_repo", label: r.label, url: `https://github.com/${r.label}`, ref: r.ref }, files: capFiles(r.files, notes), diff: null, notes };
   } catch (err) {

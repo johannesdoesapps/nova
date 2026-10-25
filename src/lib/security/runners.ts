@@ -3,7 +3,6 @@ import { getProvider, resolveModelChoice, withTimeout } from "../ai";
 import { estimateTokens } from "../ai/cost";
 import { autoIdFor } from "../ai/platform";
 import type { ChatMessage } from "../ai/types";
-import { isAdmin } from "../admin";
 import type { AuthContext } from "../auth";
 import * as store from "../db/security";
 import { ApiError, clientIp } from "../http";
@@ -14,6 +13,9 @@ import { proveOwnership } from "./authz";
 import { runCodeRules, type SourceFile } from "./code-rules";
 import { correlate } from "./correlate";
 import { checkDependencies, parseManifests } from "./deps";
+import { githubReadToken } from "./connections";
+import { applyVerification, parseVerification, selectForVerification, verificationMessages } from "./verify";
+import { fetchPullRequest, prAsset, prCovers, prEvidence, scopeToPr, type PrInfo } from "./pr";
 import { fetchRepoFiles } from "./github";
 import { parseIndicators } from "./logs";
 import { analyseLogs, huntSections, type Analysis } from "./hunt/analyse";
@@ -334,7 +336,7 @@ export async function runHunterAgent(ctx: RunContext, input: { logs: { name: str
 
 export async function runGuardianAgent(
   ctx: RunContext,
-  input: { source: { type: "upload"; files: SourceFile[] } | { type: "github"; repo: string }; asset: string; aiReview: boolean; proposeFixes: boolean },
+  input: { source: { type: "upload"; files: SourceFile[] } | { type: "github"; repo: string } | { type: "github_pr"; repo: string; number: number }; asset: string; aiReview: boolean; proposeFixes: boolean },
 ) {
   const { supabase: db, user } = ctx.auth;
   const cfg = await verifyParent(ctx);
@@ -342,8 +344,8 @@ export async function runGuardianAgent(
   if (cfg && !MODE_INFO[cfg.mode].aiReview) input = { ...input, aiReview: false };
   const runId = await store.startRun(db, user.id, {
     agent: "code_guardian",
-    action: "audit",
-    asset: input.source.type === "github" ? `github:${input.source.repo}` : input.asset || "Uploaded code",
+    action: input.source.type === "github_pr" ? "pr_audit" : "audit",
+    asset: input.source.type === "github" ? `github:${input.source.repo}` : input.source.type === "github_pr" ? prAsset(input.source.repo, input.source.number) : input.asset || "Uploaded code",
     parentId: ctx.parentId,
   });
   ctx.send({ type: "run", agent: "code_guardian", runId });
@@ -351,15 +353,35 @@ export async function runGuardianAgent(
   return guarded(ctx, runId, "code_guardian", steps, async () => {
     let files: SourceFile[];
     let asset: string;
-    if (input.source.type === "github") {
+    let pr: PrInfo | null = null;
+    if (input.source.type === "github_pr") {
+      const t = steps.start("fetch", "Pull request");
+      const { token, via } = await githubReadToken(ctx.auth, ctx.signal);
+      pr = await fetchPullRequest(input.source.repo, input.source.number, { token, signal: ctx.signal }).catch((e: Error) => {
+        throw new ApiError("bad_request", e.message);
+      });
+      // The whole repository at the pull request's head, so changed code is read in context. Nothing is executed.
+      const repo = await fetchRepoFiles(`${input.source.repo}/tree/pull/${input.source.number}/head`, { token, signal: ctx.signal }).catch((e: Error) => {
+        throw new ApiError("bad_request", e.message);
+      });
+      files = repo.files;
+      asset = prAsset(input.source.repo, input.source.number);
+      steps.finish(
+        "fetch",
+        "Pull request",
+        "ok",
+        `#${pr.number} (${pr.state}${pr.draft ? ", draft" : ""}) ${pr.headRef} → ${pr.baseRef} at ${pr.headSha.slice(0, 7)}: ${pr.files.length} changed file(s)${pr.filesTruncated ? " (GitHub listed only the first 300)" : ""}; ${repo.files.length} repository files read for context · ${via === "connection" ? "with your GitHub connection" : via === "site_token" ? "with the site's GitHub token (administrator)" : "anonymously (public repository)"}`,
+        t,
+      );
+    } else if (input.source.type === "github") {
       const t = steps.start("fetch", "GitHub snapshot");
-      const token = (await isAdmin(ctx.auth)) ? (process.env.GITHUB_TOKEN ?? "").trim() || null : null;
+      const { token, via } = await githubReadToken(ctx.auth, ctx.signal);
       const repo = await fetchRepoFiles(input.source.repo, { token, signal: ctx.signal }).catch((e: Error) => {
         throw new ApiError("bad_request", e.message);
       });
       files = repo.files;
       asset = `github:${repo.label}`;
-      steps.finish("fetch", "GitHub snapshot", "ok", `${repo.files.length} files at ${repo.ref}${repo.truncated ? " (size limit reached; some files skipped)" : ""}`, t);
+      steps.finish("fetch", "GitHub snapshot", "ok", `${repo.files.length} files at ${repo.ref}${repo.truncated ? " (size limit reached; some files skipped)" : ""} · read ${via === "connection" ? "with your GitHub connection" : via === "site_token" ? "with the site's GitHub token (administrator)" : "anonymously (public repository)"}`, t);
     } else {
       files = input.source.files;
       asset = input.asset || "Uploaded code";
@@ -416,7 +438,8 @@ export async function runGuardianAgent(
     }
 
     if (input.aiReview) {
-      const chosen = selectFilesForReview(files);
+      const changedPaths = pr ? new Set(pr.files.filter((x) => x.status !== "removed").map((x) => x.path)) : null;
+      const chosen = selectFilesForReview(changedPaths ? files.filter((x) => changedPaths.has(x.path)) : files);
       if (!chosen.length) steps.finish("ai-review", "AI code review", "skipped", "No source files suitable for review.");
       else {
         t = steps.start("ai-review", "AI code review");
@@ -437,11 +460,69 @@ export async function runGuardianAgent(
       }
     }
 
+    // A pull request: keep what the change touches, and say whether each finding is on a line it adds.
+    let prStats: Record<string, unknown> | null = null;
+    if (pr) {
+      const sec = scopeToPr(findings, pr.files);
+      const engScoped = scopeToPr(eng.findings, pr.files);
+      findings.length = 0;
+      for (const k of sec.kept) findings.push({ ...k.finding, evidence: [prEvidence(pr, k.introduced), ...k.finding.evidence] });
+      eng.findings = engScoped.kept.map((k) => ({ ...k.finding, evidence: [prEvidence(pr!, k.introduced), ...k.finding.evidence] }));
+      const introduced = sec.kept.filter((k) => k.introduced).length;
+      prStats = {
+        repo: pr.repo,
+        number: pr.number,
+        url: pr.url,
+        headSha: pr.headSha,
+        headRef: pr.headRef.slice(0, 120),
+        baseRef: pr.baseRef.slice(0, 120),
+        state: pr.state,
+        changedFiles: pr.files.length,
+        filesTruncated: pr.filesTruncated,
+        patchesMissing: pr.files.filter((x) => x.patchMissing).length,
+        introduced,
+        existing: sec.kept.length - introduced,
+        outsideChange: sec.dropped,
+      };
+      ctx.send({ type: "notice", agent: "code_guardian", text: `Pull request scope: ${sec.kept.length} finding(s) in changed files (${introduced} on added lines); ${sec.dropped} elsewhere in the repository not counted here.` });
+    }
+
+    // Phase 4 — independent verification of serious, not-yet-certain code findings (AI audits only).
+    let disproven: string[] = [];
+    let verifyStats: Record<string, unknown> | null = null;
+    {
+      const cands = selectForVerification(findings, files);
+      if (!input.aiReview) steps.finish("verify", "Independent verification", "skipped", cands.length ? `${cands.length} finding(s) stay "needs verification": this audit mode doesn't use AI.` : "Nothing to verify.");
+      else if (!cands.length) steps.finish("verify", "Independent verification", "skipped", "No medium-or-worse findings needed a second look.");
+      else {
+        t = steps.start("verify", "Independent verification");
+        try {
+          const r = await aiText(ctx, { defaultMode: "coding", messages: verificationMessages(cands), purpose: "security", prompt: `[verification] ${asset}`, maxOutputTokens: 1800 });
+          if ("skipped" in r) steps.finish("verify", "Independent verification", "skipped", r.skipped, t);
+          else {
+            const results = parseVerification(r.text, cands);
+            const applied = applyVerification(findings, cands, results, r.modelName);
+            disproven = applied.disproven;
+            verifyStats = { model: r.modelName, ...applied.counts };
+            const c = applied.counts;
+            steps.finish("verify", "Independent verification", "ok", `${r.modelName} challenged ${cands.length}: ${c.confirmed} confirmed, ${c.likely} likely, ${c.unverified} unverified, ${c.disproven} disproven (marked false positive; you can reopen them). Static reading only; nothing was run.`, t);
+          }
+        } catch (err) {
+          if (ctx.signal.aborted) throw err;
+          steps.finish("verify", "Independent verification", "failed", err instanceof ApiError ? err.message : "The verification call failed; findings keep their original status.", t);
+        }
+      }
+    }
+
     // Security findings first: the store keeps at most 400 per run.
     const saved = await store.saveFindings(db, user.id, runId, [...findings, ...eng.findings]);
+    if (disproven.length) {
+      await db.from("security_findings").update({ status: "false_positive", verification_note: "Disproven by independent verification (see evidence). Reopen it if you disagree." }).eq("user_id", user.id).in("fingerprint", disproven).eq("status", "open");
+      await store.audit(db, user.id, "verification.disproven", { runId, detail: { count: disproven.length } });
+    }
     // Only compare against earlier audits of the same named source; unnamed uploads may be unrelated projects.
-    const named = input.source.type === "github" || !!input.asset;
-    const resolved = named ? await store.markNotDetected(db, user.id, runId, "code_guardian", asset, checked) : 0;
+    const named = input.source.type === "github" || input.source.type === "github_pr" || !!input.asset;
+    const resolved = named ? await store.markNotDetected(db, user.id, runId, "code_guardian", asset, checked, pr ? { prefix: "", covers: prCovers(pr.files) } : undefined) : 0;
     ctx.send({ type: "findings", agent: "code_guardian", count: findings.length, bySeverity: countBy(findings), resolved, reopened: saved.reopened });
 
     t = steps.start("memory", "Regression memory");
@@ -528,7 +609,8 @@ export async function runGuardianAgent(
     const base = {
       findings: findings.length,
       engineeringFindings: eng.findings.length,
-      engineering: engCounts,
+      engineering: pr ? countFindings(eng.findings.map((f) => f.ruleId)) : engCounts,
+      ...(verifyStats ? { verification: verifyStats } : {}),
       bySeverity: countBy(findings),
       files: rules.filesScanned,
       lines: rules.linesScanned,
@@ -539,7 +621,7 @@ export async function runGuardianAgent(
       routes: map.routes.length,
     };
     const guardian = fitGuardianSummary({ ...eng.summary, memory }, 8_500);
-    const stats = fitStats({ ...base, codeMap: compactMap(map), guardian });
+    const stats = fitStats({ ...base, ...(prStats ? { pr: prStats } : {}), codeMap: compactMap(map), guardian });
     await store.finishRun(db, runId, { status: "completed", summary: report.summary, tools: steps.tools, stats, modelId: report.modelId });
     await store.audit(db, user.id, "audit.finished", { runId, detail: base });
     ctx.send({ type: "done", agent: "code_guardian", runId });

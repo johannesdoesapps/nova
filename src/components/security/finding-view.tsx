@@ -383,7 +383,7 @@ export function FindingView({ id }: { id: string }) {
             <div className="glass rounded-[20px] p-4">
               <h2 className="text-[13.5px] font-semibold">Status</h2>
               <select aria-label="Status" value={f.status} disabled={saving} onChange={(e) => void patch({ status: e.target.value }, `Marked ${FINDING_STATUS_LABEL[e.target.value]}`)} className={cn(selectCls, "mt-2")}>
-                {Object.entries(FINDING_STATUS_LABEL).map(([k, v]) => (
+                {Object.entries(FINDING_STATUS_LABEL).filter(([k]) => k !== "verified" || f.status === "verified").map(([k, v]) => (
                   <option key={k} value={k}>
                     {v}
                   </option>
