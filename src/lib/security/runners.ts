@@ -39,6 +39,9 @@ import { auditConfig, type AuditConfig } from "./schema";
 import { codeMapFindings, compactMap, mapCode } from "./code-map";
 import { runSentinel, type SentinelScope } from "./sentinel";
 import { SEVERITY_ORDER, type FindingDraft, type SecurityAgentId, type ToolRun } from "./types";
+import { alertText, alertWorthy, currentAlertSettings, type AuditEvent } from "./schedules";
+import { sendSecurityEmail } from "../email";
+import { publicEnv } from "../env";
 
 export type Send = (event: Record<string, unknown>) => void;
 
@@ -49,6 +52,8 @@ export interface RunContext {
   signal: AbortSignal;
   modelId?: string;
   parentId?: string | null;
+  /** Background (scheduled) runs: no AI calls — usage limits and model choice need the person's session. */
+  noAi?: boolean;
 }
 
 /** At most 12 agent runs per user per 10 minutes, across all agents. */
@@ -111,6 +116,10 @@ async function aiText(ctx: RunContext, opts: { defaultMode: "deep" | "coding"; m
 }
 
 async function writeReport(ctx: RunContext, steps: Steps, agent: SecurityAgentId, context: string, findings: FindingDraft[], extra = "") {
+  if (ctx.noAi) {
+    steps.finish("report", "AI report", "skipped", "Scheduled audits don't use AI; findings and evidence are complete without it.");
+    return { summary: null, modelId: null };
+  }
   const def = agentDef(agent)!;
   const t = steps.start("report", "AI report");
   try {
@@ -127,6 +136,27 @@ async function writeReport(ctx: RunContext, steps: Steps, agent: SecurityAgentId
     if (ctx.signal.aborted) throw err;
     steps.finish("report", "AI report", "failed", err instanceof ApiError ? err.message : "The AI model call failed; scanner results are still saved.", t);
     return { summary: null, modelId: null };
+  }
+}
+
+/**
+ * Workflow E: after findings are saved, alert on new or reopened ones that are serious and confirmed or likely —
+ * recorded in the security log (shown on the Security Team page) and emailed when the person allows it. Never throws.
+ */
+async function alertSerious(ctx: RunContext, runId: string, drafts: FindingDraft[], saved: { createdFingerprints: string[]; reopenedFingerprints: string[] }) {
+  try {
+    const { supabase: db, user } = ctx.auth;
+    const { data } = await db.from("security_audit").select("action,detail,created_at").eq("user_id", user.id).eq("action", "alerts.settings").order("created_at", { ascending: false }).limit(1);
+    const settings = currentAlertSettings((data ?? []) as AuditEvent[]);
+    const items = alertWorthy(drafts, saved, settings);
+    if (!items.length) return;
+    const runUrl = `${publicEnv.siteUrl.replace(/\/$/, "")}/agents/security/runs/${runId}`;
+    const { subject, text } = alertText(items, runUrl);
+    const emailed = settings.email ? await sendSecurityEmail(user.id, "security_team_alert", runId, subject, text, "") : false;
+    await store.audit(db, user.id, "alert.raised", { runId, detail: { count: items.length, top: items.slice(0, 5).map((i) => ({ title: i.finding.title.slice(0, 160), severity: i.finding.severity, reopened: i.reopened })), emailed } });
+    ctx.send({ type: "notice", agent: "aegis", text: `${items.length} serious finding(s) are new or reopened${emailed ? "; you've been emailed" : ""}.` });
+  } catch {
+    // An alert that can't be sent must not fail the audit; the findings are saved either way.
   }
 }
 
@@ -184,6 +214,7 @@ export async function runSentinelAgent(ctx: RunContext, input: { targetId: strin
     for (const n of result.notes) ctx.send({ type: "notice", agent: "sentinel", text: n });
 
     const saved = await store.saveFindings(db, user.id, runId, result.findings);
+    await alertSerious(ctx, runId, result.findings, saved);
     // Mapped-site findings are only "not detected" where this run looked again (a smaller crawl doesn't clear them).
     const covered = new Set(result.map?.covered ?? []);
     const resolved = await store.markNotDetected(db, user.id, runId, "sentinel", host, result.checked, { prefix: "surface.", covers: (loc) => !!loc && covered.has(loc) });
@@ -294,6 +325,7 @@ export async function runDeploymentAudit(ctx: RunContext, input: { project: stri
 
     const all = [...findings, ...siteFindings];
     const saved = await store.saveFindings(db, user.id, runId, all);
+    await alertSerious(ctx, runId, all, saved);
     let resolved = await store.markNotDetected(db, user.id, runId, "sentinel", asset, snap.missing.length ? [] : VERCEL_CHECKED);
     if (host && siteChecked.length) resolved += await store.markNotDetected(db, user.id, runId, "sentinel", host, siteChecked.filter((p) => p !== "surface."));
     ctx.send({ type: "findings", agent: "sentinel", count: all.length, bySeverity: countBy(all), resolved, reopened: saved.reopened });
@@ -413,6 +445,7 @@ export async function runCloudflareAudit(ctx: RunContext, input: { zone?: string
     }
 
     const saved = await store.saveFindings(db, user.id, runId, findings);
+    await alertSerious(ctx, runId, findings, saved);
     let resolved = 0;
     for (const s of snaps) {
       const checked = (Object.keys(AREA_PREFIX) as Exclude<Area, "events">[]).filter((a) => s.coverage[a]?.status === "checked").map((a) => AREA_PREFIX[a]);
@@ -524,6 +557,7 @@ export async function runHunterAgent(ctx: RunContext, input: { logs: { name: str
 
     const findings = [...(analysis?.findings ?? []), ...repFindings];
     const saved = await store.saveFindings(db, user.id, runId, findings);
+    await alertSerious(ctx, runId, findings, saved);
     ctx.send({ type: "findings", agent: "threat_hunter", count: findings.length, bySeverity: countBy(findings) });
 
     // Investigations: signals point at saved finding ids; link earlier investigations that share entities.
@@ -592,6 +626,7 @@ export async function runGuardianAgent(
   const cfg = await verifyParent(ctx);
   // Quick scans and the release gate don't use AI judgement for code findings.
   if (cfg && !MODE_INFO[cfg.mode].aiReview) input = { ...input, aiReview: false };
+  if (ctx.noAi) input = { ...input, aiReview: false, proposeFixes: false };
   const runId = await store.startRun(db, user.id, {
     agent: "code_guardian",
     action: input.source.type === "github_pr" ? "pr_audit" : "audit",
@@ -742,7 +777,7 @@ export async function runGuardianAgent(
     let verifyStats: Record<string, unknown> | null = null;
     {
       const cands = selectForVerification(findings, files);
-      if (!input.aiReview) steps.finish("verify", "Independent verification", "skipped", cands.length ? `${cands.length} finding(s) stay "needs verification": this audit mode doesn't use AI.` : "Nothing to verify.");
+      if (!input.aiReview) steps.finish("verify", "Independent verification", "skipped", cands.length ? `${cands.length} finding(s) stay "needs verification": ${ctx.noAi ? "scheduled audits don't use AI" : "this audit mode doesn't use AI"}.` : "Nothing to verify.");
       else if (!cands.length) steps.finish("verify", "Independent verification", "skipped", "No medium-or-worse findings needed a second look.");
       else {
         t = steps.start("verify", "Independent verification");
@@ -766,6 +801,7 @@ export async function runGuardianAgent(
 
     // Security findings first: the store keeps at most 400 per run.
     const saved = await store.saveFindings(db, user.id, runId, [...findings, ...eng.findings]);
+    await alertSerious(ctx, runId, findings, saved);
     if (disproven.length) {
       await db.from("security_findings").update({ status: "false_positive", verification_note: "Disproven by independent verification (see evidence). Reopen it if you disagree." }).eq("user_id", user.id).in("fingerprint", disproven).eq("status", "open");
       await store.audit(db, user.id, "verification.disproven", { runId, detail: { count: disproven.length } });

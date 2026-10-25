@@ -22,6 +22,7 @@ Every connector below has a working implementation against the service's officia
 | Notion | Notion OAuth (public connection) | search pages shared with Orbis; read pages | — | needs Notion setup |
 | GitHub | GitHub App user sign-in (docs/CONNECTORS_GITHUB_VERCEL.md) | list repositories, files, branches, PRs; read files; search issues | create a branch, commit a file to a branch (never the default branch), open a PR or an issue | needs GitHub setup |
 | Vercel | Sign in with Vercel (docs/CONNECTORS_GITHUB_VERCEL.md) | list projects and deployments; deployment status, URLs and build logs | redeploy (preview or production) | needs Vercel setup |
+| Cloudflare | Scoped API token the user creates and pastes (docs/SECURITY_TEAM.md) | list zones; Security Team reviews of TLS, WAF, DDoS, bots, DNS and Access | three zone TLS settings, only from a finding, after approval | **Yes** (only `ORBIS_CONNECTOR_KEY`) |
 | Microsoft OneDrive | Microsoft OAuth | search; read text files | — | needs Microsoft setup |
 | Microsoft Outlook | Microsoft OAuth | search; read messages | save a draft (never sends) | needs Microsoft setup |
 | HubSpot | HubSpot OAuth | search contacts, companies, deals | — | needs HubSpot setup |

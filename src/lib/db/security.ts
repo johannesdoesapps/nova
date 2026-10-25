@@ -109,11 +109,12 @@ export async function saveFindings(
   userId: string,
   runId: string,
   drafts: FindingDraft[],
-): Promise<{ ids: Map<string, string>; created: number; updated: number; reopened: number; reopenedFingerprints: string[] }> {
+): Promise<{ ids: Map<string, string>; created: number; updated: number; reopened: number; reopenedFingerprints: string[]; createdFingerprints: string[] }> {
   const ids = new Map<string, string>();
   const list = drafts.slice(0, 400);
   const reopenedFingerprints: string[] = [];
-  if (!list.length) return { ids, created: 0, updated: 0, reopened: 0, reopenedFingerprints };
+  const createdFingerprints: string[] = [];
+  if (!list.length) return { ids, created: 0, updated: 0, reopened: 0, reopenedFingerprints, createdFingerprints };
   const existing = new Map<string, { id: string; status: FindingStatus; occurrences: number }>();
   for (let i = 0; i < list.length; i += 150) {
     const { data } = await db
@@ -152,7 +153,10 @@ export async function saveFindings(
       )
       .select("id,fingerprint");
     if (error) fail("findings");
-    for (const r of (data ?? []) as { id: string; fingerprint: string }[]) ids.set(r.fingerprint, r.id);
+    for (const r of (data ?? []) as { id: string; fingerprint: string }[]) {
+      ids.set(r.fingerprint, r.id);
+      createdFingerprints.push(r.fingerprint);
+    }
     created = data?.length ?? 0;
   }
   let reopened = 0;
@@ -182,7 +186,7 @@ export async function saveFindings(
       .eq("id", prev.id);
     if (!error) updated++;
   }
-  return { ids, created, updated, reopened, reopenedFingerprints };
+  return { ids, created, updated, reopened, reopenedFingerprints, createdFingerprints };
 }
 
 /**

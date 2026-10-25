@@ -396,10 +396,17 @@ dashboard shows plain counts of open findings by severity.
 | (none) | Header checks, exposed-file checks, code rules, OSV dependency checks, log analysis, public GitHub repos |
 | An AI provider key (OpenAI, Anthropic, Gemini, DeepSeek) | AI reports, AI code review, proposed patches (the user can pick any model or Auto) |
 | `ABUSEIPDB_API_KEY` | IP reputation for Threat Hunter |
-| `GITHUB_TOKEN` | Private repositories — administrators only |
+| The person's GitHub connection (Connectors) | Their private repositories, pull-request audits, PR summary comments (with write access and confirmation) |
+| The person's Vercel connection | Vercel deployment audits and the advisory deploy gate |
+| The person's Cloudflare API token | Cloudflare protection reviews and approved TLS setting fixes |
+| `GITHUB_TOKEN` | Private repositories — administrators only (fallback when they haven't connected GitHub) |
+| `CRON_SECRET` + `SUPABASE_SERVICE_ROLE_KEY` | Scheduled audits (`/api/cron/security`, daily 07:17 UTC) |
+
+See [SECURITY_TEAM.md](SECURITY_TEAM.md) for the Security Team workflows built on these connections.
 
 ## Not connected yet (shown as "Not connected", never simulated)
 
 OWASP ZAP, Semgrep, Trivy and Wazuh need a separate, isolated scanner runner (containers with
 their own resource limits) — they cannot run inside Vercel serverless functions. Domain/URL
-reputation services are not connected either. Orbis does not monitor systems continuously.
+reputation services are not connected either. Orbis does not monitor systems continuously: scheduled
+audits run once a day at most.

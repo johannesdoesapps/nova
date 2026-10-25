@@ -15,6 +15,7 @@ import { AGENT_NAME, AgentBadge, fmtTime, ICON_OF, RunStatus, SEVERITY_DOT } fro
 import { EMPTY_FILTERS, FindingsPanel, type FindingFilters } from "./findings-panel";
 import type { Target } from "./forms";
 import { Launcher, type LaunchMode } from "./launcher";
+import { TeamOverview } from "./team-overview";
 
 interface Tool {
   id: string;
@@ -204,6 +205,8 @@ export function SecurityView() {
               </button>
             </div>
           </div>
+
+          <TeamOverview onLaunch={setLaunch} />
 
           {error && (
             <div role="alert" className="mt-6 flex items-center gap-3 rounded-2xl border border-s-line px-4 py-3 text-[14px]">
