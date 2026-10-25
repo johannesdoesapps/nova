@@ -123,192 +123,222 @@ function AgentCard({ a }: { a: AgentCardData }) {
   );
 }
 
-export function TeamOverview({ onLaunch }: { onLaunch: (m: LaunchMode) => void }) {
+/** The Security Team's data (agents, posture, events) and schedules, loaded once and shared by the page's tabs. */
+export function useTeam(enabled: boolean) {
   const [team, setTeam] = useState<Team | null>(null);
   const [sched, setSched] = useState<Schedules | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const load = useCallback(() => {
-    Promise.all([jsonFetch<Team>("/api/security/team"), jsonFetch<Schedules>("/api/security/schedules")])
-      .then(([t, s]) => {
-        setTeam(t);
-        setSched(s);
-        setError(null);
-      })
-      .catch((e: Error) => setError(e.message));
-  }, []);
+  const [version, setVersion] = useState(0);
+  const reload = useCallback(() => setVersion((v) => v + 1), []);
   useEffect(() => {
+    if (!enabled) return;
     let live = true;
     Promise.all([jsonFetch<Team>("/api/security/team"), jsonFetch<Schedules>("/api/security/schedules")])
       .then(([t, s]) => {
         if (!live) return;
         setTeam(t);
         setSched(s);
+        setError(null);
       })
       .catch((e: Error) => live && setError(e.message));
     return () => {
       live = false;
     };
-  }, []);
+  }, [enabled, version]);
+  return { team, sched, error, reload };
+}
 
-  if (error)
-    return (
-      <p role="alert" className="mt-6 text-[13.5px] text-s-danger">
-        The Security Team overview couldn&apos;t load: {error}
-      </p>
-    );
-  if (!team || !sched) return <div className="s-skeleton mt-6 h-40 rounded-[20px]" />;
+const SEVERITY_DOT: Record<string, string> = { critical: "bg-red-600", high: "bg-orange-500", medium: "bg-amber-400", low: "bg-sky-500", info: "bg-s-ink-3" };
+
+/** Open findings by severity (each opens the filtered list) and by how certain they are, plus where everything stands. */
+export function PostureCard({ team, onSeverity }: { team: Team; onSeverity: (s: string) => void }) {
   const v = team.byVerification;
-
   return (
-    <div className="mt-6 space-y-5">
-      <section className="grid gap-3 md:grid-cols-[1.3fr_1fr]">
-        <div className="glass rounded-[20px] p-5">
-          <h2 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-s-ink-3">Open findings by verification</h2>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {[
-              ["Confirmed", v.confirmed ?? 0],
-              ["Likely", v.likely ?? 0],
-              ["Needs verification", v.needs_verification ?? 0],
-              ["Informational", v.informational ?? 0],
-            ].map(([k, n]) => (
-              <div key={k as string} className="rounded-xl border border-s-line px-3 py-2">
-                <p className="text-[22px] font-semibold tabular-nums">{n}</p>
-                <p className="text-[12px] text-s-ink-3">{k}</p>
-              </div>
-            ))}
-          </div>
-          <p className="mt-3 text-[13px] text-s-ink-2">
-            {team.status.open} open · {team.status.awaitingVerification} fixed and awaiting verification · {team.status.fixedVerified} fixed (verified by re-check) · {team.status.acceptedRisk} accepted risk · {team.status.falsePositive} false positive or disproven ·{" "}
-            {team.newThisWeek} new this week{team.reopenedAlertsThisWeek ? ` · ${team.reopenedAlertsThisWeek} alert(s) about reopened findings this week` : ""}.
-          </p>
-          <p className="mt-1 text-[12.5px] text-s-ink-3">
-            {team.lastAudit ? (
-              <>
-                Last completed check:{" "}
-                <Link href={`/agents/security/runs/${team.lastAudit.id}`} className="underline underline-offset-2">
-                  {team.lastAudit.action} of {team.lastAudit.asset ?? "—"}
-                </Link>
-                , {fmtTime(team.lastAudit.at)}.
-              </>
-            ) : (
-              "No completed checks yet."
-            )}{" "}
-            Counts cover what has been checked; anything not connected or not audited isn&apos;t included.
-          </p>
-        </div>
-        <div className="glass rounded-[20px] p-5">
-          <h2 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-s-ink-3">Next actions</h2>
-          {team.next.length ? (
-            <ul className="mt-2 space-y-2 text-[13.5px]">
-              {team.next.map((n, i) => (
-                <li key={i} className="flex items-start gap-2">
-                  <CircleDashed className="mt-0.5 h-4 w-4 shrink-0 text-s-ink-3" />
-                  {n.href ? (
-                    <Link href={n.href} className="hover:underline">
-                      {n.text}
-                    </Link>
-                  ) : n.action ? (
-                    <button type="button" onClick={() => onLaunch(n.action as LaunchMode)} className="text-left hover:underline">
-                      {n.text}
-                    </button>
-                  ) : (
-                    <span>{n.text}</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-2 flex items-center gap-2 text-[13.5px] text-s-ink-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500" /> Nothing waiting on you.
-            </p>
-          )}
-        </div>
-      </section>
-
-      <section aria-labelledby="team-agents">
-        <h2 id="team-agents" className="mb-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-s-ink-3">
-          The team
+    <section className="glass rounded-[20px] p-5" aria-labelledby="posture">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="posture" className="text-[15px] font-semibold">
+          Open findings
         </h2>
-        <p className="mb-3 text-[12.5px] text-s-ink-3">Statuses come from real runs and logged actions only. Some agents share an engine, so one audit can update more than one card.</p>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {team.agents.map((a) => (
-            <AgentCard key={a.id} a={a} />
-          ))}
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {(
-            [
-              ["audit", "Start audit"],
-              ["code_guardian", "Audit repository or PR"],
-              ["deployment", "Audit deployment"],
-              ["cloudflare", "Inspect Cloudflare"],
-            ] as [LaunchMode, string][]
-          ).map(([m, label]) => (
-            <button key={m} type="button" onClick={() => onLaunch(m)} className="h-9 rounded-full border border-s-line-strong px-4 text-[13px] font-medium transition hover:bg-s-hover">
-              {label}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section>
-        <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-[0.06em] text-s-ink-3">Connected services</h2>
-        <div className="grid gap-3 md:grid-cols-3">
-          {team.integrations.map((i) => (
-            <div key={i.id} className="glass rounded-[18px] p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="flex items-center gap-2 text-[14px] font-medium">
-                  <Plug className="h-4 w-4 text-s-ink-3" /> {NAME[i.id]}
-                </p>
-                <span className={cn("rounded-full px-2 py-0.5 text-[11.5px]", i.status === "connected" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : i.status === "not_connected" || i.status === "disconnected" ? "bg-s-hover text-s-ink-3" : "bg-amber-500/15 text-amber-700 dark:text-amber-300")}>
-                  {i.status === "connected" ? "Connected" : i.status === "reauth_required" ? "Reconnect needed" : i.status === "error" ? "Error" : !i.available ? "Not set up on this site" : "Not connected"}
-                </span>
-              </div>
-              <p className="mt-1.5 text-[12.5px] text-s-ink-2">{USE[i.id]}</p>
-              <p className="mt-1.5 text-[12px] text-s-ink-3">
-                {i.status === "connected" ? `${i.account ?? "Account"} · ${i.writeEnabled ? "changes allowed with your approval" : "read-only"}${i.lastCheckedAt ? ` · checked ${fmtTime(i.lastCheckedAt)}` : ""}` : i.lastError ?? "Audits that need it say so instead of guessing."}
-              </p>
-              <Link href="/connectors" className="mt-2 inline-block text-[12.5px] underline underline-offset-2">
-                {i.status === "connected" ? "Manage" : "Connect"}
-              </Link>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="grid gap-3 md:grid-cols-[1.4fr_1fr]">
-        <ScheduleManager sched={sched} integrations={team.integrations} onChanged={load} />
-        <div className="glass rounded-[20px] p-5">
-          <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-[0.06em] text-s-ink-3">Recent events</h2>
-          {team.events.length ? (
-            <ul className="space-y-1.5 text-[13px]">
-              {team.events.map((e) => (
-                <li key={e.id} className="flex justify-between gap-3">
-                  {e.runId ? (
-                    <Link href={`/agents/security/runs/${e.runId}`} className="truncate hover:underline">
-                      {e.label}
-                    </Link>
-                  ) : e.findingId ? (
-                    <Link href={`/agents/security/findings/${e.findingId}`} className="truncate hover:underline">
-                      {e.label}
-                    </Link>
-                  ) : (
-                    <span className="truncate">{e.label}</span>
-                  )}
-                  <span className="shrink-0 text-s-ink-3">{fmtTime(e.at)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-[13px] text-s-ink-3">No events yet.</p>
-          )}
-        </div>
-      </section>
-    </div>
+        <p className="text-[12px] text-s-ink-3">No overall score: counts cover only what has been checked.</p>
+      </div>
+      <div className="mt-3 grid grid-cols-5 gap-2">
+        {(["critical", "high", "medium", "low", "info"] as const).map((s) => (
+          <button key={s} type="button" onClick={() => onSeverity(s)} className="rounded-2xl border border-s-line px-1 py-2.5 text-center transition hover:bg-s-hover">
+            <span className="block text-[22px] font-semibold tabular-nums">{team.bySeverity[s] ?? 0}</span>
+            <span className="mt-0.5 inline-flex items-center gap-1.5 text-[12px] capitalize text-s-ink-2">
+              <span className={cn("h-2 w-2 rounded-full", SEVERITY_DOT[s])} aria-hidden /> {s}
+            </span>
+          </button>
+        ))}
+      </div>
+      <p className="mt-3 text-[13px] text-s-ink-2">
+        <span className="font-medium text-s-ink">{v.confirmed ?? 0}</span> confirmed · <span className="font-medium text-s-ink">{v.likely ?? 0}</span> likely ·{" "}
+        <span className="font-medium text-s-ink">{v.needs_verification ?? 0}</span> need verification · {v.informational ?? 0} informational
+      </p>
+      <p className="mt-1 text-[12.5px] text-s-ink-3">
+        {team.status.awaitingVerification} awaiting verification · {team.status.fixedVerified} fixed (verified) · {team.status.acceptedRisk} accepted risk · {team.status.falsePositive} false positive · {team.newThisWeek} new this
+        week
+        {team.reopenedAlertsThisWeek ? ` · ${team.reopenedAlertsThisWeek} reopened alert(s)` : ""}
+      </p>
+      <p className="mt-1 text-[12.5px] text-s-ink-3">
+        {team.lastAudit ? (
+          <>
+            Last completed check:{" "}
+            <Link href={`/agents/security/runs/${team.lastAudit.id}`} className="underline underline-offset-2">
+              {team.lastAudit.action} of {team.lastAudit.asset ?? "—"}
+            </Link>
+            , {fmtTime(team.lastAudit.at)}.
+          </>
+        ) : (
+          "No completed checks yet."
+        )}
+      </p>
+    </section>
   );
 }
 
-function ScheduleManager({ sched, integrations, onChanged }: { sched: Schedules; integrations: Integration[]; onChanged: () => void }) {
+export function NextActions({ team, onLaunch }: { team: Team; onLaunch: (m: LaunchMode) => void }) {
+  return (
+    <section className="glass rounded-[20px] p-5" aria-labelledby="next-actions">
+      <h2 id="next-actions" className="text-[15px] font-semibold">
+        Next actions
+      </h2>
+      {team.next.length ? (
+        <ul className="mt-2 space-y-2 text-[13.5px]">
+          {team.next.map((n, i) => (
+            <li key={i} className="flex items-start gap-2">
+              <CircleDashed className="mt-0.5 h-4 w-4 shrink-0 text-s-ink-3" />
+              {n.href ? (
+                <Link href={n.href} className="hover:underline">
+                  {n.text}
+                </Link>
+              ) : n.action ? (
+                <button type="button" onClick={() => onLaunch(n.action as LaunchMode)} className="text-left hover:underline">
+                  {n.text}
+                </button>
+              ) : (
+                <span>{n.text}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 flex items-center gap-2 text-[13.5px] text-s-ink-2">
+          <CheckCircle2 className="h-4 w-4 text-emerald-500" /> Nothing waiting on you.
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** A compact strip of the team's agents and their status, for the overview. */
+export function TeamStrip({ team, onOpen }: { team: Team; onOpen: () => void }) {
+  const busy = team.agents.filter((a) => a.status !== "idle");
+  return (
+    <section className="glass rounded-[20px] p-5" aria-labelledby="team-strip">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="team-strip" className="text-[15px] font-semibold">
+          The team
+        </h2>
+        <button type="button" onClick={onOpen} className="text-[13px] text-s-ink-2 underline underline-offset-2 hover:text-s-ink">
+          See all {team.agents.length} agents
+        </button>
+      </div>
+      <ul className="mt-3 flex flex-wrap gap-1.5">
+        {team.agents.map((a) => (
+          <li key={a.id} title={a.summary} className="inline-flex items-center gap-1.5 rounded-full border border-s-line px-2.5 py-1 text-[12px]">
+            <span className={cn("h-1.5 w-1.5 rounded-full", a.status === "working" ? "bg-sky-500" : a.status === "needs_approval" ? "bg-amber-500" : a.status === "error" ? "bg-red-500" : a.status === "completed" ? "bg-emerald-500" : "bg-s-ink-3/40")} aria-hidden />
+            {a.name.replace(/ Agent$/, "")}
+            <span className="sr-only">: {STATUS[a.status].label}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-[12.5px] text-s-ink-3">{busy.length ? `${busy.length} of ${team.agents.length} agents have activity.` : "No agent has run yet. Start an audit to put the team to work."}</p>
+    </section>
+  );
+}
+
+export function AgentGrid({ team }: { team: Team }) {
+  return (
+    <section aria-labelledby="team-agents">
+      <h2 id="team-agents" className="text-[15px] font-semibold">
+        Agents
+      </h2>
+      <p className="mb-3 mt-0.5 text-[12.5px] text-s-ink-3">Statuses come from real runs and logged actions only. Some agents share an engine, so one audit can update more than one card.</p>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {team.agents.map((a) => (
+          <AgentCard key={a.id} a={a} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function Integrations({ team }: { team: Team }) {
+  return (
+    <section aria-labelledby="integrations">
+      <h2 id="integrations" className="text-[15px] font-semibold">
+        Connected services
+      </h2>
+      <p className="mb-3 mt-0.5 text-[12.5px] text-s-ink-3">Your own connections. Agents use only what&apos;s connected here; anything else is reported as not checked.</p>
+      <div className="grid gap-3 md:grid-cols-3">
+        {team.integrations.map((i) => (
+          <div key={i.id} className="glass rounded-[18px] p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="flex items-center gap-2 text-[14px] font-medium">
+                <Plug className="h-4 w-4 text-s-ink-3" /> {NAME[i.id]}
+              </p>
+              <span className={cn("rounded-full px-2 py-0.5 text-[11.5px]", i.status === "connected" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : i.status === "not_connected" || i.status === "disconnected" ? "bg-s-hover text-s-ink-3" : "bg-amber-500/15 text-amber-700 dark:text-amber-300")}>
+                {i.status === "connected" ? "Connected" : i.status === "reauth_required" ? "Reconnect needed" : i.status === "error" ? "Error" : !i.available ? "Not set up on this site" : "Not connected"}
+              </span>
+            </div>
+            <p className="mt-1.5 text-[12.5px] text-s-ink-2">{USE[i.id]}</p>
+            <p className="mt-1.5 text-[12px] text-s-ink-3">
+              {i.status === "connected" ? `${i.account ?? "Account"} · ${i.writeEnabled ? "changes allowed with your approval" : "read-only"}${i.lastCheckedAt ? ` · checked ${fmtTime(i.lastCheckedAt)}` : ""}` : (i.lastError ?? "Audits that need it say so instead of guessing.")}
+            </p>
+            <Link href="/connectors" className="mt-2 inline-block text-[12.5px] underline underline-offset-2">
+              {i.status === "connected" ? "Manage" : "Connect"}
+            </Link>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function RecentEvents({ team }: { team: Team }) {
+  return (
+    <section className="glass rounded-[20px] p-5" aria-labelledby="recent-events">
+      <h2 id="recent-events" className="mb-2 text-[15px] font-semibold">
+        Recent events
+      </h2>
+      {team.events.length ? (
+        <ul className="space-y-1.5 text-[13px]">
+          {team.events.map((e) => (
+            <li key={e.id} className="flex justify-between gap-3">
+              {e.runId ? (
+                <Link href={`/agents/security/runs/${e.runId}`} className="truncate hover:underline">
+                  {e.label}
+                </Link>
+              ) : e.findingId ? (
+                <Link href={`/agents/security/findings/${e.findingId}`} className="truncate hover:underline">
+                  {e.label}
+                </Link>
+              ) : (
+                <span className="truncate">{e.label}</span>
+              )}
+              <span className="shrink-0 text-s-ink-3">{fmtTime(e.at)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[13px] text-s-ink-3">No events yet.</p>
+      )}
+    </section>
+  );
+}
+
+export function ScheduleManager({ sched, integrations, onChanged }: { sched: Schedules; integrations: Integration[]; onChanged: () => void }) {
   const [kind, setKind] = useState<ScheduleRow["kind"]>("repository");
   const [target, setTarget] = useState("");
   const [frequency, setFrequency] = useState<"daily" | "weekly">("weekly");

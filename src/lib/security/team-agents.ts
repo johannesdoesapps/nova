@@ -110,7 +110,7 @@ export const TEAM_AGENTS: Def[] = [
     runs: (r) => hasStep(r, "Independent verification"),
     events: (e) => e.action === "verification.disproven",
     permissions: () => ["Code already read for the audit (nothing new is fetched)", "One AI model call per audit, within your plan", "Can change a finding's verification, never its severity"],
-    details: { label: "Findings", href: "/agents/security" },
+    details: { label: "Findings", href: "/agents/security?tab=findings" },
   },
   {
     id: "protection",
@@ -125,7 +125,7 @@ export const TEAM_AGENTS: Def[] = [
     runs: (r) => r.agent === "sentinel" && (r.action === "cloudflare" || r.action === "deployment"),
     events: (e) => e.action.startsWith("cloudflare.change"),
     permissions: (i) => [connLabel(i, "cloudflare", "Cloudflare", "TLS setting changes"), connLabel(i, "vercel", "Vercel", "redeploys")],
-    details: { label: "Cloudflare and Vercel results", href: "/agents/security" },
+    details: { label: "Cloudflare and Vercel results", href: "/agents/security?tab=history" },
   },
   {
     id: "identity",
@@ -140,7 +140,7 @@ export const TEAM_AGENTS: Def[] = [
     notYet: "Session settings, your identity provider's configuration and third-party OAuth grants aren't audited yet.",
     runs: (r) => isGuardianAudit(r) || (r.agent === "sentinel" && r.action === "cloudflare" && hasStep(r, "Zero Trust Access")) || (r.agent === "sentinel" && r.action === "deployment"),
     permissions: (i) => ["Code you share (read-only)", conn(i, "cloudflare")?.status === "connected" ? "Cloudflare Access: read-only (never changed)" : "Cloudflare: not connected", conn(i, "vercel")?.status === "connected" ? "Vercel protection settings: read-only" : "Vercel: not connected"],
-    details: { label: "Findings", href: "/agents/security" },
+    details: { label: "Findings", href: "/agents/security?tab=findings" },
   },
   {
     id: "reporting",
@@ -186,7 +186,7 @@ export const TEAM_AGENTS: Def[] = [
     runs: (r) => r.agent === "sentinel" && r.action === "deployment",
     events: (e) => e.action === "deployment_gate.evaluated",
     permissions: (i) => [connLabel(i, "vercel", "Vercel", "redeploys"), "Environment-variable values: never read"],
-    details: { label: "Latest deployment audit", href: "/agents/security" },
+    details: { label: "Deployment audits", href: "/agents/security?tab=history" },
   },
   {
     id: "cloudflare",
@@ -201,7 +201,7 @@ export const TEAM_AGENTS: Def[] = [
     runs: (r) => r.agent === "sentinel" && r.action === "cloudflare",
     events: (e) => e.action.startsWith("cloudflare.change"),
     permissions: (i) => [connLabel(i, "cloudflare", "Cloudflare", "TLS setting changes"), "Only zones and areas your token allows"],
-    details: { label: "Latest Cloudflare review", href: "/agents/security" },
+    details: { label: "Cloudflare reviews", href: "/agents/security?tab=history" },
   },
   {
     id: "monitoring",
@@ -216,7 +216,7 @@ export const TEAM_AGENTS: Def[] = [
     notYet: "Configuration changes are noticed when a scheduled audit runs, not the moment they happen.",
     events: (e) => e.action === "schedule.ran" || e.action === "alert.raised",
     permissions: (i) => [`${i.activeSchedules} active schedule${i.activeSchedules === 1 ? "" : "s"}`, "Your own connections, read-only", i.alertsByEmail ? "Email alerts: on" : "Email alerts: off"],
-    details: { label: "Schedules and alerts", href: "/agents/security#schedules" },
+    details: { label: "Schedules and alerts", href: "/agents/security?tab=schedules" },
   },
   {
     id: "fix",
@@ -230,7 +230,7 @@ export const TEAM_AGENTS: Def[] = [
     ],
     events: (e) => e.action === "patch.proposed" || e.action === "fix.project_opened" || e.action === "cloudflare.change_applied",
     permissions: (i) => ["Writes nothing without your approval", connLabel(i, "github", "GitHub", "branches and pull requests"), connLabel(i, "cloudflare", "Cloudflare", "TLS setting changes")],
-    details: { label: "Findings with proposed fixes", href: "/agents/security" },
+    details: { label: "Findings with proposed fixes", href: "/agents/security?tab=findings" },
   },
   {
     id: "orchestrator",

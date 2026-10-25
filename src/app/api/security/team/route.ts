@@ -86,12 +86,12 @@ export async function GET() {
     const next: { text: string; href?: string; action?: string }[] = [];
     const gh = integrations[0]!;
     if (gh.status !== "connected") next.push({ text: "Connect GitHub so Code Guardian can audit private repositories and pull requests.", href: "/connectors" });
-    if (byVerification.needs_verification) next.push({ text: `${byVerification.needs_verification} open finding(s) still need verification: review them before acting.`, href: "/agents/security" });
-    if (bySeverity.critical || bySeverity.high) next.push({ text: `${(bySeverity.critical ?? 0) + (bySeverity.high ?? 0)} open critical/high finding(s): start with these.`, href: "/agents/security" });
+    if (byVerification.needs_verification) next.push({ text: `${byVerification.needs_verification} open finding(s) still need verification: review them before acting.`, href: "/agents/security?tab=findings" });
+    if (bySeverity.critical || bySeverity.high) next.push({ text: `${(bySeverity.critical ?? 0) + (bySeverity.high ?? 0)} open critical/high finding(s): start with these.`, href: "/agents/security?tab=findings" });
     if (status.awaitingVerification) next.push({ text: `${status.awaitingVerification} fix(es) are awaiting verification: run a re-check to confirm them.` });
     if (integrations[1]!.status === "connected" && !runs.some((r) => r.action === "deployment")) next.push({ text: "Run a Vercel deployment audit.", action: "deployment" });
     if (integrations[2]!.status === "connected" && !runs.some((r) => r.action === "cloudflare")) next.push({ text: "Run a Cloudflare protection review.", action: "cloudflare" });
-    if (!schedules.length) next.push({ text: "Schedule a daily or weekly audit so regressions are caught without you remembering to check." });
+    if (!schedules.length) next.push({ text: "Schedule a daily or weekly audit so regressions are caught without you remembering to check.", href: "/agents/security?tab=schedules" });
 
     return NextResponse.json({
       agents,

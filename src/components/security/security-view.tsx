@@ -1,21 +1,22 @@
 "use client";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, Check, ChevronRight, CircleAlert, Network, Play, ScanSearch, ShieldCheck, Trash2, Rocket } from "lucide-react";
+import { ArrowLeft, ChevronRight, CircleAlert, Cloud, Code2, FileSearch, Globe, Network, Play, Plus, Rocket, ScanSearch, ShieldCheck, Trash2 } from "lucide-react";
 import { useApp } from "@/components/layout/app-context";
 import { StudioHeader } from "@/components/studio/frame";
-import { Segmented } from "@/components/studio/ui";
+import { Menu, MenuItem, MenuLabel, Segmented } from "@/components/studio/ui";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import type { SecurityAgentDef } from "@/lib/security/agents";
 import { MODE_INFO, type AuditMode } from "@/lib/security/audit";
 import type { StoredAnalysis } from "@/lib/security/audit-report";
 import { cn } from "@/lib/utils";
 import { MonitoringNote } from "./audit-views";
-import { AGENT_NAME, AgentBadge, fmtTime, ICON_OF, RunStatus, SEVERITY_DOT } from "./bits";
+import { AGENT_NAME, AgentBadge, fmtTime, ICON_OF, RunStatus } from "./bits";
 import { EMPTY_FILTERS, FindingsPanel, type FindingFilters } from "./findings-panel";
 import type { Target } from "./forms";
 import { Launcher, type LaunchMode } from "./launcher";
-import { TeamOverview } from "./team-overview";
+import { AgentGrid, Integrations, NextActions, PostureCard, RecentEvents, ScheduleManager, TeamStrip, useTeam } from "./team-overview";
 
 interface Tool {
   id: string;
@@ -49,49 +50,30 @@ interface Overview {
   totals: { all: number; open: number; assets: string[] };
 }
 
-type Tab = "findings" | "history" | "targets" | "tools";
+const TABS = ["overview", "agents", "findings", "history", "schedules", "setup"] as const;
+type Tab = (typeof TABS)[number];
 
-/** Aegis (coordination) and Bastion (protection) sit above the agents; shown in the same card style. */
+const RUN_ACTION: Record<string, string> = { audit: "code audit", pr_audit: "pull-request audit", scan: "website scan", deployment: "Vercel deployment audit", cloudflare: "Cloudflare review", investigate: "log investigation" };
+
+/** Aegis (coordination) and Bastion (protection): the layers above the engines, each with its own workspace. */
 const LAYERS = [
   {
     id: "aegis",
     icon: "network",
     name: "Orbis Aegis",
     role: "Security command center",
-    state: "Ready",
     href: "/agents/security/aegis",
     action: "Open command center",
     description: "One prioritised view across every security agent: what matters now, attack-path hypotheses, investigations, remediation that only counts as fixed after a re-check, and what isn't covered.",
-    capabilities: [
-      "One ranked list of risks from every agent, with the points behind each rank",
-      "Attack-path hypotheses across agents, marked as not reproduced",
-      "Investigations, tasks and remediation (fixed only after a re-check)",
-      "Facts you declare per asset: criticality, exposure, data held, links",
-      "Coverage: assessed, partial, stale, or not available yet",
-      "Executive, technical and operational reports",
-    ],
-    toolsLabel: "Draws on",
-    tools: ["Sentinel", "Threat Hunter", "Code Guardian", "CISA KEV"],
   },
   {
     id: "bastion",
     icon: "shield",
     name: "Orbis Bastion",
     role: "Workspace security and protection layer",
-    state: "Enforcing",
     href: "/agents/security/bastion",
     action: "Open Bastion",
     description: "Your agents, connected services and projects: what they can do, what's wrong, and rules you add. Every agent's actions are checked on Orbis's servers before they run.",
-    capabilities: [
-      "Checks every agent action on the server before it runs",
-      "Stops credentials in code, secret-file reads and private-network requests",
-      "Asks for your approval on risky actions; refuses critical ones",
-      "Agent inventory: pause, limit to projects, restrict tools",
-      "Workspace checks, code checks and a pre-deployment gate",
-      "Your own stricter rules, team roles and a signed audit log",
-    ],
-    toolsLabel: "Built in",
-    tools: ["Policy engine", "Secret and path guards", "Signed audit log"],
   },
 ] as const;
 
@@ -100,11 +82,20 @@ export function SecurityView() {
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
-  const [tab, setTab] = useState<Tab>("findings");
+  const router = useRouter();
+  const params = useSearchParams();
+  const fromUrl = params.get("tab");
+  const tab: Tab = (TABS as readonly string[]).includes(fromUrl ?? "") ? (fromUrl as Tab) : "overview";
+  const setTab = useCallback((t: Tab) => router.replace(t === "overview" ? "/agents/security" : `/agents/security?tab=${t}`, { scroll: false }), [router]);
   const [filters, setFilters] = useState<FindingFilters>(EMPTY_FILTERS);
   const [launch, setLaunch] = useState<LaunchMode | null>(null);
-  const reload = useCallback(() => setVersion((v) => v + 1), []);
   const signedOut = integrations.supabase ? !user : true;
+  const team = useTeam(!signedOut);
+  const teamReload = team.reload;
+  const reloadAll = useCallback(() => {
+    setVersion((v) => v + 1);
+    teamReload();
+  }, [teamReload]);
 
   useEffect(() => {
     if (signedOut) return;
@@ -157,8 +148,35 @@ export function SecurityView() {
   const toolById = new Map(data?.tools.map((t) => [t.id, t]) ?? []);
   const topRuns = data?.runs.filter((r) => !r.parent_id) ?? [];
   const childCount = (id: string) => data?.runs.filter((r) => r.parent_id === id).length ?? 0;
-  const audits = topRuns.filter((r) => r.stats?.audit).slice(0, 6);
-  const runTitle = (r: Run) => (r.stats?.audit ? `Sentinel · ${MODE_INFO[r.stats.audit.mode].label}` : `${AGENT_NAME[r.agent]} · ${r.action}${r.scope ? ` (${r.scope})` : ""}`);
+  const runTitle = (r: Run) => (r.stats?.audit ? `Sentinel · ${MODE_INFO[r.stats.audit.mode].label}` : `${AGENT_NAME[r.agent]} · ${RUN_ACTION[r.action] ?? r.action}${r.scope ? ` (${r.scope})` : ""}`);
+  const showFindings = (severity: string) => {
+    setFilters({ ...EMPTY_FILTERS, severity: severity as FindingFilters["severity"], status: "open" });
+    setTab("findings");
+  };
+
+  const runList = (runs: Run[]) => (
+    <ul className="space-y-2">
+      {runs.map((r) => (
+        <li key={r.id}>
+          <Link href={`/agents/security/runs/${r.id}`} className="glass group flex items-center gap-3 rounded-2xl px-4 py-3 transition hover:border-s-line-strong">
+            <AgentBadge agent={r.agent} icon={ICON_OF[r.agent]!} size="sm" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[14px] font-medium">{runTitle(r)}</p>
+              <p className="truncate text-[12.5px] text-s-ink-3">
+                {r.asset ?? "—"} · {fmtTime(r.started_at)}
+                {typeof r.stats?.findings === "number" ? ` · ${r.stats.findings} findings` : ""}
+                {childCount(r.id) ? ` · ${childCount(r.id)} agent runs` : ""}
+                {r.stats?.gate ? ` · gate ${r.stats.gate.outcome}` : ""}
+                {r.error ? ` · ${r.error}` : ""}
+              </p>
+            </div>
+            <RunStatus status={r.status} />
+            <ChevronRight className="h-4 w-4 text-s-ink-3" />
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
 
   return (
     <>
@@ -168,33 +186,46 @@ export function SecurityView() {
           <div className="s-in flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
             <div>
               <h1 className="font-serif text-[clamp(34px,5vw,46px)] leading-[1.05] tracking-[-0.01em]">Security Team</h1>
-              <p className="mt-2 max-w-2xl text-[15.5px] text-s-ink-2">Three specialised agents that check what you own using real scanners and data, explain the results, and help you fix them, coordinated by Aegis and protected by Bastion. Nothing is changed without your approval.</p>
+              <p className="mt-2 max-w-2xl text-[15.5px] text-s-ink-2">
+                Eleven agents audit your code, repositories, deployments and Cloudflare protection, verify what they find and help you fix it. Coordinated by Aegis, guarded by Bastion — nothing changes
+                without your approval.
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setLaunch("deployment")}
+              <Menu
+                label="New check"
+                align="end"
+                width={300}
                 disabled={!data}
-                className="inline-flex h-10 items-center gap-2 rounded-xl border border-s-line-strong px-4 text-[14px] font-medium transition hover:bg-s-hover disabled:opacity-50"
+                buttonClassName="inline-flex h-10 items-center gap-2 rounded-xl border border-s-line-strong px-4 text-[14px] font-medium transition hover:bg-s-hover disabled:opacity-50"
+                button={
+                  <>
+                    <Plus className="h-4 w-4" /> New check
+                  </>
+                }
               >
-                <Rocket className="h-4 w-4" /> Audit deployment
-              </button>
-              <button
-                type="button"
-                onClick={() => setLaunch("cloudflare")}
-                disabled={!data}
-                className="inline-flex h-10 items-center gap-2 rounded-xl border border-s-line-strong px-4 text-[14px] font-medium transition hover:bg-s-hover disabled:opacity-50"
-              >
-                <ShieldCheck className="h-4 w-4" /> Review Cloudflare
-              </button>
-              <button
-                type="button"
-                onClick={() => setLaunch("coordinated")}
-                disabled={!data}
-                className="inline-flex h-10 items-center gap-2 rounded-xl border border-s-line-strong px-4 text-[14px] font-medium transition hover:bg-s-hover disabled:opacity-50"
-              >
-                <Network className="h-4 w-4" /> Coordinated investigation
-              </button>
+                <MenuLabel>Code</MenuLabel>
+                <MenuItem icon={<Code2 />} hint="Upload files, a GitHub repository or a pull request" onClick={() => setLaunch("code_guardian")}>
+                  Audit code or pull request
+                </MenuItem>
+                <MenuLabel>Live applications</MenuLabel>
+                <MenuItem icon={<Globe />} hint="Headers, TLS, cookies and exposure on a site you own" onClick={() => setLaunch("sentinel")}>
+                  Scan a website
+                </MenuItem>
+                <MenuItem icon={<Rocket />} hint="Project settings, variables and the deploy gate" onClick={() => setLaunch("deployment")}>
+                  Audit a Vercel deployment
+                </MenuItem>
+                <MenuItem icon={<Cloud />} hint="TLS, WAF, DDoS, bots, DNS and Access" onClick={() => setLaunch("cloudflare")}>
+                  Review Cloudflare protection
+                </MenuItem>
+                <MenuLabel>Investigate</MenuLabel>
+                <MenuItem icon={<FileSearch />} hint="Look for attacks in server or cloud logs" onClick={() => setLaunch("threat_hunter")}>
+                  Investigate logs
+                </MenuItem>
+                <MenuItem icon={<Network />} hint="Several agents, one linked report" onClick={() => setLaunch("coordinated")}>
+                  Coordinated investigation
+                </MenuItem>
+              </Menu>
               <button
                 type="button"
                 onClick={() => setLaunch("audit")}
@@ -206,313 +237,249 @@ export function SecurityView() {
             </div>
           </div>
 
-          <TeamOverview onLaunch={setLaunch} />
-
-          {error && (
+          {(error || team.error) && (
             <div role="alert" className="mt-6 flex items-center gap-3 rounded-2xl border border-s-line px-4 py-3 text-[14px]">
-              <CircleAlert className="h-4 w-4 text-s-danger" /> <span className="flex-1">{error}</span>
-              <button type="button" onClick={reload} className="rounded-xl border border-s-line-strong px-3 py-1.5 text-[13px] hover:bg-s-hover">
+              <CircleAlert className="h-4 w-4 text-s-danger" /> <span className="flex-1">{error ?? team.error}</span>
+              <button type="button" onClick={reloadAll} className="rounded-xl border border-s-line-strong px-3 py-1.5 text-[13px] hover:bg-s-hover">
                 Try again
               </button>
             </div>
           )}
 
-          <div className="mt-7 grid gap-4 md:grid-cols-2">
-            {LAYERS.map((l, i) => (
-              <article key={l.id} className="glass relative flex flex-col rounded-[22px] p-5 transition duration-300 hover:border-s-line-strong hover:shadow-[var(--s-shadow)]" style={{ animation: `s-in .34s cubic-bezier(.2,.7,.2,1) ${i * 50}ms both` }}>
-                <div className="flex items-start gap-3.5">
-                  <AgentBadge agent={l.id} icon={l.icon} />
-                  <div className="min-w-0 flex-1">
-                    <h2 className="text-[16px] font-semibold tracking-[-0.01em]">{l.name}</h2>
-                    <p className="text-[12.5px] text-s-ink-3">{l.role}</p>
-                  </div>
-                  <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 text-[12px] text-emerald-600 dark:text-emerald-400">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden /> {l.state}
-                  </span>
-                </div>
-                <p className="mt-3.5 text-[13.5px] leading-relaxed text-s-ink-2">{l.description}</p>
-                <ul className="mt-3 space-y-1">
-                  {l.capabilities.map((c) => (
-                    <li key={c} className="flex items-start gap-2 text-[12.5px] text-s-ink-2">
-                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-s-ink-3" /> {c}
-                    </li>
-                  ))}
-                </ul>
-                <ul className="mt-4 flex flex-wrap gap-1.5" aria-label={l.toolsLabel}>
-                  {l.tools.map((t) => (
-                    <li key={t} className="inline-flex items-center gap-1.5 rounded-full border border-s-line px-2.5 py-1 text-[11.5px] text-s-ink-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
-                      {t}
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-auto pt-5">
-                  <Link href={l.href} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-s-line-strong text-[14px] font-medium transition hover:border-transparent hover:bg-s-accent hover:text-s-accent-ink">
-                    {l.action} <ChevronRight className="h-4 w-4" />
-                  </Link>
-                </div>
-              </article>
-            ))}
-          </div>
-
-          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {!data
-              ? [0, 1, 2].map((i) => <div key={i} className="glass s-skeleton h-[330px] rounded-[22px]" />)
-              : active.map((a, i) => {
-                  const latest = data.latest[a.id];
-                  return (
-                    <article key={a.id} className="glass relative flex flex-col rounded-[22px] p-5 transition duration-300 hover:border-s-line-strong hover:shadow-[var(--s-shadow)]" style={{ animation: `s-in .34s cubic-bezier(.2,.7,.2,1) ${i * 50}ms both` }}>
-                      <div className="flex items-start gap-3.5">
-                        <AgentBadge agent={a.id} icon={a.icon} />
-                        <div className="min-w-0 flex-1">
-                          <h2 className="text-[16px] font-semibold tracking-[-0.01em]">{a.name}</h2>
-                          <p className="text-[12.5px] text-s-ink-3">{a.role}</p>
-                        </div>
-                        {latest ? (
-                          <Link href={`/agents/security/runs/${latest.runId}`} title={`Last run ${fmtTime(latest.at)}`} className="rounded-lg px-1.5 py-0.5 hover:bg-s-hover">
-                            <RunStatus status={latest.status} />
-                          </Link>
-                        ) : (
-                          <RunStatus status={null} />
-                        )}
-                      </div>
-                      <p className="mt-3.5 text-[13.5px] leading-relaxed text-s-ink-2">{a.description}</p>
-                      <ul className="mt-3 space-y-1">
-                        {a.capabilities.map((c) => (
-                          <li key={c} className="flex items-start gap-2 text-[12.5px] text-s-ink-2">
-                            <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-s-ink-3" /> {c}
-                          </li>
-                        ))}
-                      </ul>
-                      <ul className="mt-4 flex flex-wrap gap-1.5" aria-label="Tools">
-                        {a.tools.map((id) => {
-                          const t = toolById.get(id);
-                          if (!t) return null;
-                          return (
-                            <li key={id} title={t.available ? (t.reason ?? t.description) : t.reason} className={cn("inline-flex items-center gap-1.5 rounded-full border border-s-line px-2.5 py-1 text-[11.5px]", t.available ? "text-s-ink-2" : "text-s-ink-3")}>
-                              <span className={cn("h-1.5 w-1.5 rounded-full", t.available ? "bg-emerald-500" : "bg-s-ink-3/50")} aria-hidden />
-                              {t.name}
-                              <span className="sr-only">{t.available ? "available" : "not connected"}</span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                      <div className="mt-auto pt-5">
-                        <button type="button" onClick={() => setLaunch(a.id as LaunchMode)} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-s-line-strong text-[14px] font-medium transition hover:border-transparent hover:bg-s-accent hover:text-s-accent-ink">
-                          <Play className="h-4 w-4" /> {a.action?.label}
-                        </button>
-                        {a.id === "threat_hunter" && (
-                          <Link href="/agents/security/hunter" className="mt-2 inline-flex h-9 w-full items-center justify-center rounded-xl text-[13px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink">
-                            Open investigations and detection lab
-                          </Link>
-                        )}
-                        {a.id === "code_guardian" && (
-                          <Link href="/agents/security/guardian" className="mt-2 inline-flex h-9 w-full items-center justify-center rounded-xl text-[13px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink">
-                            Open code health, impact analysis and repairs
-                          </Link>
-                        )}
-                      </div>
-                    </article>
-                  );
-                })}
-          </div>
-
-          {planned.length > 0 && (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {planned.map((a) => (
-                <div key={a.id} className="flex items-start gap-3 rounded-[18px] border border-dashed border-s-line-strong px-4 py-3.5 opacity-80">
-                  <AgentBadge agent={a.id} icon={a.icon} size="sm" />
-                  <div className="min-w-0">
-                    <p className="text-[13.5px] font-medium">
-                      {a.name} <span className="ml-1 rounded-full border border-s-line px-2 py-0.5 text-[11px] font-normal text-s-ink-3">Planned</span>
-                    </p>
-                    <p className="mt-0.5 text-[12.5px] text-s-ink-3">{a.description}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {data && (
-            <section className="glass mt-8 rounded-[22px] p-5" aria-labelledby="open-findings">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 id="open-findings" className="text-[15px] font-semibold">
-                  Open findings
-                </h2>
-                <p className="text-[12px] text-s-ink-3">Findings not yet fixed, accepted or marked false positive, counted by severity. No overall score is calculated.</p>
-              </div>
-              <div className="mt-4 grid grid-cols-5 gap-2">
-                {(["critical", "high", "medium", "low", "info"] as const).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => {
-                      setTab("findings");
-                      setFilters({ ...EMPTY_FILTERS, severity: s, status: "open" });
-                    }}
-                    className="rounded-2xl border border-s-line px-2 py-3 text-center transition hover:bg-s-hover"
-                  >
-                    <span className="block text-[22px] font-semibold tabular-nums">{data.openCounts[s] ?? 0}</span>
-                    <span className="mt-0.5 inline-flex items-center gap-1.5 text-[12px] capitalize text-s-ink-2">
-                      <span className={cn("h-2 w-2 rounded-full", SEVERITY_DOT[s])} /> {s}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <p className="mt-3 text-[12.5px] text-s-ink-2">
-                {data.openPosture.confirmedOrLikely} confirmed or likely · {data.openPosture.unverified} still need verification (leads from reading code or heuristics).
-              </p>
-            </section>
-          )}
-
-          {data && (
-            <section className="glass mt-4 rounded-[22px] p-5" aria-labelledby="audits">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 id="audits" className="text-[15px] font-semibold">
-                  Audits
-                </h2>
-                <button type="button" onClick={() => setLaunch("audit")} className="text-[13px] text-s-ink-2 underline underline-offset-2 hover:text-s-ink">
-                  Run an audit
-                </button>
-              </div>
-              {audits.length === 0 ? (
-                <p className="mt-2 text-[13.5px] text-s-ink-2">
-                  No audits yet. A Sentinel audit maps your website and code, runs every check in scope, links findings into attack paths and lists what wasn&apos;t assessed. Modes:{" "}
-                  {Object.values(MODE_INFO)
-                    .map((m) => m.label)
-                    .join(", ")}
-                  .
-                </p>
-              ) : (
-                <ul className="mt-3 divide-y divide-s-line">
-                  {audits.map((r) => (
-                    <li key={r.id}>
-                      <Link href={`/agents/security/runs/${r.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 text-[13.5px] hover:underline">
-                        <span className="font-medium">{MODE_INFO[r.stats.audit!.mode].label}</span>
-                        <span className="text-s-ink-3">{fmtTime(r.started_at)}</span>
-                        {r.stats.posture && (
-                          <span className="text-s-ink-2">
-                            open critical/high {r.stats.posture.open.critical}/{r.stats.posture.open.high} · {r.stats.posture.confirmedOrLikely} confirmed or likely
-                          </span>
-                        )}
-                        {r.stats.gate && (
-                          <span className={cn("font-medium", r.stats.gate.outcome === "passed" ? "text-emerald-600 dark:text-emerald-400" : "text-s-danger")}>Gate {r.stats.gate.outcome}</span>
-                        )}
-                        <span className="ml-auto">
-                          <RunStatus status={r.status} />
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="mt-3">
-                <MonitoringNote />
-              </div>
-            </section>
-          )}
-
-          <div className="mt-8">
+          <div className="mt-7 overflow-x-auto pb-1">
             <Segmented
               label="Security sections"
               value={tab}
               onChange={setTab}
               options={[
+                { value: "overview", label: "Overview" },
+                { value: "agents", label: "Agents" },
                 { value: "findings", label: "Findings" },
                 { value: "history", label: "History" },
-                { value: "targets", label: "Websites" },
-                { value: "tools", label: "Tools" },
+                { value: "schedules", label: "Schedules" },
+                { value: "setup", label: "Setup" },
               ]}
             />
-            <div className="mt-5">
-              {tab === "findings" && <FindingsPanel filters={filters} onFilters={setFilters} assets={data?.totals.assets ?? []} version={version} />}
-              {tab === "history" &&
-                (topRuns.length === 0 ? (
-                  <p className="rounded-[22px] border border-dashed border-s-line-strong px-6 py-10 text-center text-[14px] text-s-ink-2">No scans, investigations or audits yet.</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {topRuns.map((r) => (
-                      <li key={r.id}>
-                        <Link href={`/agents/security/runs/${r.id}`} className="glass group flex items-center gap-3 rounded-2xl px-4 py-3 transition hover:border-s-line-strong">
-                          <AgentBadge agent={r.agent} icon={ICON_OF[r.agent]!} size="sm" />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-[14px] font-medium">{runTitle(r)}</p>
-                            <p className="truncate text-[12.5px] text-s-ink-3">
-                              {r.asset ?? "—"} · {fmtTime(r.started_at)}
-                              {typeof r.stats?.findings === "number" ? ` · ${r.stats.findings} findings` : ""}
-                              {childCount(r.id) ? ` · ${childCount(r.id)} agent runs` : ""}
-                              {r.error ? ` · ${r.error}` : ""}
-                            </p>
-                          </div>
-                          <RunStatus status={r.status} />
-                          <ChevronRight className="h-4 w-4 text-s-ink-3" />
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                ))}
-              {tab === "targets" && data && (
-                <div className="space-y-3">
-                  <p className="text-[13.5px] text-s-ink-2">Websites Orbis Sentinel may scan. Ownership is proved with a token and re-checked before every scan.</p>
-                  {data.targets.length === 0 ? (
-                    <p className="rounded-[22px] border border-dashed border-s-line-strong px-6 py-8 text-center text-[14px] text-s-ink-2">No websites yet. Add one from Scan website.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {data.targets.map((t) => (
-                        <li key={t.id} className="glass flex items-center gap-3 rounded-2xl px-4 py-3">
-                          <span className="min-w-0 flex-1 truncate text-[14px]">{t.hostname}</span>
-                          {t.verified_at ? (
-                            <span className="inline-flex items-center gap-1 text-[12.5px] text-emerald-600 dark:text-emerald-400">
-                              <ShieldCheck className="h-4 w-4" /> Verified {fmtTime(t.verified_at)}
-                            </span>
-                          ) : (
-                            <span className="text-[12.5px] text-s-ink-3">Not verified</span>
-                          )}
-                          <button
-                            type="button"
-                            aria-label={`Remove ${t.hostname}`}
-                            onClick={async () => {
-                              if (!window.confirm(`Remove ${t.hostname}? You'll need to verify it again to scan it.`)) return;
-                              try {
-                                await jsonFetch(`/api/security/targets/${t.id}`, { method: "DELETE" });
-                                await refreshTargets();
-                              } catch (e) {
-                                setError((e as Error).message);
-                              }
-                            }}
-                            className="rounded-lg p-1.5 text-s-ink-3 hover:bg-s-hover hover:text-s-ink"
-                          >
-                            <Trash2 className="h-4 w-4" />
+          </div>
+
+          <div className="mt-5 space-y-4">
+            {tab === "overview" &&
+              (!team.team || !data ? (
+                <div className="grid gap-4 md:grid-cols-[1.4fr_1fr]">
+                  <div className="glass s-skeleton h-56 rounded-[20px]" />
+                  <div className="glass s-skeleton h-56 rounded-[20px]" />
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-4 md:grid-cols-[1.4fr_1fr]">
+                    <PostureCard team={team.team} onSeverity={showFindings} />
+                    <NextActions team={team.team} onLaunch={setLaunch} />
+                  </div>
+                  <TeamStrip team={team.team} onOpen={() => setTab("agents")} />
+                  <div className="grid gap-4 md:grid-cols-[1.4fr_1fr]">
+                    <section className="glass rounded-[20px] p-5" aria-labelledby="recent-runs">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <h2 id="recent-runs" className="text-[15px] font-semibold">
+                          Recent checks
+                        </h2>
+                        {topRuns.length > 5 && (
+                          <button type="button" onClick={() => setTab("history")} className="text-[13px] text-s-ink-2 underline underline-offset-2 hover:text-s-ink">
+                            All {topRuns.length}
                           </button>
+                        )}
+                      </div>
+                      <div className="mt-3">
+                        {topRuns.length ? (
+                          runList(topRuns.slice(0, 5))
+                        ) : (
+                          <p className="text-[13.5px] text-s-ink-2">Nothing has run yet. Start with a Security audit, or pick a single check from New check.</p>
+                        )}
+                      </div>
+                      <div className="mt-3">
+                        <MonitoringNote />
+                      </div>
+                    </section>
+                    <RecentEvents team={team.team} />
+                  </div>
+                </>
+              ))}
+
+            {tab === "agents" &&
+              (!team.team ? (
+                <div className="glass s-skeleton h-72 rounded-[20px]" />
+              ) : (
+                <>
+                  <AgentGrid team={team.team} />
+                  <section aria-labelledby="engines" className="pt-4">
+                    <h2 id="engines" className="text-[15px] font-semibold">
+                      Engines and workspaces
+                    </h2>
+                    <p className="mb-3 mt-0.5 text-[12.5px] text-s-ink-3">The scanners and layers the agents run on, each with its own workspace.</p>
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      {active.map((a) => {
+                        const latest = data?.latest[a.id];
+                        const workspace = a.id === "threat_hunter" ? "/agents/security/hunter" : a.id === "code_guardian" ? "/agents/security/guardian" : null;
+                        return (
+                          <article key={a.id} className="glass flex flex-col rounded-[18px] p-4">
+                            <div className="flex items-start gap-3">
+                              <AgentBadge agent={a.id} icon={a.icon} size="sm" />
+                              <div className="min-w-0 flex-1">
+                                <h3 className="text-[14.5px] font-medium">{a.name}</h3>
+                                <p className="text-[12px] text-s-ink-3">{a.role}</p>
+                              </div>
+                              {latest ? (
+                                <Link href={`/agents/security/runs/${latest.runId}`} title={`Last run ${fmtTime(latest.at)}`} className="rounded-lg px-1 hover:bg-s-hover">
+                                  <RunStatus status={latest.status} />
+                                </Link>
+                              ) : (
+                                <RunStatus status={null} />
+                              )}
+                            </div>
+                            <p className="mt-2 text-[12.5px] leading-snug text-s-ink-2">{a.description}</p>
+                            <ul className="mt-2 flex flex-wrap gap-1" aria-label="Tools">
+                              {a.tools.map((id) => {
+                                const t = toolById.get(id);
+                                if (!t) return null;
+                                return (
+                                  <li key={id} title={t.available ? (t.reason ?? t.description) : t.reason} className={cn("inline-flex items-center gap-1 rounded-full border border-s-line px-2 py-0.5 text-[11px]", t.available ? "text-s-ink-2" : "text-s-ink-3")}>
+                                    <span className={cn("h-1.5 w-1.5 rounded-full", t.available ? "bg-emerald-500" : "bg-s-ink-3/50")} aria-hidden />
+                                    {t.name}
+                                    <span className="sr-only">{t.available ? "available" : "not connected"}</span>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                            <div className="mt-auto flex flex-wrap gap-2 pt-3">
+                              <button type="button" onClick={() => setLaunch(a.id as LaunchMode)} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-s-line-strong px-3 text-[12.5px] font-medium hover:bg-s-hover">
+                                <Play className="h-3.5 w-3.5" /> {a.action?.label}
+                              </button>
+                              {workspace && (
+                                <Link href={workspace} className="inline-flex h-8 items-center rounded-full px-3 text-[12.5px] text-s-ink-2 hover:bg-s-hover hover:text-s-ink">
+                                  Open workspace
+                                </Link>
+                              )}
+                            </div>
+                          </article>
+                        );
+                      })}
+                      {LAYERS.map((l) => (
+                        <article key={l.id} className="glass flex flex-col rounded-[18px] p-4">
+                          <div className="flex items-start gap-3">
+                            <AgentBadge agent={l.id} icon={l.icon} size="sm" />
+                            <div className="min-w-0 flex-1">
+                              <h3 className="text-[14.5px] font-medium">{l.name}</h3>
+                              <p className="text-[12px] text-s-ink-3">{l.role}</p>
+                            </div>
+                          </div>
+                          <p className="mt-2 text-[12.5px] leading-snug text-s-ink-2">{l.description}</p>
+                          <div className="mt-auto pt-3">
+                            <Link href={l.href} className="inline-flex h-8 items-center gap-1 rounded-full border border-s-line-strong px-3 text-[12.5px] font-medium hover:bg-s-hover">
+                              {l.action} <ChevronRight className="h-3.5 w-3.5" />
+                            </Link>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                    {planned.length > 0 && (
+                      <ul className="mt-3 space-y-1 text-[12.5px] text-s-ink-3">
+                        {planned.map((a) => (
+                          <li key={a.id}>
+                            Planned: <span className="text-s-ink-2">{a.name}</span> — {a.description}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                </>
+              ))}
+
+            {tab === "findings" && <FindingsPanel filters={filters} onFilters={setFilters} assets={data?.totals.assets ?? []} version={version} />}
+
+            {tab === "history" &&
+              (topRuns.length === 0 ? (
+                <p className="rounded-[22px] border border-dashed border-s-line-strong px-6 py-10 text-center text-[14px] text-s-ink-2">No scans, audits or investigations yet.</p>
+              ) : (
+                runList(topRuns)
+              ))}
+
+            {tab === "schedules" &&
+              (!team.team || !team.sched ? <div className="glass s-skeleton h-56 rounded-[20px]" /> : <ScheduleManager sched={team.sched} integrations={team.team.integrations} onChanged={team.reload} />)}
+
+            {tab === "setup" && (
+              <div className="space-y-8">
+                {team.team && <Integrations team={team.team} />}
+                {data && (
+                  <section aria-labelledby="websites">
+                    <h2 id="websites" className="text-[15px] font-semibold">
+                      Websites
+                    </h2>
+                    <p className="mb-3 mt-0.5 text-[12.5px] text-s-ink-3">Websites Sentinel may scan. Ownership is proved with a token and re-checked before every scan.</p>
+                    {data.targets.length === 0 ? (
+                      <p className="rounded-[22px] border border-dashed border-s-line-strong px-6 py-8 text-center text-[14px] text-s-ink-2">No websites yet.</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {data.targets.map((t) => (
+                          <li key={t.id} className="glass flex items-center gap-3 rounded-2xl px-4 py-3">
+                            <span className="min-w-0 flex-1 truncate text-[14px]">{t.hostname}</span>
+                            {t.verified_at ? (
+                              <span className="inline-flex items-center gap-1 text-[12.5px] text-emerald-600 dark:text-emerald-400">
+                                <ShieldCheck className="h-4 w-4" /> Verified {fmtTime(t.verified_at)}
+                              </span>
+                            ) : (
+                              <span className="text-[12.5px] text-s-ink-3">Not verified</span>
+                            )}
+                            <button
+                              type="button"
+                              aria-label={`Remove ${t.hostname}`}
+                              onClick={async () => {
+                                if (!window.confirm(`Remove ${t.hostname}? You'll need to verify it again to scan it.`)) return;
+                                try {
+                                  await jsonFetch(`/api/security/targets/${t.id}`, { method: "DELETE" });
+                                  await refreshTargets();
+                                } catch (e) {
+                                  setError((e as Error).message);
+                                }
+                              }}
+                              className="rounded-lg p-1.5 text-s-ink-3 hover:bg-s-hover hover:text-s-ink"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <button type="button" onClick={() => setLaunch("sentinel")} className="mt-3 inline-flex h-9 items-center rounded-xl border border-s-line-strong px-3.5 text-[13px] font-medium hover:bg-s-hover">
+                      Add or verify a website
+                    </button>
+                  </section>
+                )}
+                {data && (
+                  <section aria-labelledby="scanners">
+                    <h2 id="scanners" className="text-[15px] font-semibold">
+                      Scanners and data sources
+                    </h2>
+                    <p className="mb-3 mt-0.5 text-[12.5px] text-s-ink-3">What the agents can use on this site. Anything not connected is reported as not checked, never simulated.</p>
+                    <ul className="grid gap-2 md:grid-cols-2">
+                      {data.tools.map((t) => (
+                        <li key={t.id} className="glass rounded-2xl px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className={cn("h-2 w-2 rounded-full", t.available ? "bg-emerald-500" : "bg-s-ink-3/50")} aria-hidden />
+                            <span className="text-[14px] font-medium">{t.name}</span>
+                            <span className="ml-auto text-[11.5px] text-s-ink-3">{t.available ? (t.kind === "builtin" ? "Built in" : "Connected") : "Not connected"}</span>
+                          </div>
+                          <p className="mt-1 text-[12.5px] text-s-ink-2">{t.description}</p>
+                          {(t.reason || (!t.available && t.envVars.length > 0)) && <p className="mt-1 text-[12px] text-s-ink-3">{t.reason ?? `Needs ${t.envVars.join(", ")}`}</p>}
                         </li>
                       ))}
                     </ul>
-                  )}
-                  <button type="button" onClick={() => setLaunch("sentinel")} className="inline-flex h-9 items-center rounded-xl border border-s-line-strong px-3.5 text-[13px] font-medium hover:bg-s-hover">
-                    Add or verify a website
-                  </button>
-                </div>
-              )}
-              {tab === "tools" && data && (
-                <ul className="grid gap-2 md:grid-cols-2">
-                  {data.tools.map((t) => (
-                    <li key={t.id} className="glass rounded-2xl px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className={cn("h-2 w-2 rounded-full", t.available ? "bg-emerald-500" : "bg-s-ink-3/50")} aria-hidden />
-                        <span className="text-[14px] font-medium">{t.name}</span>
-                        <span className="ml-auto text-[11.5px] text-s-ink-3">{t.available ? (t.kind === "builtin" ? "Built in" : "Connected") : "Not connected"}</span>
-                      </div>
-                      <p className="mt-1 text-[12.5px] text-s-ink-2">{t.description}</p>
-                      {(t.reason || (!t.available && t.envVars.length > 0)) && <p className="mt-1 text-[12px] text-s-ink-3">{t.reason ?? `Needs ${t.envVars.join(", ")}`}</p>}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+                  </section>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
-      <Launcher mode={launch} onClose={() => setLaunch(null)} targets={data?.targets ?? []} onTargetsChanged={refreshTargets} onFinished={reload} />
+      <Launcher mode={launch} onClose={() => setLaunch(null)} targets={data?.targets ?? []} onTargetsChanged={refreshTargets} onFinished={reloadAll} />
     </>
   );
 }

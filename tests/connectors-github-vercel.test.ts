@@ -55,7 +55,7 @@ describe("catalog and setup", () => {
 });
 
 describe("authorization URLs", () => {
-  const env = { ...process.env, GITHUB_APP_CLIENT_ID: "Iv1.abc", GITHUB_APP_CLIENT_SECRET: "ghs", ORBIS_VERCEL_CLIENT_ID: "cl_v", ORBIS_VERCEL_CLIENT_SECRET: "vs" };
+  const env = { ...process.env, GITHUB_APP_CLIENT_ID: "Iv1.abc", GITHUB_APP_CLIENT_SECRET: "github-test-secret", ORBIS_VERCEL_CLIENT_ID: "cl_v", ORBIS_VERCEL_CLIENT_SECRET: "vercel-test-secret" };
 
   it("GitHub: the app's own sign-in, with state and PKCE, and no OAuth scopes (permissions live on the app)", () => {
     const { url, cookie } = oauth.beginAuthorization(REGISTRY.github!, { userId: "u1", write: true, siteUrl: "https://tryorbis.app", env });
@@ -66,8 +66,8 @@ describe("authorization URLs", () => {
     expect(u.searchParams.get("state")).toMatch(/.{20,}/);
     expect(u.searchParams.get("code_challenge_method")).toBe("S256");
     expect(u.searchParams.has("scope")).toBe(false);
-    expect(url).not.toContain("ghs");
-    expect(cookie).not.toContain("ghs");
+    expect(url).not.toContain("github-test-secret");
+    expect(cookie).not.toContain("github-test-secret");
   });
 
   it("Vercel: Sign in with Vercel with PKCE and only the identity + refresh scopes", () => {
@@ -76,7 +76,7 @@ describe("authorization URLs", () => {
     expect(u.origin + u.pathname).toBe("https://vercel.com/oauth/authorize");
     expect(u.searchParams.get("scope")).toBe("openid email profile offline_access");
     expect(u.searchParams.get("code_challenge")).toBeTruthy();
-    expect(url).not.toContain("vs");
+    expect(url).not.toContain("vercel-test-secret");
   });
 
   it("exchanges the code on the server with the secret and records refresh + expiry", async () => {
@@ -86,7 +86,7 @@ describe("authorization URLs", () => {
     expect(t.refreshToken).toBe("ghr_y");
     expect(t.expiresAt! - Date.now()).toBeGreaterThan(28_000_000);
     const body = new URLSearchParams(calls[0]!.body!);
-    expect(body.get("client_secret")).toBe("ghs");
+    expect(body.get("client_secret")).toBe("github-test-secret");
     expect(body.get("code_verifier")).toBe("verifier1");
     expect(calls[0]!.headers.accept).toBe("application/json");
   });
@@ -106,11 +106,11 @@ describe("authorization URLs", () => {
 
   it("revokes at GitHub (app grant) and at Vercel (refresh + access token)", async () => {
     const g = fake([["DELETE", `${GH}/applications/Iv1.abc/grant`, () => new Response(null, { status: 204 })]]);
-    await REGISTRY.github!.oauth!.revoke!({ accessToken: "ghu_x" }, { id: "Iv1.abc", secret: "ghs" }, g.f);
-    expect(g.calls[0]!.headers.authorization).toBe(`Basic ${Buffer.from("Iv1.abc:ghs").toString("base64")}`);
+    await REGISTRY.github!.oauth!.revoke!({ accessToken: "ghu_x" }, { id: "Iv1.abc", secret: "github-test-secret" }, g.f);
+    expect(g.calls[0]!.headers.authorization).toBe(`Basic ${Buffer.from("Iv1.abc:github-test-secret").toString("base64")}`);
     expect(JSON.parse(g.calls[0]!.body!)).toEqual({ access_token: "ghu_x" });
     const v = fake([["POST", `${VC}/login/oauth/token/revoke`, () => ({})]]);
-    await REGISTRY.vercel!.oauth!.revoke!({ accessToken: "a", refreshToken: "r" }, { id: "cl_v", secret: "vs" }, v.f);
+    await REGISTRY.vercel!.oauth!.revoke!({ accessToken: "a", refreshToken: "r" }, { id: "cl_v", secret: "vercel-test-secret" }, v.f);
     expect(v.calls.map((c) => new URLSearchParams(c.body!).get("token"))).toEqual(["r", "a"]);
   });
 });

@@ -229,9 +229,9 @@ export const FEATURES: Feature[] = [
     slug: "security-agents",
     name: "Security Team",
     pillar: "execute",
-    title: "AI security agents for website, log and code checks",
+    title: "AI security team for code, deployments and live protection",
     description:
-      "Three security agents — Sentinel (website checks), Threat Hunter (log analysis) and Code Guardian (code and dependency audits) — that use real scanners and explain what they find.",
+      "Eleven security agents audit your code, GitHub pull requests, Vercel deployments and Cloudflare protection, verify what they find, and propose fixes that only apply after your approval.",
     status: "beta",
     tagline: "Real scanners find the issues; AI explains them and proposes fixes you can review.",
     audience: "Developers and site owners who want a quick, explained security check of their own site, logs or code.",
@@ -395,7 +395,7 @@ export const GUIDES: Guide[] = [
     slug: "security-team",
     short: "Security checks",
     title: "Running a security check with the Security Team",
-    description: "How to verify your website, analyse logs and audit code with Orbis Sentinel, Threat Hunter and Code Guardian.",
+    description: "How to audit code and pull requests, scan websites, review Vercel and Cloudflare, and analyse logs with the Orbis Security Team.",
     feature: "security-agents",
     sections: [
       { heading: "Prove you own the site", body: ["Before Sentinel scans a website, add it as a target and verify ownership with a file on the site or a DNS TXT record. Scans never follow redirects to other domains or reach private addresses."] },
