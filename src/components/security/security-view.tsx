@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, Check, ChevronRight, CircleAlert, Network, Play, ScanSearch, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, CircleAlert, Network, Play, ScanSearch, ShieldCheck, Trash2, Rocket } from "lucide-react";
 import { useApp } from "@/components/layout/app-context";
 import { StudioHeader } from "@/components/studio/frame";
 import { Segmented } from "@/components/studio/ui";
@@ -170,6 +170,14 @@ export function SecurityView() {
               <p className="mt-2 max-w-2xl text-[15.5px] text-s-ink-2">Three specialised agents that check what you own using real scanners and data, explain the results, and help you fix them, coordinated by Aegis and protected by Bastion. Nothing is changed without your approval.</p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setLaunch("deployment")}
+                disabled={!data}
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-s-line-strong px-4 text-[14px] font-medium transition hover:bg-s-hover disabled:opacity-50"
+              >
+                <Rocket className="h-4 w-4" /> Audit deployment
+              </button>
               <button
                 type="button"
                 onClick={() => setLaunch("coordinated")}

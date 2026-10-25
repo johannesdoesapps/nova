@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Check, ChevronRight, CircleAlert, SkipForward } from "lucide-react";
 import { StudioHeader } from "@/components/studio/frame";
+import { cn } from "@/lib/utils";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import { MODE_INFO, type AuditMode } from "@/lib/security/audit";
 import type { StoredAnalysis } from "@/lib/security/audit-report";
@@ -146,6 +147,84 @@ function PrPanel({ runId, pr, done, postedUrl }: { runId: string; pr: PrStats; d
   );
 }
 
+interface DeployStats {
+  vercel: {
+    project: string;
+    teamId: string | null;
+    framework: string | null;
+    nodeVersion: string | null;
+    repo: string | null;
+    protection: { vercelAuth: string | null; password: string | null; forkProtection: boolean | null; publicSource: boolean | null; bypassSecrets: number; firewall: boolean | null };
+    envs: { total: number; byType: Record<string, number>; public: number };
+    domains: { name: string; verified: boolean; redirect: string | null }[];
+    production: { state: string; commit: string | null; branch: string | null; created: number } | null;
+    checkedHost: string | null;
+    missing: string[];
+  };
+  deployGate: { decision: "allow" | "warn" | "block" | "incomplete"; mode: string; blockSeverities: string[]; reasons: string[]; blocking: { id: string; title: string; severity: string }[]; considered: { deployment: number; repository: number } };
+}
+
+const DECISION: Record<DeployStats["deployGate"]["decision"], { label: string; cls: string }> = {
+  allow: { label: "Allow", cls: "text-emerald-600 dark:text-emerald-400" },
+  warn: { label: "Warn", cls: "text-amber-600 dark:text-amber-400" },
+  block: { label: "Block", cls: "text-s-danger" },
+  incomplete: { label: "Incomplete — not a pass", cls: "text-amber-600 dark:text-amber-400" },
+};
+
+/** Vercel deployment audit: the advisory gate decision, then the settings Orbis read (never variable values). */
+function DeploymentPanel({ s }: { s: DeployStats }) {
+  const v = s.vercel;
+  const g = s.deployGate;
+  const onOff = (b: boolean | null) => (b == null ? "not reported" : b ? "on" : "off");
+  const rows: [string, string][] = [
+    ["Project", `${v.project}${v.framework ? ` (${v.framework})` : ""}`],
+    ["Repository", v.repo ?? "not linked"],
+    ["Vercel Authentication", v.protection.vercelAuth ?? "off"],
+    ["Password protection", v.protection.password ?? "off"],
+    ["Fork protection", onOff(v.protection.forkProtection)],
+    ["Public source", onOff(v.protection.publicSource)],
+    ["Node.js", v.nodeVersion ?? "not reported"],
+    ["Bypass secrets", String(v.protection.bypassSecrets)],
+    ["Environment variables", `${v.envs.total} (${Object.entries(v.envs.byType).map(([k, n]) => `${n} ${k}`).join(", ") || "none"}; ${v.envs.public} browser-exposed), names only`],
+    ["Production", v.production ? `${v.production.state.toLowerCase()}${v.production.branch ? ` from ${v.production.branch}` : ""}${v.production.commit ? ` @ ${v.production.commit.slice(0, 7)}` : ""}` : "no recent production deployment"],
+    ["Live site checked", v.checkedHost ?? "none"],
+  ];
+  return (
+    <section className="glass rounded-[20px] p-5">
+      <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-[0.06em] text-s-ink-3">Deploy gate</h2>
+      <p className={cn("text-[18px] font-semibold", DECISION[g.decision].cls)}>{DECISION[g.decision].label}</p>
+      <p className="mt-1 text-[13.5px] text-s-ink-2">
+        {g.mode === "block" ? "Blocking" : "Warning"} mode on open {g.blockSeverities.join("/")} findings that are confirmed or likely ({g.considered.deployment} from this audit, {g.considered.repository} open in the linked repository). Advisory: Orbis doesn&apos;t stop builds on Vercel.
+      </p>
+      {g.reasons.length > 0 && (
+        <ul className="mt-2 list-disc space-y-0.5 pl-5 text-[13px] text-s-ink-2">
+          {g.reasons.map((r, i) => (
+            <li key={i}>{r}</li>
+          ))}
+        </ul>
+      )}
+      {g.blocking.length > 0 && (
+        <ul className="mt-2 space-y-1 text-[13.5px]">
+          {g.blocking.map((b) => (
+            <li key={b.id} className="flex items-center gap-2">
+              <SeverityBadge severity={b.severity} /> {b.title}
+            </li>
+          ))}
+        </ul>
+      )}
+      <dl className="mt-4 grid gap-x-6 gap-y-1.5 text-[13px] sm:grid-cols-2">
+        {rows.map(([k, val]) => (
+          <div key={k}>
+            <dt className="inline text-s-ink-3">{k}: </dt>
+            <dd className="inline">{val}</dd>
+          </div>
+        ))}
+      </dl>
+      {v.missing.length > 0 && <p className="mt-3 text-[13px] text-s-danger">Not read, so not assessed: {v.missing.join("; ")}.</p>}
+    </section>
+  );
+}
+
 function VerificationNote({ v }: { v: VerificationStats }) {
   const total = v.counts.confirmed + v.counts.likely + v.counts.unverified + v.counts.disproven;
   if (!total) return null;
@@ -249,6 +328,7 @@ export function RunView({ id }: { id: string }) {
               postedUrl={(data.history.find((h) => h.action === "pr.comment")?.detail?.url as string | undefined) ?? null}
             />
           )}
+          {run.action === "deployment" && run.stats.deployGate != null && <DeploymentPanel s={run.stats as unknown as DeployStats} />}
           {run.stats.verification != null && <VerificationNote v={run.stats.verification as VerificationStats} />}
           {run.error && (
             <p role="alert" className="rounded-xl border border-s-line px-3 py-2 text-[13.5px] text-s-danger">

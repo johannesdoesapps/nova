@@ -513,3 +513,123 @@ export const guardianReady = (v: GuardianValue) =>
   v.mode === "pr" ? !!normalizeRepo(v.repo) && Number(v.prNumber) > 0 : v.mode === "github" ? v.repo.trim().length > 2 : v.files.length > 0 && totalSize(v.files) <= MAX_TOTAL;
 export const hunterReady = (v: HunterValue) => (v.files.length > 0 || v.pasted.trim().length > 0 || v.indicators.trim().length > 0) && totalSize(v.files) + v.pasted.length <= MAX_TOTAL;
 export const sentinelReady = (v: SentinelValue) => !!v.targetId && v.authorized;
+
+/* -------------------------------------------------------- Deployment audit */
+
+export interface DeploymentValue {
+  /** "<teamId or personal>:<projectId>" from the picker. */
+  pick: string;
+  gateMode: "warn" | "block";
+  blockSeverities: ("critical" | "high" | "medium")[];
+  siteChecks: boolean;
+}
+interface VercelProjects {
+  connection: { available: boolean; status: string; account: string | null; lastError: string | null };
+  projects: { id: string; name: string; teamId: string | null; scope: string; framework: string | null; repo: string | null }[];
+  refused: string[];
+}
+
+export function DeploymentForm({ value, onChange }: { value: DeploymentValue; onChange: (v: DeploymentValue) => void }) {
+  const [data, setData] = useState<VercelProjects | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    jsonFetch<VercelProjects>("/api/security/vercel/projects")
+      .then((r) => live && setData(r))
+      .catch((e: Error) => live && setError(e.message));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const connected = data?.connection.status === "connected";
+  const chosen = data?.projects.find((p) => `${p.teamId ?? "personal"}:${p.id}` === value.pick);
+  return (
+    <div className="space-y-4">
+      {!data && !error ? (
+        <p className="flex items-center gap-2 text-[13.5px] text-s-ink-2">
+          <Loader2 className="h-4 w-4 animate-spin" /> Checking your Vercel connection…
+        </p>
+      ) : error ? (
+        <p role="alert" className="text-[13.5px] text-s-danger">
+          {error}
+        </p>
+      ) : !connected ? (
+        <p className="rounded-xl border border-s-line p-3 text-[13.5px] text-s-ink-2">
+          {data!.connection.status === "reauth_required" || data!.connection.status === "error" ? "Your Vercel connection needs attention. " : "Vercel isn't connected. "}
+          Connect it on the{" "}
+          <a href="/connectors" className="underline underline-offset-2">
+            Connectors page
+          </a>{" "}
+          (read access to projects and deployments is enough), then come back.
+        </p>
+      ) : (
+        <div>
+          <label htmlFor="deploy-project" className={labelCls}>
+            Vercel project
+          </label>
+          <select id="deploy-project" value={value.pick} onChange={(e) => onChange({ ...value, pick: e.target.value })} className={inputCls}>
+            <option value="">Choose a project</option>
+            {data!.projects.map((p) => (
+              <option key={`${p.teamId}:${p.id}`} value={`${p.teamId ?? "personal"}:${p.id}`}>
+                {p.name} · {p.scope}
+                {p.framework ? ` · ${p.framework}` : ""}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1.5 text-[12.5px] text-s-ink-3">
+            Connected as {data!.connection.account ?? "your Vercel account"}. {data!.projects.length} project(s)
+            {data!.refused.length ? `; no access to ${data!.refused.join(", ")} (install Orbis's Vercel app there to include them)` : ""}.
+            {chosen?.repo ? ` Linked repository: ${chosen.repo} — its open Code Guardian findings count towards the gate.` : ""}
+          </p>
+        </div>
+      )}
+      <p className="text-[12.5px] text-s-ink-3">
+        Read-only. Orbis reads project settings, domains, recent deployments and the names, types and targets of environment variables — never their values — then makes one request to a preview
+        deployment and passive header checks on the production domain. Nothing on Vercel is changed.
+      </p>
+      <div className="rounded-2xl border border-s-line p-3">
+        <span className="block text-[12.5px] font-medium text-s-ink-2">Deploy gate</span>
+        <div className="mt-2">
+          <Segmented
+            label="Gate mode"
+            value={value.gateMode}
+            onChange={(gateMode) => onChange({ ...value, gateMode })}
+            options={[
+              { value: "warn", label: "Warn only" },
+              { value: "block", label: "Block" },
+            ]}
+          />
+        </div>
+        <div className="mt-2 flex flex-wrap gap-3">
+          {(["critical", "high", "medium"] as const).map((sv) => (
+            <label key={sv} className="flex cursor-pointer items-center gap-1.5 text-[13px] capitalize">
+              <input
+                type="checkbox"
+                checked={value.blockSeverities.includes(sv)}
+                onChange={(e) => onChange({ ...value, blockSeverities: e.target.checked ? [...value.blockSeverities, sv] : value.blockSeverities.filter((x) => x !== sv) })}
+                className="h-4 w-4 accent-[var(--s-accent)]"
+              />
+              {sv}
+            </label>
+          ))}
+        </div>
+        <p className="mt-2 text-[12px] text-s-ink-3">
+          Only confirmed or likely findings count; findings that still need verification never block. The result is advice: Orbis doesn&apos;t stop builds on Vercel.
+        </p>
+      </div>
+      <label className="flex items-center justify-between gap-3 text-[13.5px]">
+        <span>
+          Check the live production site
+          <span className="block text-[12.5px] text-s-ink-3">Passive header, TLS and cookie checks on the project&apos;s verified domain.</span>
+        </span>
+        <Switch checked={value.siteChecks} onChange={(siteChecks) => onChange({ ...value, siteChecks })} label="Check the live production site" />
+      </label>
+    </div>
+  );
+}
+
+export function deploymentBody(v: DeploymentValue) {
+  const [team, project] = v.pick.split(":");
+  return { project, teamId: team === "personal" ? null : team, gate: { mode: v.gateMode, blockSeverities: v.blockSeverities }, siteChecks: v.siteChecks };
+}
+export const deploymentReady = (v: DeploymentValue) => v.pick.includes(":") && v.blockSeverities.length > 0;

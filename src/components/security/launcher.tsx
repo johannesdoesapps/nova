@@ -11,6 +11,10 @@ import { SEVERITIES, type Severity } from "@/lib/security/types";
 import { cn } from "@/lib/utils";
 import { AGENT_NAME, AgentBadge, EMPTY_RUN, ICON_OF, RunProgress, streamRun, type RunState } from "./bits";
 import {
+  DeploymentForm,
+  deploymentBody,
+  deploymentReady,
+  type DeploymentValue,
   GuardianForm,
   guardianBody,
   guardianReady,
@@ -25,8 +29,8 @@ import {
   type Target,
 } from "./forms";
 
-export type LaunchMode = "sentinel" | "threat_hunter" | "code_guardian" | "coordinated" | "audit";
-type AgentKey = Exclude<LaunchMode, "coordinated" | "audit">;
+export type LaunchMode = "sentinel" | "threat_hunter" | "code_guardian" | "coordinated" | "audit" | "deployment";
+type AgentKey = Exclude<LaunchMode, "coordinated" | "audit" | "deployment">;
 const ORDER: AgentKey[] = ["sentinel", "threat_hunter", "code_guardian"];
 const URL_OF: Record<AgentKey, string> = { sentinel: "/api/security/sentinel", threat_hunter: "/api/security/hunter", code_guardian: "/api/security/guardian" };
 const TITLE: Record<LaunchMode, string> = {
@@ -35,6 +39,7 @@ const TITLE: Record<LaunchMode, string> = {
   code_guardian: "Audit code",
   coordinated: "Coordinated investigation",
   audit: "Security audit",
+  deployment: "Audit Vercel deployment",
 };
 const SCOPE_LABEL: Record<AgentKey, string> = { sentinel: "Website", code_guardian: "Code", threat_hunter: "Logs (optional)" };
 
@@ -52,6 +57,7 @@ function LauncherBody({ mode, onClose, targets, onTargetsChanged, onFinished }: 
   const [sentinel, setSentinel] = useState<SentinelValue>({ targetId: targets.find((t) => t.verified_at)?.id ?? targets[0]?.id ?? "", scope: "passive", authorized: false });
   const [hunter, setHunter] = useState<HunterValue>({ files: [], pasted: "", indicators: "", asset: "" });
   const [guardian, setGuardian] = useState<GuardianValue>({ mode: "upload", files: [], repo: "", prNumber: "", asset: "", aiReview: true, proposeFixes: false });
+  const [deployment, setDeployment] = useState<DeploymentValue>({ pick: "", gateMode: "warn", blockSeverities: ["critical", "high"], siteChecks: true });
   const [include, setInclude] = useState<Record<AgentKey, boolean>>({ sentinel: true, threat_hunter: mode !== "audit", code_guardian: true });
   const [auditMode, setAuditMode] = useState<AuditMode>("deep");
   const [timeBudget, setTimeBudget] = useState<TimeBudget>("standard");
@@ -63,10 +69,10 @@ function LauncherBody({ mode, onClose, targets, onTargetsChanged, onFinished }: 
   const parent = useRef<string | null>(null);
   const update = (fn: (s: RunState) => RunState) => setRun(fn);
 
-  const agents: AgentKey[] = multi ? ORDER.filter((a) => include[a]) : [mode as AgentKey];
+  const agents: AgentKey[] = multi ? ORDER.filter((a) => include[a]) : mode === "deployment" ? [] : [mode as AgentKey];
   const ready: Record<AgentKey, boolean> = { sentinel: sentinelReady(sentinel), threat_hunter: hunterReady(hunter), code_guardian: guardianReady(guardian) };
   const canStart =
-    agents.length > 0 && agents.every((a) => ready[a]) && (mode !== "coordinated" || agents.length >= 2) && (mode !== "audit" || auditMode !== "release_gate" || blockSeverities.length > 0);
+    mode === "deployment" ? deploymentReady(deployment) : agents.length > 0 && agents.every((a) => ready[a]) && (mode !== "coordinated" || agents.length >= 2) && (mode !== "audit" || auditMode !== "release_gate" || blockSeverities.length > 0);
   const budget = crawlBudget(auditMode, timeBudget, sentinel.scope === "active");
   const body = (a: AgentKey) =>
     a === "sentinel" ? { targetId: sentinel.targetId, scope: sentinel.scope, authorized: sentinel.authorized } : a === "threat_hunter" ? hunterBody(hunter) : guardianBody(guardian);
@@ -77,7 +83,10 @@ function LauncherBody({ mode, onClose, targets, onTargetsChanged, onFinished }: 
     abort.current = ctrl;
     setRun({ ...EMPTY_RUN, phase: "running" });
     try {
-      if (!multi) {
+      if (mode === "deployment") {
+        const r = await streamRun("/api/security/vercel/audit", { ...deploymentBody(deployment), modelId }, ctrl.signal, update);
+        update((s) => ({ ...s, phase: r.ok ? "done" : "error" }));
+      } else if (!multi) {
         const r = await streamRun(URL_OF[mode as AgentKey], { ...body(mode as AgentKey), modelId }, ctrl.signal, update);
         update((s) => ({ ...s, phase: r.ok ? "done" : "error" }));
       } else {
@@ -194,6 +203,7 @@ function LauncherBody({ mode, onClose, targets, onTargetsChanged, onFinished }: 
           {mode === "sentinel" && <SentinelForm value={sentinel} onChange={setSentinel} targets={targets} onTargetsChanged={onTargetsChanged} />}
           {mode === "threat_hunter" && <HunterForm value={hunter} onChange={setHunter} />}
           {mode === "code_guardian" && <GuardianForm value={guardian} onChange={setGuardian} />}
+          {mode === "deployment" && <DeploymentForm value={deployment} onChange={setDeployment} />}
         </fieldset>
       )}
 

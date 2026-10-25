@@ -13,7 +13,10 @@ import { proveOwnership } from "./authz";
 import { runCodeRules, type SourceFile } from "./code-rules";
 import { correlate } from "./correlate";
 import { checkDependencies, parseManifests } from "./deps";
-import { githubReadToken } from "./connections";
+import { githubReadToken, requireService } from "./connections";
+import { asOpenFindings, configFindings, DEFAULT_DEPLOY_GATE, deployGate, previewProbe, productionHost, readVercelProject, VERCEL_CHECKED, vercelAsset, type DeployGateConfig } from "./vercel-audit";
+import { ConnectorError } from "../connectors/http";
+import { safeRequest } from "./net";
 import { applyVerification, parseVerification, selectForVerification, verificationMessages } from "./verify";
 import { fetchPullRequest, prAsset, prCovers, prEvidence, scopeToPr, type PrInfo } from "./pr";
 import { fetchRepoFiles } from "./github";
@@ -211,6 +214,140 @@ export async function runSentinelAgent(ctx: RunContext, input: { targetId: strin
     await store.audit(db, user.id, "scan.finished", { runId, detail: base });
     ctx.send({ type: "done", agent: "sentinel", runId });
     return { runId, findings: result.findings };
+  });
+}
+
+/* ------------------------------------------------- Vercel deployment audit */
+
+/**
+ * Application Protection for a Vercel project (Workflows B and C): read-only settings and variable metadata through
+ * the person's Vercel connection, a passive check that previews are protected, passive header/TLS checks on the
+ * production domain (ownership: it's a verified domain of a project the person's own token can read), then an
+ * advisory deploy gate that also weighs open findings of the linked repository. Nothing on Vercel is changed.
+ */
+export async function runDeploymentAudit(ctx: RunContext, input: { project: string; teamId?: string | null; gate?: DeployGateConfig; siteChecks?: boolean }) {
+  const { supabase: db, user } = ctx.auth;
+  const teamId = input.teamId ?? null;
+  const gateCfg = input.gate ?? DEFAULT_DEPLOY_GATE;
+  const runId = await store.startRun(db, user.id, { agent: "sentinel", action: "deployment", asset: `vercel:${teamId ?? "personal"}/${input.project}`, scope: "passive", parentId: ctx.parentId });
+  ctx.send({ type: "run", agent: "sentinel", runId });
+  const steps = new Steps(ctx.send, "sentinel");
+  return guarded(ctx, runId, "sentinel", steps, async () => {
+    const planned: { label: string; status: string }[] = [];
+    let t = steps.start("connect", "Vercel connection");
+    const { ctx: vctx, row } = await requireService(ctx.auth, "vercel", ctx.signal);
+    steps.finish("connect", "Vercel connection", "ok", `Connected${row.account_label ? ` as ${row.account_label}` : ""}; read-only calls only`, t);
+
+    t = steps.start("project", "Project settings");
+    const snap = await readVercelProject(vctx, input.project, teamId).catch((err) => {
+      throw err instanceof ConnectorError ? new ApiError(err.kind === "auth" || err.kind === "permission" ? "forbidden" : err.kind === "not_found" ? "not_found" : "upstream_error", err.message) : err;
+    });
+    const asset = vercelAsset(snap.project);
+    steps.finish(
+      "project",
+      "Project settings",
+      snap.missing.length ? "failed" : "ok",
+      `${snap.project.name}${snap.project.framework ? ` (${snap.project.framework})` : ""}: ${snap.envs.length} environment variable names (values not read), ${snap.domains.length} domains, ${snap.deployments.length} recent deployments${snap.missing.length ? ` · not read: ${snap.missing.join("; ")}` : ""}`,
+      t,
+    );
+    planned.push({ label: "Project settings", status: snap.missing.length ? "failed" : "completed" });
+    await store.audit(db, user.id, "deployment_audit.started", { runId, detail: { project: snap.project.name, teamId, gate: gateCfg } });
+
+    const findings = configFindings(snap);
+    const notes: string[] = [];
+
+    // Workflow B evidence: is a real preview reachable without signing in?
+    const preview = snap.deployments.find((d) => d.target !== "production" && d.state === "READY" && d.url);
+    t = steps.start("preview", "Preview protection check");
+    if (preview?.url) {
+      const url = `https://${preview.url}/`;
+      const status = await safeRequest(url, { method: "GET", signal: ctx.signal, maxBytes: 4096 })
+        .then((r) => r.status)
+        .catch(() => null);
+      const note = previewProbe(findings, url, status);
+      notes.push(note);
+      steps.finish("preview", "Preview protection check", status == null ? "failed" : "ok", `${note} One read-only request.`, t);
+      planned.push({ label: "Preview protection check", status: status == null ? "failed" : "completed" });
+    } else steps.finish("preview", "Preview protection check", "skipped", "No ready preview deployment to check.", t);
+
+    // Workflow C: passive checks on the live production site.
+    let siteFindings: FindingDraft[] = [];
+    let siteChecked: string[] = [];
+    const host = productionHost(snap);
+    t = steps.start("site", "Production site checks");
+    if (input.siteChecks === false) steps.finish("site", "Production site checks", "skipped", "Turned off for this audit.", t);
+    else if (!host) {
+      steps.finish("site", "Production site checks", "skipped", "No verified production domain found.", t);
+      planned.push({ label: "Production site checks", status: "missing" });
+    } else if (!limiter("sentinel-host", 4, 10 * 60_000).check(host, 1).ok) {
+      steps.finish("site", "Production site checks", "skipped", `${host} was checked several times recently; try again in a few minutes.`, t);
+      planned.push({ label: "Production site checks", status: "skipped" });
+    } else {
+      const r = await runSentinel(host, "passive", { signal: ctx.signal, progress: (s) => ctx.send({ type: "progress", agent: "sentinel", text: s }) });
+      siteFindings = r.findings;
+      siteChecked = r.checked;
+      notes.push(...r.notes);
+      steps.finish("site", "Production site checks", r.finalUrl ? "ok" : "failed", `${host} (a verified domain of this project): ${r.requests} read-only requests, ${r.findings.length} findings. Headers, TLS, cookies and CORS only; nothing was submitted or probed.`, t);
+      planned.push({ label: "Production site checks", status: r.finalUrl ? "completed" : "failed" });
+    }
+
+    const all = [...findings, ...siteFindings];
+    const saved = await store.saveFindings(db, user.id, runId, all);
+    let resolved = await store.markNotDetected(db, user.id, runId, "sentinel", asset, snap.missing.length ? [] : VERCEL_CHECKED);
+    if (host && siteChecked.length) resolved += await store.markNotDetected(db, user.id, runId, "sentinel", host, siteChecked.filter((p) => p !== "surface."));
+    ctx.send({ type: "findings", agent: "sentinel", count: all.length, bySeverity: countBy(all), resolved, reopened: saved.reopened });
+
+    // The gate also weighs the linked repository's open code findings, if Code Guardian has audited it.
+    t = steps.start("gate", "Deploy gate");
+    const repoAsset = snap.project.link?.repo ? `github:${snap.project.link.repo}` : null;
+    const repoFindings = repoAsset ? (await store.listFindings(db, user.id, { asset: repoAsset, scope: "security" })).filter((f) => ["open", "investigating", "fix_proposed"].includes(f.status)) : [];
+    const { data: repoRuns } = repoAsset ? await db.from("security_runs").select("id").eq("user_id", user.id).eq("agent", "code_guardian").eq("asset", repoAsset).eq("status", "completed").limit(1) : { data: [] };
+    const gate = deployGate(
+      { deployment: asOpenFindings(all), repository: repoFindings as unknown as Parameters<typeof deployGate>[0]["repository"], steps: planned, repoAudited: !!repoRuns?.length },
+      gateCfg,
+    );
+    steps.finish("gate", "Deploy gate", "ok", `${gate.decision.toUpperCase()} (${gateCfg.mode === "block" ? "blocking" : "warning"} mode, advisory: Orbis doesn't stop Vercel builds). ${gate.reasons.join(" ") || "No blocking findings."}`, t);
+    await store.audit(db, user.id, "deployment_gate.evaluated", { runId, detail: { project: snap.project.name, decision: gate.decision, blocking: gate.gate.blocking.length, mode: gateCfg.mode } });
+
+    const prod = snap.deployments.find((d) => d.target === "production");
+    const report = await writeReport(
+      ctx,
+      steps,
+      "sentinel",
+      `Vercel project ${snap.project.name}: settings and environment-variable metadata (names, types and targets only; values were never read), ${host ? `passive checks of ${host}` : "no production domain checked"}. Deploy gate: ${gate.decision}. Not read: ${snap.missing.join("; ") || "nothing"}. Notes: ${notes.join(" ") || "none"}.`,
+      all,
+    );
+    const p = snap.project;
+    const base = {
+      findings: all.length,
+      bySeverity: countBy(all),
+      created: saved.created,
+      resolved,
+      reopened: saved.reopened,
+      notes: notes.slice(0, 20),
+    };
+    const stats = fitStats({
+      ...base,
+      vercel: {
+        project: p.name,
+        projectId: p.id,
+        teamId,
+        framework: p.framework,
+        nodeVersion: p.nodeVersion,
+        repo: p.link?.repo ?? null,
+        protection: { vercelAuth: p.ssoProtection ?? null, password: p.passwordProtection ?? null, forkProtection: p.gitForkProtection ?? null, publicSource: p.publicSource ?? null, bypassSecrets: p.bypassSecrets, firewall: p.firewallEnabled ?? null },
+        envs: { total: snap.envs.length, byType: snap.envs.reduce<Record<string, number>>((a, e) => ((a[e.type] = (a[e.type] ?? 0) + 1), a), {}), public: snap.envs.filter((e) => /^(NEXT_PUBLIC_|VITE_|REACT_APP_|PUBLIC_)/.test(e.key)).length },
+        domains: snap.domains.slice(0, 20),
+        production: prod ? { id: prod.id, state: prod.state, commit: prod.commit, branch: prod.branch, created: prod.created } : null,
+        checkedHost: host,
+        missing: snap.missing,
+      },
+      deployGate: { decision: gate.decision, mode: gateCfg.mode, blockSeverities: gateCfg.blockSeverities, reasons: gate.reasons, blocking: gate.gate.blocking.slice(0, 20), considered: gate.considered },
+    });
+    await store.finishRun(db, runId, { status: "completed", summary: report.summary, tools: steps.tools, stats, modelId: report.modelId });
+    await store.audit(db, user.id, "deployment_audit.finished", { runId, detail: { ...base, decision: gate.decision } });
+    ctx.send({ type: "done", agent: "sentinel", runId });
+    return { runId, findings: all, gate };
   });
 }
 

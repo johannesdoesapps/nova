@@ -37,6 +37,15 @@ export const hunterRequest = z
   .refine((b) => b.logs.some((l) => l.content.trim()) || b.indicators.trim(), "Add a log file or some indicators to investigate.")
   .refine((b) => b.logs.reduce((n, l) => n + l.content.length, 0) <= 3_000_000, "Logs are limited to 3 MB per investigation.");
 
+export const deploymentAuditRequest = z.object({
+  project: z.string().trim().regex(/^[A-Za-z0-9._-]{1,100}$/, "Use the project's id or name."),
+  teamId: z.string().regex(/^team_[A-Za-z0-9]{1,64}$/).nullable().optional(),
+  gate: z.object({ mode: z.enum(["warn", "block"]), blockSeverities: z.array(z.enum(["critical", "high", "medium"])).min(1).max(3) }).optional(),
+  siteChecks: z.boolean().default(true),
+  modelId,
+  parentId,
+});
+
 export const guardianRequest = z
   .object({
     source: z.discriminatedUnion("type", [

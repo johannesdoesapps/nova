@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { getFinding, listTargets } from "@/lib/db/security";
 import { ApiError, errorResponse, ndjsonStream, requireUuid } from "@/lib/http";
+import { PR_ASSET_RE } from "@/lib/security/pr";
 import { checkRunLimit, runGuardianAgent, runSentinelAgent } from "@/lib/security/runners";
 
 // An audit maps the site (crawl capped at 45 s by its budget) before the AI report, so allow up to two minutes.
@@ -27,8 +28,11 @@ export async function POST(req: Request, ctx: RouteContext<"/api/security/findin
     }
     if (finding.agent === "code_guardian" && finding.asset.startsWith("github:")) {
       checkRunLimit(req, auth);
+      // A pull-request finding is re-checked against the pull request's latest commit, scoped to its changed files.
+      const pr = PR_ASSET_RE.exec(finding.asset);
+      const source = pr ? { type: "github_pr" as const, repo: pr[1]!, number: Number(pr[2]) } : { type: "github" as const, repo: finding.asset.slice(7) };
       return ndjsonStream(
-        (send, signal) => runGuardianAgent({ req, auth, send, signal }, { source: { type: "github", repo: finding.asset.slice(7) }, asset: "", aiReview: false, proposeFixes: false }).then(() => {}),
+        (send, signal) => runGuardianAgent({ req, auth, send, signal }, { source, asset: "", aiReview: false, proposeFixes: false }).then(() => {}),
         req.signal,
       );
     }
