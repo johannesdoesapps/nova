@@ -21,6 +21,7 @@ import {
   Square,
   Trash2,
 } from "lucide-react";
+import { TemplateLogo } from "./template-logo";
 import { Markdown } from "@/components/common/markdown";
 import { useCatalog } from "@/components/common/model-picker";
 import { useApp } from "@/components/layout/app-context";
@@ -117,7 +118,8 @@ function Library({ mine, setMine }: { mine: MyTemplate[]; setMine: (v: MyTemplat
               <h3 className="mb-2 text-[12.5px] font-medium uppercase tracking-[0.1em] text-s-ink-3">My templates</h3>
               <ul className="grid gap-2 sm:grid-cols-2">
                 {mine.map((m) => (
-                  <li key={m.id} className="glass flex items-center gap-2 rounded-2xl px-4 py-3">
+                  <li key={m.id} className="glass flex items-center gap-3 rounded-2xl px-4 py-3">
+                    {findTemplate(m.baseId) && <TemplateLogo id={m.baseId} category={findTemplate(m.baseId)!.category} size="sm" />}
                     <Link href={`/templates?mine=${m.id}`} className="min-w-0 flex-1">
                       <span className="block truncate text-[14.5px] font-medium">{m.name}</span>
                       <span className="block truncate text-[12.5px] text-s-ink-3">
@@ -145,9 +147,14 @@ function Library({ mine, setMine }: { mine: MyTemplate[]; setMine: (v: MyTemplat
               {shown.map((t) => (
                 <li key={t.id}>
                   <Link href={`/templates?t=${t.id}`} className="glass group flex h-full flex-col rounded-[22px] p-4 transition hover:border-s-line-strong">
-                    <span className="text-[11.5px] font-medium uppercase tracking-[0.08em] text-s-ink-3">{CATEGORY_LABELS[t.category]}</span>
-                    <span className="mt-1.5 text-[16px] font-medium">{t.name}</span>
-                    <span className="mt-1 text-[13.5px] text-s-ink-2">{t.description}</span>
+                    <span className="flex items-start gap-3">
+                      <TemplateLogo id={t.id} category={t.category} />
+                      <span className="min-w-0">
+                        <span className="block text-[16px] font-medium leading-snug">{t.name}</span>
+                        <span className="block text-[11.5px] font-medium uppercase tracking-[0.08em] text-s-ink-3">{CATEGORY_LABELS[t.category]}</span>
+                      </span>
+                    </span>
+                    <span className="mt-3 text-[13.5px] text-s-ink-2">{t.description}</span>
                     <span className="mt-3 text-[12.5px] text-s-ink-3">
                       <span className="text-s-ink-2">You get:</span> {t.outcome}
                     </span>
@@ -332,8 +339,11 @@ function TemplateView({ template: t, own, mine, setMine }: { template: Template;
       </StudioHeader>
       <div className="s-scroll min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[820px] px-4 pb-24 pt-2 sm:px-8">
-          <span className="text-[12px] font-medium uppercase tracking-[0.08em] text-s-ink-3">{CATEGORY_LABELS[t.category]}</span>
-          <h1 className="mt-1 font-serif text-[clamp(28px,4.6vw,38px)] leading-tight">{own?.name ?? t.name}</h1>
+          <div className="flex items-center gap-3">
+            <TemplateLogo id={t.id} category={t.category} />
+            <span className="text-[12px] font-medium uppercase tracking-[0.08em] text-s-ink-3">{CATEGORY_LABELS[t.category]}</span>
+          </div>
+          <h1 className="mt-3 font-serif text-[clamp(28px,4.6vw,38px)] leading-tight">{own?.name ?? t.name}</h1>
           <p className="mt-2 text-[15px] text-s-ink-2">{t.description}</p>
           <p className="mt-2 text-[13.5px] text-s-ink-3">
             <span className="text-s-ink-2">You get:</span> {t.outcome}
