@@ -70,7 +70,7 @@ export function WorkspacesView() {
       {list.data && (
         <details className="mt-8 rounded-2xl border border-border p-4 text-sm">
           <summary className="cursor-pointer font-medium">Roles and permissions</summary>
-          <div className="mt-3 overflow-x-auto">
+          <div tabIndex={0} role="region" aria-label="Table (scrolls sideways)" className="mt-3 overflow-x-auto">
             <table className="w-full min-w-[560px] text-left text-xs">
               <thead className="text-faint"><tr><th className="py-1 font-medium">Action</th>{["owner", "admin", "editor", "commenter", "viewer"].map((r) => <th key={r} className="font-medium capitalize">{r}</th>)}</tr></thead>
               <tbody className="divide-y divide-border">{Object.entries(list.data.permission_matrix).map(([a, roles]) => <tr key={a}><td className="py-1">{a.replace(/_/g, " ")}</td>{["owner", "admin", "editor", "commenter", "viewer"].map((r) => <td key={r}>{roles[r] ? "✓" : "—"}</td>)}</tr>)}</tbody>

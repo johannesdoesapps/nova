@@ -386,7 +386,7 @@ export function EvaluationPanel({ m, projects, onRan }: { m: MetricsData; projec
           {msg && <span className="text-[12.5px] text-s-ink-2">{msg}</span>}
         </div>
         {m.benchmarks.length > 0 && (
-          <div className="s-scroll mt-3 overflow-x-auto">
+          <div tabIndex={0} role="region" aria-label="Table (scrolls sideways)" className="s-scroll mt-3 overflow-x-auto">
             <table className="w-full text-left text-[12.5px]">
               <thead className="text-s-ink-3">
                 <tr>

@@ -157,7 +157,7 @@ export function ArenaView() {
                 <p className="mt-0.5 text-muted">{v.message}</p>
               </div>
             )}
-            <div className="mt-3 overflow-x-auto">
+            <div tabIndex={0} role="region" aria-label="Table (scrolls sideways)" className="mt-3 overflow-x-auto">
               <table className="w-full min-w-[520px] text-left text-sm">
                 <thead className="text-xs text-faint"><tr><th className="py-1 font-medium">Hypothesis</th><th className="font-medium">Standing</th><th className="font-medium">Consistent</th><th className="font-medium">Inconsistent</th><th className="font-medium">Untested</th><th className="font-medium" title="Tested predictions that no rival hypothesis shares">Discriminating tested</th></tr></thead>
                 <tbody className="divide-y divide-border">

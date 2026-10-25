@@ -245,7 +245,7 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
         <Num label="Model calls / message" value={b.scenario.callsPerMessage} step={0.05} onChange={(v) => set({ scenario: { ...b.scenario, callsPerMessage: v } })} />
         <Num label="Cached input %" value={b.scenario.cachedInputPct} onChange={(v) => set({ scenario: { ...b.scenario, cachedInputPct: v } })} />
       </div>
-      <div className="mt-2 overflow-x-auto">
+      <div tabIndex={0} role="region" aria-label="Plans table" className="mt-2 overflow-x-auto">
         <table className="w-full min-w-[640px] text-left text-[12.5px] tabular-nums">
           <thead className="text-[11.5px] text-s-ink-3">
             <tr>

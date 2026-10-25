@@ -47,7 +47,7 @@ export function HistoryView() {
           <Card className="p-4">
             <div className="text-sm font-medium">Usage, last 30 days</div>
             {h.guest ? <p className="mt-1 text-sm text-faint">Usage tracking is available when signed in (it is stored per account with row-level security).</p> : usage.length === 0 ? <p className="mt-1 text-sm text-faint">No tracked calls.</p> : (
-              <div className="mt-2 overflow-x-auto">
+              <div tabIndex={0} role="region" aria-label="Table (scrolls sideways)" className="mt-2 overflow-x-auto">
                 <table className="w-full min-w-[720px] text-left text-sm">
                   <thead className="text-xs text-faint"><tr><th className="py-1 font-medium">Model</th><th className="font-medium">Calls</th><th className="font-medium">Errors</th><th className="font-medium">Served via fallback</th><th className="font-medium">Tokens in / out</th><th className="font-medium">Est. cost</th><th className="font-medium">By feature</th></tr></thead>
                   <tbody className="divide-y divide-border">

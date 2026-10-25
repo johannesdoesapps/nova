@@ -55,7 +55,7 @@ export function DirectoryView() {
       <SectionTabs tabs={INTEL_TABS} />
       {error && <Notice tone="danger" className="mb-4">{error}</Notice>}
       {!rows ? <Skeleton className="h-48" /> : (
-        <div className="overflow-x-auto rounded-2xl border border-border">
+        <div tabIndex={0} role="region" aria-label="Table (scrolls sideways)" className="overflow-x-auto rounded-2xl border border-border">
           <table className="w-full min-w-[1000px] text-left text-sm">
             <thead className="bg-panel text-xs uppercase tracking-wider text-faint">
               <tr><th className="px-3 py-3 font-medium">Model</th><th className="px-3 py-3 font-medium">Price (USD / 1M in · out)</th><th className="px-3 py-3 font-medium">Data handling</th><th className="px-3 py-3 font-medium">Versions served to you</th><th className="px-3 py-3 font-medium">Status</th></tr>

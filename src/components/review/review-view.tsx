@@ -406,7 +406,7 @@ function FindingCard({
           </p>
           {f.fix.before !== null && f.fix.after !== null && (
             <div className="mt-2">
-              <FileDiff change={{ path: `${f.file} (suggested, not applied)`, before: f.fix.before, after: f.fix.after }} />
+              <FileDiff change={{ path: `${f.file}:${f.line} (suggested, not applied)`, before: f.fix.before, after: f.fix.after }} />
             </div>
           )}
         </div>

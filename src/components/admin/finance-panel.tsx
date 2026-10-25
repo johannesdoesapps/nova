@@ -147,7 +147,7 @@ export function FinancePanel() {
             <p className="mt-1 text-[12px] text-s-ink-3">
               Active users: {report.health.activeUsers ? `${report.health.activeUsers.d1} today · ${report.health.activeUsers.d7} this week · ${report.health.activeUsers.d30} this month` : "—"}
             </p>
-            <div className="mt-2 overflow-x-auto">
+            <div tabIndex={0} role="region" aria-label="System health table" className="mt-2 overflow-x-auto">
               <table className="w-full min-w-[520px] text-left text-[12.5px] tabular-nums">
                 <thead className="text-[11.5px] text-s-ink-3">
                   <tr>
@@ -188,7 +188,7 @@ export function FinancePanel() {
             )}
           </div>
 
-          <div className="overflow-x-auto">
+          <div tabIndex={0} role="region" aria-label="Finance table" className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-[13px] tabular-nums">
               <thead className="text-[12px] text-s-ink-3">
                 <tr>
@@ -303,7 +303,7 @@ function UnitEconomicsView({ e }: { e: UnitEconomics }) {
           </div>
         ))}
       </dl>
-      <div className="mt-3 overflow-x-auto">
+      <div tabIndex={0} role="region" aria-label="Unit economics table" className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[560px] text-left text-[12.5px] tabular-nums">
           <thead className="text-[12px] text-s-ink-3">
             <tr>

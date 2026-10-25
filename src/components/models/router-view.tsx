@@ -80,7 +80,7 @@ export function RouterView({ models }: { models: ModelWithStatus[] }) {
         )}
       </Card>
 
-      <div className="mt-6 overflow-x-auto rounded-2xl border border-border">
+      <div tabIndex={0} role="region" aria-label="Table (scrolls sideways)" className="mt-6 overflow-x-auto rounded-2xl border border-border">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="bg-panel text-xs uppercase tracking-wider text-faint">
             <tr>

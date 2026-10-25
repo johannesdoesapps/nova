@@ -91,7 +91,7 @@ function CategoryCard({ c, names }: { c: CategoryFingerprint; names: Map<string,
         <RecBox title="Your preference (blind trials)" icon={<Users className="h-3.5 w-3.5" />} rec={c.personal} names={names} />
         <RecBox title="Measured performance (benchmarks)" icon={<FlaskConical className="h-3.5 w-3.5" />} rec={c.general} names={names} />
       </div>
-      <div className="mt-4 overflow-x-auto">
+      <div tabIndex={0} role="region" aria-label="Table (scrolls sideways)" className="mt-4 overflow-x-auto">
         <table className="w-full min-w-[860px] text-left text-sm">
           <thead className="text-xs text-faint">
             <tr><th className="py-1 font-medium">Model</th><th className="font-medium">Blind trials W/L/T</th><th className="font-medium">Preference rate (95% CI)</th><th className="font-medium">Avg rating</th><th className="font-medium">Benchmark pass (95% CI)</th><th className="font-medium">Latency p50 / p95</th><th className="font-medium">Avg cost / call</th><th className="font-medium">Version</th></tr>

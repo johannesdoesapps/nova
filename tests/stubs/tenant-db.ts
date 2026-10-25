@@ -89,8 +89,10 @@ export function tenantDb(tables: Tables) {
             const out: Row[] = [];
             for (const p of payload) {
               const existing = op === "upsert" ? rows.find((r) => onConflict.every((k) => r[k] === p[k])) : undefined;
-              if (existing) (Object.assign(existing, p), out.push(existing));
-              else {
+              if (existing) {
+                Object.assign(existing, p);
+                out.push(existing);
+              } else {
                 const row = { id: p.id ?? seq++, created_at: new Date(Date.now() + seq).toISOString(), ...p };
                 rows.push(row);
                 out.push(row);

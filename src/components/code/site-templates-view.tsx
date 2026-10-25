@@ -316,7 +316,7 @@ function BrowserBar({ host, className }: { host: string; className?: string }) {
       <i className="h-2 w-2 rounded-full bg-[#ff5f57]" />
       <i className="h-2 w-2 rounded-full bg-[#febc2e]" />
       <i className="h-2 w-2 rounded-full bg-[#28c840]" />
-      <span className="mx-auto max-w-[60%] truncate rounded-md bg-white px-3 py-0.5 text-[10.5px] text-black/45">{host}</span>
+      <span className="mx-auto max-w-[60%] truncate rounded-md bg-white px-3 py-0.5 text-[10.5px] text-black/60">{host}</span>
     </div>
   );
 }

@@ -530,7 +530,7 @@ function RiskTable() {
       <p className="mt-0.5 text-[13.5px] text-s-ink-2">
         Low-risk, reversible work runs on its own; anything consequential waits for you. These rules are enforced where each action runs, not just in the agents&apos; instructions.
       </p>
-      <div className="mt-3 overflow-x-auto rounded-2xl border border-s-line">
+      <div tabIndex={0} role="region" aria-label="What agents may do (scrolls sideways)" className="mt-3 overflow-x-auto rounded-2xl border border-s-line">
         <table className="w-full min-w-[640px] text-left text-[13px]">
           <thead className="text-[12px] text-s-ink-3">
             <tr className="border-b border-s-line">
