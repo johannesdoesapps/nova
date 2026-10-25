@@ -46,6 +46,9 @@ export interface TeamInput {
 
 export interface AgentCard {
   id: string;
+  /** The agent's own name (Orbis Inspector…). */
+  codename: string;
+  /** Its role, e.g. "Security Auditor Agent". */
   name: string;
   /** What it runs on, shown under the name. */
   engine: string;
@@ -62,6 +65,7 @@ export interface AgentCard {
 
 interface Def {
   id: string;
+  codename: string;
   name: string;
   engine: string;
   summary: string;
@@ -87,6 +91,7 @@ const hasStep = (r: RunLike, label: string) => r.tools.some((t) => t.tool.starts
 export const TEAM_AGENTS: Def[] = [
   {
     id: "auditor",
+    codename: "Orbis Inspector",
     name: "Security Auditor Agent",
     engine: "Code Guardian and Sentinel",
     summary: "Scans application code, APIs, dependencies, and configurations to identify potential security vulnerabilities before attackers can exploit them.",
@@ -103,6 +108,7 @@ export const TEAM_AGENTS: Def[] = [
   },
   {
     id: "verification",
+    codename: "Orbis Arbiter",
     name: "Vulnerability Verification Agent",
     engine: "Independent verifier",
     summary: "Independently investigates suspected vulnerabilities, checks supporting evidence, and separates confirmed security issues from false positives and unverified risks.",
@@ -119,6 +125,7 @@ export const TEAM_AGENTS: Def[] = [
   },
   {
     id: "protection",
+    codename: "Orbis Rampart",
     name: "Application Protection Agent",
     engine: "Sentinel on Cloudflare and Vercel",
     summary: "Reviews and helps configure Cloudflare security features, including DDoS protection, WAF rules, bot protection, rate limiting, and secure connections.",
@@ -135,6 +142,7 @@ export const TEAM_AGENTS: Def[] = [
   },
   {
     id: "identity",
+    codename: "Orbis Gatekeeper",
     name: "Identity and Access Security Agent",
     engine: "Code Guardian rules and Cloudflare Access",
     summary: "Audits authentication, authorization, user permissions, sessions, admin access, OAuth integrations, and Zero Trust policies to prevent unauthorized access.",
@@ -151,6 +159,7 @@ export const TEAM_AGENTS: Def[] = [
   },
   {
     id: "reporting",
+    codename: "Orbis Herald",
     name: "Security Reporting and Remediation Agent",
     engine: "Aegis reports and remediation",
     summary: "Turns audit results into clear security reports, prioritizes risks, recommends fixes, tracks remediation, and verifies whether vulnerabilities have been resolved.",
@@ -167,6 +176,7 @@ export const TEAM_AGENTS: Def[] = [
   },
   {
     id: "github",
+    codename: "Orbis Repo Warden",
     name: "GitHub Security Agent",
     engine: "Code Guardian on GitHub",
     summary: "Audits authorized GitHub repositories, pull requests, code changes, dependencies, and repository settings to detect security risks throughout development.",
@@ -184,6 +194,7 @@ export const TEAM_AGENTS: Def[] = [
   },
   {
     id: "vercel",
+    codename: "Orbis Launch Guard",
     name: "Vercel Deployment Security Agent",
     engine: "Sentinel on Vercel",
     summary: "Reviews Vercel projects, preview and production deployments, build settings, environment-variable exposure, and deployment configurations for security weaknesses.",
@@ -200,6 +211,7 @@ export const TEAM_AGENTS: Def[] = [
   },
   {
     id: "cloudflare",
+    codename: "Orbis Edgeguard",
     name: "Cloudflare Security Agent",
     engine: "Sentinel on Cloudflare",
     summary: "Inspects connected Cloudflare accounts and zones, checks available traffic-protection settings, identifies configuration gaps, and recommends improvements to live application security.",
@@ -216,6 +228,7 @@ export const TEAM_AGENTS: Def[] = [
   },
   {
     id: "monitoring",
+    codename: "Orbis Watchtower",
     name: "Security Monitoring Agent",
     engine: "Scheduler and alerts",
     summary: "Monitors scheduled audit results, newly discovered vulnerabilities, configuration changes, and recurring issues, then alerts authorized users when important risks require attention.",
@@ -232,6 +245,7 @@ export const TEAM_AGENTS: Def[] = [
   },
   {
     id: "fix",
+    codename: "Orbis Mender",
     name: "Security Fix Agent",
     engine: "Patch proposals and the coding agent",
     summary: "Proposes targeted code fixes, prepares patches or pull requests where supported, runs relevant tests, and retests vulnerabilities after fixes are applied. Requires approval for authorized write actions.",
@@ -247,6 +261,7 @@ export const TEAM_AGENTS: Def[] = [
   },
   {
     id: "orchestrator",
+    codename: "Orbis Conductor",
     name: "Security Orchestrator Agent",
     engine: "Aegis coordination",
     summary: "Coordinates the entire Security Team, assigns tasks to the appropriate agents, combines their findings, resolves conflicting results, and ensures that audits follow the correct security and approval procedures.",
@@ -337,6 +352,7 @@ export function teamAgents(input: TeamInput): AgentCard[] {
 
     return {
       id: d.id,
+      codename: d.codename,
       name: d.name,
       engine: d.engine,
       summary: d.summary,

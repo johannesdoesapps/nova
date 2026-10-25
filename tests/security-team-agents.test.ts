@@ -25,7 +25,11 @@ describe("the eleven agents", () => {
       "Security Fix Agent",
       "Security Orchestrator Agent",
     ]);
+    const codenames = TEAM_AGENTS.map((a) => a.codename);
+    expect(new Set(codenames).size).toBe(11);
+    for (const c of codenames) expect(c).toMatch(/^Orbis [A-Z]/);
     for (const a of teamAgents(base)) {
+      expect(a.codename).toMatch(/^Orbis /);
       expect(a.summary.length).toBeGreaterThan(60);
       expect(a.summary.length).toBeLessThan(260);
       expect(a.responsibilities.length).toBeGreaterThanOrEqual(3);

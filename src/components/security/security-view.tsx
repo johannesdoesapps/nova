@@ -309,8 +309,7 @@ export function SecurityView() {
                 <div className="glass s-skeleton h-72 rounded-[20px]" />
               ) : (
                 <>
-                  <AgentGrid team={team.team} />
-                  <section aria-labelledby="engines" className="pt-4">
+                  <section aria-labelledby="engines">
                     <h2 id="engines" className="text-[15px] font-semibold">
                       Engines and workspaces
                     </h2>
@@ -390,6 +389,9 @@ export function SecurityView() {
                       </ul>
                     )}
                   </section>
+                  <div className="pt-6">
+                      <AgentGrid team={team.team} />
+                  </div>
                 </>
               ))}
 

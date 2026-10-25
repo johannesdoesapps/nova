@@ -19,6 +19,7 @@ interface Integration {
 }
 interface AgentCardData {
   id: string;
+  codename: string;
   name: string;
   engine: string;
   summary: string;
@@ -91,9 +92,10 @@ function AgentCard({ a, i }: { a: AgentCardData; i: number }) {
         <AgentBadge agent={a.id} icon={AGENT_LOGO[a.id] ?? "shield"} />
         <div className="min-w-0 flex-1">
           <h3 id={`agent-${a.id}`} className="text-[16px] font-semibold leading-snug tracking-[-0.01em]">
-            {a.name.replace(/ Agent$/, "")}
+            {a.codename}
           </h3>
-          <p className="text-[12.5px] text-s-ink-3">{a.engine}</p>
+          <p className="text-[12.5px] leading-snug text-s-ink-2">{a.name.replace(/ Agent$/, "")}</p>
+          <p className="text-[12px] leading-snug text-s-ink-3">{a.engine}</p>
         </div>
         <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11.5px] font-medium", STATUS[a.status].cls)}>{STATUS[a.status].label}</span>
       </div>
@@ -264,10 +266,13 @@ export function TeamStrip({ team, onOpen }: { team: Team; onOpen: () => void }) 
       </div>
       <ul className="mt-3 flex flex-wrap gap-1.5">
         {team.agents.map((a) => (
-          <li key={a.id} title={a.summary} className="inline-flex items-center gap-1.5 rounded-full border border-s-line px-2.5 py-1 text-[12px]">
+          <li key={a.id} title={`${a.name.replace(/ Agent$/, "")}: ${a.summary}`} className="inline-flex items-center gap-1.5 rounded-full border border-s-line px-2.5 py-1 text-[12px]">
             <span className={cn("h-1.5 w-1.5 rounded-full", a.status === "working" ? "bg-sky-500" : a.status === "needs_approval" ? "bg-amber-500" : a.status === "error" ? "bg-red-500" : a.status === "completed" ? "bg-emerald-500" : "bg-s-ink-3/40")} aria-hidden />
-            {a.name.replace(/ Agent$/, "")}
-            <span className="sr-only">: {STATUS[a.status].label}</span>
+            {a.codename.replace(/^Orbis /, "")}
+            <span className="sr-only">
+              {" "}
+              ({a.name.replace(/ Agent$/, "")}): {STATUS[a.status].label}
+            </span>
           </li>
         ))}
       </ul>
