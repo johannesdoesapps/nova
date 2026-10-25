@@ -10,6 +10,7 @@ import {
   ImageIcon,
   LayoutTemplate,
   MessagesSquare,
+  MousePointerClick,
   Plug,
   ShieldCheck,
   SlidersHorizontal,
@@ -36,6 +37,7 @@ export type Section =
   | "activity"
   | "templates"
   | "agents"
+  | "mimic"
   | "discover"
   | "missions"
   | "council"
@@ -69,6 +71,7 @@ export const NAV_ENTRIES: NavEntry[] = [
   { id: "chat", label: "Chat", href: "/chat", icon: MessagesSquare, group: "mode", hint: "Ask, research and write with AI" },
   { id: "code", label: "Code", href: "/code", icon: Code2, group: "mode", hint: "Build and fix software with the coding agent" },
   { id: "agents", label: "Agents", href: "/agents", icon: Bot, group: "main", hint: "Specialised assistants, including the Security Team" },
+  { id: "mimic", label: "Mimic", href: "/mimic", icon: MousePointerClick, group: "main", hint: "Show Mimic a task once; it learns it and does it for you" },
   { id: "projects", label: "Projects", href: "/projects", icon: FolderKanban, group: "bar", hint: "Ongoing work: code projects, missions and their tasks" },
   { id: "activity", label: "Activity", href: "/activity", icon: Activity, group: "main", hint: "Every agent task: what's running, waiting for you, done or failed" },
   { id: "templates", label: "Templates", href: "/templates", icon: LayoutTemplate, group: "main", hint: "Ready-made workflows for common tasks" },
