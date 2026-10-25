@@ -11,8 +11,8 @@ type Ctx = RouteContext<"/api/mimic/rules/[id]">;
 export async function PATCH(req: Request, ctx: Ctx) {
   try {
     const id = requireUuid((await ctx.params).id);
-    const body = await parseJsonBody(req, z.object({ category: z.enum(CATEGORIES).optional(), remove: z.boolean().optional() }), 2_000);
     const auth = await codeContext("mimic-write", 60);
+    const body = await parseJsonBody(req, z.object({ category: z.enum(CATEGORIES).optional(), remove: z.boolean().optional() }), 2_000);
     await updateRule(auth, id, body);
     return NextResponse.json({ ok: true });
   } catch (err) {

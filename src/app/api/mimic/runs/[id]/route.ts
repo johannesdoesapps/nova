@@ -23,8 +23,8 @@ const body = z.object({
 export async function POST(req: Request, ctx: Ctx) {
   try {
     const id = requireUuid((await ctx.params).id);
-    const d = await parseJsonBody(req, body, 8_000);
     const auth = await codeContext("mimic-write", 60);
+    const d = await parseJsonBody(req, body, 8_000);
     return NextResponse.json({ run: await decideRun(req, auth, id, d) });
   } catch (err) {
     return errorResponse(err);

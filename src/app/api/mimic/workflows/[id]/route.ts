@@ -22,8 +22,8 @@ const patch = z.object({
 export async function PATCH(req: Request, ctx: Ctx) {
   try {
     const id = requireUuid((await ctx.params).id);
-    const body = await parseJsonBody(req, patch, 20_000);
     const auth = await codeContext("mimic-write", 60);
+    const body = await parseJsonBody(req, patch, 20_000);
     return NextResponse.json({ workflow: await updateWorkflow(auth, id, body as Parameters<typeof updateWorkflow>[2]) });
   } catch (err) {
     return errorResponse(err);
