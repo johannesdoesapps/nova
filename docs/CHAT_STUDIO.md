@@ -72,3 +72,14 @@ Without a key, the labelled demo provider streams a template reply. It is marked
 | Ctrl/⌘+Shift+O | New chat |
 | Ctrl/⌘+B | Toggle sidebar |
 | Esc | Close menus and dialogs |
+
+## Opening links
+
+When a signed-in user's message contains http(s) links (up to 3), the chat route opens them before answering
+(`src/lib/links/`): Bastion's network check first, then a guarded request per hop (public addresses only, checked at
+connect time and for literal IPs; ports 80/443; 8 s and 2 MB per page; up to 4 redirects, each checked). The page's
+title and readable text (scripts, styles, navigation and footers removed; 20,000 characters max) go to the model as
+untrusted data with a citation number, and the link appears as a source. Links that can't be read (sign-in walls,
+404s, PDFs, pages built only with JavaScript, private addresses) are reported to the model with the reason, so the
+answer says which link failed and why instead of guessing. Opened links don't use the plan's web searches; the page
+text counts as normal input. Limit: 30 links per user per 10 minutes. Guests are told to sign in.

@@ -2,7 +2,7 @@ import "server-only";
 import { lookup as dnsLookup, resolveTxt } from "node:dns";
 import http from "node:http";
 import https from "node:https";
-import type { LookupFunction } from "node:net";
+import { isIP, type LookupFunction } from "node:net";
 import { isPublicAddress } from "./net-pure";
 
 export { isPublicAddress, normalizeHost } from "./net-pure";
@@ -43,6 +43,9 @@ export function safeRequest(
   const u = new URL(url);
   if (u.protocol !== "https:" && u.protocol !== "http:") return Promise.reject(new Error("Unsupported protocol"));
   if (u.port && u.port !== "80" && u.port !== "443") return Promise.reject(new Error("Unsupported port"));
+  // Node skips the lookup for a literal IP address, so check those here.
+  const literal = u.hostname.replace(/^\[|\]$/g, "");
+  if (isIP(literal) && !isPublicAddress(literal)) return Promise.reject(new BlockedAddressError(`${literal} is a private or reserved address`));
   const maxBytes = opts.maxBytes ?? 256 * 1024;
   const mod = u.protocol === "https:" ? https : http;
   return new Promise((resolve, reject) => {

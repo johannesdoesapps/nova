@@ -100,6 +100,13 @@ export const ENFORCEMENT_POINTS: EnforcementPoint[] = [
     note: "Checked when a scan starts, not per request; requests are limited to the user's verified sites by the scanners' own guard (src/lib/security/net.ts).",
   },
   {
+    surface: "Links opened from chat messages",
+    state: "enforced",
+    ops: ["web.search"],
+    where: "src/app/api/chat/route.ts (links), src/lib/links/read.ts",
+    note: "Checked before Orbis opens links a user pasted (the network switch and lockdown apply). Each request, including redirects, goes to public addresses only; page text is passed to the model as untrusted data.",
+  },
+  {
     surface: "Chat answers, research and code review",
     state: "not_covered",
     ops: [],
