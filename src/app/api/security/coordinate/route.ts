@@ -5,6 +5,7 @@ import { errorResponse, parseJsonBody } from "@/lib/http";
 import { MODE_INFO } from "@/lib/security/audit";
 import { coordinateStart } from "@/lib/security/schema";
 import { assertAgentAccess } from "@/lib/agent-platform/server";
+import { enforce } from "@/lib/bastion/server";
 
 /**
  * POST /api/security/coordinate — open a coordinated investigation, or a
@@ -17,6 +18,8 @@ export async function POST(req: Request) {
   try {
     const auth = await requireUser();
     await assertAgentAccess(auth, "security");
+    // Orbis Bastion: scans make outbound requests (to the user's verified site); an administrator can switch those off.
+    await enforce({ db: auth.supabase, userId: auth.user.id, kind: "agent", agent: "security" }, "web.search", "security scan");
     const body = await parseJsonBody(req, coordinateStart);
     const runId = await startRun(auth.supabase, auth.user.id, {
       agent: "coordinated",

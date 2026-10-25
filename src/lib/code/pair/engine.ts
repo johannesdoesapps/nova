@@ -7,7 +7,9 @@ import { reportError } from "@/lib/observability";
 import { enforceLimits, planLimits, recordRunLater, releaseUsage } from "@/lib/usage";
 import { byteLength, MAX_FILE_BYTES, validProjectPath, type FileChange } from "../projects";
 import { getFiles, getProjectRow, optionalBox, setRunCommand, type Authed } from "../server";
-import { AGENT_OUTPUT_TOKENS, MAX_MODEL_FAILURES, addTests, addUsage, execCommand, finishStep, modelTimeoutFor, pauseFor, saveChanges } from "../agent/engine";
+import { AGENT_OUTPUT_TOKENS, MAX_MODEL_FAILURES, addTests, addUsage, codeAgentId, execCommand, finishStep, modelTimeoutFor, pauseFor, saveChanges } from "../agent/engine";
+import { commandOp } from "../../bastion/guards";
+import { guard as bastionGuard } from "../../bastion/server";
 import { classifyCommand } from "../agent/policy";
 import { addEvents, createCheckpoint, listEvents, runOptions, runStatus, runUsage, updateRun, updateRunIfNotCancelled, type RunPatch, type RunRow } from "../agent/runs";
 import { testResult } from "../agent/test-results";
@@ -302,7 +304,7 @@ async function applyCode(auth: Authed, row: RunRow, code: { files: { path: strin
   for (const p of code.delete) if (allowed.has(p) && current.has(p)) changes.push({ path: p, before: current.get(p)!, after: null });
   if (changes.length) {
     await createCheckpoint(auth, row.id, label.slice(0, 120), Object.fromEntries(changes.map((c) => [c.path, c.before])));
-    await saveChanges(auth, row.id, row.project_id, changes);
+    for (const r of await saveChanges(auth, row.id, row.project_id, changes, { agent: codeAgentId(row) })) rejected.push({ path: r.path, why: `blocked by Orbis Bastion: ${r.reason}` });
   }
   return { paths: changes.map((c) => c.path), rejected, at: new Date().toISOString() };
 }
@@ -319,15 +321,23 @@ async function testStep(auth: Authed, row: RunRow, s: PairState): Promise<RunRow
   if (!(await optionalBox(auth, row.project_id))) return skip("the project's computer is off (start it to let the agents run tests)");
   const decision = classifyCommand(command);
   if (decision.kind === "block") return skip(`Orbis won't run it: ${decision.reason}`);
-  if (decision.kind === "ask") {
-    await addEvents(auth, row.id, [{ kind: "approval", title: `Waiting for your approval to run the tests: ${command}`.slice(0, 380), detail: { command, reason: decision.reason } }]);
-    return finishStep(auth, row.id, { pair: s, status: "awaiting_approval", pending: { kind: "command", command, reason: decision.reason } });
+  const g = await bastionGuard({ db: auth.supabase, userId: auth.user.id, kind: "agent", agent: codeAgentId(row), runId: row.id }, commandOp(command), command);
+  if (g.outcome === "deny") return skip(`blocked by Orbis Bastion: ${g.reason}`);
+  if (decision.kind === "ask" || g.outcome === "needs_approval") {
+    const reason = decision.kind === "ask" ? decision.reason : `${g.reason} (Orbis Bastion)`;
+    await addEvents(auth, row.id, [{ kind: "approval", title: `Waiting for your approval to run the tests: ${command}`.slice(0, 380), detail: { command, reason } }]);
+    return finishStep(auth, row.id, { pair: s, status: "awaiting_approval", pending: { kind: "command", command, reason } });
   }
   return runTests(auth, row, s, command);
 }
 
-async function runTests(auth: Authed, row: RunRow, s: PairState, command: string, steps = row.steps + 1): Promise<RunRow> {
-  const out = await execCommand(auth, row.id, row.project_id, command);
+async function runTests(auth: Authed, row: RunRow, s: PairState, command: string, steps = row.steps + 1, approved = false): Promise<RunRow> {
+  const out = await execCommand(auth, row.id, row.project_id, command, undefined, { agent: codeAgentId(row), approved });
+  if (out.blocked) {
+    const t: PairTestRun = { command, round: s.round + 1, exitCode: null, passed: null, outputTail: "", ranAt: new Date().toISOString(), skipped: `blocked by Orbis Bastion: ${out.blocked}`.slice(0, 300) };
+    await addEvents(auth, row.id, [commandEvent(command, out)]);
+    return finishStep(auth, row.id, { steps, pair: { ...s, tests: [...s.tests, t].slice(-20), phase: "review" }, status: "running", pending: null });
+  }
   const test = testResult({ command, ...out });
   const t: PairTestRun = {
     command,
@@ -376,7 +386,7 @@ export async function pairRespond(auth: Authed, row: RunRow, input: { decision: 
       await addEvents(auth, row.id, [{ kind: "approval", title: `You approved running the tests: ${pending.command.slice(0, 200)}` }]);
       if (!(await optionalBox(auth, row.project_id))) throw new ApiError("conflict", "The project's computer isn't running. Start it first.", { scope: "workspace_stopped" });
       // Approving isn't a step of its own: the test run is counted with the step that asked.
-      return runTests(auth, row, s, pending.command, row.steps);
+      return runTests(auth, row, s, pending.command, row.steps, true);
     }
     if (input.decision === "reject") {
       const t: PairTestRun = { command: pending.command, round: s.round + 1, exitCode: null, passed: null, outputTail: "", ranAt: new Date().toISOString(), skipped: "you declined to run it" };

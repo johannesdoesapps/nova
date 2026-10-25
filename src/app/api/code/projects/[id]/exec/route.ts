@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { commandOp } from "@/lib/bastion/guards";
+import { enforce } from "@/lib/bastion/server";
 import { codeContext, getProjectRow, requireBox, syncBack } from "@/lib/code/server";
 import { PREVIEW_JOB, stopPreview } from "@/lib/code/preview";
 import { claimSync, killJob, readJob, startJob } from "@/lib/code/workspace";
@@ -23,6 +25,9 @@ export async function POST(req: Request, ctx: Ctx) {
     const { command, preview } = await parseJsonBody(req, body, 4_000);
     const auth = await codeContext("code-exec", 30);
     await getProjectRow(auth, id);
+    // Orbis Bastion: the user typed this in their own terminal (that's the approval); lockdown and an
+    // administrator switching commands off still apply.
+    await enforce({ db: auth.supabase, userId: auth.user.id, kind: "user", agent: "terminal" }, preview ? "preview.start" : commandOp(command), command, { approved: true });
     const { box } = await requireBox(auth, id);
     if (preview) {
       await stopPreview(box);

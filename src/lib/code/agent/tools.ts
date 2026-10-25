@@ -1,4 +1,7 @@
 import type { z } from "zod";
+import { BULK_DELETE, commandOp, detectInjection, fileWriteOp, injectionNote } from "../../bastion/guards";
+import type { OperationId, Outcome } from "../../bastion/policy";
+import { redactAll } from "../../secrets";
 import { diagnoseOutput } from "./diagnose";
 import { applyAiEdits, type AiEdits } from "../ai-edits";
 import { diffStats, unifiedDiff } from "../diff";
@@ -31,6 +34,8 @@ export interface CommandOutcome {
   /** Files the command created, changed or deleted in the project. */
   changed: FileChange[];
   skipped: string[];
+  /** Orbis Bastion refused the command (it didn't run). */
+  blocked?: string;
 }
 
 /** What the run has done to a file: its content before the run first touched it, and the run's latest. */
@@ -50,12 +55,12 @@ export interface Checkpoint {
 export interface AgentEnv {
   /** The project's files as saved now. */
   files(): Promise<ProjectFile[]>;
-  /** Save changes to the project (and the running computer), and record them for the run. */
-  save(changes: FileChange[]): Promise<void>;
+  /** Save changes to the project (and the running computer), and record them for the run. Returns the changes Bastion refused (not saved). */
+  save(changes: FileChange[]): Promise<{ path: string; reason: string }[] | void>;
   /** Whether the project's computer is running. */
   computer(): Promise<boolean>;
-  /** Run a command in the computer and wait for it (up to the time limit). */
-  exec(command: string): Promise<CommandOutcome>;
+  /** Run a command in the computer and wait for it (up to the time limit). `approved`: the user approved exactly this command. */
+  exec(command: string, approved?: boolean): Promise<CommandOutcome>;
   /** This run's changes so far. */
   changes(): Promise<RunChange[]>;
   checkpoints: { list(): Promise<Checkpoint[]>; create(label: string, files: Record<string, string | null>): Promise<Checkpoint> };
@@ -82,6 +87,12 @@ export interface AgentEnv {
     propose(note: { kind: MemoryKind; title: string; content: string }): Promise<MemoryEntry>;
   };
   github?: (tool: string, args: Record<string, unknown>) => Promise<{ ok: boolean; text: string; summary: string }>;
+  /**
+   * Orbis Bastion: protected actions are checked here before they run (src/lib/bastion). The same checks are
+   * enforced again where the action is carried out (saving files, running commands), so skipping this one
+   * doesn't get an action through.
+   */
+  guard?: (op: OperationId, resource: string, approved?: boolean) => Promise<{ outcome: Outcome; reason: string }>;
 }
 
 export interface StepState {
@@ -119,6 +130,8 @@ export interface StepOutcome {
   editedAt: string | null;
   /** Website checks that ran this step (the latest of each). */
   checks: { server?: ServerCheck; preview?: PreviewCheckRecord; build?: BuildCheck };
+  /** Actions Orbis Bastion refused this step. */
+  denied: number;
 }
 
 const MAX_READ_CHARS = 30_000;
@@ -286,7 +299,9 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
   let proposed: FileChange[] = [];
   const checks: StepOutcome["checks"] = {};
   let checked = false;
-  const done = (pause: StepOutcome["pause"], summary: string | null = null, unresolved: string[] = []): StepOutcome => ({ results, events, pause, plan, summary, unresolved, tests, edited, editedAt, checks });
+  let denied = 0;
+  let deletedThisStep = 0;
+  const done = (pause: StepOutcome["pause"], summary: string | null = null, unresolved: string[] = []): StepOutcome => ({ results, events, pause, plan, summary, unresolved, tests, edited, editedAt, checks, denied });
   const log = async (...e: NewEvent[]) => {
     events.push(...e);
     if (env.emit) await env.emit(e);
@@ -296,12 +311,26 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
     for (const a of reply.actions.slice(from)) result(a.id, a.tool, false, `Not run: ${why}`);
   };
   const lastTests = () => tests[tests.length - 1] ?? state.lastTests ?? null;
+  /** Ask Bastion; a refusal is recorded in the step's results and the activity log. */
+  const guard = async (op: OperationId, resource: string, approved = false) => {
+    const g = env.guard ? await env.guard(op, resource, approved) : null;
+    if (g?.outcome === "deny") denied++;
+    return g;
+  };
+  const refusedBy = (reason: string) => `Blocked by Orbis Bastion: ${reason} Don't try to get around it; tell the user what you needed and why.`;
 
-  const save = async (changes: FileChange[]) => {
-    await env.save(changes);
-    edited = true;
-    editedAt = new Date().toISOString();
-    files = applyProposed(await current(), changes);
+  /** Save changes; returns why Bastion refused them, if it did (nothing is saved then). */
+  const save = async (changes: FileChange[]): Promise<string | null> => {
+    const refused = (await env.save(changes)) ?? [];
+    const kept = changes.filter((c) => !refused.some((r) => r.path === c.path));
+    if (kept.length) {
+      edited = true;
+      editedAt = new Date().toISOString();
+      files = applyProposed(await current(), kept);
+    }
+    if (!refused.length) return null;
+    denied++;
+    return refused.map((r) => `${r.path}: ${r.reason}`).join("; ");
   };
 
   /** Run a command (or ask first), as run_command and run_tests do. Returns a pause when the step must stop. */
@@ -329,8 +358,14 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
       return null;
     }
     const approved = state.approvedCommand === cmd;
-    if (!approved && (state.commands === "ask" || decision.kind === "ask")) {
-      const reason = decision.kind === "ask" ? decision.reason : "Every command needs your approval in this run.";
+    const g = await guard(commandOp(cmd), cmd, approved);
+    if (g?.outcome === "deny") {
+      result(id, tool, false, refusedBy(g.reason));
+      await log({ kind: "command", title: `Blocked by Bastion: ${cmd.slice(0, 200)}`, detail: { command: cmd, blocked: g.reason, bastion: true } });
+      return null;
+    }
+    if (!approved && (state.commands === "ask" || decision.kind === "ask" || g?.outcome === "needs_approval")) {
+      const reason = g?.outcome === "needs_approval" ? `${g.reason} (Orbis Bastion)` : decision.kind === "ask" ? decision.reason : "Every command needs your approval in this run.";
       result(id, tool, true, "Waiting for the user to approve this command.");
       skipRest(i + 1, "waiting for the user's approval of the command.");
       await log({ kind: "approval", title: `Asked to run: ${cmd.slice(0, 200)}`, detail: { command: cmd, reason } });
@@ -343,13 +378,14 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
       return done({ status: "needs_input", pending: { kind: "computer", command: cmd } });
     }
     commandRan = true;
-    const out = await env.exec(cmd);
+    const out = await env.exec(cmd, approved);
     if (out.changed.length) {
       files = null;
       edited = true;
       editedAt = new Date().toISOString();
     }
-    const t = isTestCommand(cmd) || tool === "run_tests" ? testResult({ command: cmd, ...out }) : null;
+    if (out.blocked) denied++;
+    const t = !out.blocked && (isTestCommand(cmd) || tool === "run_tests") ? testResult({ command: cmd, ...out }) : null;
     if (t) tests.push(t);
     else if (decision.purpose === "build" && !out.cancelled) {
       checks.build = { command: cmd.slice(0, 300), exitCode: out.exitCode, passed: out.exitCode === 0 && !out.timedOut, ranAt: new Date().toISOString() };
@@ -413,7 +449,7 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
             ? `<file path="${p}">(no such file)</file>`
             : isSecretPath(p)
               ? `<file path="${p}">${WITHHELD}</file>`
-              : `<file path="${p}">\n${clipText(byPath.get(p)!, MAX_READ_CHARS)}\n</file>`,
+              : `<file path="${p}">\n${untrusted(clipText(byPath.get(p)!, MAX_READ_CHARS))}\n</file>`,
         );
         const found = paths.filter((p) => byPath.has(p));
         result(id, tool, found.length > 0, parts.join("\n"));
@@ -445,7 +481,7 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
           await log({ kind: "note", title: `Refused an edit to ${String(a.path ?? "a file").slice(0, 200)} (QA may only change tests)` });
           break;
         }
-        const base = state.reviewEdits ? applyProposed(await current(), proposed) : await current();
+        const base = state.reviewEdits || proposed.length ? applyProposed(await current(), proposed) : await current();
         const applied = applyAiEdits(base, [toEdit(tool, a)]);
         if (!applied.ok) {
           result(id, tool, false, applied.errors.join(" "));
@@ -453,6 +489,32 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
         }
         if (!applied.changes.length) {
           result(id, tool, true, "No change (the file already had that content).");
+          break;
+        }
+        // Bastion: credentials written into files are refused; secret, CI, deployment and migration files and
+        // bulk deletes go to the user for review even when edits are otherwise saved straight away.
+        let review: string | null = null;
+        let refused: string | null = null;
+        for (const c of applied.changes) {
+          const bulk = c.after === null && deletedThisStep + 1 > BULK_DELETE;
+          const g = await guard(bulk ? "file.delete.bulk" : fileWriteOp(c.path, c.after, c.before), c.path);
+          if (g?.outcome === "deny") refused = g.reason;
+          else if (g?.outcome === "needs_approval") review = g.reason;
+        }
+        if (refused) {
+          result(id, tool, false, refusedBy(refused));
+          await log({ kind: "note", title: `Bastion refused a change to ${String(a.path ?? "a file").slice(0, 200)}`, detail: { path: a.path, blocked: refused, bastion: true } });
+          break;
+        }
+        deletedThisStep += applied.changes.filter((c) => c.after === null).length;
+        if ((review || proposed.length) && !state.reviewEdits) {
+          const next = mergeChanges([...proposed, ...applied.changes]);
+          if (JSON.stringify(next).length > MAX_REVIEW_CHARS) {
+            result(id, tool, false, "Not proposed: that's more than the user can review at once. Propose it in a later step.");
+            break;
+          }
+          proposed = next;
+          result(id, tool, true, `${describeChange(applied.changes[0]!)} — needs the user's review first (${review ?? "it goes with other edits waiting for review"}).`);
           break;
         }
         if (state.reviewEdits) {
@@ -465,7 +527,11 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
           result(id, tool, true, `${describeChange(applied.changes[0]!)} — proposed; the user will review it.`);
           break;
         }
-        await save(applied.changes);
+        const blockedSave = await save(applied.changes);
+        if (blockedSave) {
+          result(id, tool, false, refusedBy(blockedSave));
+          break;
+        }
         const c = applied.changes[0]!;
         result(id, tool, true, `${describeChange(c)} — saved.`);
         await log({ kind: "edit", title: describeChange(c), detail: { path: c.path } });
@@ -546,6 +612,11 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
           label = `checkpoint “${cp.label}”`;
         }
         const plan = planRestore(await env.changes(), target, await current());
+        const gr = await guard("checkpoint.restore", ref);
+        if (gr && gr.outcome !== "allow") {
+          result(id, tool, false, gr.outcome === "deny" ? refusedBy(gr.reason) : `Not restored: ${gr.reason}`);
+          break;
+        }
         const note = plan.conflicts.length ? ` Left alone (changed by someone else since): ${plan.conflicts.join(", ")}.` : "";
         if (!plan.changes.length) {
           result(id, tool, true, `Nothing to restore: the files already match ${label}.${note}`);
@@ -556,7 +627,11 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
           result(id, tool, true, `Restoring ${plan.changes.length} file${plan.changes.length === 1 ? "" : "s"} to ${label} — proposed; the user will review it.${note}`);
           break;
         }
-        await save(plan.changes);
+        const blockedRestore = await save(plan.changes);
+        if (blockedRestore) {
+          result(id, tool, false, refusedBy(blockedRestore));
+          break;
+        }
         result(id, tool, true, `Restored ${plan.changes.map((c) => c.path).join(", ")} to ${label}.${note}`);
         await log({
           kind: "revert",
@@ -604,8 +679,14 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
           await log({ kind: "command", title: `Blocked: ${cmd.slice(0, 200)}`, detail: { command: cmd, blocked: decision.reason } });
           break;
         }
-        if (state.approvedCommand !== cmd && (state.commands === "ask" || decision.kind === "ask")) {
-          const reason = decision.kind === "ask" ? decision.reason : "Every command needs your approval in this run.";
+        const gp = await guard("preview.start", cmd, state.approvedCommand === cmd);
+        if (gp?.outcome === "deny") {
+          result(id, tool, false, refusedBy(gp.reason));
+          await log({ kind: "command", title: `Blocked by Bastion: ${cmd.slice(0, 200)}`, detail: { command: cmd, blocked: gp.reason, bastion: true, preview: true } });
+          break;
+        }
+        if (state.approvedCommand !== cmd && (state.commands === "ask" || decision.kind === "ask" || gp?.outcome === "needs_approval")) {
+          const reason = gp?.outcome === "needs_approval" ? `${gp.reason} (Orbis Bastion)` : decision.kind === "ask" ? decision.reason : "Every command needs your approval in this run.";
           result(id, tool, true, "Waiting for the user to approve the server command.");
           skipRest(i + 1, "waiting for the user's approval of the server command.");
           await log({ kind: "approval", title: `Asked to start the preview with: ${cmd.slice(0, 200)}`, detail: { command: cmd, reason, preview: true } });
@@ -674,9 +755,14 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
           result(id, tool, false, "Web search isn't available here. Rely on the project's own files and what you know, and say when you're unsure.");
           break;
         }
+        const gw = await guard("web.search", a.query as string);
+        if (gw && gw.outcome !== "allow") {
+          result(id, tool, false, refusedBy(gw.reason));
+          break;
+        }
         try {
           const found = await env.lookupDocs(a.query as string);
-          result(id, tool, true, found.length ? found.map((s, n) => `(${n + 1}) ${s.title} — ${s.url}\n${s.snippet}`).join("\n\n") : "No results.");
+          result(id, tool, true, found.length ? untrusted(found.map((s, n) => `(${n + 1}) ${s.title} — ${s.url}\n${s.snippet}`).join("\n\n")) : "No results.");
           await log({
             kind: "inspect",
             title: `Looked up “${(a.query as string).slice(0, 80)}” (${found.length} result${found.length === 1 ? "" : "s"})`,
@@ -692,8 +778,13 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
           result(id, tool, false, "GitHub isn't connected for this user.");
           break;
         }
+        const gg = await guard("connector.read", `github ${a.action as string} ${String(a.repo ?? "")} ${String(a.path ?? a.query ?? "")}`.trim());
+        if (gg && gg.outcome !== "allow") {
+          result(id, tool, false, refusedBy(gg.reason));
+          break;
+        }
         const r = await env.github(`github_${a.action as string}`, Object.fromEntries(Object.entries(a).filter(([k]) => k !== "action")));
-        result(id, tool, r.ok, r.text);
+        result(id, tool, r.ok, r.ok ? untrusted(redactAll(r.text)) : r.text);
         await log({ kind: "inspect", title: r.ok ? `GitHub: ${r.summary}` : `GitHub: ${r.text.slice(0, 200)}` });
         break;
       }
@@ -707,7 +798,7 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
           result(id, tool, true, "That's an image: it's shown with the first message when the model can see images. It has no text to read.");
           break;
         }
-        result(id, tool, true, `<attachment name="${a.name as string}">\n${clipText(found.content, MAX_READ_CHARS)}\n</attachment>`);
+        result(id, tool, true, `<attachment name="${a.name as string}">\n${untrusted(clipText(found.content, MAX_READ_CHARS))}\n</attachment>`);
         await log({ kind: "inspect", title: `Read the attached file ${(a.name as string).slice(0, 200)}` });
         break;
       }
@@ -788,6 +879,15 @@ export function applyProposed(files: ProjectFile[], changes: FileChange[]): Proj
   return [...map].map(([path, content]) => ({ path, content })).sort((a, b) => a.path.localeCompare(b.path));
 }
 
+/**
+ * Content from outside the conversation (files, command output, web results, GitHub, attachments) that looks
+ * like it's trying to instruct the AI gets Bastion's note in front of it. The content itself is kept.
+ */
+export function untrusted(text: string): string {
+  const inj = detectInjection(text);
+  return inj.suspicious ? `${injectionNote(inj.signals)}\n${text}` : text;
+}
+
 export function testDetails(t: TestResult): string {
   return [
     `${describeTestResult(t)} — exit code ${t.exitCode ?? "none"}, ${(t.durationMs / 1000).toFixed(1)}s, at ${t.ranAt}.`,
@@ -800,6 +900,7 @@ export function testDetails(t: TestResult): string {
 }
 
 export function commandResultText(command: string, out: CommandOutcome, test: TestResult | null = null): string {
+  if (out.blocked) return `$ ${command}\nNot run: blocked by Orbis Bastion — ${out.blocked}`;
   const status = out.cancelled
     ? "stopped by the user"
     : out.timedOut
@@ -814,10 +915,11 @@ export function commandResultText(command: string, out: CommandOutcome, test: Te
   const skipped = out.skipped.length ? `\nNot copied back (binary, too large or over the project's limits): ${out.skipped.slice(0, 20).join(", ")}` : "";
   const parsed = test ? `\n${describeTestResult(test)}${test.failures.length ? `\nFailing: ${test.failures.join("; ")}` : ""}` : "";
   const cause = !out.cancelled && out.exitCode !== 0 ? diagnoseOutput(out.output) : null;
-  return `$ ${command}\n${status} after ${(out.durationMs / 1000).toFixed(1)}s${parsed}${files}${skipped}${cause ? `\nLikely cause: ${cause.hint}` : ""}\nOutput:\n${tailText(out.output, OUTPUT_FOR_MODEL) || "(no output)"}`;
+  return `$ ${command}\n${status} after ${(out.durationMs / 1000).toFixed(1)}s${parsed}${files}${skipped}${cause ? `\nLikely cause: ${cause.hint}` : ""}\nOutput:\n${untrusted(redactAll(tailText(out.output, OUTPUT_FOR_MODEL))) || "(no output)"}`;
 }
 
 export function commandEvent(command: string, out: CommandOutcome, test: TestResult | null = null): NewEvent {
+  if (out.blocked) return { kind: "command", title: `Blocked by Bastion: ${command.slice(0, 200)}`, detail: { command, blocked: out.blocked, bastion: true } };
   const verdict = out.cancelled ? "stopped" : out.timedOut ? "timed out" : out.exitCode === 0 ? "passed" : `failed (exit ${out.exitCode})`;
   return {
     kind: "command",
@@ -828,7 +930,7 @@ export function commandEvent(command: string, out: CommandOutcome, test: TestRes
       timedOut: out.timedOut,
       cancelled: out.cancelled,
       durationMs: Math.round(out.durationMs),
-      output: tailText(out.output, OUTPUT_FOR_LOG),
+      output: redactAll(tailText(out.output, OUTPUT_FOR_LOG)),
       changed: out.changed.map((c) => c.path),
       ...(test ? { tests: { verdict: test.verdict, framework: test.framework, passed: test.passed, failed: test.failed, skipped: test.skipped, failures: test.failures } } : {}),
     },

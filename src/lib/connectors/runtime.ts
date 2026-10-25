@@ -2,6 +2,9 @@ import "server-only";
 import type { AuthContext } from "@/lib/auth";
 import { ApiError } from "@/lib/http";
 import { reportError } from "@/lib/observability";
+import { detectInjection, injectionNote } from "@/lib/bastion/guards";
+import { guard } from "@/lib/bastion/server";
+import { redactAll } from "@/lib/secrets";
 import { githubAppConfig } from "@/lib/github/app";
 import { requireRepoAccess } from "@/lib/github/server";
 import type { AiMode, ConnectionView, ConnectorItem } from "./catalog";
@@ -174,10 +177,31 @@ export interface ToolRun {
   error?: string;
 }
 
-export async function runTool(auth: Authed, name: string, args: unknown, opts: { rows?: ConnectionRow[]; signal?: AbortSignal; fetch?: Fetch } = {}): Promise<ToolRun> {
+/**
+ * What a connected service returned, as the AI will read it: credentials removed, and Bastion's note in front of
+ * text that looks like it's trying to instruct the AI (an email or document can say anything).
+ */
+export function cleanResult(result: ToolResult): ToolResult {
+  const items = result.items.map((i) => ({ ...i, ...(i.snippet ? { snippet: redactAll(i.snippet) } : {}) }));
+  if (!result.text) return { ...result, items };
+  const text = redactAll(result.text);
+  const inj = detectInjection(text);
+  return { ...result, items, text: inj.suspicious ? `${injectionNote(inj.signals)}\n${text}` : text };
+}
+
+export async function runTool(
+  auth: Authed,
+  name: string,
+  args: unknown,
+  opts: { rows?: ConnectionRow[]; signal?: AbortSignal; fetch?: Fetch; actor?: { kind: "agent" | "user"; agent: string; runId?: string } } = {},
+): Promise<ToolRun> {
   const found = toolByName(name);
   if (!found) return { connectorId: "?", tool: name, ok: false, error: `Unknown tool ${name}.` };
   const { connector: c, tool } = found;
+  // Orbis Bastion: reading a connected service is low risk, but an administrator can switch it off or suspend the agent.
+  const actor = opts.actor ?? { kind: "agent" as const, agent: "assistant" };
+  const d = await guard({ db: auth.supabase, userId: auth.user.id, kind: actor.kind, agent: actor.agent, runId: actor.runId ?? null }, "connector.read", `${name}`);
+  if (d.outcome !== "allow") return { connectorId: c.meta.id, tool: name, ok: false, error: `Blocked by Orbis Bastion: ${d.reason}` };
   const row = opts.rows ? (opts.rows.find((r) => r.connector_id === c.meta.id) ?? null) : await getConnection(auth, c.meta.id);
   if (!usable(c, row)) {
     const why = missingSetup(c).length ? `${c.meta.name} isn't set up on this site.` : row?.status === "reauth_required" ? `${c.meta.name} needs reconnecting.` : `${c.meta.name} isn't connected.`;
@@ -187,14 +211,14 @@ export async function runTool(auth: Authed, name: string, args: unknown, opts: {
   if (!parsed.success) return { connectorId: c.meta.id, tool: name, ok: false, error: `Invalid request for ${c.meta.name}: ${parsed.error.issues[0]?.message ?? "bad arguments"}.` };
   const key = `${auth.user.id}:${name}:${JSON.stringify(parsed.data)}`;
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_MS) return { connectorId: c.meta.id, tool: name, ok: true, result: hit.result };
+  if (hit && Date.now() - hit.at < CACHE_MS) return { connectorId: c.meta.id, tool: name, ok: true, result: cleanResult(hit.result) };
   try {
     const { token, extra } = await accessToken(auth, c, row!, opts.fetch);
     const result = await (tool as ToolDef<unknown>).run({ token, extra, fetch: opts.fetch ?? fetch, signal: opts.signal }, parsed.data);
     cache.set(key, { at: Date.now(), result });
     if (cache.size > 300) cache.delete(cache.keys().next().value!);
     if (c.meta.auth !== "github_app") void updateConnection(auth, c.meta.id, { last_used_at: new Date().toISOString(), ...(row!.last_error ? { last_error: null } : {}) });
-    return { connectorId: c.meta.id, tool: name, ok: true, result };
+    return { connectorId: c.meta.id, tool: name, ok: true, result: cleanResult(result) };
   } catch (err) {
     await noteFailure(auth, c.meta.id, err);
     if (!(err instanceof ConnectorError) && !(err instanceof ApiError)) reportError(err, { where: `connectors.tool.${name}` });
@@ -245,6 +269,10 @@ export async function runAction(auth: Authed, name: string, args: unknown, f: Fe
   }
   const parsed = (action as ActionDef<unknown>).input.safeParse(args);
   if (!parsed.success) throw new ApiError("bad_request", parsed.error.issues[0]?.message ?? "Check the details and try again.");
+  // Orbis Bastion: acting in a connected service is high risk. The user confirmed this exact action on its card
+  // (that's the approval); an administrator can still switch connector actions off or lock everything down.
+  const d = await guard({ db: auth.supabase, userId: auth.user.id, kind: "user", agent: "connectors" }, "connector.write", name, { approved: true });
+  if (d.outcome !== "allow") throw new ApiError("forbidden", `Blocked by Orbis Bastion: ${d.reason}`, { scope: "bastion" });
   let outcome: ActionOutcome;
   try {
     const { token, extra } = await accessToken(auth, c, row!, f);

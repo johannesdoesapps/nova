@@ -95,7 +95,7 @@ export interface RunUsage {
 }
 
 /** Why a run failed, for the report and reliability figures. */
-export const FAILURE_KINDS = ["no_model", "provider_rejected", "provider_not_configured", "provider_unavailable", "refused", "unreadable_replies", "internal"] as const;
+export const FAILURE_KINDS = ["no_model", "provider_rejected", "provider_not_configured", "provider_unavailable", "refused", "unreadable_replies", "blocked_by_policy", "internal"] as const;
 export type FailureKind = (typeof FAILURE_KINDS)[number];
 
 export const EMPTY_USAGE: RunUsage = { inputTokens: 0, outputTokens: 0, costUsd: 0, modelCalls: 0, models: [] };

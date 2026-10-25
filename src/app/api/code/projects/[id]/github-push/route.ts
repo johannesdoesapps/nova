@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { hardSecrets, isSecretPath } from "@/lib/bastion/guards";
+import { enforce } from "@/lib/bastion/server";
 import { changedSinceBase, pushConflicts, type Shas } from "@/lib/code/github-sync";
 import { codeContext, dbError, getFiles } from "@/lib/code/server";
 import { gitBlobSha, REPO_RE, repoTree } from "@/lib/github/app";
@@ -63,6 +65,12 @@ export async function POST(req: Request, ctx: RouteContext<"/api/code/projects/[
       files = files.filter((f) => changed.has(f.path));
       if (!files.length && !deleted.length) throw new ApiError("bad_request", "Nothing has changed in Orbis since the last update from GitHub, so there's nothing to push.");
     }
+    // Orbis Bastion: pushing is high risk and needs the user's confirmation of this push (given in the dialog);
+    // files that hold credentials are never pushed, whoever asks.
+    await enforce({ db: auth.supabase, userId: auth.user.id, kind: "user", agent: "github_push" }, "github.push", `${input.repo} → ${input.branch}`, { approved: input.confirm });
+    const withheld = files.filter((f) => isSecretPath(f.path) || hardSecrets(f.content).length > 0).map((f) => f.path);
+    files = files.filter((f) => !withheld.includes(f.path));
+    if (!files.length && !deleted.length) throw new ApiError("bad_request", "Every changed file holds credentials, so there's nothing Orbis will push.");
     let result;
     let status: "done" | "failed" = "failed";
     try {
@@ -72,7 +80,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/code/projects/[
       const { error } = await auth.supabase.from("connector_actions").insert({ connector_id: "github", action: "push_branch", status, summary: `${input.repo} → ${input.branch}`.slice(0, 500) });
       if (error) reportError(error, { where: "code.push.log" });
     }
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json({ ok: true, ...result, withheld });
   } catch (err) {
     return errorResponse(err);
   }

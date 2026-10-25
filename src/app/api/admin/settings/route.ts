@@ -45,8 +45,11 @@ export async function PUT(req: Request) {
     // Paused agents are managed in the agent directory; a save from this page (which may hold an older copy) keeps them as stored.
     const { data: stored, error: readError } = await auth.supabase.from("app_settings").select("settings").eq("id", 1).maybeSingle();
     if (readError) throw new ApiError("internal", "The settings could not be saved.");
-    next.pausedAgents = parsePlatformSettings(((stored as { settings?: unknown } | null)?.settings ?? {}) as Record<string, unknown>).pausedAgents;
-    const { data, error } = await auth.supabase.from("app_settings").update({ settings: next, updated_by: auth.user.id }).eq("id", 1).select("id");
+    const storedRaw = ((stored as { settings?: unknown } | null)?.settings ?? {}) as Record<string, unknown>;
+    next.pausedAgents = parsePlatformSettings(storedRaw).pausedAgents;
+    // Bastion's controls are changed only from the Bastion page (with their own version history); keep them as stored.
+    const toSave = storedRaw.bastion !== undefined ? { ...next, bastion: storedRaw.bastion } : next;
+    const { data, error } = await auth.supabase.from("app_settings").update({ settings: toSave, updated_by: auth.user.id }).eq("id", 1).select("id");
     if (error || !data?.length) throw new ApiError("internal", "The settings could not be saved.");
     // Which settings changed (names only; the values stay in app_settings).
     await recordAdminAction(auth.supabase, "settings.save", null, {

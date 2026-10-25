@@ -1,3 +1,4 @@
+import { enforce } from "@/lib/bastion/server";
 import { codeContext, getFiles, getProjectRow } from "@/lib/code/server";
 import { zipBaseName, zipFiles } from "@/lib/code/zip";
 import { errorResponse, requireUuid } from "@/lib/http";
@@ -8,6 +9,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/code/projects/[
     const id = requireUuid((await ctx.params).id);
     const auth = await codeContext("code-download", 20);
     const project = await getProjectRow(auth, id);
+    await enforce({ db: auth.supabase, userId: auth.user.id, kind: "user", agent: "exports" }, "data.export", `project ${project.name}`.slice(0, 200), { approved: true });
     const files = await getFiles(auth, id);
     const base = zipBaseName(project.name);
     const zip = zipFiles(base, files);

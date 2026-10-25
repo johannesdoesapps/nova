@@ -142,7 +142,7 @@ export function FindingView({ id }: { id: string }) {
   const header = (
     <StudioHeader>
       <Link href="/agents/security" className="inline-flex items-center gap-1.5 text-[14px] text-s-ink-2 transition hover:text-s-ink">
-        <ArrowLeft className="h-4 w-4" /> Security
+        <ArrowLeft className="h-4 w-4" aria-hidden /> <span className="max-sm:sr-only">Security</span>
       </Link>
       <span className="text-s-ink-3">/</span>
       <span className="truncate text-[14px] font-medium">Finding</span>

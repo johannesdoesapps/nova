@@ -267,7 +267,7 @@ function PushForm({ projectId, sourceRepo, onClose }: { projectId: string; sourc
   const [message, setMessage] = useState("Changes from Orbis");
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ compareUrl: string; commitUrl: string; branch: string } | null>(null);
+  const [result, setResult] = useState<{ compareUrl: string; commitUrl: string; branch: string; withheld?: string[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** GitHub changed some of the same files: the user may push anyway, replacing them on the new branch. */
   const [clash, setClash] = useState(false);
@@ -301,6 +301,12 @@ function PushForm({ projectId, sourceRepo, onClose }: { projectId: string; sourc
           <p className="text-s-ink-2">
             Pushed to <code className="font-mono">{result.branch}</code>.
           </p>
+          {result.withheld?.length ? (
+            <p className="text-s-ink-2">
+              Not pushed because they hold credentials: {result.withheld.slice(0, 5).join(", ")}
+              {result.withheld.length > 5 ? ` and ${result.withheld.length - 5} more` : ""}.
+            </p>
+          ) : null}
           <a href={result.compareUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-s-ink underline">
             Open a pull request <ExternalLink className="h-3 w-3" />
           </a>

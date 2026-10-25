@@ -37,6 +37,9 @@ import {
   type TranscriptMessage,
 } from "./protocol";
 import { classifyCommand } from "./policy";
+import { BULK_DELETE, commandOp, fileWriteOp } from "../../bastion/guards";
+import { shouldContain } from "../../bastion/policy";
+import { agentSuspended, guard as bastionGuard, refusalsInRun, type GuardContext } from "../../bastion/server";
 import { agentPurpose, profileGuidance, profileReport, qaMayEdit } from "./profiles";
 import { isSiteTemplateId, siteTemplateGuidance } from "../site-templates";
 import { buildReport } from "./report";
@@ -226,9 +229,37 @@ async function mirror(box: WorkspaceBox | null, changes: FileChange[]) {
   }
 }
 
-/** Save changes to the project, copy them to the running computer, and record them for the run. */
-export async function saveChanges(auth: Authed, runId: string, projectId: string, changes: FileChange[]) {
-  if (!changes.length) return;
+/** Which agent a run is, for Orbis Bastion (suspensions and decisions are per agent). */
+export function codeAgentId(row: Pick<RunRow, "options">): string {
+  const o = runOptions(row);
+  return o.agent ?? (o.web ? "website_builder" : "engineer");
+}
+
+/** An agent's action checked by Orbis Bastion where it's carried out. `approved`: the user approved exactly this action. */
+export interface Gate {
+  agent: string;
+  approved?: boolean;
+}
+const gateCtx = (auth: Authed, runId: string, agent: string): GuardContext => ({ db: auth.supabase, userId: auth.user.id, kind: "agent", agent, runId });
+
+/**
+ * Save changes to the project, copy them to the running computer, and record them for the run. With a gate (an
+ * agent's changes), each change passes Orbis Bastion first; refused ones aren't saved and are returned.
+ */
+export async function saveChanges(auth: Authed, runId: string, projectId: string, changes: FileChange[], gate: Gate | null = null): Promise<{ path: string; reason: string }[]> {
+  const refused: { path: string; reason: string }[] = [];
+  if (gate) {
+    const ok: FileChange[] = [];
+    const deletes = changes.filter((c) => c.after === null).length;
+    for (const c of changes) {
+      const op = c.after === null && deletes > BULK_DELETE ? "file.delete.bulk" : fileWriteOp(c.path, c.after, c.before);
+      const d = await bastionGuard(gateCtx(auth, runId, gate.agent), op, c.path, { approved: gate.approved });
+      if (d.outcome === "allow") ok.push(c);
+      else refused.push({ path: c.path, reason: d.reason });
+    }
+    changes = ok;
+  }
+  if (!changes.length) return refused;
   await applyFileChanges(
     auth,
     projectId,
@@ -236,6 +267,7 @@ export async function saveChanges(auth: Authed, runId: string, projectId: string
   );
   await recordChanges(auth, runId, changes);
   await mirror(await optionalBox(auth, projectId), changes);
+  return refused;
 }
 
 /** Run a command in the project's computer, wait for it, and copy back the files it changed. */
@@ -244,7 +276,10 @@ export function commandKeeps(row: Pick<RunRow, "options">): ((path: string) => b
   return runOptions(row).agent === "qa_tester" ? qaMayEdit : undefined;
 }
 
-export async function execCommand(auth: Authed, runId: string, projectId: string, command: string, keep?: (path: string) => boolean): Promise<CommandOutcome> {
+export async function execCommand(auth: Authed, runId: string, projectId: string, command: string, keep: ((path: string) => boolean) | undefined, gate: Gate): Promise<CommandOutcome> {
+  // Every command an agent runs passes Orbis Bastion here, however it got here (a step, an approval, pair coding, verification).
+  const d = await bastionGuard(gateCtx(auth, runId, gate.agent), commandOp(command), command, { approved: gate.approved });
+  if (d.outcome !== "allow") return { exitCode: null, output: "", durationMs: 0, timedOut: false, cancelled: false, changed: [], skipped: [], blocked: d.reason };
   const box = await optionalBox(auth, projectId);
   if (!box) throw new ApiError("conflict", "The project's computer isn't running.", { scope: "workspace_stopped" });
   const before = await getFiles(auth, projectId);
@@ -342,11 +377,13 @@ function attachmentEvents(atts: { name: string; kind: "text" | "image" }[], canS
 
 function realEnv(c: EnvContext): AgentEnv {
   const { auth, run, project } = c;
+  const agent = codeAgentId(run);
   const env: AgentEnv = {
     files: () => getFiles(auth, project.id),
-    save: (changes) => saveChanges(auth, run.id, project.id, changes),
+    save: (changes) => saveChanges(auth, run.id, project.id, changes, { agent }),
     computer: async () => Boolean(await optionalBox(auth, project.id)),
-    exec: (command) => execCommand(auth, run.id, project.id, command, commandKeeps(run)),
+    exec: (command, approved) => execCommand(auth, run.id, project.id, command, commandKeeps(run), { agent, approved }),
+    guard: (op, resource, approved) => bastionGuard(gateCtx(auth, run.id, agent), op, resource, { approved }),
     changes: async () => (await listChanges(auth, run.id)).map((ch) => ({ path: ch.path, before: ch.before, after: ch.after })),
     checkpoints: { list: () => listCheckpoints(auth, run.id), create: (label, files) => createCheckpoint(auth, run.id, label, files) },
     project: { runCommand: project.runCommand },
@@ -396,7 +433,7 @@ function realEnv(c: EnvContext): AgentEnv {
   }
   if (c.github) {
     env.github = async (tool, args) => {
-      const r = await runTool(auth, tool, args);
+      const r = await runTool(auth, tool, args, { actor: { kind: "agent", agent: codeAgentId(run), runId: run.id } });
       if (!r.ok || !r.result) return { ok: false, text: r.error ?? "GitHub couldn't complete that.", summary: "" };
       const items = r.result.items.map((i) => `- ${i.title}${i.url ? ` (${i.url})` : ""}${i.snippet ? `: ${i.snippet}` : ""}`).join("\n");
       return { ok: true, text: clipText(r.result.text ?? items ?? "", 30_000) || "(nothing found)", summary: r.result.summary };
@@ -545,6 +582,13 @@ export async function stepRun(req: Request, auth: Authed, runId: string, opts: {
 }
 
 async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now() + STEP_BUDGET_MS, clock: () => number = Date.now): Promise<RunRow> {
+  // Orbis Bastion: a suspended agent stops at its next step, whatever it was doing.
+  const suspended = await agentSuspended(codeAgentId(row));
+  if (suspended?.kind === "unavailable") throw new ApiError("provider_unavailable", suspended.message);
+  if (suspended) {
+    await addEvents(auth, row.id, [{ kind: "status", title: `Stopped by Orbis Bastion: ${suspended.message}`, detail: { bastion: true } }]);
+    return finishStep(auth, row.id, { status: "failed", error: `Stopped by Orbis Bastion: ${suspended.message}`, pending: null }, [], [], "blocked_by_policy");
+  }
   // Pair coding: two agents take turns (pair/engine.ts).
   if (runOptions(row).pair) return pairStep(req, auth, row, deadline, clock);
   // The agent has finished: Orbis runs the checks itself, one per step, before the run may end.
@@ -843,6 +887,14 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
     }
   }
   if (outcome.summary) patch.summary = outcome.summary;
+  // Orbis Bastion: repeated refusals in one run stop it (one harmless refusal doesn't).
+  if (outcome.denied) {
+    const refusals = await refusalsInRun(auth.supabase, auth.user.id, row.id, row.created_at).catch(() => 0);
+    if (shouldContain(refusals)) {
+      await addEvents(auth, row.id, [{ kind: "status", title: `Stopped by Orbis Bastion after ${refusals} refused actions`, detail: { bastion: true } }]);
+      return finishStep(auth, row.id, { ...patch, status: "failed", pending: null, error: `Stopped by Orbis Bastion: the agent tried ${refusals} actions that policy doesn't allow. Review the activity log before starting again.` }, outcome.unresolved, [], "blocked_by_policy");
+    }
+  }
   if (patch.status === "completed") return beginVerification(auth, row, patch, env, outcome.unresolved);
   return finishStep(auth, row.id, patch, outcome.unresolved);
 }
@@ -1079,11 +1131,14 @@ async function respond(auth: Authed, row: RunRow, input: RespondInput): Promise<
             },
           ]);
         }
-        await saveChanges(auth, row.id, row.project_id, pending.changes);
-        transcript = appendUser(transcript, `The user approved your edits; they're saved: ${pending.changes.map(describeChange).join("; ")}.`);
-        return done({ status: working, transcript, last_edit_at: new Date().toISOString() }, [
+        const refused = await saveChanges(auth, row.id, row.project_id, pending.changes, { agent: codeAgentId(row), approved: true });
+        const saved = pending.changes.filter((c) => !refused.some((r) => r.path === c.path));
+        const blocked = refused.length ? ` Orbis Bastion refused ${refused.map((r) => `${r.path} (${r.reason})`).join("; ")} — those weren't saved.` : "";
+        transcript = appendUser(transcript, `The user approved your edits; ${saved.length ? `they're saved: ${saved.map(describeChange).join("; ")}.` : "none could be saved."}${blocked}`);
+        return done({ status: working, transcript, ...(saved.length ? { last_edit_at: new Date().toISOString() } : {}) }, [
           { kind: "approval", title: `You approved changes to ${pending.changes.length} file${pending.changes.length === 1 ? "" : "s"}` },
-          ...pending.changes.map((c) => ({ kind: "edit" as const, title: describeChange(c), detail: { path: c.path } })),
+          ...saved.map((c) => ({ kind: "edit" as const, title: describeChange(c), detail: { path: c.path } })),
+          ...refused.map((r) => ({ kind: "note" as const, title: `Bastion refused the change to ${r.path.slice(0, 200)}`, detail: { path: r.path, blocked: r.reason, bastion: true } })),
         ]);
       }
       if (input.decision === "reject") {
@@ -1157,8 +1212,8 @@ async function continueAfterLimit(row: RunRow, reason: LimitReason, done: (patch
 /** Run a command the user approved, and put the result in the conversation. */
 async function runApproved(auth: Authed, row: RunRow, command: string, lead: NewEvent[]): Promise<RunRow> {
   if (lead.length) await addEvents(auth, row.id, lead);
-  const out = await execCommand(auth, row.id, row.project_id, command, commandKeeps(row));
-  const test = isTestCommand(command) ? testResult({ command, ...out }) : null;
+  const out = await execCommand(auth, row.id, row.project_id, command, commandKeeps(row), { agent: codeAgentId(row), approved: true });
+  const test = !out.blocked && isTestCommand(command) ? testResult({ command, ...out }) : null;
   const transcript = appendUser(row.transcript ?? [], `The user approved \`${command}\`. Result:\n${commandResultText(command, out, test)}`);
   await addEvents(auth, row.id, [commandEvent(command, out, test)]);
   // A build that ran after the user's go-ahead (or once the computer started) counts like any other.
@@ -1180,6 +1235,12 @@ async function startApprovedPreview(auth: Authed, row: RunRow, command: string, 
   if (lead.length) await addEvents(auth, row.id, lead);
   const box = await optionalBox(auth, row.project_id);
   if (!box) throw new ApiError("conflict", "The project's computer isn't running yet. Press Start first.", { scope: "workspace_stopped" });
+  const d = await bastionGuard(gateCtx(auth, row.id, codeAgentId(row)), "preview.start", command, { approved: true });
+  if (d.outcome !== "allow") {
+    await addEvents(auth, row.id, [{ kind: "command", title: `Blocked by Bastion: ${command.slice(0, 200)}`, detail: { command, preview: true, blocked: d.reason, bastion: true } }]);
+    const transcript = appendUser(row.transcript ?? [], `start_preview with \`${command}\` was blocked by Orbis Bastion: ${d.reason}`);
+    return finishStep(auth, row.id, { transcript: capTranscript(transcript), pending: null, status: workingStatus(row) });
+  }
   const project = await getProjectRow(auth, row.project_id);
   if (command !== project.runCommand) {
     await setRunCommand(auth, row.project_id, command);

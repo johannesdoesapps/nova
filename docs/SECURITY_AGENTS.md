@@ -1,6 +1,7 @@
 # Orbis Security Team
 
-`/agents/security` — three cybersecurity agents that work alone or together. Scanners
+`/agents/security` — three cybersecurity agents that work alone or together, coordinated by Aegis (command
+center) and protected by Bastion (enforcement layer for every Orbis agent). Scanners
 produce the findings; AI models only explain them, propose fixes, and write reports.
 
 ## Agents
@@ -247,6 +248,105 @@ mismatch, and 8 low/tentative patterns.
 **Not built.** Executing tests or builds during an audit (the coding agent does that when it repairs), profiling
 and benchmarks (performance findings are static patterns, never measured claims), type-aware analysis (rules are
 text-based), pnpm/yarn lockfile compatibility checks, continuous monitoring, and automatic upgrades.
+
+## Aegis — command center
+
+`/agents/security/aegis` (`src/lib/security/aegis/`, API `/api/security/aegis`). Aegis decides and coordinates; it
+doesn't scan and never changes a system. Everything is rebuilt on each load from stored findings and runs plus
+the decisions people recorded (`security_audit` rows named `aegis.*`, append-only).
+
+- **Roster** (`roster.ts`): Sentinel, Threat Hunter, Code Guardian and Bastion are available; Supply Chain,
+  Identity and Incident Commander are partial (their work is done today by the agents above); Cloud Guardian,
+  Red Team and Compliance & Privacy are **unavailable** and shown that way — no task is ever run or simulated for
+  them, and their coverage domains read "Unavailable".
+- **Unified model** (`model.ts`): assets (verified websites, audited repositories and uploads, log sources),
+  identities seen in investigations, and facts you declare per asset (criticality, internet exposure, data held,
+  owner, links). Declared links count as real; links Aegis suggests from shared names are hypotheses until you
+  confirm them.
+- **Prioritisation** (`risk.ts`): severity and confidence come from the agent; Aegis adds documented points for
+  exposure, CISA KEV listing, malicious activity or attack attempts on the same asset, declared criticality and
+  sensitive data. Tiers: immediate (credible, ≥ 50 points, and exploitation evidence or a critical internet-facing
+  issue), priority, strategic. Every ranked risk shows its factors and points; the assumptions are listed on the
+  page. Accepted risks need an expiry (1–366 days) and a reason; without one they're listed as excluded.
+- **Attack paths** (`paths.ts`): single-domain chains plus cross-agent hypotheses (probe after a weakness, leaked
+  credential with suspicious logins, KEV dependency with attacks on a linked system, logging switched off near
+  serious weaknesses, low-severity web weaknesses that combine into session theft). Each says how its pieces
+  relate (same asset, declared link, or *not linked — assumed*) and is marked **not reproduced**.
+- **Tasks** (`orchestrate.ts`): investigate → repair → verify for each immediate risk (dependent, so sequential),
+  assessments for stale or never-assessed assets (independent, parallel), link confirmations for you, and
+  "not covered" tasks for unavailable domains (blocked). Each task has an id, scope, objective, due-by suggestion,
+  completion criteria and dependencies; "done" comes from evidence (a newer run or a re-check), not from a click.
+- **Investigations** (`workflow.ts`): a ten-step record per serious risk, filled in only from recorded data,
+  with notes and a conclusion (exploitable / exploited / not exploitable / false positive / inconclusive) you add.
+- **Remediation**: Proposed → Approved → In progress → Verification required, or Rolled back — set by people.
+  **Verified / Partially resolved / Failed are set only by re-check evidence after the fix was applied**: a
+  finding still detected after that time (failed), or a dated "not detected" re-scan after it (verified).
+  `canTransition` refuses those statuses from people.
+- **Coverage** (`coverage.ts`): web, code, supply chain, telemetry, identity, cloud, attack validation, compliance
+  and intelligence — assessed, partial, not assessed or unavailable — plus stale assessments (> 30 days).
+- **Reports**: executive, technical and operational (Markdown download, logged as `aegis.report`).
+
+Evaluation: `tests/aegis.test.ts` (prioritisation, exceptions, attack-path honesty, duplicates, remediation
+verification rules, empty-state honesty, unavailable agents, task sequencing, reports).
+
+## Bastion — enforcement layer
+
+`/agents/security/bastion` (`src/lib/bastion/`, APIs `/api/bastion`, `/api/admin/bastion`). Security is enforced
+by the platform at the point each action runs, not requested from the AI.
+
+- **Policy** (`policy.ts`): every protected action is an operation with a risk level (low, moderate, high,
+  critical), a capability group and a floor. Agents: low and moderate allowed; high needs the user's approval of
+  that exact action (bound by a hash of user, agent, operation and resource — it doesn't carry over to another
+  command, agent, user or operation); critical refused, approved or not. People need explicit confirmation for
+  critical actions. Agents can't change policy or grant permissions.
+- **Fail closed**: controls (`app_settings.settings.bastion`, cached ~10 s per server) that can't be read or don't
+  validate mean only low-risk actions go ahead; administrators can still repair them.
+- **Emergency controls** (administrators): lockdown (only reading and analysis), suspend agents (running coding
+  tasks stop at their next step; others can't start), switch capabilities off, raise risk levels. Each change is a
+  new version with a summary and a restorable snapshot (last 20), requires explicit confirmation and an
+  up-to-date version number, and is recorded in the admin audit log. The general settings save keeps Bastion's
+  controls as stored.
+- **Guards** (`guards.ts`): secret and sensitive (CI, deployment, migration) paths, recognised credential formats
+  in new content, commands that read secret files, workspace path canonicalisation, outbound destination checks,
+  and prompt-injection signals in untrusted content.
+- **Containment**: five refused actions in one coding run stop the run.
+- **Audit**: refusals, approval requests and approved high-risk actions are recorded in the user's
+  `security_audit` (`bastion.deny`, `bastion.needs_approval`, `bastion.allow`) with the resource redacted; command
+  output and file contents are never recorded. Administrators see decisions across users when the service key is
+  configured.
+
+Where it's enforced is listed in `src/lib/bastion/coverage.ts` and on the Bastion page: coding agents' commands
+(in `execCommand`, so approvals, pair coding and verification are covered too) and file saves (`saveChanges`),
+preview starts, connected-service reads and actions, GitHub pushes (credential files are never pushed), the
+user's terminal, chat code runs, project downloads, Workforce ticks, agent starts, and security scan starts.
+
+**Remaining bypass paths and limits (not fixed):**
+
+- Commands run inside the project's sandbox. Bastion classifies the command line; a recognised command (e.g.
+  `npm test`) runs whatever the project's scripts say, so a malicious `package.json` script isn't inspected.
+  The sandbox's own network allowlist (npm, PyPI) is the control there.
+- Prompt-injection detection is pattern-based and can be evaded. It adds a warning; the real protection is that
+  the actions an injection might ask for are checked regardless.
+- Credential detection recognises specific formats (AWS, GitHub, Stripe live, Anthropic/OpenAI-style, Slack,
+  Google, Supabase, private keys). Other secrets in new files aren't caught.
+- Suspension and lockdown reach other servers within the controls cache (~10 s); an action already running
+  (a command mid-execution) finishes.
+- Containment counts refusals from the audit trail; if that query fails, the run isn't stopped early (the
+  individual refusals still apply).
+- Chat answers, research and code review aren't routed through Bastion's network switch; their web searches
+  still run. Exports other than project downloads (research and security reports) aren't covered.
+- Security scans are checked when they start, not per request; their own SSRF guard (`src/lib/security/net.ts`)
+  limits requests to verified sites.
+- Workforce sandbox commands use the Workforce's own command rules; Bastion checks each tick, not each command.
+- Users act on their own data under row-level security; Bastion's records live in the user's own append-only
+  audit trail, so a user can add (not change or remove) rows there.
+
+Tests: `tests/bastion.test.ts` (decisions, approvals not carrying over, fail-closed, lockdown, suspension,
+capability switches, floors, guards for secrets, commands, traversal, SSRF destinations and injection, redaction,
+views, enforcement-point files exist) and the "Orbis Bastion in a coding task" cases in
+`tests/code-agent-engine.test.ts` (credential written into code refused, CI file sent to review, destructive
+command never runs even when approved, secret-reading command needs approval, output redacted, suspended agent
+stopped mid-task, unreadable controls pause work).
 
 ## Shared finding format
 

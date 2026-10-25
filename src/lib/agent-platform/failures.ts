@@ -36,6 +36,7 @@ const BY_KIND: Record<string, FailureClass> = {
   provider_rejected: "invalid_input",
   refused: "strategy",
   unreadable_replies: "strategy",
+  blocked_by_policy: "permission",
   internal: "transient",
 };
 

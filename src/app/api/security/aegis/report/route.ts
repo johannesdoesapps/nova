@@ -1,0 +1,27 @@
+import { assertAgentAccess } from "@/lib/agent-platform/server";
+import { requireUser } from "@/lib/auth";
+import { audit } from "@/lib/db/security";
+import { errorResponse } from "@/lib/http";
+import { loadAegis } from "@/lib/security/aegis/server";
+import { executiveReport, operationalReport, technicalReport } from "@/lib/security/aegis/state";
+
+export const maxDuration = 30;
+
+const KINDS = { executive: executiveReport, technical: technicalReport, operational: operationalReport } as const;
+
+/** GET /api/security/aegis/report?type=executive|technical|operational — a Markdown report from recorded data. */
+export async function GET(req: Request) {
+  try {
+    const auth = await requireUser();
+    await assertAgentAccess(auth, "security");
+    const type = new URL(req.url).searchParams.get("type") ?? "executive";
+    const make = KINDS[type as keyof typeof KINDS] ?? KINDS.executive;
+    const text = make(await loadAegis(auth.supabase, auth.user.id));
+    await audit(auth.supabase, auth.user.id, "aegis.report", { detail: { type } });
+    return new Response(text, {
+      headers: { "content-type": "text/markdown; charset=utf-8", "content-disposition": `attachment; filename="orbis-aegis-${type}-${new Date().toISOString().slice(0, 10)}.md"` },
+    });
+  } catch (err) {
+    return errorResponse(err);
+  }
+}

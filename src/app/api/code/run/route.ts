@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
+import { enforce } from "@/lib/bastion/server";
 import { checkRunAllowance, recordCodeRun, releaseRun } from "@/lib/code/meter";
 import { codeLanguage, MAX_CODE_CHARS } from "@/lib/code/languages";
 import { maxCodeRunCostUsd } from "@/lib/code/pricing";
@@ -30,6 +31,8 @@ export async function POST(req: Request) {
     const lang = codeLanguage(input.language);
     if (!lang) throw new ApiError("bad_request", "Orbis can run Python, JavaScript, TypeScript and Bash code.");
     if (!codeRunsAvailable()) throw new ApiError("not_configured", "Running code isn't set up on this server.");
+    // Orbis Bastion: the user pressed Run on this block (that's the approval); an administrator can switch code runs off.
+    await enforce({ db: auth.supabase, userId: auth.user.id, kind: "user", agent: "code_runner" }, "code.run", `${lang.id} (${input.code.length} chars)`, { approved: true });
     if (!limiter("code-run", 10, 60_000).check(`u:${auth.user.id}`, 1).ok) {
       throw new ApiError("rate_limited", "Too many code runs in a minute. Please wait a moment.");
     }

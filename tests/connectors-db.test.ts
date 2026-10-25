@@ -10,6 +10,8 @@ import { randomBytes } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+// Bastion's controls as stored when an administrator hasn't changed anything (tests/bastion.test.ts covers the rest).
+vi.mock("@/lib/bastion/controls", async () => ({ loadControls: async () => (await import("@/lib/bastion/policy")).DEFAULT_CONTROLS, invalidateControls: () => {} }));
 vi.mock("server-only", () => ({}));
 process.env.ORBIS_CONNECTOR_KEY = randomBytes(32).toString("base64");
 
@@ -127,7 +129,12 @@ describe("confirmed actions on the server", () => {
     expect(await runAction(authWith(row, inserts), "gmail_create_draft", args, ok)).toMatchObject({ ok: true, summary: "Draft saved in Gmail (to sam@acme.test)." });
     const fail = vi.fn(async () => new Response("quota", { status: 403 })) as unknown as typeof fetch;
     expect(await runAction(authWith(row, inserts), "gmail_create_draft", args, fail)).toMatchObject({ ok: false, summary: expect.stringMatching(/refused/) });
-    expect(inserts.map((i) => [i.t, i.r.status])).toEqual([["connector_actions", "done"], ["connector_actions", "failed"]]);
+    expect(inserts.filter((i) => i.t === "connector_actions").map((i) => i.r.status)).toEqual(["done", "failed"]);
+    // Orbis Bastion records each confirmed high-risk action (the action's name, never its content).
+    expect(inserts.filter((i) => i.t === "security_audit").map((i) => [i.r.action, (i.r.detail as { op: string }).op, (i.r.detail as { resource: string }).resource])).toEqual([
+      ["bastion.allow", "connector.write", "gmail_create_draft"],
+      ["bastion.allow", "connector.write", "gmail_create_draft"],
+    ]);
     expect(JSON.stringify(inserts)).not.toContain("Hello");
   });
 });

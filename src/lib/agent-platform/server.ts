@@ -1,4 +1,5 @@
 import "server-only";
+import { agentSuspended } from "../bastion/server";
 import { isAdmin } from "../admin";
 import type { AuthContext } from "../auth";
 import { workspacesAvailable } from "../code/workspace";
@@ -48,5 +49,8 @@ export async function assertAgentAccess(auth: AuthContext, id: AgentId): Promise
   if (a.state === "setup") throw new ApiError("not_configured", `${def.name}: ${a.message}`);
   if (a.state === "sign_in") throw new ApiError("unauthorized", a.message);
   if (a.state === "upgrade") throw new ApiError("plan_required", `${def.name} isn't included in your plan. ${a.message}`);
+  // Orbis Bastion: an agent an administrator suspended can't start anything (and stops at its next step).
+  const suspended = await agentSuspended(id);
+  if (suspended) throw new ApiError(suspended.kind === "unavailable" ? "provider_unavailable" : "not_configured", `${def.name}: ${suspended.message.replace(/^this agent/, "it")}`);
   return def;
 }

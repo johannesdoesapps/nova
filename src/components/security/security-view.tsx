@@ -154,7 +154,36 @@ export function SecurityView() {
             </div>
           )}
 
-          <div className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-7 grid gap-3 md:grid-cols-2">
+            <Link href="/agents/security/aegis" className="glass group flex items-start gap-3.5 rounded-[22px] p-5 transition hover:border-s-line-strong hover:shadow-[var(--s-shadow)]">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-s-line text-s-ink-2">
+                <Network className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[16px] font-semibold tracking-[-0.01em] group-hover:underline">Aegis</span>
+                <span className="block text-[12.5px] text-s-ink-3">Command center</span>
+                <span className="mt-2 block text-[13.5px] leading-relaxed text-s-ink-2">
+                  One prioritised view across every security agent: what matters now, attack-path hypotheses, investigations, remediation that only counts as fixed after a re-check, and what
+                  isn&apos;t covered.
+                </span>
+              </span>
+            </Link>
+            <Link href="/agents/security/bastion" className="glass group flex items-start gap-3.5 rounded-[22px] p-5 transition hover:border-s-line-strong hover:shadow-[var(--s-shadow)]">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-s-line text-s-ink-2">
+                <ShieldCheck className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[16px] font-semibold tracking-[-0.01em] group-hover:underline">Bastion</span>
+                <span className="block text-[12.5px] text-s-ink-3">Protection layer</span>
+                <span className="mt-2 block text-[13.5px] leading-relaxed text-s-ink-2">
+                  Every agent&apos;s commands, file changes, connected-service actions and pushes are checked on Orbis&apos;s servers before they run. See its decisions, and where it isn&apos;t
+                  enforced yet.
+                </span>
+              </span>
+            </Link>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {!data
               ? [0, 1, 2].map((i) => <div key={i} className="glass s-skeleton h-[330px] rounded-[22px]" />)
               : active.map((a, i) => {

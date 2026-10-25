@@ -64,6 +64,12 @@ const toolTurn = vi.fn(async (p: ToolTurnParams): Promise<ToolTurnResult> => {
 });
 const generate = vi.fn(async () => ({ text: script.json.shift() ?? "", usage: { inputTokens: 500, outputTokens: 50, estimated: false }, simulated: false }));
 
+// Bastion's controls as stored when an administrator hasn't changed anything (tests/bastion.test.ts covers the rest).
+const bastion = vi.hoisted(() => ({ controls: undefined as unknown }));
+vi.mock("@/lib/bastion/controls", async () => {
+  const { DEFAULT_CONTROLS } = await import("@/lib/bastion/policy");
+  return { loadControls: async () => (bastion.controls === undefined ? DEFAULT_CONTROLS : bastion.controls), invalidateControls: () => {} };
+});
 vi.mock("@/lib/ai", () => ({
   getProvider: (id: string) => (id === "anthropic" ? { id, toolTurn, generate, stream } : { id, generate, stream }),
   resolveModelChoice: async (id: string, ctx: { needs?: string[] }) => {
@@ -296,7 +302,7 @@ const { toRunView } = await import("@/lib/code/agent/runs");
 const { scrub } = await import("@/lib/code/agent/runs");
 const real = await vi.importActual<typeof import("@/lib/code/agent/runs")>("@/lib/code/agent/runs");
 
-const auth = { mode: "authenticated", userId: "u1" } as never;
+const auth = { mode: "authenticated", userId: "u1", user: { id: "u1" }, supabase: null } as never;
 const req = () => new Request("https://tryorbis.app/api/code/agent/x/step", { method: "POST" });
 
 let runSeq = 0;
@@ -338,6 +344,7 @@ const FAILING = " ❯ sum.test.js (2 tests | 1 failed)\n   × sum > adds negativ
 const PASSING = "      Tests  2 passed (2)\n";
 
 beforeEach(() => {
+  bastion.controls = undefined;
   attachmentRows.list = [];
   memory.notes = [];
   memory.added = [];
@@ -831,6 +838,74 @@ describe("time limits, duplicate requests and run records", () => {
     expect(runVersion(row)).not.toBe(runVersion({ ...row, locked_until: lockedUntil }));
     expect(runVersion(row)).not.toBe(runVersion({ ...row, updated_at: "2026-10-23T10:00:01Z" }));
     expect(busy.version).toBe(runVersion({ ...row, locked_until: lockedUntil }));
+  });
+});
+
+describe("Orbis Bastion in a coding task", () => {
+  const AWS = "AKIA" + "ABCDEFGHIJKLMNOP";
+  const going = () => newRun({ status: "running", options: { approvePlans: false, reviewEdits: false, commands: "safe", modelId: null } as never });
+  const results = (id: string) => run(id).transcript.flatMap((m) => m.results ?? []);
+
+  it("refuses a credential written into code, and sends secret or CI files for review instead of saving them", async () => {
+    const id = going();
+    script.turns.push(
+      turn(
+        "Configuring.",
+        call("write_file", { path: "config.js", content: `export const key = "${AWS}";\n` }),
+        call("write_file", { path: "ok.js", content: "export const ok = 1;\n" }),
+        call("write_file", { path: ".github/workflows/deploy.yml", content: "on: push\n" }),
+      ),
+    );
+    const r = await stepRun(req(), auth, id, { expectStep: 0 });
+    expect(files.has("config.js")).toBe(false);
+    expect(results(id)[0]!.text).toMatch(/Blocked by Orbis Bastion: Write a credential into a file isn't allowed for agents/);
+    expect(files.get("ok.js")).toBe("export const ok = 1;\n");
+    // Edits weren't set to be reviewed, but the CI file waits for the user anyway.
+    expect(files.has(".github/workflows/deploy.yml")).toBe(false);
+    expect(r.run).toMatchObject({ status: "awaiting_approval", pending: { kind: "edits" } });
+    await respondToRun(auth, id, { decision: "approve" });
+    expect(files.get(".github/workflows/deploy.yml")).toBe("on: push\n");
+  });
+
+  it("never runs a destructive command, even one the user approves, and asks before a command that reads secrets", async () => {
+    const id = going();
+    script.turns.push(turn("Cleaning.", call("run_command", { command: "rm -rf /" })), turn("Reading config.", call("run_command", { command: "cat .env" })));
+    await stepRun(req(), auth, id, { expectStep: 0 });
+    expect(commands).toEqual([]);
+    const r = await stepRun(req(), auth, id, { expectStep: 1 });
+    expect(commands).toEqual([]);
+    expect(r.run).toMatchObject({ status: "awaiting_approval", pending: { kind: "command", command: "cat .env" } });
+    expect((r.run.pending as { reason: string }).reason).toMatch(/Orbis Bastion/);
+
+    // Approving a pending command that Bastion refuses outright (here: a destructive one put in the record) still doesn't run it.
+    db.runs.get(id)!.pending = { kind: "command", command: "rm -rf /", reason: "x" };
+    await respondToRun(auth, id, { decision: "approve" });
+    expect(commands).toEqual([]);
+    expect(events(id).some((e) => e.title.startsWith("Blocked by Bastion: rm -rf /"))).toBe(true);
+  });
+
+  it("removes credentials from command output before the model or the log sees them", async () => {
+    const id = going();
+    commandOutput = () => ({ output: `AWS_ACCESS_KEY_ID=${AWS}\n`, exitCode: 0 });
+    script.turns.push(turn("Checking.", call("run_command", { command: "npm run build" })));
+    await stepRun(req(), auth, id, { expectStep: 0 });
+    expect(commands).toEqual(["npm run build"]);
+    expect(JSON.stringify(run(id).transcript)).not.toContain(AWS);
+    expect(JSON.stringify(events(id))).not.toContain(AWS);
+  });
+
+  it("stops a running task at its next step when an administrator suspends the agent, and pauses everything when the controls can't be read", async () => {
+    const id = going();
+    bastion.controls = { ...(await import("@/lib/bastion/policy")).DEFAULT_CONTROLS, suspendedAgents: ["engineer"] };
+    const r = await stepRun(req(), auth, id, { expectStep: 0 });
+    expect(r.run).toMatchObject({ status: "failed" });
+    expect(r.run.error).toMatch(/Stopped by Orbis Bastion: this agent is suspended/);
+    expect(script.requested.length).toBe(0);
+
+    const other = going();
+    bastion.controls = null;
+    await expect(stepRun(req(), auth, other, { expectStep: 0 })).rejects.toMatchObject({ code: "provider_unavailable" });
+    expect(run(other).status).toBe("running");
   });
 });
 
