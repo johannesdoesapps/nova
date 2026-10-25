@@ -69,3 +69,9 @@ export function verify(signed: string, env?: Record<string, string | undefined>)
 }
 
 export const randomToken = (bytes = 32) => b64u(randomBytes(bytes));
+
+/** An HMAC of `data` with a key derived for `purpose` (e.g. signing Bastion's audit records), or null without the key. */
+export function macFor(purpose: string, data: string, env?: Record<string, string | undefined>): string | null {
+  if (!rawKey(env)) return null;
+  return b64u(createHmac("sha256", derive(purpose, env)).update(data).digest()).slice(0, 32);
+}

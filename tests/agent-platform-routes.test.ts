@@ -10,8 +10,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/http";
 import { DEFAULT_BILLING } from "@/lib/plans";
 
-// Bastion's controls as stored when an administrator hasn't changed anything (tests/bastion.test.ts covers the rest).
-vi.mock("@/lib/bastion/controls", async () => ({ loadControls: async () => (await import("@/lib/bastion/policy")).DEFAULT_CONTROLS, invalidateControls: () => {} }));
+// Bastion's controls and an empty workspace policy, as stored when nobody has changed anything (tests/bastion*.test.ts cover the rest).
+vi.mock("@/lib/bastion/controls", async () => (await import("./stubs/bastion-controls")).defaultBastionControls());
 vi.mock("server-only", () => ({}));
 
 const OWN = "00000000-0000-4000-8000-0000000000a1";

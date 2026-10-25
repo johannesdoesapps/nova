@@ -174,10 +174,10 @@ export function SecurityView() {
               </span>
               <span className="min-w-0">
                 <span className="block text-[16px] font-semibold tracking-[-0.01em] group-hover:underline">Bastion</span>
-                <span className="block text-[12.5px] text-s-ink-3">Protection layer</span>
+                <span className="block text-[12.5px] text-s-ink-3">Workspace security and protection layer</span>
                 <span className="mt-2 block text-[13.5px] leading-relaxed text-s-ink-2">
-                  Every agent&apos;s commands, file changes, connected-service actions and pushes are checked on Orbis&apos;s servers before they run. See its decisions, and where it isn&apos;t
-                  enforced yet.
+                  Your agents, connected services and projects: what they can do, what&apos;s wrong, and rules you add. Every agent&apos;s actions are checked on Orbis&apos;s servers before
+                  they run.
                 </span>
               </span>
             </Link>

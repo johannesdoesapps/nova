@@ -50,7 +50,7 @@ export async function assertAgentAccess(auth: AuthContext, id: AgentId): Promise
   if (a.state === "sign_in") throw new ApiError("unauthorized", a.message);
   if (a.state === "upgrade") throw new ApiError("plan_required", `${def.name} isn't included in your plan. ${a.message}`);
   // Orbis Bastion: an agent an administrator suspended can't start anything (and stops at its next step).
-  const suspended = await agentSuspended(id);
+  const suspended = await agentSuspended(id, auth.mode === "authenticated" ? { db: auth.supabase, ownerId: auth.user.id } : null);
   if (suspended) throw new ApiError(suspended.kind === "unavailable" ? "provider_unavailable" : "not_configured", `${def.name}: ${suspended.message.replace(/^this agent/, "it")}`);
   return def;
 }

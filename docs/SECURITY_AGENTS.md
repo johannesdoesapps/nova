@@ -348,6 +348,10 @@ views, enforcement-point files exist) and the "Orbis Bastion in a coding task" c
 command never runs even when approved, secret-reading command needs approval, output redacted, suspended agent
 stopped mid-task, unreadable controls pause work).
 
+Customers see and control Bastion for their own workspace (posture, findings, agent and application protection,
+restrict-only policies, roles, audit log, notifications) through **Bastion Customer Security** — see
+`BASTION_CUSTOMER.md`.
+
 ## Shared finding format
 
 Every agent writes the same structure (`security_findings`): id, title, description,

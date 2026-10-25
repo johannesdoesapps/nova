@@ -143,3 +143,22 @@ export async function sendEmailTo(to: string, subject: string, text: string): Pr
   });
   if (!res.ok) throw new Error(`Resend answered ${res.status}`);
 }
+
+/** A security notice from Orbis Bastion, at most once per (user, kind, key). Never throws. */
+export async function sendSecurityEmail(userId: string, kind: string, periodKey: string, subject: string, text: string): Promise<boolean> {
+  try {
+    if (!emailConfigured()) return false;
+    const db = serviceSupabase();
+    if (!db) return false;
+    if (!(await claimNotification(userId, kind.slice(0, 60), periodKey))) return false;
+    const { data: u } = await db.auth.admin.getUserById(userId);
+    const to = u?.user?.email;
+    if (!to) return false;
+    await sendEmailTo(to, subject, `${text}\n\nDetected by Orbis Bastion — this is a signal to review, not a confirmed incident. Details: ${site()}/agents/security/bastion\n\nTurn these emails off in Bastion → Policies → Notifications.\n\n— Orbis`);
+    await db.from("notifications").update({ sent: true }).eq("user_id", userId).eq("kind", kind.slice(0, 60)).eq("period_key", periodKey.slice(0, 80));
+    return true;
+  } catch (err) {
+    console.error("[orbis] security email failed", kind, safeMessage(err));
+    return false;
+  }
+}

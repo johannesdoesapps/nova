@@ -8,6 +8,8 @@
 import { randomBytes } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Bastion's controls and an empty workspace policy, as stored when nobody has changed anything (tests/bastion*.test.ts cover the rest).
+vi.mock("@/lib/bastion/controls", async () => (await import("./stubs/bastion-controls")).defaultBastionControls());
 vi.mock("server-only", () => ({}));
 
 const KEY = randomBytes(32).toString("base64");

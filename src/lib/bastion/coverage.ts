@@ -107,6 +107,13 @@ export const ENFORCEMENT_POINTS: EnforcementPoint[] = [
     note: "These produce text and don't act on anything outside Orbis. Their web searches aren't routed through Bastion's network switch yet.",
   },
   {
+    surface: "Workspace policies (Bastion Customer Security)",
+    state: "enforced",
+    ops: ["command.run", "file.write", "preview.start", "connector.read", "agent.step"],
+    where: "src/lib/bastion/server.ts (guard), src/lib/code/agent/runs.ts (createRun), src/lib/code/agent/engine.ts (step), src/lib/connectors/runtime.ts (runTool), src/app/api/agents/chat/route.ts, src/lib/agent-platform/server.ts (assertAgentAccess)",
+    note: "A workspace's own restrictions are merged into every decision above and can only add to Bastion Core's: paused agents, switched-off capabilities, extra approvals, project boundaries for coding agents, which connected services agents may read, and tools removed from custom agents. When the policy can't be read, protected actions fail closed.",
+  },
+  {
     surface: "Changing Bastion's controls",
     state: "enforced",
     ops: ["policy.modify"],

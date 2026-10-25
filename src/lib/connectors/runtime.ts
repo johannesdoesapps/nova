@@ -3,7 +3,8 @@ import type { AuthContext } from "@/lib/auth";
 import { ApiError } from "@/lib/http";
 import { reportError } from "@/lib/observability";
 import { detectInjection, injectionNote } from "@/lib/bastion/guards";
-import { guard } from "@/lib/bastion/server";
+import { integrationAllowed } from "@/lib/bastion/customer/policy";
+import { guard, workspacePolicy } from "@/lib/bastion/server";
 import { redactAll } from "@/lib/secrets";
 import { githubAppConfig } from "@/lib/github/app";
 import { requireRepoAccess } from "@/lib/github/server";
@@ -202,6 +203,12 @@ export async function runTool(
   const actor = opts.actor ?? { kind: "agent" as const, agent: "assistant" };
   const d = await guard({ db: auth.supabase, userId: auth.user.id, kind: actor.kind, agent: actor.agent, runId: actor.runId ?? null }, "connector.read", `${name}`);
   if (d.outcome !== "allow") return { connectorId: c.meta.id, tool: name, ok: false, error: `Blocked by Orbis Bastion: ${d.reason}` };
+  // The workspace may limit which connected services agents read (a person browsing their own services isn't limited).
+  if (actor.kind === "agent") {
+    const ws = await workspacePolicy(auth.supabase, auth.user.id);
+    if (ws === "unavailable" || !integrationAllowed(ws, c.meta.id))
+      return { connectorId: c.meta.id, tool: name, ok: false, error: ws === "unavailable" ? "Blocked by Orbis Bastion: your workspace's security policy couldn't be read (fail closed)." : `Blocked by your workspace's security policy: agents may not read ${c.meta.name}.` };
+  }
   const row = opts.rows ? (opts.rows.find((r) => r.connector_id === c.meta.id) ?? null) : await getConnection(auth, c.meta.id);
   if (!usable(c, row)) {
     const why = missingSetup(c).length ? `${c.meta.name} isn't set up on this site.` : row?.status === "reauth_required" ? `${c.meta.name} needs reconnecting.` : `${c.meta.name} isn't connected.`;

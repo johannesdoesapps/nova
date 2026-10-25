@@ -4,6 +4,8 @@ import type { ChatMessage, ModelWithStatus } from "@/lib/ai/types";
 import { builtinAgent } from "@/lib/agents/builtins";
 import { capabilityStatus } from "@/lib/agents/capabilities";
 import { authorizeTurn, runAgentTurn } from "@/lib/agents/execute";
+import { agentPaused, customAgentTools } from "@/lib/bastion/customer/policy";
+import { workspacePolicy } from "@/lib/bastion/server";
 import { agentChatRequest } from "@/lib/agents/schema";
 import { isBuiltinId, type AgentConfig } from "@/lib/agents/types";
 import { requireUserIfConfigured, type AuthContext } from "@/lib/auth";
@@ -43,6 +45,15 @@ export async function POST(req: Request) {
       // Guest mode (no accounts configured): the agent lives in the browser and is sent with the request.
       agent = { ...body.agent, id: body.agentId, kind: "custom", category: "Custom", modelPreference: null, temperature: null, createdAt: null, updatedAt: null };
     } else throw new ApiError("not_found", "Agent not found.");
+
+    // Orbis Bastion: the workspace may pause this agent or remove some of its tools (Bastion → Agents).
+    if (auth.mode === "authenticated") {
+      const ws = await workspacePolicy(auth.supabase, auth.user.id);
+      if (ws === "unavailable") throw new ApiError("provider_unavailable", "Orbis Bastion couldn't read your workspace's security policy, so agents are paused (fail closed). Try again in a moment.");
+      const ref = agent.kind === "custom" ? `custom:${agent.id}` : `builtin:${agent.id}`;
+      if (agentPaused(ws, ref)) throw new ApiError("forbidden", `${agent.name} is paused by your workspace's security policy. Resume it in Bastion → Agents.`, { scope: "bastion" });
+      if (agent.kind === "custom") agent = { ...agent, capabilities: customAgentTools(ws, agent.id, agent.capabilities) };
+    }
 
     const attachments = body.attachments ?? [];
     authorizeTurn(agent, { attachments, useWeb: !!body.useWeb });

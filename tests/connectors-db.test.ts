@@ -10,8 +10,8 @@ import { randomBytes } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-// Bastion's controls as stored when an administrator hasn't changed anything (tests/bastion.test.ts covers the rest).
-vi.mock("@/lib/bastion/controls", async () => ({ loadControls: async () => (await import("@/lib/bastion/policy")).DEFAULT_CONTROLS, invalidateControls: () => {} }));
+// Bastion's controls and an empty workspace policy, as stored when nobody has changed anything (tests/bastion*.test.ts cover the rest).
+vi.mock("@/lib/bastion/controls", async () => (await import("./stubs/bastion-controls")).defaultBastionControls());
 vi.mock("server-only", () => ({}));
 process.env.ORBIS_CONNECTOR_KEY = randomBytes(32).toString("base64");
 

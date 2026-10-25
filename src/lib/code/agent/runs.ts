@@ -1,4 +1,6 @@
 import "server-only";
+import { projectAllowed } from "../../bastion/customer/policy";
+import { workspacePolicy } from "../../bastion/server";
 import { ApiError, requireUuid } from "@/lib/http";
 import { getPlatformSettings } from "@/lib/ai/settings";
 import { redactSecrets } from "@/lib/usage";
@@ -107,6 +109,11 @@ export function toRunView(r: Omit<RunRow, "transcript"> & { transcript?: unknown
 }
 
 export async function createRun(auth: Authed, input: { projectId: string; request: string; options: RunOptions; stepLimit: number; pair?: PairState }): Promise<RunRow> {
+  // Orbis Bastion: a workspace boundary may keep this coding agent to other projects (every way of starting one comes here).
+  const agent = input.options.agent ?? (input.options.web ? "website_builder" : "engineer");
+  const ws = await workspacePolicy(auth.supabase, auth.user.id);
+  if (ws === "unavailable") throw new ApiError("provider_unavailable", "Orbis Bastion couldn't read your workspace's security policy, so agents are paused (fail closed). Try again in a moment.");
+  if (!projectAllowed(ws, agent, input.projectId)) throw new ApiError("forbidden", `Your workspace's security policy keeps the ${agent.replace("_", " ")} agent to other projects. Change it in Bastion → Policies.`, { scope: "bastion" });
   const { data, error } = await auth.supabase
     .from("code_agent_runs")
     .insert({

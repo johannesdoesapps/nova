@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { planTiersSchema } from "./customer/tiers";
 
 /**
  * Orbis Bastion — the policy every protected action passes before it runs. Pure: the decision depends only on the
@@ -77,6 +78,8 @@ export const snapshotSchema = z
     blockedCapabilities: z.array(z.enum(Object.keys(CAPABILITIES) as [Capability, ...Capability[]])).max(20),
     /** Raise (never lower below the floor) an operation's risk level. */
     riskOverrides: z.record(z.string(), z.enum(RISKS)),
+    /** Which Customer Security tier each plan gets (customer/tiers.ts); unset = the defaults. */
+    planTiers: planTiersSchema.optional(),
   })
   .strict();
 export type ControlsSnapshot = z.infer<typeof snapshotSchema>;
@@ -117,6 +120,7 @@ export const snapshotOf = (c: BastionControls): ControlsSnapshot => ({
   suspendedAgents: c.suspendedAgents,
   blockedCapabilities: c.blockedCapabilities,
   riskOverrides: c.riskOverrides,
+  ...(c.planTiers ? { planTiers: c.planTiers } : {}),
 });
 
 /** What changed between two versions, in words (for the history and the audit log). */
@@ -132,6 +136,14 @@ export function describeChange(prev: ControlsSnapshot, next: ControlsSnapshot): 
   if (unblocked.length) out.push(`unblocked ${unblocked.join(", ")}`);
   const ops = new Set([...Object.keys(prev.riskOverrides), ...Object.keys(next.riskOverrides)]);
   for (const op of ops) if (prev.riskOverrides[op] !== next.riskOverrides[op]) out.push(`${op} → ${next.riskOverrides[op] ?? "default"}`);
+  if (JSON.stringify(prev.planTiers ?? null) !== JSON.stringify(next.planTiers ?? null))
+    out.push(
+      next.planTiers
+        ? `plan tiers ${Object.entries(next.planTiers)
+            .map(([p, t]) => `${p}=${t}`)
+            .join(", ")}`
+        : "plan tiers → default",
+    );
   return out.join("; ").slice(0, 300) || "no change";
 }
 

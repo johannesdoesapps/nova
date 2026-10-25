@@ -39,7 +39,9 @@ import {
 import { classifyCommand } from "./policy";
 import { BULK_DELETE, commandOp, fileWriteOp } from "../../bastion/guards";
 import { shouldContain } from "../../bastion/policy";
-import { agentSuspended, guard as bastionGuard, refusalsInRun, type GuardContext } from "../../bastion/server";
+import { notifyOwner } from "../../bastion/customer/notify";
+import { projectAllowed } from "../../bastion/customer/policy";
+import { agentSuspended, guard as bastionGuard, refusalsInRun, workspacePolicy, type GuardContext } from "../../bastion/server";
 import { agentPurpose, profileGuidance, profileReport, qaMayEdit } from "./profiles";
 import { isSiteTemplateId, siteTemplateGuidance } from "../site-templates";
 import { buildReport } from "./report";
@@ -233,6 +235,13 @@ async function mirror(box: WorkspaceBox | null, changes: FileChange[]) {
 export function codeAgentId(row: Pick<RunRow, "options">): string {
   const o = runOptions(row);
   return o.agent ?? (o.web ? "website_builder" : "engineer");
+}
+
+/** Why the workspace's policy keeps this coding agent out of this project, or null when it may work there. */
+export async function projectBoundary(auth: Authed, agent: string, projectId: string): Promise<string | null> {
+  const ws = await workspacePolicy(auth.supabase, auth.user.id);
+  if (ws === "unavailable") return "your workspace's security policy couldn't be read, so agents are paused (fail closed). Try again in a moment.";
+  return projectAllowed(ws, agent, projectId) ? null : `your workspace's policy keeps the ${agent.replace("_", " ")} agent to other projects (Bastion → Policies).`;
 }
 
 /** An agent's action checked by Orbis Bastion where it's carried out. `approved`: the user approved exactly this action. */
@@ -583,8 +592,14 @@ export async function stepRun(req: Request, auth: Authed, runId: string, opts: {
 
 async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now() + STEP_BUDGET_MS, clock: () => number = Date.now): Promise<RunRow> {
   // Orbis Bastion: a suspended agent stops at its next step, whatever it was doing.
-  const suspended = await agentSuspended(codeAgentId(row));
+  const suspended = await agentSuspended(codeAgentId(row), { db: auth.supabase, ownerId: auth.user.id });
   if (suspended?.kind === "unavailable") throw new ApiError("provider_unavailable", suspended.message);
+  // A workspace boundary (Bastion → Policies) may keep this agent to other projects; checked at every step.
+  const boundary = await projectBoundary(auth, codeAgentId(row), row.project_id);
+  if (boundary) {
+    await addEvents(auth, row.id, [{ kind: "status", title: `Stopped by Orbis Bastion: ${boundary}`, detail: { bastion: true } }]);
+    return finishStep(auth, row.id, { status: "failed", error: `Stopped by Orbis Bastion: ${boundary}`, pending: null }, [], [], "blocked_by_policy");
+  }
   if (suspended) {
     await addEvents(auth, row.id, [{ kind: "status", title: `Stopped by Orbis Bastion: ${suspended.message}`, detail: { bastion: true } }]);
     return finishStep(auth, row.id, { status: "failed", error: `Stopped by Orbis Bastion: ${suspended.message}`, pending: null }, [], [], "blocked_by_policy");
@@ -892,6 +907,7 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
     const refusals = await refusalsInRun(auth.supabase, auth.user.id, row.id, row.created_at).catch(() => 0);
     if (shouldContain(refusals)) {
       await addEvents(auth, row.id, [{ kind: "status", title: `Stopped by Orbis Bastion after ${refusals} refused actions`, detail: { bastion: true } }]);
+      await notifyOwner(auth.supabase, auth.user.id, "repeatedBlocks", `contain:${row.id}`, "Orbis Bastion stopped a coding task", `A ${codeAgentId(row).replace("_", " ")} task was stopped after ${refusals} actions that policy doesn't allow. Look at its activity before starting it again.`).catch(() => {});
       return finishStep(auth, row.id, { ...patch, status: "failed", pending: null, error: `Stopped by Orbis Bastion: the agent tried ${refusals} actions that policy doesn't allow. Review the activity log before starting again.` }, outcome.unresolved, [], "blocked_by_policy");
     }
   }

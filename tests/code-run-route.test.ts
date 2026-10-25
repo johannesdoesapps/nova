@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/http";
 import { DEFAULT_BILLING } from "@/lib/plans";
 
+// Bastion's controls and an empty workspace policy, as stored when nobody has changed anything (tests/bastion*.test.ts cover the rest).
+vi.mock("@/lib/bastion/controls", async () => (await import("./stubs/bastion-controls")).defaultBastionControls());
 vi.mock("server-only", () => ({}));
 
 const state = {

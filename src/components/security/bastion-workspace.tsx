@@ -8,6 +8,7 @@ import { Segmented, Switch } from "@/components/studio/ui";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import type { EnforcementPoint } from "@/lib/bastion/coverage";
 import { CAPABILITIES, OPERATIONS, RISKS, type BastionControls, type Capability, type OperationId, type Risk } from "@/lib/bastion/policy";
+import { DEFAULT_PLAN_TIERS, TIER_LABEL, TIERS, type PlanTiers, type Tier } from "@/lib/bastion/customer/tiers";
 import { SUSPENDABLE, type BastionSummary, type policyTable } from "@/lib/bastion/view";
 import { Section } from "./audit-views";
 import { fmtTime } from "./bits";
@@ -18,7 +19,7 @@ import { fmtTime } from "./bits";
  * agents, switching capabilities off and raising risk levels — each change is a new version with history.
  */
 
-interface UserView {
+export interface UserView {
   available: boolean;
   controls: { version: number; updatedAt: string; lockdown: boolean; suspendedAgents: string[]; blockedCapabilities: string[] } | null;
   policy: ReturnType<typeof policyTable>;
@@ -34,80 +35,10 @@ interface AdminView {
   scope: "all_users" | "own";
 }
 
-type Tab = "overview" | "policy" | "decisions" | "controls";
 const RISK_STYLE: Record<string, string> = { low: "text-s-ink-2", moderate: "text-sky-700 dark:text-sky-300", high: "text-amber-700 dark:text-amber-300", critical: "text-s-danger" };
 const OUTCOME_LABEL: Record<string, string> = { allow: "Allowed", deny: "Refused", needs_approval: "Needed approval" };
 const STATE_LABEL: Record<string, string> = { enforced: "Enforced", partial: "Partly enforced", not_covered: "Not covered" };
 const btn = "inline-flex h-8 items-center gap-1.5 rounded-lg border border-s-line-strong px-2.5 text-[12.5px] transition hover:bg-s-hover disabled:opacity-50";
-
-export function BastionWorkspace() {
-  const { user, integrations } = useApp();
-  const [tab, setTab] = useState<Tab>("overview");
-  const [data, setData] = useState<UserView | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const signedOut = integrations.supabase ? !user : true;
-  const load = useCallback(() => jsonFetch<UserView>("/api/bastion").then(setData), []);
-
-  useEffect(() => {
-    if (signedOut) return;
-    let alive = true;
-    void load().catch((e: Error) => alive && setError(e.message));
-    return () => {
-      alive = false;
-    };
-  }, [signedOut, load]);
-
-  return (
-    <>
-      <StudioHeader>
-        <Link href="/agents/security" className="inline-flex items-center gap-1.5 text-[14px] text-s-ink-2 transition hover:text-s-ink">
-          <ArrowLeft className="h-4 w-4" aria-hidden /> <span className="max-sm:sr-only">Security</span>
-        </Link>
-        <span className="text-s-ink-3">/</span>
-        <span className="whitespace-nowrap text-[14px] font-medium">Bastion</span>
-      </StudioHeader>
-      <div className="s-scroll min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[1180px] space-y-5 px-4 pb-24 pt-2 sm:px-8">
-          <div className="s-in">
-            <h1 className="font-serif text-[clamp(30px,4.5vw,42px)] leading-[1.05]">Bastion</h1>
-            <p className="mt-2 max-w-3xl text-[15px] text-s-ink-2">
-              The protection layer every agent goes through. Commands, file changes, connected services, GitHub pushes and the rest are checked on Orbis&apos;s servers right before they run — not just
-              requested of the AI — and refused when policy says no.
-            </p>
-          </div>
-          <Segmented
-            label="Bastion sections"
-            value={tab}
-            onChange={setTab}
-            options={[
-              { value: "overview", label: "Overview" },
-              { value: "policy", label: "Policy" },
-              { value: "decisions", label: "Decisions" },
-              ...(data?.admin ? [{ value: "controls" as const, label: "Controls (admin)" }] : []),
-            ]}
-          />
-          {signedOut ? (
-            <p className="rounded-[20px] border border-dashed border-s-line-strong px-6 py-8 text-center text-[14px] text-s-ink-2">Sign in to see Bastion.</p>
-          ) : error ? (
-            <p role="alert" className="flex items-center gap-2 text-[14px] text-s-danger">
-              <CircleAlert className="h-4 w-4" /> {error}
-            </p>
-          ) : !data ? (
-            <div className="s-skeleton h-48 rounded-2xl" />
-          ) : tab === "overview" ? (
-            <Overview d={data} />
-          ) : tab === "policy" ? (
-            <Policy d={data} />
-          ) : tab === "decisions" ? (
-            <Decisions summary={data.summary} empty="Bastion hasn't refused or asked approval for anything you or your agents did." />
-          ) : (
-            <Controls onSaved={() => void load()} />
-          )}
-        </div>
-      </div>
-    </>
-  );
-}
 
 function Stat({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
   return (
@@ -133,7 +64,7 @@ function Status({ d }: { d: UserView }) {
   );
 }
 
-function Overview({ d }: { d: UserView }) {
+export function CoreOverview({ d }: { d: UserView }) {
   const suspended = SUSPENDABLE.filter((a) => d.controls?.suspendedAgents.includes(a.id));
   const blocked = (d.controls?.blockedCapabilities ?? []) as Capability[];
   return (
@@ -187,7 +118,7 @@ function Overview({ d }: { d: UserView }) {
   );
 }
 
-function Policy({ d }: { d: UserView }) {
+export function CorePolicy({ d }: { d: UserView }) {
   return (
     <Section title="Operations" note="Every protected action Bastion knows about, with the risk level it's treated at now.">
       <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Operations table">
@@ -219,7 +150,7 @@ function Policy({ d }: { d: UserView }) {
   );
 }
 
-function Decisions({ summary, empty, showUser }: { summary: BastionSummary; empty: string; showUser?: boolean }) {
+export function Decisions({ summary, empty, showUser }: { summary: BastionSummary; empty: string; showUser?: boolean }) {
   if (!summary.total) return <p className="text-[13.5px] text-s-ink-2">{empty}</p>;
   return (
     <div className="space-y-4">
@@ -285,7 +216,7 @@ function Decisions({ summary, empty, showUser }: { summary: BastionSummary; empt
 
 /* --------------------------------------------------------------- controls */
 
-function Controls({ onSaved }: { onSaved: () => void }) {
+export function CoreControls({ onSaved }: { onSaved: () => void }) {
   const { notify } = useStudio();
   const [view, setView] = useState<AdminView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -293,15 +224,17 @@ function Controls({ onSaved }: { onSaved: () => void }) {
   const [suspended, setSuspended] = useState<string[]>([]);
   const [blocked, setBlocked] = useState<Capability[]>([]);
   const [overrides, setOverrides] = useState<Record<string, Risk>>({});
+  const [tiers, setTiers] = useState<PlanTiers>(DEFAULT_PLAN_TIERS);
   const [note, setNote] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const apply = (c: Pick<BastionControls, "lockdown" | "suspendedAgents" | "blockedCapabilities" | "riskOverrides">) => {
+  const apply = (c: Pick<BastionControls, "lockdown" | "suspendedAgents" | "blockedCapabilities" | "riskOverrides" | "planTiers">) => {
     setLockdown(c.lockdown);
     setSuspended(c.suspendedAgents);
     setBlocked(c.blockedCapabilities);
     setOverrides(c.riskOverrides);
+    setTiers(c.planTiers ?? DEFAULT_PLAN_TIERS);
   };
   const load = useCallback(
     () =>
@@ -327,6 +260,7 @@ function Controls({ onSaved }: { onSaved: () => void }) {
           suspendedAgents: suspended,
           blockedCapabilities: blocked,
           riskOverrides: overrides,
+          planTiers: tiers,
           ...(note.trim() ? { note } : {}),
           confirm: true,
         }),
@@ -418,6 +352,22 @@ function Controls({ onSaved }: { onSaved: () => void }) {
               </li>
             ))}
         </ul>
+      </Section>
+      <Section title="Customer Security tiers by plan" note="Which Bastion Customer Security features each plan includes. Bastion Core's protections apply on every plan.">
+        <div className="flex flex-wrap gap-3">
+          {(["free", "pro", "max"] as const).map((plan) => (
+            <label key={plan} className="flex flex-col gap-1 text-[12px] text-s-ink-3">
+              {plan === "free" ? "Free" : plan === "pro" ? "Pro" : "Max"}
+              <select value={tiers[plan]} onChange={(e) => setTiers({ ...tiers, [plan]: e.target.value as Tier })} className="h-8 rounded-lg border border-s-line bg-transparent px-2 text-[13px] text-s-ink">
+                {TIERS.map((t) => (
+                  <option key={t} value={t}>
+                    {TIER_LABEL[t]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+        </div>
       </Section>
       <Section title={`Activate version ${view.version + 1}`}>
         <label className="flex flex-col gap-1 text-[12px] text-s-ink-3">

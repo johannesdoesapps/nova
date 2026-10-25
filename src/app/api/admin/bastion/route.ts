@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/admin";
 import { recordAdminAction } from "@/lib/admin-audit";
 import { getAuth } from "@/lib/auth";
 import { CAPABILITIES, DEFAULT_CONTROLS, describeChange, HISTORY_LIMIT, parseControls, RISKS, snapshotOf, validateControls, type BastionControls, type Capability } from "@/lib/bastion/policy";
+import { planTiersSchema } from "@/lib/bastion/customer/tiers";
 import { enforce, invalidateControls } from "@/lib/bastion/server";
 import { summarise, type DecisionEvent } from "@/lib/bastion/view";
 import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
@@ -17,6 +18,7 @@ const body = z
     suspendedAgents: z.array(z.string().regex(/^[a-z_]{2,40}$/)).max(40),
     blockedCapabilities: z.array(z.enum(Object.keys(CAPABILITIES) as [Capability, ...Capability[]])).max(20),
     riskOverrides: z.record(z.string(), z.enum(RISKS)),
+    planTiers: planTiersSchema.optional(),
     note: z.string().trim().max(200).optional(),
     /** Changing policy is critical: the administrator confirms it explicitly. */
     confirm: z.literal(true),
@@ -61,6 +63,7 @@ export async function PUT(req: Request) {
       suspendedAgents: [...new Set(input.suspendedAgents)],
       blockedCapabilities: [...new Set(input.blockedCapabilities)],
       riskOverrides: input.riskOverrides,
+      ...(input.planTiers ? { planTiers: input.planTiers } : {}),
     };
     const summary = describeChange(snapshotOf(prev), snapshot);
     const now = new Date().toISOString();

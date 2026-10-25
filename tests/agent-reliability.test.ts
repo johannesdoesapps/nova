@@ -9,6 +9,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Bastion's controls and an empty workspace policy, as stored when nobody has changed anything (tests/bastion*.test.ts cover the rest).
+vi.mock("@/lib/bastion/controls", async () => (await import("./stubs/bastion-controls")).defaultBastionControls());
 vi.mock("server-only", () => ({}));
 const settings = { taskLimits: {} as { tokenBudget?: number; timeLimitMinutes?: number } };
 vi.mock("@/lib/ai/settings", () => ({ getPlatformSettings: async () => ({ pausedAgents: [], taskLimits: settings.taskLimits }) }));
@@ -239,7 +241,7 @@ describe("resources, versions and approvals", () => {
 
   it("a new task records its agent's version, and gets the administrator's limits when set", async () => {
     const db = fakeDb();
-    await createRun({ supabase: db } as never, {
+    await createRun({ supabase: db, user: { id: "u1" } } as never, {
       projectId: "p1",
       request: "Fix it",
       options: { modelId: null, approvePlans: true, reviewEdits: false, commands: "safe", readOnly: false, agent: "bug_fixer" },
@@ -250,7 +252,7 @@ describe("resources, versions and approvals", () => {
 
     settings.taskLimits = { tokenBudget: 200_000, timeLimitMinutes: 15 };
     const db2 = fakeDb();
-    await createRun({ supabase: db2 } as never, {
+    await createRun({ supabase: db2, user: { id: "u1" } } as never, {
       projectId: "p1",
       request: "Build",
       options: { modelId: null, approvePlans: true, reviewEdits: false, commands: "safe", readOnly: false, web: true },

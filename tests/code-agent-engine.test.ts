@@ -65,10 +65,13 @@ const toolTurn = vi.fn(async (p: ToolTurnParams): Promise<ToolTurnResult> => {
 const generate = vi.fn(async () => ({ text: script.json.shift() ?? "", usage: { inputTokens: 500, outputTokens: 50, estimated: false }, simulated: false }));
 
 // Bastion's controls as stored when an administrator hasn't changed anything (tests/bastion.test.ts covers the rest).
-const bastion = vi.hoisted(() => ({ controls: undefined as unknown }));
+const bastion = vi.hoisted(() => ({ controls: undefined as unknown, workspace: undefined as unknown }));
 vi.mock("@/lib/bastion/controls", async () => {
   const { DEFAULT_CONTROLS } = await import("@/lib/bastion/policy");
-  return { loadControls: async () => (bastion.controls === undefined ? DEFAULT_CONTROLS : bastion.controls), invalidateControls: () => {} };
+  return (await import("./stubs/bastion-controls")).defaultBastionControls({
+    controls: () => (bastion.controls === undefined ? DEFAULT_CONTROLS : bastion.controls),
+    workspace: () => bastion.workspace,
+  });
 });
 vi.mock("@/lib/ai", () => ({
   getProvider: (id: string) => (id === "anthropic" ? { id, toolTurn, generate, stream } : { id, generate, stream }),
@@ -345,6 +348,7 @@ const PASSING = "      Tests  2 passed (2)\n";
 
 beforeEach(() => {
   bastion.controls = undefined;
+  bastion.workspace = undefined;
   attachmentRows.list = [];
   memory.notes = [];
   memory.added = [];

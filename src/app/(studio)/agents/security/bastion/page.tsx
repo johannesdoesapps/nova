@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import { BastionWorkspace } from "@/components/security/bastion-workspace";
+import { BastionPage } from "@/components/security/bastion-customer";
 
 export const metadata: Metadata = {
   title: "Bastion",
-  description: "The protection layer every Orbis agent goes through: enforced policy, where it applies, its decisions and the emergency controls.",
+  description: "Security for your workspace: agents, connected services, applications, findings and policies, on top of the protections Orbis enforces for every agent.",
   robots: { index: false },
 };
 
-export default function BastionPage() {
-  return <BastionWorkspace />;
+export default function Page() {
+  return <BastionPage />;
 }
