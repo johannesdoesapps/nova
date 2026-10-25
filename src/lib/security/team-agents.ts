@@ -47,6 +47,8 @@ export interface TeamInput {
 export interface AgentCard {
   id: string;
   name: string;
+  /** What it runs on, shown under the name. */
+  engine: string;
   summary: string;
   responsibilities: string[];
   /** What the summary describes that Orbis doesn't do yet (shown, so the card doesn't overpromise). */
@@ -61,6 +63,7 @@ export interface AgentCard {
 interface Def {
   id: string;
   name: string;
+  engine: string;
   summary: string;
   responsibilities: string[];
   notYet?: string;
@@ -85,6 +88,7 @@ export const TEAM_AGENTS: Def[] = [
   {
     id: "auditor",
     name: "Security Auditor Agent",
+    engine: "Code Guardian and Sentinel",
     summary: "Scans application code, APIs, dependencies, and configurations to identify potential security vulnerabilities before attackers can exploit them.",
     responsibilities: [
       "Secret and insecure-code rules for JavaScript/TypeScript, Python and PHP",
@@ -100,6 +104,7 @@ export const TEAM_AGENTS: Def[] = [
   {
     id: "verification",
     name: "Vulnerability Verification Agent",
+    engine: "Independent verifier",
     summary: "Independently investigates suspected vulnerabilities, checks supporting evidence, and separates confirmed security issues from false positives and unverified risks.",
     responsibilities: [
       "Challenges each medium-or-worse code finding against the code around it, separately from the auditor",
@@ -115,6 +120,7 @@ export const TEAM_AGENTS: Def[] = [
   {
     id: "protection",
     name: "Application Protection Agent",
+    engine: "Sentinel on Cloudflare and Vercel",
     summary: "Reviews and helps configure Cloudflare security features, including DDoS protection, WAF rules, bot protection, rate limiting, and secure connections.",
     responsibilities: [
       "Reviews DDoS, WAF, bot, rate-limiting and TLS settings on Cloudflare, and deployment protection on Vercel",
@@ -130,6 +136,7 @@ export const TEAM_AGENTS: Def[] = [
   {
     id: "identity",
     name: "Identity and Access Security Agent",
+    engine: "Code Guardian rules and Cloudflare Access",
     summary: "Audits authentication, authorization, user permissions, sessions, admin access, OAuth integrations, and Zero Trust policies to prevent unauthorized access.",
     responsibilities: [
       "Finds routes and handlers without a sign-in or ownership check (code)",
@@ -145,6 +152,7 @@ export const TEAM_AGENTS: Def[] = [
   {
     id: "reporting",
     name: "Security Reporting and Remediation Agent",
+    engine: "Aegis reports and remediation",
     summary: "Turns audit results into clear security reports, prioritizes risks, recommends fixes, tracks remediation, and verifies whether vulnerabilities have been resolved.",
     responsibilities: [
       "Writes a report for each audit and one unified report for coordinated audits",
@@ -160,6 +168,7 @@ export const TEAM_AGENTS: Def[] = [
   {
     id: "github",
     name: "GitHub Security Agent",
+    engine: "Code Guardian on GitHub",
     summary: "Audits authorized GitHub repositories, pull requests, code changes, dependencies, and repository settings to detect security risks throughout development.",
     responsibilities: [
       "Audits the repositories you shared with Orbis (read-only snapshot, nothing run)",
@@ -176,6 +185,7 @@ export const TEAM_AGENTS: Def[] = [
   {
     id: "vercel",
     name: "Vercel Deployment Security Agent",
+    engine: "Sentinel on Vercel",
     summary: "Reviews Vercel projects, preview and production deployments, build settings, environment-variable exposure, and deployment configurations for security weaknesses.",
     responsibilities: [
       "Reads project settings, domains and recent deployments",
@@ -191,6 +201,7 @@ export const TEAM_AGENTS: Def[] = [
   {
     id: "cloudflare",
     name: "Cloudflare Security Agent",
+    engine: "Sentinel on Cloudflare",
     summary: "Inspects connected Cloudflare accounts and zones, checks available traffic-protection settings, identifies configuration gaps, and recommends improvements to live application security.",
     responsibilities: [
       "Reviews TLS/HTTPS, managed WAF, rate limiting, HTTP DDoS overrides and bot protection per zone",
@@ -206,6 +217,7 @@ export const TEAM_AGENTS: Def[] = [
   {
     id: "monitoring",
     name: "Security Monitoring Agent",
+    engine: "Scheduler and alerts",
     summary: "Monitors scheduled audit results, newly discovered vulnerabilities, configuration changes, and recurring issues, then alerts authorized users when important risks require attention.",
     responsibilities: [
       "Runs your scheduled audits daily or weekly, as you, read-only and without AI",
@@ -221,6 +233,7 @@ export const TEAM_AGENTS: Def[] = [
   {
     id: "fix",
     name: "Security Fix Agent",
+    engine: "Patch proposals and the coding agent",
     summary: "Proposes targeted code fixes, prepares patches or pull requests where supported, runs relevant tests, and retests vulnerabilities after fixes are applied. Requires approval for authorized write actions.",
     responsibilities: [
       "Proposes patches with a regression test for up to three findings per audit — never applied automatically",
@@ -235,6 +248,7 @@ export const TEAM_AGENTS: Def[] = [
   {
     id: "orchestrator",
     name: "Security Orchestrator Agent",
+    engine: "Aegis coordination",
     summary: "Coordinates the entire Security Team, assigns tasks to the appropriate agents, combines their findings, resolves conflicting results, and ensures that audits follow the correct security and approval procedures.",
     responsibilities: [
       "Plans coordinated audits and runs each agent in order",
@@ -324,6 +338,7 @@ export function teamAgents(input: TeamInput): AgentCard[] {
     return {
       id: d.id,
       name: d.name,
+      engine: d.engine,
       summary: d.summary,
       responsibilities: d.responsibilities,
       notYet: d.notYet ?? null,

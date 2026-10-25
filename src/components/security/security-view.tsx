@@ -16,7 +16,7 @@ import { AGENT_NAME, AgentBadge, fmtTime, ICON_OF, RunStatus } from "./bits";
 import { EMPTY_FILTERS, FindingsPanel, type FindingFilters } from "./findings-panel";
 import type { Target } from "./forms";
 import { Launcher, type LaunchMode } from "./launcher";
-import { AgentGrid, Integrations, NextActions, PostureCard, RecentEvents, ScheduleManager, TeamStrip, useTeam } from "./team-overview";
+import { AgentGrid, NextActions, PostureCard, RecentEvents, ScheduleManager, TeamStrip, useTeam } from "./team-overview";
 
 interface Tool {
   id: string;
@@ -315,33 +315,33 @@ export function SecurityView() {
                       Engines and workspaces
                     </h2>
                     <p className="mb-3 mt-0.5 text-[12.5px] text-s-ink-3">The scanners and layers the agents run on, each with its own workspace.</p>
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                       {active.map((a) => {
                         const latest = data?.latest[a.id];
                         const workspace = a.id === "threat_hunter" ? "/agents/security/hunter" : a.id === "code_guardian" ? "/agents/security/guardian" : null;
                         return (
-                          <article key={a.id} className="glass flex flex-col rounded-[18px] p-4">
-                            <div className="flex items-start gap-3">
-                              <AgentBadge agent={a.id} icon={a.icon} size="sm" />
+                          <article key={a.id} className="glass relative flex flex-col rounded-[22px] p-5 transition duration-300 hover:border-s-line-strong hover:shadow-[var(--s-shadow)]">
+                            <div className="flex items-start gap-3.5">
+                              <AgentBadge agent={a.id} icon={a.icon} />
                               <div className="min-w-0 flex-1">
-                                <h3 className="text-[14.5px] font-medium">{a.name}</h3>
-                                <p className="text-[12px] text-s-ink-3">{a.role}</p>
+                                <h3 className="text-[16px] font-semibold tracking-[-0.01em]">{a.name}</h3>
+                                <p className="text-[12.5px] text-s-ink-3">{a.role}</p>
                               </div>
                               {latest ? (
-                                <Link href={`/agents/security/runs/${latest.runId}`} title={`Last run ${fmtTime(latest.at)}`} className="rounded-lg px-1 hover:bg-s-hover">
+                                <Link href={`/agents/security/runs/${latest.runId}`} title={`Last run ${fmtTime(latest.at)}`} className="rounded-lg px-1.5 py-0.5 hover:bg-s-hover">
                                   <RunStatus status={latest.status} />
                                 </Link>
                               ) : (
                                 <RunStatus status={null} />
                               )}
                             </div>
-                            <p className="mt-2 text-[12.5px] leading-snug text-s-ink-2">{a.description}</p>
-                            <ul className="mt-2 flex flex-wrap gap-1" aria-label="Tools">
+                            <p className="mt-3.5 text-[13.5px] leading-relaxed text-s-ink-2">{a.description}</p>
+                            <ul className="mt-4 flex flex-wrap gap-1.5" aria-label="Tools">
                               {a.tools.map((id) => {
                                 const t = toolById.get(id);
                                 if (!t) return null;
                                 return (
-                                  <li key={id} title={t.available ? (t.reason ?? t.description) : t.reason} className={cn("inline-flex items-center gap-1 rounded-full border border-s-line px-2 py-0.5 text-[11px]", t.available ? "text-s-ink-2" : "text-s-ink-3")}>
+                                  <li key={id} title={t.available ? (t.reason ?? t.description) : t.reason} className={cn("inline-flex items-center gap-1.5 rounded-full border border-s-line px-2.5 py-1 text-[11.5px]", t.available ? "text-s-ink-2" : "text-s-ink-3")}>
                                     <span className={cn("h-1.5 w-1.5 rounded-full", t.available ? "bg-emerald-500" : "bg-s-ink-3/50")} aria-hidden />
                                     {t.name}
                                     <span className="sr-only">{t.available ? "available" : "not connected"}</span>
@@ -349,12 +349,12 @@ export function SecurityView() {
                                 );
                               })}
                             </ul>
-                            <div className="mt-auto flex flex-wrap gap-2 pt-3">
-                              <button type="button" onClick={() => setLaunch(a.id as LaunchMode)} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-s-line-strong px-3 text-[12.5px] font-medium hover:bg-s-hover">
-                                <Play className="h-3.5 w-3.5" /> {a.action?.label}
+                            <div className="mt-auto pt-5">
+                              <button type="button" onClick={() => setLaunch(a.id as LaunchMode)} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-s-line-strong text-[14px] font-medium transition hover:border-transparent hover:bg-s-accent hover:text-s-accent-ink">
+                                <Play className="h-4 w-4" /> {a.action?.label}
                               </button>
                               {workspace && (
-                                <Link href={workspace} className="inline-flex h-8 items-center rounded-full px-3 text-[12.5px] text-s-ink-2 hover:bg-s-hover hover:text-s-ink">
+                                <Link href={workspace} className="mt-2 inline-flex h-9 w-full items-center justify-center rounded-xl text-[13px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink">
                                   Open workspace
                                 </Link>
                               )}
@@ -363,18 +363,18 @@ export function SecurityView() {
                         );
                       })}
                       {LAYERS.map((l) => (
-                        <article key={l.id} className="glass flex flex-col rounded-[18px] p-4">
-                          <div className="flex items-start gap-3">
-                            <AgentBadge agent={l.id} icon={l.icon} size="sm" />
+                        <article key={l.id} className="glass relative flex flex-col rounded-[22px] p-5 transition duration-300 hover:border-s-line-strong hover:shadow-[var(--s-shadow)]">
+                          <div className="flex items-start gap-3.5">
+                            <AgentBadge agent={l.id} icon={l.icon} />
                             <div className="min-w-0 flex-1">
-                              <h3 className="text-[14.5px] font-medium">{l.name}</h3>
-                              <p className="text-[12px] text-s-ink-3">{l.role}</p>
+                              <h3 className="text-[16px] font-semibold tracking-[-0.01em]">{l.name}</h3>
+                              <p className="text-[12.5px] text-s-ink-3">{l.role}</p>
                             </div>
                           </div>
-                          <p className="mt-2 text-[12.5px] leading-snug text-s-ink-2">{l.description}</p>
-                          <div className="mt-auto pt-3">
-                            <Link href={l.href} className="inline-flex h-8 items-center gap-1 rounded-full border border-s-line-strong px-3 text-[12.5px] font-medium hover:bg-s-hover">
-                              {l.action} <ChevronRight className="h-3.5 w-3.5" />
+                          <p className="mt-3.5 text-[13.5px] leading-relaxed text-s-ink-2">{l.description}</p>
+                          <div className="mt-auto pt-5">
+                            <Link href={l.href} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-s-line-strong text-[14px] font-medium transition hover:border-transparent hover:bg-s-accent hover:text-s-accent-ink">
+                              {l.action} <ChevronRight className="h-4 w-4" />
                             </Link>
                           </div>
                         </article>
@@ -407,7 +407,6 @@ export function SecurityView() {
 
             {tab === "setup" && (
               <div className="space-y-8">
-                {team.team && <Integrations team={team.team} />}
                 {data && (
                   <section aria-labelledby="websites">
                     <h2 id="websites" className="text-[15px] font-semibold">

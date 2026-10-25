@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({ default: ({ href, children, ...rest }: { href: string; children: unknown }) => h("a", { href, ...rest }, children as never) }));
 
-import { AgentGrid, Integrations, NextActions, PostureCard, RecentEvents, ScheduleManager, TeamStrip } from "@/components/security/team-overview";
+import { AgentGrid, NextActions, PostureCard, RecentEvents, ScheduleManager, TeamStrip } from "@/components/security/team-overview";
 import { teamAgents } from "@/lib/security/team-agents";
 
 const agents = teamAgents({
@@ -49,21 +49,21 @@ describe("Security dashboard pieces", () => {
     expect(html).toContain("Token can&#x27;t list zones.");
     expect(html).toContain("GitHub: read-only");
     expect(html).toContain("No activity yet.");
+    // Every agent has its own logo badge and an engine line, like the engine cards.
+    expect(html.match(/bg-gradient-to-br/g)).toHaveLength(11);
+    expect(html).toContain("Code Guardian on GitHub");
   });
 
-  it("render the overview: posture, next actions, team strip, events, connections and schedules", () => {
+  it("render the overview: posture, next actions, team strip, events and schedules", () => {
     const html = [
       renderToStaticMarkup(h(PostureCard, { team, onSeverity: () => {} })),
       renderToStaticMarkup(h(NextActions, { team, onLaunch: () => {} })),
       renderToStaticMarkup(h(TeamStrip, { team, onOpen: () => {} })),
       renderToStaticMarkup(h(RecentEvents, { team })),
-      renderToStaticMarkup(h(Integrations, { team })),
       renderToStaticMarkup(h(ScheduleManager, { sched: { schedules: [], alerts: { email: true, minSeverity: "high" } }, integrations: team.integrations, onChanged: () => {} })),
     ].join("");
     expect(html).toContain("Open findings");
     expect(html).toContain("need verification");
-    expect(html).toContain("Reconnect needed");
-    expect(html).toContain("Not set up on this site");
     expect(html).toContain("See all 11 agents");
     expect(html).toContain("No scheduled audits yet.");
     expect(html).toContain('href="/agents/security?tab=findings"');

@@ -1,10 +1,10 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { BellRing, CalendarClock, CheckCircle2, CircleDashed, Loader2, Plug, Trash2 } from "lucide-react";
+import { BellRing, CalendarClock, Check, CheckCircle2, ChevronRight, CircleDashed, Loader2, Trash2 } from "lucide-react";
 import { jsonFetch } from "@/hooks/use-ndjson";
 import { cn } from "@/lib/utils";
-import { fmtTime } from "./bits";
+import { AGENT_ICON, AgentBadge, fmtTime } from "./bits";
 import { inputCls, labelCls } from "./forms";
 import type { LaunchMode } from "./launcher";
 
@@ -20,6 +20,7 @@ interface Integration {
 interface AgentCardData {
   id: string;
   name: string;
+  engine: string;
   summary: string;
   responsibilities: string[];
   notYet: string | null;
@@ -55,13 +56,6 @@ interface Schedules {
   alerts: { email: boolean; minSeverity: "critical" | "high" };
 }
 
-const NAME: Record<Integration["id"], string> = { github: "GitHub", vercel: "Vercel", cloudflare: "Cloudflare" };
-const USE: Record<Integration["id"], string> = {
-  github: "Private repositories, pull-request audits and PR comments",
-  vercel: "Deployment settings, environment-variable metadata and the deploy gate",
-  cloudflare: "TLS, WAF, DDoS, bot, DNS and Zero Trust Access review",
-};
-
 const STATUS: Record<AgentCardData["status"], { label: string; cls: string }> = {
   idle: { label: "Idle", cls: "bg-s-hover text-s-ink-3" },
   working: { label: "Working", cls: "bg-sky-500/15 text-sky-700 dark:text-sky-300" },
@@ -70,53 +64,77 @@ const STATUS: Record<AgentCardData["status"], { label: string; cls: string }> = 
   error: { label: "Error", cls: "bg-red-500/15 text-red-700 dark:text-red-300" },
 };
 
-/** One agent: what it's for, what it does, what it may touch, and its real status (from runs and logged events only). */
-function AgentCard({ a }: { a: AgentCardData }) {
+/** Each agent's logo (tint comes from AGENT_TINT under the same id). */
+const AGENT_LOGO: Record<string, keyof typeof AGENT_ICON> = {
+  auditor: "scan",
+  verification: "verify",
+  protection: "protect",
+  identity: "key",
+  reporting: "report",
+  github: "branch",
+  vercel: "triangle",
+  cloudflare: "cloud",
+  monitoring: "monitor",
+  fix: "wrench",
+  orchestrator: "orchestrate",
+};
+
+/** One agent, in the same card style as the engines: logo, name, what it runs on, real status, then the detail. */
+function AgentCard({ a, i }: { a: AgentCardData; i: number }) {
   return (
-    <article className="glass flex flex-col rounded-[18px] p-4" aria-labelledby={`agent-${a.id}`}>
-      <div className="flex items-start justify-between gap-2">
-        <h3 id={`agent-${a.id}`} className="text-[14.5px] font-medium leading-snug">
-          {a.name}
-        </h3>
+    <article
+      aria-labelledby={`agent-${a.id}`}
+      className="glass relative flex flex-col rounded-[22px] p-5 transition duration-300 hover:border-s-line-strong hover:shadow-[var(--s-shadow)]"
+      style={{ animation: `s-in .34s cubic-bezier(.2,.7,.2,1) ${i * 40}ms both` }}
+    >
+      <div className="flex items-start gap-3.5">
+        <AgentBadge agent={a.id} icon={AGENT_LOGO[a.id] ?? "shield"} />
+        <div className="min-w-0 flex-1">
+          <h3 id={`agent-${a.id}`} className="text-[16px] font-semibold leading-snug tracking-[-0.01em]">
+            {a.name.replace(/ Agent$/, "")}
+          </h3>
+          <p className="text-[12.5px] text-s-ink-3">{a.engine}</p>
+        </div>
         <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11.5px] font-medium", STATUS[a.status].cls)}>{STATUS[a.status].label}</span>
       </div>
-      <p className="mt-1.5 text-[13px] leading-snug text-s-ink-2">{a.summary}</p>
-      {a.statusNote && <p className={cn("mt-1.5 text-[12.5px]", a.status === "error" ? "text-s-danger" : "text-s-ink-2")}>{a.statusNote}</p>}
-      <div className="mt-2.5 text-[12.5px]">
-        <p className="font-medium text-s-ink-2">Responsibilities</p>
-        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-s-ink-2">
-          {a.responsibilities.map((r) => (
-            <li key={r}>{r}</li>
-          ))}
-        </ul>
-        {a.notYet && <p className="mt-1.5 text-s-ink-3">Not yet: {a.notYet}</p>}
-        <p className="mt-2 font-medium text-s-ink-2">Permissions</p>
-        <ul className="mt-1 flex flex-wrap gap-1">
-          {a.permissions.map((p) => (
-            <li key={p} className="rounded-full border border-s-line px-2 py-0.5 text-[11.5px] text-s-ink-2">
-              {p}
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div className="mt-auto pt-3 text-[12px] text-s-ink-3">
-        {a.lastActivity ? (
-          <p>
-            Last activity:{" "}
-            {a.lastActivity.href ? (
-              <Link href={a.lastActivity.href} className="underline underline-offset-2">
-                {a.lastActivity.label}
-              </Link>
-            ) : (
-              a.lastActivity.label
-            )}
-            , {fmtTime(a.lastActivity.at)}
-          </p>
-        ) : (
-          <p>No activity yet.</p>
-        )}
-        <Link href={a.details.href} className="mt-1.5 inline-block font-medium text-s-ink underline underline-offset-2">
-          View details
+      <p className="mt-3.5 text-[13.5px] leading-relaxed text-s-ink-2">{a.summary}</p>
+      {a.statusNote && <p className={cn("mt-2 text-[12.5px]", a.status === "error" ? "text-s-danger" : "text-s-ink-2")}>{a.statusNote}</p>}
+      <ul className="mt-3 space-y-1" aria-label="Responsibilities">
+        {a.responsibilities.map((r) => (
+          <li key={r} className="flex items-start gap-2 text-[12.5px] text-s-ink-2">
+            <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-s-ink-3" /> {r}
+          </li>
+        ))}
+      </ul>
+      {a.notYet && <p className="mt-2 text-[12px] text-s-ink-3">Not yet: {a.notYet}</p>}
+      <ul className="mt-4 flex flex-wrap gap-1.5" aria-label="Permissions">
+        {a.permissions.map((p) => (
+          <li key={p} className="inline-flex items-center gap-1.5 rounded-full border border-s-line px-2.5 py-1 text-[11.5px] text-s-ink-2">
+            <span className={cn("h-1.5 w-1.5 rounded-full", /not connected|off$/.test(p) ? "bg-s-ink-3/50" : "bg-emerald-500")} aria-hidden />
+            {p}
+          </li>
+        ))}
+      </ul>
+      <div className="mt-auto pt-5">
+        <p className="mb-2 text-[12px] text-s-ink-3">
+          {a.lastActivity ? (
+            <>
+              Last activity:{" "}
+              {a.lastActivity.href ? (
+                <Link href={a.lastActivity.href} className="underline underline-offset-2">
+                  {a.lastActivity.label}
+                </Link>
+              ) : (
+                a.lastActivity.label
+              )}
+              , {fmtTime(a.lastActivity.at)}
+            </>
+          ) : (
+            "No activity yet."
+          )}
+        </p>
+        <Link href={a.details.href} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-s-line-strong text-[14px] font-medium transition hover:border-transparent hover:bg-s-accent hover:text-s-accent-ink">
+          View details <ChevronRight className="h-4 w-4" />
         </Link>
       </div>
     </article>
@@ -265,41 +283,9 @@ export function AgentGrid({ team }: { team: Team }) {
         Agents
       </h2>
       <p className="mb-3 mt-0.5 text-[12.5px] text-s-ink-3">Statuses come from real runs and logged actions only. Some agents share an engine, so one audit can update more than one card.</p>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {team.agents.map((a) => (
-          <AgentCard key={a.id} a={a} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-export function Integrations({ team }: { team: Team }) {
-  return (
-    <section aria-labelledby="integrations">
-      <h2 id="integrations" className="text-[15px] font-semibold">
-        Connected services
-      </h2>
-      <p className="mb-3 mt-0.5 text-[12.5px] text-s-ink-3">Your own connections. Agents use only what&apos;s connected here; anything else is reported as not checked.</p>
-      <div className="grid gap-3 md:grid-cols-3">
-        {team.integrations.map((i) => (
-          <div key={i.id} className="glass rounded-[18px] p-4">
-            <div className="flex items-center justify-between gap-2">
-              <p className="flex items-center gap-2 text-[14px] font-medium">
-                <Plug className="h-4 w-4 text-s-ink-3" /> {NAME[i.id]}
-              </p>
-              <span className={cn("rounded-full px-2 py-0.5 text-[11.5px]", i.status === "connected" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : i.status === "not_connected" || i.status === "disconnected" ? "bg-s-hover text-s-ink-3" : "bg-amber-500/15 text-amber-700 dark:text-amber-300")}>
-                {i.status === "connected" ? "Connected" : i.status === "reauth_required" ? "Reconnect needed" : i.status === "error" ? "Error" : !i.available ? "Not set up on this site" : "Not connected"}
-              </span>
-            </div>
-            <p className="mt-1.5 text-[12.5px] text-s-ink-2">{USE[i.id]}</p>
-            <p className="mt-1.5 text-[12px] text-s-ink-3">
-              {i.status === "connected" ? `${i.account ?? "Account"} · ${i.writeEnabled ? "changes allowed with your approval" : "read-only"}${i.lastCheckedAt ? ` · checked ${fmtTime(i.lastCheckedAt)}` : ""}` : (i.lastError ?? "Audits that need it say so instead of guessing.")}
-            </p>
-            <Link href="/connectors" className="mt-2 inline-block text-[12.5px] underline underline-offset-2">
-              {i.status === "connected" ? "Manage" : "Connect"}
-            </Link>
-          </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {team.agents.map((a, i) => (
+          <AgentCard key={a.id} a={a} i={i} />
         ))}
       </div>
     </section>

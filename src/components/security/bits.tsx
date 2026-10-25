@@ -1,14 +1,14 @@
 "use client";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
-import { Check, CircleAlert, CircleDashed, CircleX, Code2, Crosshair, Globe, Loader2, Network, Radar, ShieldCheck, Siren, SkipForward } from "lucide-react";
+import { Activity, BadgeCheck, Check, CircleAlert, CircleDashed, CircleX, Cloud, Code2, Crosshair, FileText, GitBranch, Globe, KeyRound, Loader2, Network, Radar, ScanSearch, ShieldCheck, ShieldHalf, Siren, SkipForward, Triangle, Workflow, Wrench } from "lucide-react";
 import { Markdown } from "@/components/common/markdown";
 import { postNdjson } from "@/hooks/use-ndjson";
 import type { SecurityAgentDef } from "@/lib/security/agents";
 import type { StoredAnalysis } from "@/lib/security/audit-report";
 import { cn } from "@/lib/utils";
 
-export const AGENT_ICON: Record<SecurityAgentDef["icon"] | "coordinated" | "network" | "shield", typeof Radar> = {
+export const AGENT_ICON: Record<SecurityAgentDef["icon"] | "coordinated" | "network" | "shield" | "scan" | "verify" | "protect" | "key" | "report" | "branch" | "triangle" | "cloud" | "monitor" | "wrench" | "orchestrate", typeof Radar> = {
   radar: Radar,
   crosshair: Crosshair,
   code: Code2,
@@ -17,6 +17,17 @@ export const AGENT_ICON: Record<SecurityAgentDef["icon"] | "coordinated" | "netw
   coordinated: Radar,
   network: Network,
   shield: ShieldCheck,
+  scan: ScanSearch,
+  verify: BadgeCheck,
+  protect: ShieldHalf,
+  key: KeyRound,
+  report: FileText,
+  branch: GitBranch,
+  triangle: Triangle,
+  cloud: Cloud,
+  monitor: Activity,
+  wrench: Wrench,
+  orchestrate: Workflow,
 };
 export const AGENT_TINT: Record<string, string> = {
   sentinel: "from-sky-500/25 to-cyan-400/5 text-sky-600 dark:text-sky-300",
@@ -27,6 +38,18 @@ export const AGENT_TINT: Record<string, string> = {
   coordinated: "from-s-accent/25 to-transparent text-s-ink",
   aegis: "from-emerald-500/25 to-teal-400/5 text-emerald-600 dark:text-emerald-300",
   bastion: "from-rose-500/25 to-red-400/5 text-rose-600 dark:text-rose-300",
+  // The Security Team's agents
+  auditor: "from-sky-500/25 to-cyan-400/5 text-sky-600 dark:text-sky-300",
+  verification: "from-emerald-500/25 to-green-400/5 text-emerald-600 dark:text-emerald-300",
+  protection: "from-orange-500/25 to-amber-400/5 text-orange-600 dark:text-orange-300",
+  identity: "from-indigo-500/25 to-blue-400/5 text-indigo-600 dark:text-indigo-300",
+  reporting: "from-teal-500/25 to-cyan-400/5 text-teal-600 dark:text-teal-300",
+  github: "from-zinc-500/25 to-zinc-400/5 text-zinc-700 dark:text-zinc-200",
+  vercel: "from-neutral-600/25 to-neutral-400/5 text-neutral-800 dark:text-neutral-100",
+  cloudflare: "from-orange-500/25 to-yellow-400/5 text-orange-600 dark:text-orange-300",
+  monitoring: "from-amber-500/25 to-orange-400/5 text-amber-600 dark:text-amber-300",
+  fix: "from-violet-500/25 to-fuchsia-400/5 text-violet-600 dark:text-violet-300",
+  orchestrator: "from-rose-500/25 to-pink-400/5 text-rose-600 dark:text-rose-300",
 };
 export const AGENT_NAME: Record<string, string> = {
   sentinel: "Orbis Sentinel",
