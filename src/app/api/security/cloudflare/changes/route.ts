@@ -59,6 +59,7 @@ const body = z.object({ findingId: z.uuid(), confirm: z.literal(true), expectCur
 
 export async function POST(req: Request) {
   try {
+    await requireUser();
     const input = await parseJsonBody(req, body, 500);
     const p = await proposalFor(req, input.findingId).catch((err) => {
       throw wrap(err);
