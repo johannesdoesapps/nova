@@ -103,15 +103,25 @@ create table if not exists public.mimic_settings (
   updated_at timestamptz not null default now()
 );
 
-do $$
-declare t text;
-begin
-  foreach t in array array['mimic_documents', 'mimic_workflows', 'mimic_runs', 'mimic_rules', 'mimic_ledger', 'mimic_settings'] loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format('drop policy if exists "%s: own rows" on public.%I', t, t);
-    execute format('create policy "%s: own rows" on public.%I for all to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()))', t, t);
-  end loop;
-end $$;
+-- Own rows only, on every table but the audit log.
+alter table public.mimic_documents enable row level security;
+drop policy if exists "mimic_documents: own rows" on public.mimic_documents;
+create policy "mimic_documents: own rows" on public.mimic_documents for all to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+alter table public.mimic_workflows enable row level security;
+drop policy if exists "mimic_workflows: own rows" on public.mimic_workflows;
+create policy "mimic_workflows: own rows" on public.mimic_workflows for all to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+alter table public.mimic_runs enable row level security;
+drop policy if exists "mimic_runs: own rows" on public.mimic_runs;
+create policy "mimic_runs: own rows" on public.mimic_runs for all to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+alter table public.mimic_rules enable row level security;
+drop policy if exists "mimic_rules: own rows" on public.mimic_rules;
+create policy "mimic_rules: own rows" on public.mimic_rules for all to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+alter table public.mimic_ledger enable row level security;
+drop policy if exists "mimic_ledger: own rows" on public.mimic_ledger;
+create policy "mimic_ledger: own rows" on public.mimic_ledger for all to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+alter table public.mimic_settings enable row level security;
+drop policy if exists "mimic_settings: own rows" on public.mimic_settings;
+create policy "mimic_settings: own rows" on public.mimic_settings for all to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 
 -- The audit log: read, append and delete (data deletion), never update.
 alter table public.mimic_events enable row level security;
