@@ -73,6 +73,21 @@ export async function audit(db: ServerSupabase, userId: string, action: string, 
 }
 
 export async function startRun(db: ServerSupabase, userId: string, r: { agent: string; action: string; asset?: string | null; scope?: string | null; parentId?: string | null; modelId?: string | null }) {
+  // The orchestrator's duplicate guard: the same agent, action and asset can't run twice at once (runs left
+  // "running" by a crash stop counting after the stale window).
+  if (r.asset) {
+    const { data: busy } = await db
+      .from("security_runs")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("agent", r.agent)
+      .eq("action", r.action)
+      .eq("asset", r.asset.slice(0, 300))
+      .eq("status", "running")
+      .gte("started_at", new Date(Date.now() - STALE_MS).toISOString())
+      .limit(1);
+    if (busy?.length) throw new ApiError("conflict", "The same check is already running for this target. Wait for it to finish, or open it from the run history.");
+  }
   const { data, error } = await db
     .from("security_runs")
     .insert({ user_id: userId, agent: r.agent, action: r.action, asset: r.asset?.slice(0, 300) ?? null, scope: r.scope ?? null, parent_id: r.parentId ?? null, model_id: r.modelId ?? null })

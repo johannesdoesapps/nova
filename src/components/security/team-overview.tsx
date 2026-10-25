@@ -17,7 +17,20 @@ interface Integration {
   lastCheckedAt: string | null;
   lastError: string | null;
 }
+interface AgentCardData {
+  id: string;
+  name: string;
+  summary: string;
+  responsibilities: string[];
+  notYet: string | null;
+  status: "idle" | "working" | "needs_approval" | "completed" | "error";
+  statusNote: string | null;
+  lastActivity: { label: string; at: string; href: string | null } | null;
+  permissions: string[];
+  details: { label: string; href: string };
+}
 interface Team {
+  agents: AgentCardData[];
   integrations: Integration[];
   bySeverity: Record<string, number>;
   byVerification: Record<string, number>;
@@ -49,14 +62,66 @@ const USE: Record<Integration["id"], string> = {
   cloudflare: "TLS, WAF, DDoS, bot, DNS and Zero Trust Access review",
 };
 
-/** The five roles of the brief, and what in Orbis does each one today. */
-const ROLES: { name: string; who: string; does: string; launch?: LaunchMode; cta?: string }[] = [
-  { name: "Security Auditor", who: "Code Guardian + Sentinel", does: "Reads code, dependencies, routes and sign-in checks; scans websites you've proved you own.", launch: "audit", cta: "Start audit" },
-  { name: "Vulnerability Verification", who: "Independent verifier", does: "A separate model call challenges each serious code finding against the code; confirmed or disproven needs an exact quote. Re-checks decide what's fixed." },
-  { name: "Application Protection", who: "Sentinel · Vercel and Cloudflare", does: "Deployment protection, variable exposure and the deploy gate on Vercel; TLS, WAF, DDoS, bots and DNS on Cloudflare.", launch: "cloudflare", cta: "Review Cloudflare" },
-  { name: "Identity & Access", who: "Code Guardian rules + Cloudflare Access", does: "Missing sign-in or ownership checks in code, and who Zero Trust Access lets in. Policies are reviewed, never changed." },
-  { name: "Reporting & Remediation", who: "Aegis", does: "One prioritised report, fixes proposed for your review (never applied without approval), retests and history." },
-];
+const STATUS: Record<AgentCardData["status"], { label: string; cls: string }> = {
+  idle: { label: "Idle", cls: "bg-s-hover text-s-ink-3" },
+  working: { label: "Working", cls: "bg-sky-500/15 text-sky-700 dark:text-sky-300" },
+  needs_approval: { label: "Needs approval", cls: "bg-amber-500/15 text-amber-700 dark:text-amber-300" },
+  completed: { label: "Completed", cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" },
+  error: { label: "Error", cls: "bg-red-500/15 text-red-700 dark:text-red-300" },
+};
+
+/** One agent: what it's for, what it does, what it may touch, and its real status (from runs and logged events only). */
+function AgentCard({ a }: { a: AgentCardData }) {
+  return (
+    <article className="glass flex flex-col rounded-[18px] p-4" aria-labelledby={`agent-${a.id}`}>
+      <div className="flex items-start justify-between gap-2">
+        <h3 id={`agent-${a.id}`} className="text-[14.5px] font-medium leading-snug">
+          {a.name}
+        </h3>
+        <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11.5px] font-medium", STATUS[a.status].cls)}>{STATUS[a.status].label}</span>
+      </div>
+      <p className="mt-1.5 text-[13px] leading-snug text-s-ink-2">{a.summary}</p>
+      {a.statusNote && <p className={cn("mt-1.5 text-[12.5px]", a.status === "error" ? "text-s-danger" : "text-s-ink-2")}>{a.statusNote}</p>}
+      <div className="mt-2.5 text-[12.5px]">
+        <p className="font-medium text-s-ink-2">Responsibilities</p>
+        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-s-ink-2">
+          {a.responsibilities.map((r) => (
+            <li key={r}>{r}</li>
+          ))}
+        </ul>
+        {a.notYet && <p className="mt-1.5 text-s-ink-3">Not yet: {a.notYet}</p>}
+        <p className="mt-2 font-medium text-s-ink-2">Permissions</p>
+        <ul className="mt-1 flex flex-wrap gap-1">
+          {a.permissions.map((p) => (
+            <li key={p} className="rounded-full border border-s-line px-2 py-0.5 text-[11.5px] text-s-ink-2">
+              {p}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="mt-auto pt-3 text-[12px] text-s-ink-3">
+        {a.lastActivity ? (
+          <p>
+            Last activity:{" "}
+            {a.lastActivity.href ? (
+              <Link href={a.lastActivity.href} className="underline underline-offset-2">
+                {a.lastActivity.label}
+              </Link>
+            ) : (
+              a.lastActivity.label
+            )}
+            , {fmtTime(a.lastActivity.at)}
+          </p>
+        ) : (
+          <p>No activity yet.</p>
+        )}
+        <Link href={a.details.href} className="mt-1.5 inline-block font-medium text-s-ink underline underline-offset-2">
+          View details
+        </Link>
+      </div>
+    </article>
+  );
+}
 
 export function TeamOverview({ onLaunch }: { onLaunch: (m: LaunchMode) => void }) {
   const [team, setTeam] = useState<Team | null>(null);
@@ -160,20 +225,28 @@ export function TeamOverview({ onLaunch }: { onLaunch: (m: LaunchMode) => void }
         </div>
       </section>
 
-      <section>
-        <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-[0.06em] text-s-ink-3">Roles</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {ROLES.map((r) => (
-            <div key={r.name} className="glass flex flex-col rounded-[18px] p-4">
-              <p className="text-[14px] font-medium">{r.name}</p>
-              <p className="text-[12px] text-s-ink-3">{r.who}</p>
-              <p className="mt-2 flex-1 text-[12.5px] leading-relaxed text-s-ink-2">{r.does}</p>
-              {r.launch && (
-                <button type="button" onClick={() => onLaunch(r.launch!)} className="mt-3 h-8 rounded-full border border-s-line-strong text-[12.5px] font-medium transition hover:bg-s-hover">
-                  {r.cta}
-                </button>
-              )}
-            </div>
+      <section aria-labelledby="team-agents">
+        <h2 id="team-agents" className="mb-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-s-ink-3">
+          The team
+        </h2>
+        <p className="mb-3 text-[12.5px] text-s-ink-3">Statuses come from real runs and logged actions only. Some agents share an engine, so one audit can update more than one card.</p>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {team.agents.map((a) => (
+            <AgentCard key={a.id} a={a} />
+          ))}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {(
+            [
+              ["audit", "Start audit"],
+              ["code_guardian", "Audit repository or PR"],
+              ["deployment", "Audit deployment"],
+              ["cloudflare", "Inspect Cloudflare"],
+            ] as [LaunchMode, string][]
+          ).map(([m, label]) => (
+            <button key={m} type="button" onClick={() => onLaunch(m)} className="h-9 rounded-full border border-s-line-strong px-4 text-[13px] font-medium transition hover:bg-s-hover">
+              {label}
+            </button>
           ))}
         </div>
       </section>
@@ -268,7 +341,7 @@ function ScheduleManager({ sched, integrations, onChanged }: { sched: Schedules;
   };
 
   return (
-    <div className="glass rounded-[20px] p-5">
+    <div id="schedules" className="glass scroll-mt-20 rounded-[20px] p-5">
       <h2 className="mb-2 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.06em] text-s-ink-3">
         <CalendarClock className="h-4 w-4" /> Scheduled audits
       </h2>

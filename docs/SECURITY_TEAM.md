@@ -4,17 +4,32 @@ The Security Team is the set of security capabilities on `/agents/security`, coo
 Bastion (see [SECURITY_AGENTS.md](SECURITY_AGENTS.md)). This page covers what was added for auditing real
 repositories, pull requests and deployments, and for reviewing live protection on Cloudflare.
 
-## Roles
+## Agents
 
-| Role (brief) | What does it in Orbis |
-|---|---|
-| Security Auditor | Code Guardian (code, dependencies, routes, auth checks, config) and Sentinel (websites you proved you own) |
-| Vulnerability Verification | The independent verification step plus classification (confirmed / likely / needs verification / disproven) and re-checks |
-| Application Protection | Sentinel's `deployment` (Vercel) and `cloudflare` actions |
-| Identity & Access | Code Guardian's auth/ownership rules and the Cloudflare Zero Trust Access review |
-| Reporting & Remediation | Aegis reports, fix proposals (never applied without approval), retests, history |
+The Security page shows eleven agent cards (`src/lib/security/team-agents.ts`), each with its name, summary,
+responsibilities, a "Not yet" note where the summary goes beyond what Orbis does today, permissions (from the
+person's own connections), last activity and a details link.
 
-The roles are modules of existing agents rather than new agent ids, so no database migration was needed.
+| Agent | Engine | Status comes from |
+|---|---|---|
+| Security Auditor | Code Guardian + Sentinel | code audits, PR audits, website scans |
+| Vulnerability Verification | verification step | the "Independent verification" step when it actually ran; disproven events |
+| Application Protection | Sentinel `cloudflare`/`deployment` | those runs; approved Cloudflare changes |
+| Identity and Access Security | Code Guardian auth rules, Cloudflare Access, Vercel protection | code audits, Cloudflare runs with an Access step, deployment audits |
+| Security Reporting and Remediation | AI reports, Aegis | runs with an AI report step, coordinated runs, report exports, finding updates |
+| GitHub Security | Code Guardian on GitHub | runs on `github:` assets, PR comments |
+| Vercel Deployment Security | Sentinel `deployment` | deployment audits, gate evaluations |
+| Cloudflare Security | Sentinel `cloudflare` | Cloudflare reviews and changes |
+| Security Monitoring | scheduler + alerts | `schedule.ran`, `alert.raised` |
+| Security Fix | patch proposals, coding-agent handoff, approved changes | `patch.proposed`, `fix.project_opened`, `cloudflare.change_applied`; *Needs approval* while proposed patches wait |
+| Security Orchestrator | coordinated audits (Aegis) | coordinated runs, Aegis actions |
+
+Statuses: **Idle** (nothing has run), **Working** (a matching run is in progress), **Needs approval**, **Completed**,
+**Error** (with the reason). Nothing is shown as working or completed without a real run or logged event behind it.
+Several agents share an engine, so one audit can update more than one card.
+
+The orchestrator refuses to start the same check (agent, action and target) while one is already running
+(`startRun`, within the 10-minute stale window).
 
 ## Audit phases
 

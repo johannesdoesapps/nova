@@ -5,7 +5,8 @@ import { auditLog, listFindings, listRuns } from "@/lib/db/security";
 import { errorResponse } from "@/lib/http";
 import { classify } from "@/lib/security/details";
 import { serviceState } from "@/lib/security/connections";
-import { currentSchedules, type AuditEvent } from "@/lib/security/schedules";
+import { currentAlertSettings, currentSchedules, type AuditEvent } from "@/lib/security/schedules";
+import { teamAgents, type EventLike, type RunLike } from "@/lib/security/team-agents";
 
 const OPEN = new Set(["open", "investigating", "fix_proposed"]);
 
@@ -40,7 +41,13 @@ const EVENT_LABEL: Record<string, string> = {
 export async function GET() {
   try {
     const auth = await requireUser();
-    const [rows, findings, runs, log] = await Promise.all([listConnections(auth).catch(() => []), listFindings(auth.supabase, auth.user.id, { scope: "security" }), listRuns(auth.supabase, auth.user.id, 30), auditLog(auth.supabase, auth.user.id, 300)]);
+    const [rows, findings, runs, log, settingsEvents] = await Promise.all([
+      listConnections(auth).catch(() => []),
+      listFindings(auth.supabase, auth.user.id, { scope: "security" }),
+      listRuns(auth.supabase, auth.user.id, 80),
+      auditLog(auth.supabase, auth.user.id, 300),
+      auth.supabase.from("security_audit").select("action,detail,created_at").eq("user_id", auth.user.id).in("action", ["schedule.set", "schedule.removed", "alerts.settings"]).order("created_at").limit(2000),
+    ]);
     const integrations = await Promise.all((["github", "vercel", "cloudflare"] as const).map((id) => serviceState(auth, id, rows)));
 
     const open = findings.filter((f) => OPEN.has(f.status));
@@ -65,7 +72,16 @@ export async function GET() {
     );
     const newThisWeek = findings.filter((f) => Date.parse(f.first_seen) >= week).length;
     const last = runs.find((r) => r.status === "completed");
-    const schedules = currentSchedules(events);
+    const settings = (settingsEvents.data ?? []) as AuditEvent[];
+    const schedules = currentSchedules(settings);
+    const agents = teamAgents({
+      runs: runs as unknown as RunLike[],
+      events: events as unknown as EventLike[],
+      integrations,
+      fixesAwaitingApproval: findings.filter((f) => f.status === "fix_proposed" && !!f.patch).length,
+      activeSchedules: schedules.filter((s) => s.enabled).length,
+      alertsByEmail: currentAlertSettings(settings).email,
+    });
 
     const next: { text: string; href?: string; action?: string }[] = [];
     const gh = integrations[0]!;
@@ -78,6 +94,7 @@ export async function GET() {
     if (!schedules.length) next.push({ text: "Schedule a daily or weekly audit so regressions are caught without you remembering to check." });
 
     return NextResponse.json({
+      agents,
       integrations,
       bySeverity,
       byVerification,
