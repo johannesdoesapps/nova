@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { LOWER, orbisConfig, type OrbisConfig, type QualityTier } from "./config";
 import { ParticleSystem } from "./particles";
-import { ease, VISUALS, type Visual } from "./state";
+import { OrbisAnimator, statePalettes, type ColorKey } from "./animator";
+import type { VISUALS } from "./state";
 
 /**
  * OrbisScene: renders the ORBIS core with three.js.
@@ -146,19 +147,11 @@ export class OrbisScene {
   private linePos!: Float32Array;
   private lineCol!: Float32Array;
 
-  private visual: Visual = { ...VISUALS.idle };
-  private target: Visual = VISUALS.idle;
+  private readonly anim: OrbisAnimator;
   private color = new THREE.Color();
-  private readonly palette: Record<number, { a: THREE.Color; b: THREE.Color; p: THREE.Color; c: THREE.Color; l: THREE.Color; g: THREE.Color }>;
-  private hueTarget = 0;
-  private hue = [1, 0, 0, 0];
-  private angle = 0;
-  private time = 0;
   private last = 0;
   private raf = 0;
   private running = false;
-  private pulses: { r: number; s: number }[] = [];
-  private nextAutoPulse = 0;
   private pointerNdc: { x: number; y: number } | null = null;
   private readonly ray = new THREE.Raycaster();
   private readonly plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
@@ -178,7 +171,7 @@ export class OrbisScene {
     this.opts = opts;
     this.tier = opts.tier;
     this.cfg = orbisConfig(opts.tier, { pointer: opts.pointer && !opts.reducedMotion });
-    // Throws when WebGL isn't available; the component then shows the simple core.
+    // Throws when WebGL isn't available; the component then uses the 2D renderer (scene-2d.ts).
     // Opaque: the dark background is part of the picture, so additive light never shows seams over the page.
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: "high-performance" });
     this.renderer.setClearColor(BACKGROUND, 1);
@@ -186,14 +179,7 @@ export class OrbisScene {
 
     const pal = this.cfg.palette;
     const rgb = (v: readonly number[]) => new THREE.Color(v[0], v[1], v[2]);
-    const [violet, magenta, rose] = pal.gradient;
-    // Each state's colours: the gradient's three stops (a, p, b), the centre, the links and the floor.
-    this.palette = {
-      0: { a: rgb(violet), p: rgb(magenta), b: rgb(rose), c: rgb(pal.core), l: rgb(pal.link), g: rgb(pal.grid) },
-      1: { a: rgb([1, 0.3, 0.22]), p: rgb(pal.error), b: rgb([1, 0.58, 0.32]), c: rgb([1, 0.84, 0.74]), l: rgb([0.9, 0.32, 0.2]), g: rgb([0.75, 0.25, 0.18]) },
-      2: { a: rgb([0.98, 0.62, 0.2]), p: rgb(pal.warn), b: rgb([1, 0.84, 0.45]), c: rgb([1, 0.95, 0.8]), l: rgb([0.85, 0.6, 0.22]), g: rgb([0.7, 0.5, 0.2]) },
-      3: { a: rgb(violet).multiplyScalar(0.45), p: rgb(magenta).multiplyScalar(0.4), b: rgb(rose).multiplyScalar(0.4), c: rgb(pal.core).multiplyScalar(0.45), l: rgb(pal.link).multiplyScalar(0.45), g: rgb(pal.grid).multiplyScalar(0.5) },
-    };
+    this.anim = new OrbisAnimator(statePalettes(this.cfg), opts.reducedMotion);
 
     this.system = new ParticleSystem(this.cfg);
     this.pointMat = new THREE.ShaderMaterial({
@@ -299,11 +285,8 @@ export class OrbisScene {
 
   /** The look to ease toward. */
   setTarget(key: keyof typeof VISUALS) {
-    this.target = VISUALS[key];
-    this.hueTarget = this.target.hue;
+    this.anim.setTarget(key);
     if (this.opts.reducedMotion) {
-      this.visual = { ...this.target };
-      this.hue = [0, 1, 2, 3].map((h) => (h === this.hueTarget ? 1 : 0));
       this.applyVisual();
       this.render();
     }
@@ -311,9 +294,7 @@ export class OrbisScene {
 
   /** A wave of light from the centre (e.g. a spoken word). */
   pulse(strength = 1) {
-    if (this.opts.reducedMotion) return;
-    if (this.pulses.length >= 3) this.pulses.shift();
-    this.pulses.push({ r: 0, s: Math.min(1.2, strength) });
+    this.anim.pulse(strength);
   }
 
   setPointer(ndc: { x: number; y: number } | null) {
@@ -351,21 +332,7 @@ export class OrbisScene {
 
   /** Advance the animation by dt seconds (also used to draw a still frame). */
   step(dt: number) {
-    this.time += dt;
-    this.visual = ease(this.visual, this.target, dt);
-    const k = 1 - Math.exp(-dt * 2.4);
-    this.hue = this.hue.map((h, i) => h + ((i === this.hueTarget ? 1 : 0) - h) * k);
-    this.angle += this.visual.rotation * dt;
-
-    if (this.target.autoPulse > 0 && this.time >= this.nextAutoPulse) {
-      this.pulse(0.7);
-      this.nextAutoPulse = this.time + this.target.autoPulse;
-    }
-    for (const p of this.pulses) {
-      p.r += dt * 0.85;
-      p.s *= Math.exp(-dt * 0.9);
-    }
-    this.pulses = this.pulses.filter((p) => p.r < 1.5 && p.s > 0.02);
+    const k = this.anim.advance(dt);
 
     let pointer: { x: number; y: number; z: number } | null = null;
     if (this.pointerNdc) {
@@ -373,7 +340,7 @@ export class OrbisScene {
       if (this.ray.ray.intersectPlane(this.plane, this.hit)) pointer = { x: this.hit.x, y: this.hit.y, z: this.hit.z };
     }
     const level = Math.min(1, Math.max(0, this.opts.audioLevel?.() ?? 0));
-    this.system.update({ t: this.time, dt, angle: this.angle, visual: this.visual, audio: level, pointer });
+    this.system.update({ t: this.anim.time, dt, angle: this.anim.angle, visual: this.anim.visual, audio: level, pointer });
     this.applyVisual();
 
     // Gentle parallax: the camera leans a little toward the pointer.
@@ -387,22 +354,14 @@ export class OrbisScene {
     }
   }
 
-  private mix(which: "a" | "b" | "p" | "c" | "l" | "g"): THREE.Color {
-    this.color.setRGB(0, 0, 0);
-    let sum = 0;
-    this.hue.forEach((w, i) => {
-      if (w <= 0.001) return;
-      const c = this.palette[i]![which];
-      this.color.r += c.r * w;
-      this.color.g += c.g * w;
-      this.color.b += c.b * w;
-      sum += w;
-    });
-    return this.color.multiplyScalar(1 / (sum || 1));
+  private mix(which: ColorKey): THREE.Color {
+    const [r, g, b] = this.anim.color(which);
+    return this.color.setRGB(r, g, b);
   }
 
   private applyVisual() {
-    const v = this.visual;
+    const v = this.anim.visual;
+    const pulses = this.anim.pulses;
     const u = this.pointMat.uniforms;
     (u.uColorA!.value as THREE.Color).copy(this.mix("a"));
     (u.uColorB!.value as THREE.Color).copy(this.mix("p"));
@@ -413,19 +372,19 @@ export class OrbisScene {
     const s = u.uPulseS!.value as THREE.Vector3;
     r.set(-1, -1, -1);
     s.set(0, 0, 0);
-    this.pulses.forEach((p, i) => {
+    pulses.forEach((p, i) => {
       r.setComponent(i, p.r);
       s.setComponent(i, p.s);
     });
     const glowColor = this.mix("c");
     (this.core.material as THREE.SpriteMaterial).color.copy(glowColor);
-    (this.core.material as THREE.SpriteMaterial).opacity = 0.5 * v.glow + this.pulses.reduce((a, p) => a + p.s * 0.12, 0);
+    (this.core.material as THREE.SpriteMaterial).opacity = 0.5 * v.glow + pulses.reduce((a, p) => a + p.s * 0.12, 0);
     (this.halo.material as THREE.SpriteMaterial).color.copy(this.mix("p"));
     (this.halo.material as THREE.SpriteMaterial).opacity = 0.2 * v.glow;
     (this.fog.material as THREE.SpriteMaterial).color.copy(this.mix("l"));
     (this.fog.material as THREE.SpriteMaterial).opacity = 0.1 + 0.06 * v.glow;
     (this.gridMat.uniforms.uColor!.value as THREE.Color).copy(this.mix("g"));
-    this.gridMat.uniforms.uTime!.value = this.time;
+    this.gridMat.uniforms.uTime!.value = this.anim.time;
     (this.gridMat.uniforms.uCam!.value as THREE.Vector3).copy(this.camera.position);
 
     const n = this.system.writeLinks(this.linePos, this.lineCol, this.mix("l").toArray() as [number, number, number], v.links);

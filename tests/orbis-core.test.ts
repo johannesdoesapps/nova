@@ -1,11 +1,13 @@
 /**
  * The ORBIS core's logic (no GPU): quality tiers, the particle cloud's shape, the grid neighbour search (checked
  * against a brute-force search), link limits and fading, smooth motion, easing between states, and the state
- * store (real activity vs labelled previews, pulses).
+ * store (real activity vs labelled previews, pulses), and the 2D renderer's camera (used when WebGL isn't there).
  */
 import { describe, expect, it } from "vitest";
 import { orbisConfig, qualityFor } from "@/components/jarvis/orbis/config";
 import { ParticleSystem } from "@/components/jarvis/orbis/particles";
+import { frameCamera, project } from "@/components/jarvis/orbis/scene-2d";
+import { OrbisAnimator, statePalettes } from "@/components/jarvis/orbis/animator";
 import { effective, ease, lookFor, orbisStore, pulseOrbis, setOrbisMode, setOrbisState, VISUALS } from "@/components/jarvis/orbis/state";
 
 const cfg = (over = {}) => orbisConfig("low", over);
@@ -155,5 +157,57 @@ describe("states", () => {
     offPulse();
     pulseOrbis(1);
     expect(got).toEqual([0.7]);
+  });
+});
+
+describe("2D renderer camera", () => {
+  it("frames the whole core inside the canvas, a little above the middle", () => {
+    for (const [w, h] of [[1320, 800], [390, 700], [1920, 600]] as const) {
+      const cam = frameCamera(w, h, 10);
+      const s = new ParticleSystem(cfg());
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      const out = [0, 0, 0];
+      for (let i = 0; i < s.active; i++) {
+        project(cam, s.positions[i * 3]!, s.positions[i * 3 + 1]!, s.positions[i * 3 + 2]!, out);
+        expect(out[2]).toBeGreaterThan(0);
+        minX = Math.min(minX, out[0]!); maxX = Math.max(maxX, out[0]!);
+        minY = Math.min(minY, out[1]!); maxY = Math.max(maxY, out[1]!);
+      }
+      expect(minX).toBeGreaterThan(0);
+      expect(maxX).toBeLessThan(w);
+      expect(minY).toBeGreaterThan(0);
+      expect(maxY).toBeLessThan(h);
+      const c = project(cam, 0, 0, 0);
+      expect(c[0]).toBeCloseTo(w / 2, 5);
+      expect(c[1]).toBeLessThan(h / 2);
+    }
+  });
+
+  it("draws nearer points larger, and the floor below the core", () => {
+    const cam = frameCamera(1000, 800, 10);
+    const near = project(cam, 0, 0, 8);
+    const far = project(cam, 0, 0, -8);
+    expect(near[2]).toBeLessThan(far[2]!);
+    expect(project(cam, 0, -14.2, 0)[1]).toBeGreaterThan(project(cam, 0, -10, 0)[1]!);
+  });
+});
+
+describe("animator", () => {
+  it("blends to the error colours and back, and runs waves of light outward", () => {
+    const a = new OrbisAnimator(statePalettes(cfg()), false);
+    const violet = a.color("a");
+    a.setTarget("error");
+    for (let i = 0; i < 300; i++) a.advance(1 / 60);
+    const red = a.color("a");
+    expect(red[0]).toBeGreaterThan(red[2]);
+    expect(violet[2]).toBeGreaterThan(violet[1]);
+    a.pulse(1);
+    a.advance(0.3);
+    expect(a.pulseAt(a.pulses[0]!.r)).toBeGreaterThan(a.pulseAt(a.pulses[0]!.r + 0.5));
+    const still = new OrbisAnimator(statePalettes(cfg()), true);
+    still.setTarget("error");
+    expect(still.hue).toEqual([0, 1, 0, 0]);
+    still.pulse(1);
+    expect(still.pulses).toHaveLength(0);
   });
 });

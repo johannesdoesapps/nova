@@ -234,7 +234,9 @@ ORBIS name and the state controls sit along the bottom.
 | OrbisCore / Lighting / Grid | `orbis/scene.ts` | Points use a soft-glow shader, with depth-dependent brightness and outward light pulses. Links use additive line segments. Glow comes from three additive sprites (centre, halo, atmosphere) rather than full-screen bloom. The floor is a shader grid that fades with distance and has a slow light sweep. If frames stay slower than about 40 fps, it draws fewer particles and then steps down a tier. |
 | OrbisStateManager | `orbis/state.ts` | Visual targets for idle, listening, thinking, speaking, error, plus approval (amber) and stopped (dimmed). Every value eases exponentially, so nothing jumps. It also holds the shared store and API (below). |
 | OrbisAudioAnalyzer | `orbis/audio.ts` | A smoothed loudness level from the microphone stream push-to-talk already opens. |
-| OrbisInterface | `orbis/orbis-hero.tsx`, `orbis/orbis-core.tsx` | The layout and controls. It loads three.js only in the browser; resizes with its box; pauses when the tab is hidden or the core is off screen; draws a still picture for reduced motion; falls back to the simple CSS core if WebGL fails or the context is lost; and frees GPU resources on unmount. |
+| OrbisAnimator | `orbis/animator.ts` | The animation state both renderers share: easing between looks, blending each state's colours, rotation, and the waves of light. |
+| 2D renderer | `orbis/scene-2d.ts` | The same core drawn with the ordinary 2D canvas, for browsers that give the page no WebGL (hardware acceleration off, a blocked GPU driver, some remote desktops and VMs). It uses the same particles and animator; links are stroked in six brightness groups, points are stamped from small pre-drawn glow images, and the floor is drawn once per size and colour. It starts no higher than the medium tier, then steps down (fewer particles, a lower tier, fewer pixels) if frames stay slower than about 30 fps. |
+| OrbisInterface | `orbis/orbis-hero.tsx`, `orbis/orbis-core.tsx` | The layout and controls. It loads three.js only in the browser; resizes with its box; pauses when the tab is hidden or the core is off screen; draws a still picture for reduced motion; and frees GPU resources on unmount. Renderer order: WebGL, then the 2D canvas if WebGL can't start or its context is lost (logged once as a console warning), then the simple CSS core only if the 2D canvas fails too. The wrapper's `data-orbis-renderer` says which one is drawing (`webgl` or `2d`). |
 
 **API** (`src/components/jarvis/orbis/state.ts`):
 
@@ -255,9 +257,10 @@ ORBIS name and the state controls sit along the bottom.
 **Settings → "Core reacts to the pointer"** turns off pointer interaction.
 
 **Tested:**
-- `tests/orbis-core.test.ts` (11 tests): tiers; the cloud's shape; the grid search giving exactly the same links
+- `tests/orbis-core.test.ts` (14 tests): tiers; the cloud's shape; the grid search giving exactly the same links
   as a brute-force search; link limits and fading; smooth, finite motion; flash rate; stepping down; easing
-  without jumps; state mapping; preview labelling; pulses.
+  without jumps; state mapping; preview labelling; pulses; the 2D camera keeping the whole core inside the
+  canvas at desktop, phone and wide sizes; and the animator's colour blending, waves, and reduced motion.
 - In Chromium with software WebGL (SwiftShader):
   - the core renders, and each control changes the look and the status line;
   - a request turns the real state to Thinking;
@@ -269,3 +272,7 @@ ORBIS name and the state controls sit along the bottom.
 
   Software rendering ran at about 24–31 frames per second, which says nothing about real GPUs; the 60 fps target
   hasn't been measured on real hardware.
+- In Chromium with WebGL switched off (`--disable-gpu --disable-software-rasterizer`, where three.js reports
+  "Error creating WebGL context"): the 2D renderer takes over at the medium tier (2,000 particles); idle,
+  thinking and error each draw their look; reduced motion draws a still frame; no page errors. The page got
+  about 56 frames per second here; that headless machine isn't a real user's computer either.
