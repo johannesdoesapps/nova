@@ -1,0 +1,1241 @@
+{
+  "schema_version": 1,
+  "title": "Orbis deep audit",
+  "target": "https://tryorbis.app",
+  "repository": "johannesdoesapps/nova",
+  "branch": "audit-2026-10-26",
+  "audit_date": "2026-10-26",
+  "evidence_levels": {
+    "Observed": "Seen directly in production, logs, configuration or a running build",
+    "Code-verified": "Confirmed by reading the code path end to end",
+    "Test-inferred": "Reproduced or confirmed by an automated test against the real code or migrations (not production)",
+    "Unverified": "Plausible but not confirmed",
+    "N/A": "Not applicable"
+  },
+  "summary": {
+    "findings_total": 36,
+    "by_severity": {
+      "Critical": 0,
+      "High": 1,
+      "Medium": 13,
+      "Low": 17,
+      "Info": 5
+    },
+    "by_status": {
+      "fixed": 13,
+      "partially_fixed": 5,
+      "open": 17,
+      "fixed_before_audit": 1
+    },
+    "production_changes_made": "None. Fixes are committed on the audit branch; nothing was deployed and no migration was applied.",
+    "app_store_ready": false,
+    "app_store_note": "Not assessed as ready: no iOS or Android build was produced or tested in this audit.",
+    "report_state": "Draft: findings, fixes, sweeps, accessibility and performance are complete; production deploy and migration await approval."
+  },
+  "baseline": {
+    "commit": "da535ec",
+    "vitest": {
+      "files": 123,
+      "passed": 1712,
+      "failed": 0
+    },
+    "tsc_errors": 0,
+    "eslint": {
+      "errors": 0,
+      "warnings": 2
+    },
+    "next_build": "passed",
+    "npm_audit": {
+      "critical": 0,
+      "high": 0,
+      "moderate": 0,
+      "low": 0
+    },
+    "secret_scan": "Only test fixtures in the repository and history; production JavaScript bundles contain no secret values"
+  },
+  "after_fixes": {
+    "commit": "83e39d6",
+    "vitest": {
+      "files": 125,
+      "passed": 1733,
+      "todo": 2,
+      "failed": 0
+    },
+    "tsc_errors": 0,
+    "eslint": {
+      "errors": 0,
+      "warnings": 2
+    },
+    "next_build": "passed"
+  },
+  "inventory": {
+    "framework": "Next.js 16.4.2, React 19.3, Tailwind v4",
+    "hosting": "Vercel",
+    "database": "Supabase Postgres with row-level security",
+    "page_routes": 88,
+    "api_route_handlers": 216,
+    "migrations": 53,
+    "public_tables": 74,
+    "tables_with_rls": 74,
+    "security_definer_functions": 31,
+    "test_files": 125,
+    "payments": "Stripe 23",
+    "email": "Resend",
+    "mobile": "Capacitor 8 shell in mobile/ (not built in this audit)"
+  },
+  "ui_sweeps": {
+    "public_production": {
+      "page_loads": 279,
+      "routes": 31,
+      "widths": [
+        320,
+        375,
+        390,
+        430,
+        768,
+        1024,
+        1280,
+        1440,
+        1920
+      ],
+      "status": {
+        "200": 234,
+        "0": 36,
+        "404": 9
+      },
+      "horizontal_scroll": 0,
+      "elements_past_edge": 0,
+      "theme": "light",
+      "note": "status 0 = /chat, /mimic, /agents, /templates as a guest: the pages rendered (correct title, one h1, no overflow) but keep a connection open, so the 45 s network-idle wait timed out before the status was recorded; the 9 x 404 are the deliberate /no-such-page"
+    },
+    "signed_in_local": {
+      "page_loads": 675,
+      "routes": 75,
+      "widths": [
+        320,
+        375,
+        390,
+        430,
+        768,
+        1024,
+        1280,
+        1440,
+        1920
+      ],
+      "status": {
+        "200": 657,
+        "404": 18
+      },
+      "horizontal_scroll": 0,
+      "elements_past_edge": 0,
+      "theme": "dark",
+      "note": "Local production build with a mock Supabase and a synthetic user; 404s are deliberate missing-id and does-not-exist routes. Console errors from /_vercel/insights (served only on Vercel) and from RPC calls the mock does not implement (/admin finance, /api/code/projects) are harness artefacts."
+    },
+    "axe_before_fixes": {
+      "scrollable-region-focusable": 12,
+      "target-size": 1,
+      "aria-allowed-role": 1,
+      "landmark-one-main": 1,
+      "region": 1,
+      "page-has-heading-one": 1
+    },
+    "axe_after_fixes": {
+      "target-size": 1,
+      "page-has-heading-one (not-found state)": 1
+    },
+    "public_axe": "No violations on 31 public routes at 390 and 1440 px"
+  },
+  "performance": {
+    "tool": "Lighthouse 12.8.2",
+    "target": "https://tryorbis.app",
+    "note": "Lab measurements from this container (simulated throttling for mobile); one run per page and profile; another local browser sweep was running at the same time, which can lower scores slightly.",
+    "runs": [
+      {
+        "page": "/features",
+        "mode": "desktop",
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "lcp_ms": 526,
+        "fcp_ms": 246,
+        "tbt_ms": 0,
+        "cls": 0,
+        "transfer_kb": 458,
+        "failing": []
+      },
+      {
+        "page": "/features",
+        "mode": "mobile",
+        "performance": 99,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "lcp_ms": 1980,
+        "fcp_ms": 930,
+        "tbt_ms": 96,
+        "cls": 0,
+        "transfer_kb": 422,
+        "failing": []
+      },
+      {
+        "page": "/login",
+        "mode": "desktop",
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 66,
+        "lcp_ms": 602,
+        "fcp_ms": 282,
+        "tbt_ms": 2,
+        "cls": 0,
+        "transfer_kb": 467,
+        "failing": [
+          "is-crawlable"
+        ]
+      },
+      {
+        "page": "/login",
+        "mode": "mobile",
+        "performance": 90,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 66,
+        "lcp_ms": 2859,
+        "fcp_ms": 1059,
+        "tbt_ms": 290,
+        "cls": 0,
+        "transfer_kb": 467,
+        "failing": [
+          "largest-contentful-paint",
+          "total-blocking-time",
+          "is-crawlable"
+        ]
+      },
+      {
+        "page": "/pricing",
+        "mode": "desktop",
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "lcp_ms": 564,
+        "fcp_ms": 257,
+        "tbt_ms": 0,
+        "cls": 0,
+        "transfer_kb": 484,
+        "failing": [
+          "inspector-issues"
+        ]
+      },
+      {
+        "page": "/pricing",
+        "mode": "mobile",
+        "performance": 94,
+        "accessibility": 100,
+        "best-practices": 96,
+        "seo": 100,
+        "lcp_ms": 2258,
+        "fcp_ms": 980,
+        "tbt_ms": 221,
+        "cls": 0,
+        "transfer_kb": 438,
+        "failing": [
+          "total-blocking-time",
+          "inspector-issues"
+        ]
+      },
+      {
+        "page": "/",
+        "mode": "desktop",
+        "performance": 100,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "lcp_ms": 630,
+        "fcp_ms": 310,
+        "tbt_ms": 0,
+        "cls": 0,
+        "transfer_kb": 504,
+        "failing": []
+      },
+      {
+        "page": "/",
+        "mode": "mobile",
+        "performance": 77,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100,
+        "lcp_ms": 3232,
+        "fcp_ms": 1224,
+        "tbt_ms": 634,
+        "cls": 0,
+        "transfer_kb": 456,
+        "failing": [
+          "largest-contentful-paint",
+          "total-blocking-time"
+        ]
+      }
+    ],
+    "homepage_mobile_reruns": [
+      {
+        "page": "/",
+        "mode": "mobile (rerun alone)",
+        "performance": 97,
+        "lcp_ms": 2554,
+        "tbt_ms": 50,
+        "fcp_ms": 1204
+      },
+      {
+        "page": "/",
+        "mode": "mobile (rerun alone)",
+        "performance": 87,
+        "lcp_ms": 3419,
+        "tbt_ms": 132,
+        "fcp_ms": 1409
+      },
+      {
+        "page": "/",
+        "mode": "mobile (rerun alone)",
+        "performance": 88,
+        "lcp_ms": 3383,
+        "tbt_ms": 87,
+        "fcp_ms": 1567
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "ORB-001",
+      "title": "Any signed-in user could write their own usage records and shut off AI for every user",
+      "severity": "High",
+      "area": "Database / billing",
+      "status": "Fixed in code; database migration prepared, not applied",
+      "confidence": "High",
+      "evidence": [
+        "Code-verified",
+        "Test-inferred",
+        "Observed"
+      ],
+      "locations": [
+        "supabase/migrations/20261018000000_initial_schema.sql:243 (model_runs_insert_own)",
+        "src/lib/budget.ts:204-232 (checkSiteCap)",
+        "supabase/migrations/20261027100000_usage_limits_v5.sql:181-187",
+        "src/lib/usage.ts:453"
+      ],
+      "description": "model_runs rows were written through the user's own Supabase session, and the insert policy accepted any column values. Every row counts toward the site-wide monthly AI cap and toward the in-flight hold checks.",
+      "impact": "Production has ORBIS_MONTHLY_AI_BUDGET_USD=75 (Observed, Vercel env). One REST insert of a row with estimated_cost >= 75 would refuse AI requests for every user, administrators included, until the month ends, and corrupt finance figures. A dummy row with an in-flight request_id also stopped that hold counting against the user's budget. No sign of exploitation: the largest run cost this month is $0.188 (Observed, read-only SQL).",
+      "reproduction": "PGlite with all migrations and Supabase default privileges: as user A, insert model_runs(units=1, estimated_cost=999999); user B's next usage_reserve_v5 with a site cap returns {ok:false, scope:'site'}. Not run against production (it would cause the outage).",
+      "remediation": "Runs are now inserted with the service role (src/lib/supabase/admin.ts usageWriter; usage.ts, code/meter.ts, code/server.ts). Migration 20261109000000_audit_hardening.sql revokes INSERT on model_runs from anon/authenticated and drops the insert policy. Deploy the code first, then apply the migration.",
+      "regression_test": "tests/audit-db.test.ts (ORB-001 x2), tests/rls.test.ts",
+      "needs_approval": "Apply migration 20261109000000_audit_hardening.sql to production after deploying the code"
+    },
+    {
+      "id": "ORB-002",
+      "title": "Usage reservations trust caller-supplied estimates and let users release or settle their own holds",
+      "severity": "Medium",
+      "area": "Database / billing",
+      "status": "Partially fixed (migration prepared): hold estimates clamped to $5; release/settle bypass still open",
+      "confidence": "High",
+      "evidence": [
+        "Code-verified",
+        "Test-inferred"
+      ],
+      "locations": [
+        "supabase/migrations/20261027100000_usage_limits_v5.sql:158,181-187",
+        "supabase/migrations/20261019130000_usage_ledger.sql:181-191 (usage_finish)",
+        "usage_credit_settle (usage ledger migrations)"
+      ],
+      "description": "usage_reserve_v5 is callable by any signed-in user with their own p_est_cost_usd, and active holds count toward the site cap. usage_finish(id,'released') and usage_credit_settle are callable directly, so a user can free their own holds early and overdraw credits (floored at 0).",
+      "impact": "One huge hold refused all users for up to 10 minutes, renewable. Credits: 20 units used against a balance of 10 (Test-inferred).",
+      "reproduction": "PGlite PoC: reserve(est=999999) as user A, then user B's reserve with site cap 5000 fails; reserve 10 credit units, usage_finish('released'), reserve 10 more, settle both: balance 0 after 20 units used.",
+      "remediation": "Done: BEFORE INSERT/UPDATE trigger clamps usage_holds.est_cost_usd to $5 unless the JWT role is service_role. Remaining (needs a billing refactor and your approval): make reserve/finish/settle callable only by the service role with an explicit p_user_id, server-side estimates, and require state='active' in usage_credit_settle.",
+      "regression_test": "tests/audit-db.test.ts (ORB-002 clamp; release/settle as it.todo)",
+      "needs_approval": "Billing refactor (reservations made only by the server) and production migration"
+    },
+    {
+      "id": "ORB-003",
+      "title": "Shell injection through the coding agent's browser-check path, bypassing command approval",
+      "severity": "Medium",
+      "area": "AI agents / code execution",
+      "status": "Fixed",
+      "confidence": "High",
+      "evidence": [
+        "Code-verified",
+        "Test-inferred"
+      ],
+      "locations": [
+        "src/lib/code/agent/tool-specs.ts:91-101",
+        "src/lib/code/preview.ts:149-163",
+        "src/lib/code/agent/tools.ts:722-746"
+      ],
+      "description": "check_preview accepted any path matching /^\\/[^\\s]*$/ and put it inside double quotes on a bash -c command line, where $(...) and backticks still expand. The handler didn't check plan approval or the commands setting.",
+      "impact": "Prompt-injected repository content could make the agent run arbitrary commands in the user's project computer (e.g. delete files, alter the sync script) without the user's approval, even with commands turned off. Limited to the user's own isolated sandbox.",
+      "reproduction": "Engine test: check_preview {path: '/$(rm${IFS}-rf${IFS}/vercel/sandbox/src)'} reached the preview stub on the old code (2 checks ran) and is refused on the new code.",
+      "remediation": "Path limited to URL characters (PREVIEW_PATH in src/lib/code/projects.ts) in the schema and again at the shell boundary, single-quoted; check_preview now requires plan approval and commands not 'off'.",
+      "regression_test": "tests/code-agent-engine.test.ts (ORB-003), tests/audit-2026-10-26.test.ts",
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-004",
+      "title": "Coding-agent command safe-list could be bypassed (env prefix, nested shells, redirects, split rm flags)",
+      "severity": "Medium",
+      "area": "AI agents / code execution",
+      "status": "Fixed",
+      "confidence": "High",
+      "evidence": [
+        "Code-verified",
+        "Test-inferred"
+      ],
+      "locations": [
+        "src/lib/code/agent/policy.ts"
+      ],
+      "description": "`env` was classed as a read-only inspect command, so `env bash -c '...'` and `env node -e` ran without approval. Relative redirects (`echo x > .github/workflows/ci.yml`) and `git diff --output=` were allowed. `rm -r -f .` and `git -C . push` missed the never-run list.",
+      "impact": "Agent-run commands could change files (including CI files) or run arbitrary scripts without the user's approval.",
+      "reproduction": "classifyCommand('env bash -c \"rm -rf src\"') returned allow/inspect before the fix; now ask.",
+      "remediation": "env only allowed bare; nested shells and inline scripts ask; redirects into files and --output ask; split rm flags and git options before push are blocked.",
+      "regression_test": "tests/audit-2026-10-26.test.ts (ORB-004)",
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-005",
+      "title": "Withheld secret files are reachable through commands; redaction missed common variable names",
+      "severity": "Medium",
+      "area": "AI agents / secrets",
+      "status": "Partially fixed (redaction); .env still copied into the sandbox",
+      "confidence": "High",
+      "evidence": [
+        "Code-verified",
+        "Test-inferred"
+      ],
+      "locations": [
+        "src/lib/secrets.ts:23",
+        "src/lib/code/workspace.ts:150-155",
+        "src/lib/bastion/guards.ts:57"
+      ],
+      "description": "read_files withholds .env, but the file is copied into the project computer and the secret-read guard is pattern based (`cat .e\"n\"v` passes). The redaction applied to command output needed a word boundary before the keyword, so DB_PASSWORD=, JWT_SECRET=, OPENAI_API_KEY= values went to the model unredacted.",
+      "impact": "A project's own .env values could reach the AI provider and the run log.",
+      "reproduction": "redactAll('DB_PASSWORD=hunter2222') returned the value unchanged before the fix.",
+      "remediation": "Done: the credential pattern now matches names inside longer variable names. Open (product decision): leave isSecretPath files out of the sandbox, or mount them unreadable to agent commands; this changes how users' dev servers get their environment.",
+      "regression_test": "tests/audit-2026-10-26.test.ts (ORB-005)",
+      "needs_approval": "Decide whether the project computer should receive .env files"
+    },
+    {
+      "id": "ORB-006",
+      "title": "Slack action card showed an assistant-chosen channel name, not where the message goes",
+      "severity": "Medium",
+      "area": "Integrations",
+      "status": "Fixed (card shows the channel id and labels the name as unchecked)",
+      "confidence": "High",
+      "evidence": [
+        "Code-verified",
+        "Test-inferred"
+      ],
+      "locations": [
+        "src/lib/connectors/providers/slack.ts:68-81",
+        "src/components/connectors/action-card.tsx:24-29"
+      ],
+      "description": "The confirm card displayed channelName and text; the real destination `channel` was hidden but kept as proposed.",
+      "impact": "Injected page or email content could make the card read '#team-updates' while Confirm posts private content to another conversation.",
+      "reproduction": "Proposal {channel:'D0ATTACKER', channelName:'team-updates'} rendered as 'Post … in #team-updates'.",
+      "remediation": "Card now shows the channel id as the destination and marks the name as unverified. A full fix (resolve the name with conversations.info) needs the channels:read/im:read scopes, so users would have to reconnect Slack.",
+      "regression_test": "tests/audit-2026-10-26.test.ts (ORB-006/007/008)",
+      "needs_approval": "Optional: add Slack read scopes to show verified names"
+    },
+    {
+      "id": "ORB-009",
+      "title": "Pasting a link to a crafted page could block a server instance for minutes (quadratic regex)",
+      "severity": "Medium",
+      "area": "Performance / availability",
+      "status": "Fixed",
+      "confidence": "High",
+      "evidence": [
+        "Test-inferred"
+      ],
+      "locations": [
+        "src/lib/links/parse.ts:50-62",
+        "src/lib/connectors/http.ts (htmlToText)"
+      ],
+      "description": "Backreference and lazy regexes over up to 2 MB of HTML rescanned to the end for every unclosed tag.",
+      "impact": "Measured locally: 200 KB of repeated '<main>x' took 5,052 ms (synchronous). After the fix, 2 MB hostile inputs of 8 shapes each take under 40 ms.",
+      "reproduction": "readablePage('<main>x'.repeat(28571), 'text/html').",
+      "remediation": "Linear-time stripElements/stripComments/titleOf/mainElement, bounded tag regexes, and a 400 KB cap before parsing.",
+      "regression_test": "tests/audit-2026-10-26.test.ts (ORB-009 timing and output)",
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-010",
+      "title": "Files changed by agent commands are saved without Bastion's file checks or edit review",
+      "severity": "Medium",
+      "area": "AI agents",
+      "status": "Open (design change); reduced by ORB-004",
+      "confidence": "High",
+      "evidence": [
+        "Code-verified"
+      ],
+      "locations": [
+        "src/lib/code/agent/engine.ts:337-347",
+        "src/lib/code/server.ts:376-396"
+      ],
+      "description": "After a command, changed and deleted files are synced straight into code_files without fileWriteOp (secret content, CI/deploy/migration files, bulk deletes) and regardless of 'review each edit'.",
+      "impact": "An auto-allowed install script or approved command can change CI files that may later be pushed to GitHub, without per-edit review.",
+      "reproduction": "Code path review; not exercised end to end.",
+      "remediation": "Run each synced change through the same gate as write_file (saveChanges with the Bastion gate), and queue changes as proposed edits when reviewEdits is on.",
+      "regression_test": null,
+      "needs_approval": "Behaviour change for the coding agent"
+    },
+    {
+      "id": "ORB-011",
+      "title": "Website-ownership proof for active scans could be bypassed",
+      "severity": "Medium",
+      "area": "Security tooling / authorization",
+      "status": "Fixed in code; token lock in the prepared migration",
+      "confidence": "High",
+      "evidence": [
+        "Code-verified",
+        "Test-inferred"
+      ],
+      "locations": [
+        "src/lib/security/authz.ts",
+        "supabase/migrations/20261019090000_security_center.sql:6-14,96"
+      ],
+      "description": "Users could rewrite their target's token over REST, and the check passed if the verification file or any TXT record merely contained the token (e.g. an SPF string). Tokens are also public once published, so another user's token could be copied.",
+      "impact": "Sentinel could be pointed at sites the user doesn't control and crawl/probe them from Orbis infrastructure.",
+      "reproduction": "Set token to 'v=spf1 include:_spf.google.com', verify against a domain with that SPF record (code path; not run against third parties).",
+      "remediation": "Token must have the server-issued format, belong to the first user it was issued to (service-role lookup), and appear exactly (whole line / whole record). Migration revokes UPDATE on security_targets except verified_at/verified_method. UI instructions updated.",
+      "regression_test": "tests/audit-2026-10-26.test.ts (ORB-011 matching), tests/audit-db.test.ts (ORB-011 token update refused)",
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-012",
+      "title": "Scheduled audits could be created directly in the audit table, past the cap and plan check",
+      "severity": "Medium",
+      "area": "Authorization / scheduling",
+      "status": "Partially fixed: per-user cap of 10 and round-robin order in the cron; entitlement re-check open",
+      "confidence": "High",
+      "evidence": [
+        "Code-verified",
+        "Test-inferred"
+      ],
+      "locations": [
+        "src/lib/security/scheduler.ts",
+        "supabase/migrations/20261019090000_security_center.sql:104"
+      ],
+      "description": "Users can insert security_audit rows with action 'schedule.set'; the daily cron used every such row and ran them in insertion order.",
+      "impact": "One user could starve every other user's scheduled audits daily.",
+      "reproduction": "Code path review.",
+      "remediation": "Cron now takes at most MAX_SCHEDULES per user and interleaves users. Open: re-check the Security agent entitlement in the cron, or move schedules to their own table written only by the route.",
+      "regression_test": "tests/audit-2026-10-26.test.ts (ORB-012 interleave)",
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-014",
+      "title": "Workspace reservations take their limits from the caller, so one user can block sandboxes site-wide",
+      "severity": "Medium",
+      "area": "Database / code execution",
+      "status": "Open",
+      "confidence": "High",
+      "evidence": [
+        "Code-verified",
+        "Test-inferred"
+      ],
+      "locations": [
+        "supabase/migrations/20261020020000_code_workspace.sql:179-229"
+      ],
+      "description": "code_workspace_reserve is executable by signed-in users and accepts p_user_limit, p_site_limit and p_site_concurrent from the caller.",
+      "impact": "Repeated calls add 60-minute blocks and fake live sessions; other users get 'busy' or 'site limit reached'.",
+      "reproduction": "PGlite PoC: 5 direct calls by one user, then another user's reservation returns {ok:false, reason:'busy'}.",
+      "remediation": "Read the limits inside the function from server-side settings, or make it callable only by the service role (with p_user_id).",
+      "regression_test": "tests/audit-db.test.ts (ORB-014, it.todo)",
+      "needs_approval": "Production migration + code change"
+    },
+    {
+      "id": "ORB-015",
+      "title": "Mimic data wasn't deleted with the account",
+      "severity": "Medium",
+      "area": "Database / privacy",
+      "status": "Fixed in the prepared migration",
+      "confidence": "High",
+      "evidence": [
+        "Code-verified",
+        "Test-inferred",
+        "Observed"
+      ],
+      "locations": [
+        "supabase/migrations/20261108000000_mimic.sql"
+      ],
+      "description": "The seven mimic_* tables had no foreign key to auth.users with ON DELETE CASCADE.",
+      "impact": "Invoice text and drafts would be left behind after account deletion, against the privacy policy. Production currently has no Mimic rows and no orphans (Observed).",
+      "reproduction": "PGlite: delete an auth user with a mimic_documents row; the row remained.",
+      "remediation": "NOT VALID foreign keys with ON DELETE CASCADE on all seven tables (no existing rows touched).",
+      "regression_test": "tests/audit-db.test.ts (ORB-015)",
+      "needs_approval": "Apply migration"
+    },
+    {
+      "id": "ORB-027",
+      "title": "Stripe checkout fails: no payment methods enabled",
+      "severity": "Medium",
+      "area": "Billing / configuration",
+      "status": "Open (Stripe dashboard)",
+      "confidence": "High",
+      "evidence": [
+        "Observed"
+      ],
+      "locations": [
+        "Vercel runtime logs: 'No valid payment method types'"
+      ],
+      "description": "Get Pro shows 'Something went wrong' because the Stripe account has no payment method types enabled.",
+      "impact": "Nobody can subscribe.",
+      "reproduction": "Click Get Pro on /pricing (observed earlier this session).",
+      "remediation": "Enable Cards in Stripe -> Settings -> Payment methods, then retry.",
+      "regression_test": null,
+      "needs_approval": "Stripe dashboard change (yours)"
+    },
+    {
+      "id": "ORB-028",
+      "title": "GPT-5.6 Luna rejected coding-agent tool calls (Oct 20)",
+      "severity": "Medium",
+      "area": "AI providers",
+      "status": "Fixed before this audit (commit 7a12f21)",
+      "confidence": "High",
+      "evidence": [
+        "Observed"
+      ],
+      "locations": [
+        "src/lib/ai/providers/openai-compatible.ts:134"
+      ],
+      "description": "115 errors for 23 users on 20 October, none since.",
+      "impact": "Coding-agent runs failed for those users that day.",
+      "reproduction": "Vercel runtime errors (7 days).",
+      "remediation": "reasoning_effort 'none' for tool calls.",
+      "regression_test": null,
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-007",
+      "title": "Slack chat.postMessage was retried after timeouts, so a message could be posted twice",
+      "severity": "Low",
+      "area": "Integrations",
+      "status": "Fixed",
+      "confidence": "High",
+      "evidence": [
+        "Code-verified",
+        "Test-inferred"
+      ],
+      "locations": [
+        "src/lib/connectors/providers/slack.ts:29",
+        "src/lib/connectors/http.ts:74-91"
+      ],
+      "description": "slackApi used the default 2 retries on network errors, the 15 s timeout and 502/503/504; every other write action already passed retries: 0.",
+      "impact": "A slow Slack response could post the same message two or three times.",
+      "reproduction": "Fetch stub that always fails: chat.postMessage was attempted 3 times before; now once.",
+      "remediation": "chat.postMessage is never retried; reads still are.",
+      "regression_test": "tests/audit-2026-10-26.test.ts (ORB-006/007/008)",
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-008",
+      "title": "Confirmed connector actions were not idempotent",
+      "severity": "Low",
+      "area": "Integrations",
+      "status": "Fixed (best effort)",
+      "confidence": "High",
+      "evidence": [
+        "Code-verified",
+        "Test-inferred"
+      ],
+      "locations": [
+        "src/app/api/connectors/actions/route.ts"
+      ],
+      "description": "The route ran the action and only afterwards marked the proposal done; it never checked whether the proposal was already done.",
+      "impact": "A double click or client retry could send an email, create an issue or post a message twice.",
+      "reproduction": "Two POSTs with the same messageId/proposalId both ran the action.",
+      "remediation": "Before running, the route refuses a proposal that is done or started in the last 5 minutes, and records startedAt. A millisecond race between two simultaneous requests remains; a database-level claim would close it.",
+      "regression_test": "tests/audit-2026-10-26.test.ts (ORB-006/007/008: proposal runs once)",
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-013",
+      "title": "Users could flood the admin Bastion summary with fake decision rows",
+      "severity": "Low",
+      "area": "Authorization / admin",
+      "status": "Fixed",
+      "confidence": "Medium",
+      "evidence": [
+        "Code-verified"
+      ],
+      "locations": [
+        "src/app/api/admin/bastion/route.ts",
+        "src/lib/bastion/view.ts:65"
+      ],
+      "description": "The admin summary read all users' bastion.* audit rows without checking Orbis's signature.",
+      "impact": "Real denials could be pushed out of the administrator's view.",
+      "reproduction": "Code path review.",
+      "remediation": "Only signed rows are summarised (when a signing key is configured).",
+      "regression_test": null,
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-016",
+      "title": "Newer tables still granted TRUNCATE to signed-in and anonymous roles",
+      "severity": "Low",
+      "area": "Database",
+      "status": "Fixed in the prepared migration",
+      "confidence": "High",
+      "evidence": [
+        "Test-inferred"
+      ],
+      "locations": [
+        "supabase/migrations/20261104000000_code_reviews.sql:56"
+      ],
+      "description": "The blanket revoke ran before mimic_* and bastion_workspace_roles existed. TRUNCATE ignores RLS; PostgREST cannot issue it, so this is defence in depth.",
+      "impact": "Only reachable through a direct database connection as those roles.",
+      "reproduction": "PGlite: user B truncated user A's mimic_events.",
+      "remediation": "Revoke on those tables and in default privileges.",
+      "regression_test": "tests/audit-db.test.ts (ORB-016)",
+      "needs_approval": "Apply migration"
+    },
+    {
+      "id": "ORB-017",
+      "title": "Site-cap queries scan all holds; holds are never purged; checkSiteCap loads up to 500k rows",
+      "severity": "Low",
+      "area": "Performance / database",
+      "status": "Partially fixed (index in the prepared migration)",
+      "confidence": "High",
+      "evidence": [
+        "Code-verified",
+        "Observed"
+      ],
+      "locations": [
+        "supabase/migrations/20261027100000_usage_limits_v5.sql:184",
+        "src/lib/budget.ts:213"
+      ],
+      "description": "Each reservation sums active holds site-wide with no suitable index; nothing deletes old holds. checkSiteCap sums in Node.",
+      "impact": "Slower reservations as data grows. Today: 432 holds, 353 runs this month (Observed), so no current impact.",
+      "reproduction": "Code review.",
+      "remediation": "Partial index usage_holds(expires_at) where state='active' added. Open: purge holds older than a day; sum in SQL.",
+      "regression_test": null,
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-018",
+      "title": "Some server-owned columns are editable by the user",
+      "severity": "Low",
+      "area": "Database",
+      "status": "Partially fixed (security_targets); others open",
+      "confidence": "Medium",
+      "evidence": [
+        "Code-verified"
+      ],
+      "locations": [
+        "supabase/migrations/20261022030000*.sql (code_agent_runs)",
+        "supabase/migrations/20261021000000_connectors.sql (connector_accounts.write_enabled, scopes)"
+      ],
+      "description": "code_agent_runs token_budget/usage/report/step_limit, connector_accounts.write_enabled/scopes, and security_targets.verified_at can be changed over REST.",
+      "impact": "Mostly bounded by check constraints and server re-checks; weakens the app's own consent step for connector write access.",
+      "reproduction": "Code review.",
+      "remediation": "Move these columns to service-role or definer-function updates.",
+      "regression_test": null,
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-019",
+      "title": "Forgeable analytics events and assistant messages",
+      "severity": "Low",
+      "area": "Database / integrity",
+      "status": "Open",
+      "confidence": "Medium",
+      "evidence": [
+        "Code-verified"
+      ],
+      "locations": [
+        "product_events and messages insert policies"
+      ],
+      "description": "Users can insert any allowed product_events, and messages with role='assistant', which then show in their own public share links.",
+      "impact": "Fake admin metrics; a shared chat can show text Orbis never wrote (only in the sharer's own conversation).",
+      "reproduction": "Code review.",
+      "remediation": "Restrict role on insert to 'user' (server writes assistant messages with the service role), and record analytics server-side.",
+      "regression_test": null,
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-020",
+      "title": "A chat turn is lost when the model fails mid-stream",
+      "severity": "Low",
+      "area": "AI chat / reliability",
+      "status": "Open",
+      "confidence": "High",
+      "evidence": [
+        "Code-verified"
+      ],
+      "locations": [
+        "src/app/api/chat/route.ts:302-329,368"
+      ],
+      "description": "On a mid-stream error the route records the run and rethrows; the user message and partial reply are not saved.",
+      "impact": "The user's message disappears from history even though usage is recorded.",
+      "reproduction": "Code review.",
+      "remediation": "Save the user message and partial assistant text with an error flag in the catch path.",
+      "regression_test": null,
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-021",
+      "title": "Request cost estimate leaves out side context; auxiliary model calls aren't reserved",
+      "severity": "Low",
+      "area": "Billing",
+      "status": "Open",
+      "confidence": "Medium",
+      "evidence": [
+        "Code-verified"
+      ],
+      "locations": [
+        "src/app/api/chat/route.ts:65",
+        "src/lib/connectors/chat.ts:25",
+        "src/lib/search/live.ts:78"
+      ],
+      "description": "The estimate covers message, attachments and history, not linked pages, connector docs or memory (up to ~60k chars); the connector planner and Claude-backed search are recorded afterwards but not reserved.",
+      "impact": "maxRequestCostUsd can be exceeded somewhat.",
+      "reproduction": "Code review.",
+      "remediation": "Include side context in the estimate and reserve auxiliary calls.",
+      "regression_test": null,
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-022",
+      "title": "Backslash in a page URL returns a 500 in production",
+      "severity": "Low",
+      "area": "Routing",
+      "status": "Open",
+      "confidence": "High",
+      "evidence": [
+        "Observed"
+      ],
+      "locations": [
+        "Next.js routing on Vercel (before src/proxy.ts runs)"
+      ],
+      "description": "GET https://tryorbis.app/pricing%5C returned 500 (Observed today); Vercel logs show MODULE_NOT_FOUND. The local production build returns 404 for the same URL.",
+      "impact": "Error noise and alerts; no data exposure.",
+      "reproduction": "curl -s -o /dev/null -w '%{http_code}' 'https://tryorbis.app/pricing%5C' -> 500",
+      "remediation": "A proxy redirect was tried and reverted: Next.js resolves %5C paths before the proxy runs (locally even /api/models%5C skipped the proxy). Options: a Vercel-level redirect rule for paths containing %5C, or an upstream Next.js report.",
+      "regression_test": null,
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-023",
+      "title": "About 83 API routes validate the request body before authentication",
+      "severity": "Low",
+      "area": "API",
+      "status": "Open",
+      "confidence": "High",
+      "evidence": [
+        "Observed"
+      ],
+      "locations": [
+        "e.g. /api/projects POST, /api/projects/[id]/notes POST"
+      ],
+      "description": "Unauthenticated requests with an empty body get 400 with field names instead of 401.",
+      "impact": "Reveals request schemas to anonymous callers; no data exposure.",
+      "reproduction": "Unauthenticated sweep of 262 method/route pairs: 83 x 400.",
+      "remediation": "Authenticate before parseJsonBody (as done for Mimic routes).",
+      "regression_test": null,
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-024",
+      "title": "Security headers: inline scripts allowed, HSTS without includeSubDomains, ACAO * on static pages",
+      "severity": "Low",
+      "area": "Security headers",
+      "status": "Open",
+      "confidence": "High",
+      "evidence": [
+        "Observed"
+      ],
+      "locations": [
+        "next.config / vercel headers"
+      ],
+      "description": "CSP has script-src 'unsafe-inline'; HSTS max-age=63072000 without includeSubDomains/preload; access-control-allow-origin: * on the prerendered homepage HTML. XFO DENY, nosniff, referrer-policy and permissions-policy are present.",
+      "impact": "Weaker XSS defence in depth; no cookie-bearing API responses carry ACAO.",
+      "reproduction": "curl -sI https://tryorbis.app/",
+      "remediation": "Move to nonce-based CSP; add includeSubDomains once every subdomain is HTTPS; drop ACAO on HTML.",
+      "regression_test": null,
+      "needs_approval": "includeSubDomains/preload affects every subdomain"
+    },
+    {
+      "id": "ORB-025",
+      "title": "Leaked-password protection is off in Supabase Auth",
+      "severity": "Low",
+      "area": "Authentication",
+      "status": "Open (dashboard setting)",
+      "confidence": "High",
+      "evidence": [
+        "Observed"
+      ],
+      "locations": [
+        "Supabase advisor auth_leaked_password_protection"
+      ],
+      "description": "Supabase's HaveIBeenPwned check for new passwords is disabled.",
+      "impact": "Users can choose known-breached passwords.",
+      "reproduction": "Supabase security advisor (WARN).",
+      "remediation": "Enable it in Supabase Dashboard -> Authentication -> Password security.",
+      "regression_test": null,
+      "needs_approval": "Dashboard change"
+    },
+    {
+      "id": "ORB-029",
+      "title": "Stripe webhook check-then-mark race; subscription sync without locking",
+      "severity": "Low",
+      "area": "Billing",
+      "status": "Open",
+      "confidence": "Medium",
+      "evidence": [
+        "Code-verified"
+      ],
+      "locations": [
+        "src/app/api/stripe/webhook/route.ts:36,116",
+        "syncSubscription"
+      ],
+      "description": "eventSeen is checked first and markEvent written last, so two simultaneous deliveries are both processed; writes are mostly idempotent via unique keys.",
+      "impact": "Rare duplicate processing.",
+      "reproduction": "Code review.",
+      "remediation": "Insert the stripe_events row first (unique) and skip on conflict.",
+      "regression_test": null,
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-033",
+      "title": "Accessibility: sidebar history not keyboard-scrollable, alert role on a heading, share error page without a main landmark",
+      "severity": "Low",
+      "area": "Accessibility",
+      "status": "Fixed",
+      "confidence": "High",
+      "evidence": [
+        "Observed",
+        "Test-inferred"
+      ],
+      "locations": [
+        "src/components/studio/sidebar.tsx",
+        "src/components/workforce/task-view.tsx",
+        "src/components/workspaces/share-view.tsx"
+      ],
+      "description": "axe (WCAG 2.2 AA + best practice) on the signed-in sweep: scrollable-region-focusable (serious) on 12 routes where the sidebar's history area shrinks and overflows with only text; aria-allowed-role on the workforce task error; landmark-one-main/region on the share error page.",
+      "impact": "Keyboard-only users couldn't scroll the history area on those pages; screen readers got a wrong role and no main landmark.",
+      "reproduction": "Local production build, axe 4.x at 390 and 1440 px.",
+      "remediation": "History area is a labelled, focusable region; role moved to a wrapper; share view uses <main>. Re-checked after a rebuild: none of these violations remain.",
+      "regression_test": "Re-run of the axe sweep on the 17 affected routes",
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-034",
+      "title": "Accessibility: minor remaining issues (error screens without an h1, small text links, one obscured back link)",
+      "severity": "Low",
+      "area": "Accessibility",
+      "status": "Open",
+      "confidence": "High",
+      "evidence": [
+        "Observed"
+      ],
+      "locations": [
+        "detail views' not-found states (research, review, pair, missions, workflows, research-print)",
+        "/agents/research back link",
+        "breadcrumb and footer links"
+      ],
+      "description": "Not-found states show the error in a role=alert paragraph with no h1. On phones, breadcrumb/footer links such as 'Docs' and 'Features' are 20 px high (WCAG 2.5.8 asks for 24 px or enough spacing). The 'All agents' link on /agents/research is partly covered at 390 px (axe target-size).",
+      "impact": "Small usability cost for screen-reader and touch users; no blocking issue.",
+      "reproduction": "Sweeps at 9 widths; axe at 390/1440.",
+      "remediation": "Render error states with an h1; give standalone small links min-h-6 (24 px); fix the overlap on /agents/research.",
+      "regression_test": null,
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-036",
+      "title": "Homepage Largest Contentful Paint on mobile is above 2.5 s in lab tests",
+      "severity": "Low",
+      "area": "Performance",
+      "status": "Open",
+      "confidence": "Medium",
+      "evidence": [
+        "Observed"
+      ],
+      "locations": [
+        "https://tryorbis.app/ (mobile profile)"
+      ],
+      "description": "Lighthouse mobile (simulated 4G, 4x CPU), three runs on their own: performance 97/87/88, LCP 2.55/3.42/3.38 s, TBT 50–132 ms, CLS 0. Desktop scores 100 (LCP 0.63 s).",
+      "impact": "Slower first view on phones; Core Web Vitals field data may differ (not available here).",
+      "reproduction": "npx lighthouse@12.8.2 https://tryorbis.app/ x3",
+      "remediation": "Identify the LCP element (hero text/screenshot), preload it or reduce work before it; trim the homepage chunk (28 KiB unused JS reported).",
+      "regression_test": null,
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-026",
+      "title": "Rate limits are per server instance",
+      "severity": "Info",
+      "area": "API / abuse",
+      "status": "Open",
+      "confidence": "High",
+      "evidence": [
+        "Code-verified"
+      ],
+      "locations": [
+        "src/lib/rate-limit.ts"
+      ],
+      "description": "The per-minute and guest daily limits are in memory, so each Vercel instance counts separately. Database reservations remain the real cost limit.",
+      "impact": "Limits are weaker than configured under load.",
+      "reproduction": "Code review (the file says so).",
+      "remediation": "Move to a shared store (Postgres or Upstash) if abuse appears.",
+      "regression_test": null,
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-030",
+      "title": "Database housekeeping: 10 unindexed foreign keys, 37 unused indexes",
+      "severity": "Info",
+      "area": "Database / performance",
+      "status": "Open",
+      "confidence": "High",
+      "evidence": [
+        "Observed"
+      ],
+      "locations": [
+        "Supabase performance advisors"
+      ],
+      "description": "Reported by Supabase advisors.",
+      "impact": "Slower deletes/joins as data grows; unused index write cost.",
+      "reproduction": "Supabase advisors.",
+      "remediation": "Add covering indexes for hot foreign keys; review unused indexes after more traffic.",
+      "regression_test": null,
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-031",
+      "title": "Coding-agent 'never run' list can be satisfied by approval for some destructive forms",
+      "severity": "Info",
+      "area": "AI agents",
+      "status": "Fixed for the reported forms",
+      "confidence": "Medium",
+      "evidence": [
+        "Code-verified"
+      ],
+      "locations": [
+        "src/lib/code/agent/policy.ts BLOCKED"
+      ],
+      "description": "rm -r -f . and git -C . push fell through to 'ask'.",
+      "impact": "Could run once approved; sandbox network is allow-listed.",
+      "reproduction": "classifyCommand.",
+      "remediation": "Patterns extended (see ORB-004).",
+      "regression_test": "tests/audit-2026-10-26.test.ts",
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-032",
+      "title": "Guest mode skips model-tier checks (only when Supabase isn't configured)",
+      "severity": "Info",
+      "area": "AI / billing",
+      "status": "Open (not applicable to production)",
+      "confidence": "Medium",
+      "evidence": [
+        "Code-verified"
+      ],
+      "locations": [
+        "src/lib/usage.ts:149-153",
+        "src/lib/ai/index.ts:164"
+      ],
+      "description": "With Supabase unconfigured and guest AI allowed, guests can pick premium models and limits are per instance.",
+      "impact": "None in production (Supabase is configured).",
+      "reproduction": "Code review.",
+      "remediation": "Apply tier checks to guests too.",
+      "regression_test": null,
+      "needs_approval": null
+    },
+    {
+      "id": "ORB-035",
+      "title": "CSP blocks a harmless eval probe from zod on every page",
+      "severity": "Info",
+      "area": "Security headers",
+      "status": "Open",
+      "confidence": "High",
+      "evidence": [
+        "Observed"
+      ],
+      "locations": [
+        "zod v4 allowsEval check (client bundle)"
+      ],
+      "description": "Chrome reports a CSP issue (script-src eval) on production pages: zod tries `Function(\"\")` inside try/catch to decide whether it can compile validators, and falls back when blocked.",
+      "impact": "Console/Lighthouse noise only; Best Practices 96 on /pricing because of it.",
+      "reproduction": "Chrome DevTools Protocol Audits.issueAdded on https://tryorbis.app/pricing.",
+      "remediation": "Set z.config({ jitless: true }) once in client code to skip the probe.",
+      "regression_test": null,
+      "needs_approval": null
+    }
+  ],
+  "needs_approval": [
+    {
+      "id": "ORB-001",
+      "action": "Apply migration 20261109000000_audit_hardening.sql to production after deploying the code"
+    },
+    {
+      "id": "ORB-002",
+      "action": "Billing refactor (reservations made only by the server) and production migration"
+    },
+    {
+      "id": "ORB-005",
+      "action": "Decide whether the project computer should receive .env files"
+    },
+    {
+      "id": "ORB-006",
+      "action": "Optional: add Slack read scopes to show verified names"
+    },
+    {
+      "id": "ORB-010",
+      "action": "Behaviour change for the coding agent"
+    },
+    {
+      "id": "ORB-014",
+      "action": "Production migration + code change"
+    },
+    {
+      "id": "ORB-015",
+      "action": "Apply migration"
+    },
+    {
+      "id": "ORB-027",
+      "action": "Stripe dashboard change (yours)"
+    },
+    {
+      "id": "ORB-016",
+      "action": "Apply migration"
+    },
+    {
+      "id": "ORB-024",
+      "action": "includeSubDomains/preload affects every subdomain"
+    },
+    {
+      "id": "ORB-025",
+      "action": "Dashboard change"
+    }
+  ],
+  "not_tested": [
+    {
+      "item": "Native iOS and Android builds",
+      "why": "Needs Xcode/Android Studio, devices or emulators and store accounts; not available in this environment"
+    },
+    {
+      "item": "Real sign-in flows in production (email, GitHub, Google)",
+      "why": "Would create real accounts; synthetic local sessions were used instead"
+    },
+    {
+      "item": "Real AI requests, coding-agent runs and connector actions in production",
+      "why": "Cost money, contact third parties or send messages; covered by tests with stubs"
+    },
+    {
+      "item": "Stripe checkout end to end",
+      "why": "Payment methods are not enabled in the Stripe account (ORB-027); no charges allowed"
+    },
+    {
+      "item": "Exploit of ORB-001/002/014 against production",
+      "why": "Would cause a real outage; shown on PGlite with all migrations instead"
+    },
+    {
+      "item": "Load and stress testing",
+      "why": "Not authorised against production; only single sequential requests were made"
+    },
+    {
+      "item": "The Python engine (workspaces, share, connections)",
+      "why": "Separate service outside this repository review"
+    },
+    {
+      "item": "Whether Supabase requires email confirmation",
+      "why": "Auth setting not readable read-only; affects team_accept_invite email matching"
+    },
+    {
+      "item": "Live grants on the production database",
+      "why": "Assumed Supabase's default privileges, as the migrations do"
+    },
+    {
+      "item": "Screen-reader and keyboard-only walkthroughs",
+      "why": "Automated axe checks only; manual assistive-technology testing not done"
+    }
+  ],
+  "checklist": [
+    [
+      "Inventory of routes, pages, migrations, tables and functions",
+      true
+    ],
+    [
+      "Baseline: tests, type check, lint, build, dependency audit, secret scan",
+      true
+    ],
+    [
+      "Authorization review of every route handler",
+      true
+    ],
+    [
+      "Multi-user isolation and RLS tested with synthetic users (PGlite)",
+      true
+    ],
+    [
+      "AI, agents and code execution review",
+      true
+    ],
+    [
+      "Integrations review (connectors, Stripe, email)",
+      true
+    ],
+    [
+      "Unauthenticated production API sweep",
+      true
+    ],
+    [
+      "Production headers, logs, advisors (read-only)",
+      true
+    ],
+    [
+      "UI at 9 viewports: public pages on production",
+      true
+    ],
+    [
+      "UI at 9 viewports: signed-in pages on a local production build",
+      true
+    ],
+    [
+      "Accessibility: axe at 390 px and 1440 px",
+      true
+    ],
+    [
+      "Performance: Lighthouse on key production pages",
+      true
+    ],
+    [
+      "Every confirmed finding has an ORB ID, status, confidence and evidence level",
+      true
+    ],
+    [
+      "Safe fixes applied with regression tests that fail on the old code",
+      true
+    ],
+    [
+      "Full test suite, type check, lint and build pass after the fixes",
+      true
+    ],
+    [
+      "Risky or approval-bound fixes documented with a patch or plan",
+      true
+    ],
+    [
+      "No secrets, personal data or raw logs in the reports",
+      true
+    ],
+    [
+      "Production deploy",
+      false
+    ],
+    [
+      "Production migration",
+      false
+    ],
+    [
+      "Native app builds tested",
+      false
+    ]
+  ]
+}
