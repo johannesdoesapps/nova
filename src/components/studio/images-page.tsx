@@ -1,4 +1,5 @@
 "use client";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useState } from "react";
 import { Download, ImageIcon, Loader2 } from "lucide-react";
@@ -22,6 +23,14 @@ const QUALITIES: { value: Quality; label: string }[] = [
   { value: "medium", label: "Standard" },
   { value: "high", label: "High" },
 ];
+const ASPECT: Record<Size, string> = { "1024x1024": "1 / 1", "1536x1024": "3 / 2", "1024x1536": "2 / 3" };
+
+// The pixel-mosaic loader uses WebGL (three.js): loaded only on this page, and only in the browser.
+const ImageLoader = dynamic(() => import("./image-loader"), {
+  ssr: false,
+  loading: () => <div className="w-full animate-pulse rounded-[18px] bg-s-hover" style={{ aspectRatio: "1 / 1" }} />,
+});
+
 const btn = "inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-5 text-[14px] font-medium transition disabled:opacity-40 [&_svg]:h-4 [&_svg]:w-4";
 
 /**
@@ -36,16 +45,20 @@ export function ImagesPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [made, setMade] = useState<Made[]>([]);
+  /** The image being created: shown as the loader, then moved into `made` once it has been revealed. */
+  const [pending, setPending] = useState<{ url: string | null; prompt: string; size: Size } | null>(null);
 
   const create = async () => {
     const p = prompt.trim();
     if (p.length < 3 || busy) return;
     setBusy(true);
     setError(null);
+    setPending({ url: null, prompt: p, size });
     try {
       const j = await jsonFetch<{ image: string }>("/api/images", { method: "POST", body: JSON.stringify({ prompt: p, size, quality, requestId: crypto.randomUUID() }) });
-      setMade((xs) => [{ url: j.image, prompt: p, size }, ...xs].slice(0, 12));
+      setPending({ url: j.image, prompt: p, size });
     } catch (e) {
+      setPending(null);
       setError(e instanceof Error ? e.message : "The image couldn't be created. Try again.");
     } finally {
       setBusy(false);
@@ -108,8 +121,25 @@ export function ImagesPage() {
               )}
             </section>
           )}
-          {made.length > 0 && (
+          {(made.length > 0 || pending) && (
             <ul className="mt-6 grid gap-4 sm:grid-cols-2">
+              {pending && (
+                <li className="glass overflow-hidden rounded-[18px]" aria-busy={!pending.url}>
+                  <ImageLoader
+                    src={pending.url}
+                    aspect={ASPECT[pending.size]}
+                    onRevealed={() => {
+                      const done = pending;
+                      if (done.url) setMade((xs) => [{ url: done.url!, prompt: done.prompt, size: done.size }, ...xs].slice(0, 12));
+                      setPending(null);
+                    }}
+                  />
+                  <div className="p-3">
+                    <p className="text-[12.5px] leading-relaxed text-s-ink-2">{pending.prompt}</p>
+                    <p className="mt-0.5 text-[12px] text-s-ink-3">{pending.url ? "Done" : "Creating…"}</p>
+                  </div>
+                </li>
+              )}
               {made.map((m, i) => (
                 <li key={`${i}-${m.prompt.slice(0, 20)}`} className="glass overflow-hidden rounded-[18px]">
                   {/* eslint-disable-next-line @next/next/no-img-element -- a generated data URL, not a static asset */}

@@ -1,20 +1,22 @@
 "use client";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { ArrowUp, Check, CodeXml, FileText, Globe, ImagePlus, Mic, Paperclip, Plus, Scale, ShieldCheck, ShieldQuestionMark, Square, Telescope, X } from "lucide-react";
+import { ArrowUp, Check, CodeXml, FileText, Globe, Mic, Scale, ShieldCheck, ShieldQuestionMark, Square, Telescope, X } from "lucide-react";
 import type { ModelWithStatus } from "@/lib/ai/types";
 import { CHAT_MODES, MODE_LABELS, type ChatMode } from "@/lib/ai/modes";
 import { ALLOWED_ATTACHMENT_EXT, MAX_ATTACHMENT_CHARS } from "@/lib/limits";
 import { cn } from "@/lib/utils";
 import { attachmentBytes, MAX_ATTACHMENTS_BYTES, type ChatAttachment } from "./chat-client";
-import { GitHubLogo } from "@/components/common/github-logo";
 import { GitHubPicker } from "./github-picker";
-import { IconButton, iconButtonClass, Menu, MenuItem, MenuLabel, MenuSeparator, Switch } from "./ui";
+import { IconButton, iconButtonClass, Menu, MenuItem, MenuLabel } from "./ui";
 import { ModelSelector } from "./model-selector";
 import { UsageNotice, useUsage, type UsageState } from "./usage";
 import { isAutoId } from "@/lib/ai/router-modes";
 import { recipientsFor } from "@/lib/ai/disclosure";
+import { useMicrophone } from "voice-glow";
 import { useApp } from "@/components/layout/app-context";
 import { useStudio } from "./frame";
+import { ComposerGlow } from "./voice-glow";
+import { GooeyAttach } from "./gooey-attach";
 
 export const MODE_ICONS: Record<ChatMode, ReactNode> = {
   research: <Telescope />,
@@ -62,6 +64,13 @@ export function Composer(p: ComposerProps) {
   const [drag, setDrag] = useState(false);
   const [githubOpen, setGithubOpen] = useState(false);
   const speech = useSpeech(p.onChange);
+  // A second, level-only microphone stream for the glow. Not on iPhone and iPad, where Safari may not let speech
+  // recognition and another capture share the microphone; the glow then only shows while Orbis answers.
+  const mic = useMicrophone();
+  const { stop: stopMic } = mic;
+  useEffect(() => {
+    if (!speech.listening) stopMic();
+  }, [speech.listening, stopMic]);
   const canSend = p.value.trim().length > 0 && !p.busy;
 
   // Grow with the content, up to a comfortable maximum, then scroll.
@@ -122,224 +131,202 @@ export function Composer(p: ComposerProps) {
 
   return (
     <div className="w-full">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-        onDragOver={(e) => {
-          if (e.dataTransfer.types.includes("Files")) {
+      <ComposerGlow stream={mic.stream} listening={speech.listening} busy={p.busy}>
+        <form
+          onSubmit={(e) => {
             e.preventDefault();
-            setDrag(true);
-          }
-        }}
-        onDragLeave={(e) => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrag(false);
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDrag(false);
-          void addFiles(e.dataTransfer.files);
-        }}
-        className={cn("composer glass-strong glass-edge rounded-[26px] p-2", drag && "drag")}
-      >
-        <input
-          ref={fileRef}
-          id="studio-file"
-          type="file"
-          multiple
-          hidden
-          accept={ALLOWED_ATTACHMENT_EXT.join(",")}
-          onChange={(e) => void addFiles(e.target.files)}
-        />
-
-        {p.attachments.length > 0 && (
-          <ul className="flex flex-wrap gap-1.5 px-1.5 pb-1 pt-1.5" aria-label="Attached files">
-            {p.attachments.map((a) => (
-              <li key={a.name} className="s-pop flex items-center gap-2 rounded-xl border border-s-line bg-s-hover py-1.5 pl-2 pr-1 text-[12.5px]">
-                <span className="grid h-6 w-6 place-items-center rounded-lg bg-s-accent-soft text-s-accent">
-                  <FileText className="h-3.5 w-3.5" />
-                </span>
-                <span className="max-w-[180px] truncate">{a.name}</span>
-                <IconButton size="sm" label={`Remove ${a.name}`} className="h-6 w-6" onClick={() => p.onAttachments(p.attachments.filter((x) => x.name !== a.name))}>
-                  <X />
-                </IconButton>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <label htmlFor="studio-input" className="sr-only">Message Orbis</label>
-        <textarea
-          id="studio-input"
-          ref={inputRef}
-          value={p.value}
-          onChange={(e) => p.onChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
-            const mod = e.metaKey || e.ctrlKey;
-            if ((p.enterToSend && !e.shiftKey && !mod) || (!p.enterToSend && mod)) {
+            submit();
+          }}
+          onDragOver={(e) => {
+            if (e.dataTransfer.types.includes("Files")) {
               e.preventDefault();
-              submit();
+              setDrag(true);
             }
           }}
-          onPaste={(e) => {
-            if (e.clipboardData.files.length) {
-              e.preventDefault();
-              void addFiles(e.clipboardData.files);
-            }
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrag(false);
           }}
-          rows={1}
-          maxLength={12000}
-          placeholder={speech.listening ? "Listening…" : (p.placeholder ?? (p.variant === "hero" ? "Ask anything…" : "Message Orbis"))}
-          className={cn(
-            "s-scroll block w-full resize-none bg-transparent px-3 text-s-ink outline-none placeholder:text-s-ink-3 focus-visible:outline-none",
-            p.variant === "hero" ? "min-h-[64px] pb-2 pt-3 text-[16.5px] leading-relaxed" : "min-h-[44px] pb-1.5 pt-2.5 text-[16px] leading-relaxed",
-          )}
-        />
+          onDrop={(e) => {
+            e.preventDefault();
+            setDrag(false);
+            void addFiles(e.dataTransfer.files);
+          }}
+          className={cn("composer glass-strong glass-edge rounded-[26px] p-2", drag && "drag")}
+        >
+          <input
+            ref={fileRef}
+            id="studio-file"
+            type="file"
+            multiple
+            hidden
+            accept={ALLOWED_ATTACHMENT_EXT.join(",")}
+            onChange={(e) => void addFiles(e.target.files)}
+          />
 
-        <div className="flex items-center gap-1 pt-1">
-          <Menu
-            label="Add to message"
-            side="auto"
-            width={276}
-            buttonLabel="Add files and tools"
-            buttonClassName={cn(iconButtonClass(), "rounded-full")}
-            button={<Plus />}
-          >
-            <MenuItem
-              icon={<Paperclip />}
-              hint={filesAllowed ? "Text, Markdown, CSV or JSON · up to 3 · sent with your message to the model" : "Not enabled for this agent"}
-              disabled={!filesAllowed}
-              onClick={() => fileRef.current?.click()}
-            >
-              Upload files
-            </MenuItem>
-            <MenuItem
-              icon={<GitHubLogo className="h-4 w-4" />}
-              hint={filesAllowed ? "Files from repositories you choose" : "Not enabled for this agent"}
-              disabled={!filesAllowed}
-              onClick={() => setGithubOpen(true)}
-            >
-              Add from GitHub
-            </MenuItem>
-            <MenuItem icon={<ImagePlus />} hint="The connected models accept text only for now" disabled>
-              Add images
-            </MenuItem>
-            <MenuSeparator />
-            <div className="flex items-start gap-3 rounded-xl px-2.5 py-2">
-              <Globe className="mt-px h-4 w-4 shrink-0 text-s-ink-2" />
-              <div className="min-w-0 flex-1">
-                <div className="text-[13.5px]">Search the web</div>
-                <div className="mt-0.5 text-[12px] leading-snug text-s-ink-3">
-                  {!webAllowed
-                    ? (p.webBlockedHint ?? "Available in Research mode")
-                    : !p.webAvailable
-                      ? "Not set up on this site"
-                      : "Cite live sources · your search terms go to the search provider"}
-                </div>
-              </div>
-              <Switch label="Search the web" checked={p.useWeb && webAllowed} onChange={p.onUseWeb} disabled={!p.webAvailable || !webAllowed} />
-            </div>
-          </Menu>
-
-          {p.onMode && (
-            <Menu
-              label="Assistant mode"
-              side="auto"
-              width={300}
-              buttonLabel={`Mode: ${MODE_LABELS[p.mode].label}`}
-              buttonTitle="Assistant mode"
-              buttonClassName="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink [&_svg]:h-4 [&_svg]:w-4"
-              button={
-                <>
-                  {MODE_ICONS[p.mode]}
-                  <span className="hidden sm:inline">{MODE_LABELS[p.mode].label}</span>
-                </>
-              }
-            >
-                  <MenuLabel>Mode</MenuLabel>
-                  {CHAT_MODES.map((m) => (
-                    <MenuItem
-                      key={m}
-                      role="menuitemradio"
-                      checked={p.mode === m}
-                      icon={MODE_ICONS[m]}
-                      hint={MODE_LABELS[m].blurb}
-                      right={p.mode === m ? <Check /> : null}
-                      onClick={() => p.onMode?.(m)}
-                    >
-                      {MODE_LABELS[m].label}
-                    </MenuItem>
-                  ))}
-            </Menu>
-          )}
-
-          {p.useWeb && webAllowed && p.webAvailable && (
-            <button
-              type="button"
-              onClick={() => p.onUseWeb(false)}
-              className="s-pop hidden h-8 items-center gap-1.5 rounded-full bg-s-accent-soft px-2.5 text-[12.5px] text-s-accent sm:inline-flex"
-              title="Web search is on — click to turn off"
-            >
-              <Globe className="h-3.5 w-3.5" /> Web
-            </button>
-          )}
-
-          {/* The model name gives way on narrow screens so Send always fits. */}
-          <div className="ml-auto flex min-w-0 items-center gap-1 [&>*]:shrink-0">
-            <WhereItGoes models={p.models} modelId={p.modelId} web={p.useWeb && webAllowed && p.webAvailable} files={p.attachments.length} />
-            <ModelSelector models={p.models} value={p.modelId} onChange={p.onModel} auto={p.auto ?? null} className="min-w-0 !shrink" />
-
-            {speech.supported && (
-              <IconButton
-                label={speech.listening ? "Stop voice input" : "Voice input"}
-                active={speech.listening}
-                onClick={() => (speech.listening ? speech.stop() : speech.start(p.value))}
-                className={cn("rounded-full", speech.listening && "bg-s-accent-soft text-s-accent")}
-                aria-pressed={speech.listening}
-              >
-                {speech.listening ? (
-                  <span className="flex h-4 items-center gap-[3px]" aria-hidden>
-                    <span className="s-dot h-2.5 w-[3px] rounded-full bg-current" />
-                    <span className="s-dot h-4 w-[3px] rounded-full bg-current [animation-delay:120ms]" />
-                    <span className="s-dot h-2.5 w-[3px] rounded-full bg-current [animation-delay:240ms]" />
+          {p.attachments.length > 0 && (
+            <ul className="flex flex-wrap gap-1.5 px-1.5 pb-1 pt-1.5" aria-label="Attached files">
+              {p.attachments.map((a) => (
+                <li key={a.name} className="s-pop flex items-center gap-2 rounded-xl border border-s-line bg-s-hover py-1.5 pl-2 pr-1 text-[12.5px]">
+                  <span className="grid h-6 w-6 place-items-center rounded-lg bg-s-accent-soft text-s-accent">
+                    <FileText className="h-3.5 w-3.5" />
                   </span>
-                ) : (
-                  <Mic />
-                )}
-              </IconButton>
+                  <span className="max-w-[180px] truncate">{a.name}</span>
+                  <IconButton size="sm" label={`Remove ${a.name}`} className="h-6 w-6" onClick={() => p.onAttachments(p.attachments.filter((x) => x.name !== a.name))}>
+                    <X />
+                  </IconButton>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <label htmlFor="studio-input" className="sr-only">Message Orbis</label>
+          <textarea
+            id="studio-input"
+            ref={inputRef}
+            value={p.value}
+            onChange={(e) => p.onChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+              const mod = e.metaKey || e.ctrlKey;
+              if ((p.enterToSend && !e.shiftKey && !mod) || (!p.enterToSend && mod)) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+            onPaste={(e) => {
+              if (e.clipboardData.files.length) {
+                e.preventDefault();
+                void addFiles(e.clipboardData.files);
+              }
+            }}
+            rows={1}
+            maxLength={12000}
+            placeholder={speech.listening ? "Listening…" : (p.placeholder ?? (p.variant === "hero" ? "Ask anything…" : "Message Orbis"))}
+            className={cn(
+              "s-scroll block w-full resize-none bg-transparent px-3 text-s-ink outline-none placeholder:text-s-ink-3 focus-visible:outline-none",
+              p.variant === "hero" ? "min-h-[64px] pb-2 pt-3 text-[16.5px] leading-relaxed" : "min-h-[44px] pb-1.5 pt-2.5 text-[16px] leading-relaxed",
+            )}
+          />
+
+          <div className="flex items-center gap-1 pt-1">
+            <GooeyAttach
+              filesAllowed={filesAllowed}
+              onUpload={() => fileRef.current?.click()}
+              onGitHub={() => setGithubOpen(true)}
+              web={{
+                on: p.useWeb && webAllowed,
+                enabled: p.webAvailable && webAllowed,
+                hint: !webAllowed
+                  ? (p.webBlockedHint ?? "Available in Research mode")
+                  : !p.webAvailable
+                    ? "Not set up on this site"
+                    : "Cite live sources · your search terms go to the search provider",
+                onToggle: p.onUseWeb,
+              }}
+            />
+
+            {p.onMode && (
+              <Menu
+                label="Assistant mode"
+                side="auto"
+                width={300}
+                buttonLabel={`Mode: ${MODE_LABELS[p.mode].label}`}
+                buttonTitle="Assistant mode"
+                buttonClassName="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink [&_svg]:h-4 [&_svg]:w-4"
+                button={
+                  <>
+                    {MODE_ICONS[p.mode]}
+                    <span className="hidden sm:inline">{MODE_LABELS[p.mode].label}</span>
+                  </>
+                }
+              >
+                    <MenuLabel>Mode</MenuLabel>
+                    {CHAT_MODES.map((m) => (
+                      <MenuItem
+                        key={m}
+                        role="menuitemradio"
+                        checked={p.mode === m}
+                        icon={MODE_ICONS[m]}
+                        hint={MODE_LABELS[m].blurb}
+                        right={p.mode === m ? <Check /> : null}
+                        onClick={() => p.onMode?.(m)}
+                      >
+                        {MODE_LABELS[m].label}
+                      </MenuItem>
+                    ))}
+              </Menu>
             )}
 
-            {p.busy ? (
+            {p.useWeb && webAllowed && p.webAvailable && (
               <button
                 type="button"
-                onClick={p.onStop}
-                aria-label="Stop generating"
-                title="Stop generating"
-                className="s-pop grid h-9 w-9 place-items-center rounded-full bg-s-ink text-s-bg transition hover:opacity-85 active:scale-95"
+                onClick={() => p.onUseWeb(false)}
+                className="s-pop hidden h-8 items-center gap-1.5 rounded-full bg-s-accent-soft px-2.5 text-[12.5px] text-s-accent sm:inline-flex"
+                title="Web search is on — click to turn off"
               >
-                <Square className="h-3.5 w-3.5 fill-current" />
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={!canSend}
-                aria-label="Send message"
-                title={p.enterToSend ? "Send (Enter)" : "Send (Ctrl/⌘ + Enter)"}
-                className={cn(
-                  "grid h-9 w-9 place-items-center rounded-full transition-all duration-200 active:scale-90",
-                  canSend
-                    ? "bg-s-accent text-s-accent-ink shadow-[0_6px_18px_-6px_var(--s-accent)] hover:-translate-y-px hover:brightness-110"
-                    : "bg-s-hover text-s-ink-3",
-                )}
-              >
-                <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.2} />
+                <Globe className="h-3.5 w-3.5" /> Web
               </button>
             )}
+
+            {/* The model name gives way on narrow screens so Send always fits. */}
+            <div className="ml-auto flex min-w-0 items-center gap-1 [&>*]:shrink-0">
+              <WhereItGoes models={p.models} modelId={p.modelId} web={p.useWeb && webAllowed && p.webAvailable} files={p.attachments.length} />
+              <ModelSelector models={p.models} value={p.modelId} onChange={p.onModel} auto={p.auto ?? null} className="min-w-0 !shrink" />
+
+              {speech.supported && (
+                <IconButton
+                  label={speech.listening ? "Stop voice input" : "Voice input"}
+                  active={speech.listening}
+                  onClick={() => {
+                    if (speech.listening) return speech.stop();
+                    speech.start(p.value);
+                    if (!isAppleTouch()) void mic.start();
+                  }}
+                  className={cn("rounded-full", speech.listening && "bg-s-accent-soft text-s-accent")}
+                  aria-pressed={speech.listening}
+                >
+                  {speech.listening ? (
+                    <span className="flex h-4 items-center gap-[3px]" aria-hidden>
+                      <span className="s-dot h-2.5 w-[3px] rounded-full bg-current" />
+                      <span className="s-dot h-4 w-[3px] rounded-full bg-current [animation-delay:120ms]" />
+                      <span className="s-dot h-2.5 w-[3px] rounded-full bg-current [animation-delay:240ms]" />
+                    </span>
+                  ) : (
+                    <Mic />
+                  )}
+                </IconButton>
+              )}
+
+              {p.busy ? (
+                <button
+                  type="button"
+                  onClick={p.onStop}
+                  aria-label="Stop generating"
+                  title="Stop generating"
+                  className="s-pop grid h-9 w-9 place-items-center rounded-full bg-s-ink text-s-bg transition hover:opacity-85 active:scale-95"
+                >
+                  <Square className="h-3.5 w-3.5 fill-current" />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!canSend}
+                  aria-label="Send message"
+                  title={p.enterToSend ? "Send (Enter)" : "Send (Ctrl/⌘ + Enter)"}
+                  className={cn(
+                    "grid h-9 w-9 place-items-center rounded-full transition-all duration-200 active:scale-90",
+                    canSend
+                      ? "bg-s-accent text-s-accent-ink shadow-[0_6px_18px_-6px_var(--s-accent)] hover:-translate-y-px hover:brightness-110"
+                      : "bg-s-hover text-s-ink-3",
+                  )}
+                >
+                  <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.2} />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      </form>
+        </form>
+      </ComposerGlow>
       {error && (
         <p role="alert" className="s-in mt-2 px-3 text-[12.5px] text-s-danger">
           {error}
@@ -369,6 +356,8 @@ interface Recognition {
 type RecognitionCtor = new () => Recognition;
 
 const noSubscribe = () => () => {};
+/** iPhone, iPad (which reports itself as a Mac with touch) and iPod. */
+const isAppleTouch = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 function speechCtor(): RecognitionCtor | undefined {
   const w = window as unknown as { SpeechRecognition?: RecognitionCtor; webkitSpeechRecognition?: RecognitionCtor };
   return w.SpeechRecognition ?? w.webkitSpeechRecognition;
