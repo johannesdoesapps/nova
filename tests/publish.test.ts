@@ -171,9 +171,11 @@ describe("the hosting client", () => {
     const flaky = fake(() => (++n < 2 ? { status: 502, json: { error: { message: "bad gateway" } } } : { json: { id: "dpl_2", readyState: "READY" } }));
     expect(await new VercelHost(cfg, flaky.f).deployment("dpl_2")).toMatchObject({ readyState: "READY" });
     expect(n).toBe(2);
-    const denied = fake(() => ({ status: 403, json: { error: { message: "forbidden" } } }));
+    const denied = fake(() => ({ status: 403, json: { error: { code: "forbidden", message: "Not authorized: token secret-token has no access to this team" } } }));
     const err = await new VercelHost(cfg, denied.f).findProject("k").catch((e) => e);
     expect(err.code).toBe("not_configured");
+    // Vercel's reason is shown (so the admin can tell a bad token from a wrong team), the token never is.
+    expect(String(err.message)).toContain("Vercel: forbidden: Not authorized");
     expect(String(err.message)).not.toContain("secret-token");
     const limited = fake(() => ({ status: 429, json: { error: { message: "Too many deployments" } } }));
     expect((await new VercelHost(cfg, limited.f).findProject("k").catch((e) => e)).code).toBe("provider_unavailable");

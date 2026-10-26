@@ -127,8 +127,16 @@ export class VercelHost {
         await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
         continue;
       }
-      if (res.status === 401 || res.status === 403)
-        throw new ApiError("not_configured", "The hosting account refused Orbis's publishing token (it may have expired or lost access). An administrator needs to replace ORBIS_PUBLISH_VERCEL_TOKEN.");
+      if (res.status === 401 || res.status === 403) {
+        // Vercel's own reason (e.g. an invalid token vs. a token without access to the team) — never the token itself.
+        const code = (body?.error?.code ?? "").replace(/[^\w.-]/g, "").slice(0, 60);
+        const why = [code, msg.split(this.cfg.token).join("[token]")].filter(Boolean).join(": ");
+        console.warn(`[publish] Vercel refused the publishing token: HTTP ${res.status}${why ? ` (${why})` : ""}`);
+        throw new ApiError(
+          "not_configured",
+          `The hosting account refused Orbis's publishing token${why ? ` (Vercel: ${why})` : ""}. Check that ORBIS_PUBLISH_VERCEL_TOKEN is a valid token with access to the ${this.cfg.teamId ? "team in ORBIS_PUBLISH_VERCEL_TEAM_ID" : "personal account"}, then replace it if needed.`,
+        );
+      }
       if (res.status === 429 || res.status === 402) throw new ApiError("provider_unavailable", `The hosting provider is limiting new publishes right now${msg ? ` (${msg})` : ""}. Try again in a few minutes.`);
       throw new ApiError("upstream_error", `The hosting provider couldn't ${method === "GET" ? "answer" : "do that"}${msg ? `: ${msg}` : ` (HTTP ${res.status})`}.`);
     }
