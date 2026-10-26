@@ -1,11 +1,12 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowUp, Mic, OctagonX, Play } from "lucide-react";
+import { ArrowUp, AudioLines, Mic, OctagonX, Play } from "lucide-react";
 import { useMicrophone } from "voice-glow";
 import { useApp } from "@/components/layout/app-context";
 import { StudioHeader } from "@/components/studio/frame";
 import { useSpeech } from "@/hooks/use-speech";
+import { END_OF_TURN_MS, isStopPhrase, QUIET_ROUND_MS, QUIET_ROUNDS, RELISTEN_DELAY_MS, shouldListen } from "@/lib/jarvis/conversation";
 import { agentState, haltAgent, pairAgent, resumeAgent, unpairAgent, type AgentState } from "@/lib/jarvis/desktop-client";
 import { executeStep, prepareStep } from "@/lib/jarvis/executors";
 import { MissionRunner, newMission, type Mission } from "@/lib/jarvis/mission";
@@ -67,6 +68,9 @@ export function JarvisView() {
   const [mission, setMission] = useState<Mission | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState(false);
+  // Conversation mode: hands-free back-and-forth (see src/lib/jarvis/conversation.ts). Off on every visit.
+  const [convo, setConvo] = useState(false);
+  const [visible, setVisible] = useState(true);
 
   // The latest values, for callbacks that outlive a render (the mission runner, key handlers).
   const settingsRef = useRef(settings);
@@ -74,12 +78,14 @@ export function JarvisView() {
   const agentRef = useRef(agent);
   const draftRef = useRef(draft);
   const turnsRef = useRef(turns);
+  const convoRef = useRef(convo);
   useEffect(() => {
     settingsRef.current = settings;
     haltedRef.current = halted;
     agentRef.current = agent;
     draftRef.current = draft;
     turnsRef.current = turns;
+    convoRef.current = convo;
   });
 
   const runner = useRef<MissionRunner | null>(null);
@@ -273,6 +279,7 @@ export function JarvisView() {
   const emergencyStop = useCallback(() => {
     setHalted(true);
     saveHalted(true);
+    setConvo(false);
     runner.current?.stop("interrupted");
     turnAbort.current?.abort();
     stopSpeaking();
@@ -303,16 +310,21 @@ export function JarvisView() {
     if (!speech.listening) stopMic();
   }, [speech.listening, stopMic]);
   const audioLevel = useCallback(() => analyzer.current?.level() ?? 0, []);
-  const ptt = useRef<"key" | "button" | null>(null);
+  // Who is listening right now (null once stopped by us); `via` remembers it until recognition has ended.
+  const ptt = useRef<"key" | "button" | "convo" | null>(null);
+  const via = useRef<"key" | "button" | "convo" | null>(null);
   const submitOnEnd = useRef(false);
   const wasListening = useRef(false);
+  const quietRounds = useRef(0);
 
   const startListening = useCallback(
-    (via: "key" | "button") => {
+    (from: "key" | "button" | "convo") => {
       if (!speech.supported || speech.listening) return;
-      stopSpeaking();
+      // Push to talk interrupts Jarvis; conversation mode only starts once Jarvis has finished speaking.
+      if (from !== "convo") stopSpeaking();
       setDraft("");
-      ptt.current = via;
+      ptt.current = from;
+      via.current = from;
       submitOnEnd.current = false;
       speech.start("");
       if (!isAppleTouch()) void startMic().catch(() => {});
@@ -334,21 +346,118 @@ export function JarvisView() {
     },
     [speech],
   );
+
+  const startConversation = useCallback(() => {
+    quietRounds.current = 0;
+    setConvo(true);
+    say("notice", "Conversation on. Just talk; Jarvis listens again after each reply. Say “stop” or press Esc to end it.");
+  }, [say]);
+  const endConversation = useCallback(
+    (why: string) => {
+      if (!convoRef.current) return;
+      convoRef.current = false;
+      setConvo(false);
+      say("notice", why);
+    },
+    [say],
+  );
+
   // Recognition delivers its last words before it ends; send them then.
   useEffect(() => {
     if (wasListening.current && !speech.listening) {
+      const from = via.current;
+      // Still set: recognition ended by itself (silence, or a quiet round), not because we stopped it.
+      const endedItself = ptt.current !== null;
       ptt.current = null;
-      if (submitOnEnd.current) {
+      via.current = null;
+      const text = draftRef.current;
+      if (from === "convo" && convoRef.current && (submitOnEnd.current || endedItself)) {
         submitOnEnd.current = false;
-        void submit(draftRef.current);
+        if (!text.trim()) {
+          if (++quietRounds.current >= QUIET_ROUNDS) endConversation("Conversation ended: I didn't hear anything for a while.");
+        } else if (isStopPhrase(text)) {
+          setDraft("");
+          endConversation("Conversation ended.");
+        } else {
+          quietRounds.current = 0;
+          void submit(text);
+        }
+      } else if (submitOnEnd.current) {
+        submitOnEnd.current = false;
+        void submit(text);
       }
     }
     wasListening.current = speech.listening;
-  }, [speech.listening, submit]);
+  }, [speech.listening, submit, endConversation]);
+
+  /* Conversation mode ------------------------------------------------------------------------------------- */
+
+  useEffect(() => {
+    const onVis = () => setVisible(document.visibilityState === "visible");
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+  // Stop listening when the conversation ends or the tab goes to the background (nothing is heard unseen).
+  useEffect(() => {
+    if ((!convo || !visible) && ptt.current === "convo") stopListening(false);
+  }, [convo, visible, stopListening]);
+  // Blocked microphone or a broken speech service: end rather than retry forever.
+  useEffect(() => {
+    if (speech.error) endConversation(`Conversation ended: ${speech.error}`);
+  }, [speech.error, endConversation]);
+
+  // Stable handles for the timers below, so a re-render doesn't restart them.
+  const listenRef = useRef(startListening);
+  const stopRef = useRef(stopListening);
+  const { stop: stopSpeech } = speech;
+  useEffect(() => {
+    listenRef.current = startListening;
+    stopRef.current = stopListening;
+  });
+
+  const listenNow = shouldListen({
+    on: convo,
+    supported: speech.supported,
+    listening: speech.listening,
+    busy: thinking || running,
+    speaking,
+    visible,
+    typing: !!draft.trim(),
+  });
+  // Listen again once Jarvis is idle and its voice has finished (speech output can start a moment after the reply).
+  useEffect(() => {
+    if (!listenNow) return;
+    const t = setInterval(() => {
+      if ("speechSynthesis" in window && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) return;
+      clearInterval(t);
+      listenRef.current("convo");
+    }, RELISTEN_DELAY_MS);
+    return () => clearInterval(t);
+  }, [listenNow]);
+  // Your turn ends after a short pause following your last word.
+  useEffect(() => {
+    if (!speech.listening || ptt.current !== "convo" || !draft.trim()) return;
+    const t = setTimeout(() => stopRef.current(true), END_OF_TURN_MS);
+    return () => clearTimeout(t);
+  }, [draft, speech.listening]);
+  // A round with no words at all ends after a while; a couple of those end the conversation.
+  const heardNothing = !draft.trim();
+  useEffect(() => {
+    if (!speech.listening || ptt.current !== "convo" || !heardNothing) return;
+    const t = setTimeout(stopSpeech, QUIET_ROUND_MS);
+    return () => clearTimeout(t);
+  }, [speech.listening, heardNothing, stopSpeech]);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (convoRef.current) {
+          e.preventDefault();
+          stopSpeaking();
+          stopListening(false);
+          endConversation("Conversation ended.");
+          return;
+        }
         if (ptt.current) {
           e.preventDefault();
           stopListening(false);
@@ -375,7 +484,7 @@ export function JarvisView() {
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", blur);
     };
-  }, [startListening, stopListening, stopSpeaking]);
+  }, [startListening, stopListening, stopSpeaking, endConversation]);
 
   /* State ------------------------------------------------------------------------------------------------- */
 
@@ -459,9 +568,27 @@ export function JarvisView() {
             <section aria-label="Jarvis status" className="text-center">
               <p className="text-[15px] text-s-ink">{CORE_LABEL[core]}</p>
               <p className="mt-0.5 text-[12.5px] text-s-ink-3">
-                {speech.supported ? `Hold ${key} or the microphone, speak, let go. Or type.` : "Voice input isn't available in this browser; type your request."}
-                {!connected && " Connect the Desktop Agent to let Jarvis work on this computer."}
+                {!speech.supported
+                  ? "Voice input isn't available in this browser; type your request."
+                  : convo
+                    ? "Conversation on: just talk, and pause when you're done. Jarvis doesn't listen while it speaks or works. Say “stop” or press Esc to end."
+                    : `Hold ${key} or the microphone, speak, let go. Or type, or start a conversation.`}
+                {!connected && !convo && " Connect the Desktop Agent to let Jarvis work on this computer."}
               </p>
+              {speech.supported && (
+                <button
+                  type="button"
+                  aria-pressed={convo}
+                  onClick={() => (convo ? endConversation("Conversation ended.") : startConversation())}
+                  className={cn(
+                    "mt-3 inline-flex h-9 items-center gap-2 rounded-full border px-4 text-[13px] font-medium transition",
+                    convo ? "border-transparent bg-s-ink text-s-bg hover:opacity-90" : "border-s-line text-s-ink-2 hover:border-s-line-strong hover:text-s-ink",
+                  )}
+                >
+                  <AudioLines className={cn("h-4 w-4", convo && speech.listening && "motion-safe:animate-pulse")} aria-hidden />
+                  {convo ? "End conversation" : "Start a conversation"}
+                </button>
+              )}
             </section>
 
             <section aria-label="Conversation" className="mt-5 space-y-2.5">

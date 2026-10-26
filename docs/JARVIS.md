@@ -149,6 +149,17 @@ node orbis-desktop-agent.mjs --origin http://localhost:3000   # also accept a de
   - speak, then let go to send, or press Esc to cancel;
   - a keyboard user can press Enter or Space on the mic button to start and stop;
   - nothing is recorded until you press.
+- **Conversation mode** (the **Start a conversation** button under the status line): hands-free
+  back-and-forth (`src/lib/jarvis/conversation.ts`).
+  - Jarvis listens, and your turn ends when you pause for about 1.3 seconds after your last word. It replies,
+    then listens again by itself.
+  - It never listens while it is speaking (so it can't hear itself), while it is answering or running a mission,
+    while it waits for you to click an approval, while you are typing, or while the tab is in the background.
+  - It ends when you say "stop" (or "goodbye", "that's all", "never mind" and similar, but only as the whole
+    sentence, so "stop the music" is still sent), press Esc or the button, press the emergency stop, after
+    about 30 seconds of silence, or if the microphone is blocked.
+  - It's off on every visit; the page never starts listening by itself.
+  - Approvals are click-only, also in a conversation.
 - **Voice input** uses the browser's Web Speech API.
   - In Chrome and Edge, your audio goes to the browser maker's speech service; in Safari, to Apple's.
   - Orbis receives only the words.
@@ -182,6 +193,7 @@ node orbis-desktop-agent.mjs --origin http://localhost:3000   # also accept a de
 | File | Tests | Covers |
 |---|---|---|
 | `tests/jarvis.test.ts` | 19 | Tool list, proposal checks (including `javascript:` and `file:` URLs, a shell-injected app name, a path in a rename), the permission table at each level, and the mission runner: order, approval, rejection, batch approval of the exact list, refusal, partial failure, retry only for reads, a timeout counted as unknown, stop while running, stop while waiting, pause and resume. Also settings fallbacks, history trimming with private text removed, and push-to-talk key matching and clash warnings. |
+| `tests/jarvis-conversation.test.ts` | 3 | Stop phrases (and real requests that contain the same words), and when conversation mode may listen. |
 | `tests/jarvis-api.test.ts` | 11 | System prompt contents, vetting, the JSON fallback, the `/turn` route (native, desktop, JSON, answer-only, bad requests, metering), and the `/look` route (answer, better view, vision required, image validation). |
 | `tests/desktop-agent.test.ts` | 13 | Folder limits, symbolic-link escape, no overwrite, sorting from an approved list only, rejection of tampered moves, undo, halt, unknown tools, macOS launch without a shell plus the running check, and the HTTP layer: Origin, Host (DNS rebinding), pairing, token, Private Network Access preflight, JSON only. |
 
@@ -201,6 +213,17 @@ node orbis-desktop-agent.mjs --origin http://localhost:3000   # also accept a de
 - 8 missions appeared in Activity;
 - no console errors;
 - no sideways scrolling at 390 px.
+
+**Conversation mode, end to end** (production build in Chromium; speech recognition, speech output and the
+model were stand-ins, with speech output taking 1.2 s per reply):
+- two spoken turns were sent hands-free, in order, and the second carried the first exchange as history;
+- "OK Jarvis, stop" ended the conversation and was not sent;
+- it never listened while speaking, and listened again only after each reply had finished;
+- two silent rounds ended it and sent nothing;
+- Esc, the emergency stop and a background tab each stopped the microphone; returning to the tab listened again;
+- no sideways scrolling at 390 px; no page errors.
+
+Not yet checked with a real microphone and a real browser speech service.
 
 **HTTPS check:** a page served over HTTPS with the production CSP (including `upgrade-insecure-requests`)
 reached the agent at `http://127.0.0.1:47821` in this Chromium.
