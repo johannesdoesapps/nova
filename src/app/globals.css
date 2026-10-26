@@ -188,6 +188,25 @@ body {
 .orbis-run-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4em; color: var(--fg-faint); font-family: var(--font-sans, inherit); }
 .orbis-run-link { text-decoration: underline; text-underline-offset: 2px; color: inherit; font-weight: 500; }
 
+/* Jarvis Mode's core (components/jarvis/jarvis-core.tsx): it moves only while something is happening. */
+@keyframes jarvis-spin { to { transform: rotate(360deg); } }
+@keyframes jarvis-breathe { 0%, 100% { transform: scale(1); opacity: 0.85; } 50% { transform: scale(1.06); opacity: 1; } }
+@keyframes jarvis-pulse { 0% { transform: scale(0.92); opacity: 0.55; } 70% { transform: scale(1.18); opacity: 0; } 100% { opacity: 0; } }
+@keyframes jarvis-wave { 0%, 100% { transform: scale(1); } 25% { transform: scale(1.12); } 50% { transform: scale(0.96); } 75% { transform: scale(1.08); } }
+.jarvis-core .jarvis-ring-arc { opacity: 0.25; }
+.jarvis-idle .jarvis-heart { animation: jarvis-breathe 4.5s ease-in-out infinite; }
+.jarvis-listening .jarvis-ring-outer { animation: jarvis-pulse 1.4s ease-out infinite; opacity: 0.6; }
+.jarvis-listening .jarvis-heart { animation: jarvis-breathe 1.2s ease-in-out infinite; }
+.jarvis-thinking .jarvis-ring-arc { animation: jarvis-spin 1.6s linear infinite; opacity: 0.8; }
+.jarvis-working .jarvis-ring-arc { animation: jarvis-spin 0.9s linear infinite; opacity: 0.9; }
+.jarvis-working .jarvis-ring-inner { animation: jarvis-spin 3s linear infinite reverse; border-style: dashed; }
+.jarvis-approval .jarvis-heart { animation: jarvis-breathe 2s ease-in-out infinite; }
+.jarvis-speaking .jarvis-heart { animation: jarvis-wave 0.9s ease-in-out infinite; }
+.jarvis-stopped .jarvis-heart, .jarvis-stopped .jarvis-glow { opacity: 0.35; }
+@media (prefers-reduced-motion: reduce) {
+  .jarvis-core *, .jarvis-core { animation: none !important; }
+}
+
 /* The logo while Orbis works: a bright stretch of line running around the loop. */
 @keyframes loop-trace { to { stroke-dashoffset: -100; } }
 .loop-trace { animation: loop-trace 1.6s linear infinite; }

@@ -11,6 +11,7 @@ import {
   LayoutTemplate,
   MessagesSquare,
   MousePointerClick,
+  Orbit,
   Plug,
   ShieldCheck,
   SlidersHorizontal,
@@ -31,6 +32,7 @@ import {
 
 export type Section =
   | "home"
+  | "jarvis"
   | "chat"
   | "code"
   | "projects"
@@ -68,6 +70,7 @@ export interface NavEntry {
 
 export const NAV_ENTRIES: NavEntry[] = [
   { id: "home", label: "Home", href: "/home", icon: House, group: "main", hint: "Your start page: recent work, your day and suggestions" },
+  { id: "jarvis", label: "Jarvis", href: "/jarvis", icon: Orbit, group: "main", hint: "Voice-first assistant that plans and carries out tasks, on this computer too" },
   { id: "chat", label: "Chat", href: "/chat", icon: MessagesSquare, group: "mode", hint: "Ask, research and write with AI" },
   { id: "code", label: "Code", href: "/code", icon: Code2, group: "mode", hint: "Build and fix software with the coding agent" },
   { id: "agents", label: "Agents", href: "/agents", icon: Bot, group: "main", hint: "Specialised assistants, including the Security Team" },

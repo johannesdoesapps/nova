@@ -2,7 +2,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ArrowUp, Loader2, Mic, Square } from "lucide-react";
 import { iconButtonClass } from "@/components/studio/ui";
-import { useSpeech } from "@/components/studio/composer";
+import { useSpeech } from "@/hooks/use-speech";
 import { cn } from "@/lib/utils";
 import { AttachmentTray, Dragging, dropAndPaste, PlusMenu, type Attachments } from "./attachments";
 

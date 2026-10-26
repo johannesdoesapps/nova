@@ -8,7 +8,8 @@ import type { NextConfig } from "next";
  * Scripts and styles come only from this site (Next.js needs its own inline
  * scripts, so 'unsafe-inline' stays; "eval" only in development). Images may
  * be anywhere https (avatars, images in replies). The only other site the
- * browser talks to is Supabase, for sign-in. The Code preview is a frame on
+ * browser talks to is Supabase, for sign-in, plus the Orbis Desktop Agent on
+ * the user's own computer (127.0.0.1) when Jarvis Mode is connected to it. The Code preview is a frame on
  * the workspace computer's own https address. Nothing may embed Orbis.
  */
 function contentSecurityPolicy(): string {
@@ -26,7 +27,8 @@ function contentSecurityPolicy(): string {
     "style-src": ["'self'", "'unsafe-inline'"],
     "img-src": ["'self'", "data:", "blob:", "https:"],
     "font-src": ["'self'", "data:"],
-    "connect-src": ["'self'", ...(supabase ? [supabase, supabase.replace(/^https:/, "wss:")] : []), ...(dev ? ["ws:"] : [])],
+    // The Orbis Desktop Agent (Jarvis Mode) listens on this computer only, on its default port.
+    "connect-src": ["'self'", ...(supabase ? [supabase, supabase.replace(/^https:/, "wss:")] : []), "http://127.0.0.1:47821", ...(dev ? ["ws:"] : [])],
     "media-src": ["'self'", "blob:", "data:"],
     "worker-src": ["'self'", "blob:"],
     "frame-src": ["'self'", "https:"],
