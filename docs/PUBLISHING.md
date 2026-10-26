@@ -19,8 +19,15 @@ The **Publish** button (top right of a Code project, where **Run** used to be; R
 - Each project has one site whose name comes from the project and a key from its id (`<name>-<12 hex>`), so the address never changes, even if the project is renamed. Publishing again replaces the live version at the same address.
 - Every deployment carries a fingerprint of the files it contains. The button's dot is green when the live site matches the saved files and amber when there are unpublished changes; the dialog says the same.
 - If a build fails, the previous version stays live and the project's files are untouched; **Retry** publishes again.
-- **Take site down** deletes the site at the host. The address stops working; the project is unchanged and can be published again.
+- **Take site down** deletes the site at the host (in shared mode: removes its address and deletes its deployments). The address stops working; the project is unchanged and can be published again.
 - No database tables are needed: the host is the record of what's published.
+
+### Two hosting set-ups (`src/lib/publish/sites.ts`)
+
+- **One project per site** (default): each site is its own Vercel project, created on the first publish; every publish is a production deployment and the address is the project's own domain.
+- **Shared project** (`ORBIS_PUBLISH_VERCEL_PROJECT` set): some Vercel accounts refuse to create projects through the API. Vercel answers `403 forbidden: You don't have permission to create the project`, even for the team owner, while the dashboard still works. In this mode every site is a deployment in one existing project, and Orbis never creates projects. Each deployment carries the Orbis project id and the site's address in its metadata. Once a deployment is built, Orbis points the address at it: an alias named the same way, `<name>-<12 hex>.vercel.app`. The address is chosen on the first publish and reused afterwards. Orbis never moves an address back to an older version. If an address is already taken by another Vercel account, the dialog says so.
+  - The shared project must have **Vercel Authentication turned off** (Settings → Deployment Protection), because sites are preview deployments. Orbis asks Vercel to turn it off on every publish, but the account may refuse. If visitors are asked to log in, the dialog tells the administrator what to change.
+  - Old deployments stay in the shared project. Set a deployment retention policy in the project's settings if you want them cleaned up.
 
 ### Security
 
@@ -37,6 +44,7 @@ Until this is done the button opens a dialog explaining that publishing isn't se
 2. In the Orbis Vercel project's environment variables (Production), add:
    - `ORBIS_PUBLISH_VERCEL_TOKEN`: the token.
    - `ORBIS_PUBLISH_VERCEL_TEAM_ID`: the team's id (`team_…`). Leave it out for a personal account.
+   - `ORBIS_PUBLISH_VERCEL_PROJECT` (only if the account can't create projects through the API): the name or id of an empty project created in the dashboard, with no Git repository connected and Vercel Authentication turned off.
 3. Redeploy Orbis.
 
 ### Things to decide
@@ -48,7 +56,8 @@ Until this is done the button opens a dialog explaining that publishing isn't se
 
 ## Tests
 
-- `tests/publish.test.ts`: site checks, secrets, frameworks, limits, naming, fingerprints, and the Vercel client against a fake API (uploads by SHA-1, public projects, production deployments, retries, refusals without leaking the token, the reachability check).
+- `tests/publish.test.ts`: site checks, secrets, frameworks, limits, naming, fingerprints, and the Vercel client against a fake API (uploads by SHA-1, public projects, production deployments, retries, refusals without leaking the token, the reachability check). Shared mode is tested too: no project is ever created; every build setting is sent; the address is assigned and kept across renames, and never moved back to an older version; another project's deployment, or one claiming a foreign address, is refused; the site can be taken down; a missing shared project and an address someone else owns are both explained.
+- The same browser run was repeated in shared mode, against a local API that refuses project creation the way the real account does (38 checks). A separate check covered a shared project whose Vercel Authentication can't be turned off: the publish ends with instructions to turn it off.
 - A browser run against a local copy of the Vercel API covered (35 checks):
   - first publish and the live link, Copy and Open, a separate signed-out visitor loading the page and its styles;
   - unpublished-changes indicator, republishing to the same address, unsaved editor edits saved before publishing;

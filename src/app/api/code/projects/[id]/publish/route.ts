@@ -4,13 +4,15 @@ import { enforce } from "@/lib/bastion/server";
 import { codeContext, getFiles, getProjectRow } from "@/lib/code/server";
 import { ApiError, errorResponse, parseJsonBody, requireUuid } from "@/lib/http";
 import { reportError } from "@/lib/observability";
-import { planSite, publicUrl, siteFingerprint, siteKey, siteProjectName } from "@/lib/publish/site";
+import { planSite, siteFingerprint, siteProjectName } from "@/lib/publish/site";
+import { siteHost } from "@/lib/publish/sites";
 import { checkReachable, publishConfig, VercelHost, type HostDeployment, type PublishConfig } from "@/lib/publish/vercel";
 
 export const maxDuration = 60;
 
 /**
- * Publishing a Code project as a public website (see src/lib/publish/vercel.ts for the hosting set-up).
+ * Publishing a Code project as a public website (see src/lib/publish/vercel.ts for the hosting set-up and
+ * src/lib/publish/sites.ts for where a site lives: its own host project, or one shared project).
  *
  * GET    — whether publishing is set up, the live site (address, when, whether it matches the saved files), a
  *          publish still in progress, and what publishing the saved files now would do (problems, size).
@@ -71,21 +73,25 @@ export async function GET(req: Request, ctx: RouteContext<"/api/code/projects/[i
     if (deploymentId) {
       if (!DEPLOYMENT_RE.test(deploymentId)) throw new ApiError("bad_request", "That isn't a publish id.");
       const { host } = hostFor();
-      const site = await host.findProject(siteKey(id));
-      const d = site ? await host.deployment(deploymentId) : null;
-      if (!site || !d || d.projectId !== site.id || d.meta.orbisProject !== id) throw new ApiError("not_found", "That publish wasn't found for this project.");
+      const site = siteHost(host, cfg!, id);
+      const d = await site.deployment(deploymentId);
+      if (!d) throw new ApiError("not_found", "That publish wasn't found for this project.");
       const p = progress(d);
       if (p.phase !== "publishing") return NextResponse.json({ phase: p.phase, state: d.readyState, error: p.error ?? null });
-      const url = publicUrl(d.alias, d.url, site.name);
+      const { url, assigned } = await site.address(d);
       const probe = probeUrl(url, cfg!);
       if (!probe) return NextResponse.json({ phase: "failed", state: d.readyState, error: "The host gave the site an address Orbis doesn't recognise, so it wasn't opened." });
       const reach = await checkReachable(probe);
       if (!reach.ok)
         return NextResponse.json({
-          phase: d.aliasAssigned ? "failed" : "publishing",
+          phase: assigned ? "failed" : "publishing",
           state: d.readyState,
           url,
-          error: d.aliasAssigned ? `The site was published but ${url} didn't load from outside (${reach.detail}). Try again in a minute; if it keeps failing, publish again.` : null,
+          error: !assigned
+            ? null
+            : reach.status === 401 || reach.status === 403
+              ? `The site was published but ${url} asks visitors to log in to Vercel. An administrator needs to turn off Vercel Authentication (Settings → Deployment Protection) for the hosting project, then publish again.`
+              : `The site was published but ${url} didn't load from outside (${reach.detail}). Try again in a minute; if it keeps failing, publish again.`,
         });
       return NextResponse.json({ phase: "live", state: d.readyState, url, publishedAt: d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString(), fingerprint: d.meta.orbisFingerprint ?? null });
     }
@@ -95,13 +101,11 @@ export async function GET(req: Request, ctx: RouteContext<"/api/code/projects/[i
     const current = { fingerprint: await siteFingerprint(plan.files), problems: plan.problems, files: plan.files.length, bytes: plan.bytes, kind: plan.kind, name: siteProjectName(project.name, id) };
     if (!cfg) return NextResponse.json({ configured: false, site: null, pending: null, current, upToDate: null });
 
-    const host = new VercelHost(cfg);
-    const site = await host.findProject(siteKey(id));
-    if (!site) return NextResponse.json({ configured: true, site: null, pending: null, current, upToDate: null });
-    const [live, latest] = await Promise.all([host.latestProduction(site.id, "READY"), host.latestProduction(site.id)]);
-    const pending = latest && latest.id !== live?.id && !["ERROR", "CANCELED", "BLOCKED", "READY"].includes(latest.readyState) ? { deploymentId: latest.id, state: latest.readyState } : null;
+    const status = await siteHost(new VercelHost(cfg), cfg, id).status();
+    const live = status.live?.deployment;
+    const pending = status.pending ? { deploymentId: status.pending.id, state: status.pending.readyState } : null;
     const liveSite = live
-      ? { url: publicUrl(live.alias, live.url, site.name), deploymentId: live.id, publishedAt: live.createdAt ? new Date(live.createdAt).toISOString() : null, fingerprint: live.meta.orbisFingerprint ?? null }
+      ? { url: status.live!.url, deploymentId: live.id, publishedAt: live.createdAt ? new Date(live.createdAt).toISOString() : null, fingerprint: live.meta.orbisFingerprint ?? null }
       : null;
     return NextResponse.json({ configured: true, site: liveSite, pending, current, upToDate: liveSite ? liveSite.fingerprint === current.fingerprint : null });
   } catch (err) {
@@ -115,7 +119,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/code/projects/[
     await parseJsonBody(req, confirmBody, 1_000);
     const auth = await codeContext("code-publish", 6);
     const project = await getProjectRow(auth, id);
-    const { host } = hostFor();
+    const { cfg, host } = hostFor();
 
     // 1–4. Read the saved files, find the entry point and framework, check references and secrets.
     const files = await getFiles(auth, id);
@@ -126,14 +130,10 @@ export async function POST(req: Request, ctx: RouteContext<"/api/code/projects/[
     const name = siteProjectName(project.name, id);
     await enforce({ db: auth.supabase, userId: auth.user.id, kind: "user", agent: "publish" }, "site.publish", `${project.name} → ${name}.vercel.app`.slice(0, 200), { approved: true });
 
-    // 5. The site's project on the host (created on the first publish, kept public and in step with the files).
-    let site = await host.findProject(siteKey(id));
-    if (!site) site = await host.createProject(name, plan.framework, plan.buildCommand);
-    else await host.updateProject(site.id, plan.framework, plan.buildCommand);
-
+    // 5. Upload the files and deploy them where the site lives (its own project, or the shared one).
     const uploaded = await host.upload(plan.files);
     const fingerprint = await siteFingerprint(plan.files);
-    const d = await host.deploy(site, uploaded, { orbisProject: id, orbisFingerprint: fingerprint }, plan.framework, plan.buildCommand);
+    const d = await siteHost(host, cfg, id).publish(project.name, plan, uploaded, fingerprint);
     return NextResponse.json({ deploymentId: d.id, phase: progress(d).phase === "failed" ? "failed" : "building", kind: plan.kind, warnings: plan.problems.filter((p) => p.level === "warning"), files: plan.files.length });
   } catch (err) {
     if (!(err instanceof ApiError)) reportError(err, { where: "code.publish" });
@@ -147,10 +147,9 @@ export async function DELETE(req: Request, ctx: RouteContext<"/api/code/projects
     await parseJsonBody(req, confirmBody, 1_000);
     const auth = await codeContext("code-publish", 6);
     await getProjectRow(auth, id);
-    const { host } = hostFor();
-    const site = await host.findProject(siteKey(id));
-    if (site) await host.deleteProject(site.id);
-    return NextResponse.json({ ok: true, removed: !!site });
+    const { cfg, host } = hostFor();
+    const removed = await siteHost(host, cfg, id).remove();
+    return NextResponse.json({ ok: true, removed });
   } catch (err) {
     return errorResponse(err);
   }

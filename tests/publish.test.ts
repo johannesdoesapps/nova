@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { keptPrivate, localReferences, planSite, publicUrl, siteFingerprint, siteKey, siteProjectName } from "@/lib/publish/site";
+import { siteHost } from "@/lib/publish/sites";
 import { checkReachable, publishConfig, VercelHost } from "@/lib/publish/vercel";
 import { OPERATIONS } from "@/lib/bastion/policy";
 
@@ -115,7 +116,12 @@ describe("the hosting client", () => {
     delete process.env.ORBIS_PUBLISH_VERCEL_TOKEN;
     expect(publishConfig()).toBeNull();
     process.env.ORBIS_PUBLISH_VERCEL_TOKEN = "tok";
-    expect(publishConfig()).toEqual({ token: "tok", teamId: null, api: "https://api.vercel.com" });
+    expect(publishConfig()).toEqual({ token: "tok", teamId: null, api: "https://api.vercel.com", sharedProject: null });
+    process.env.ORBIS_PUBLISH_VERCEL_PROJECT = "orbis-sites";
+    expect(publishConfig()?.sharedProject).toBe("orbis-sites");
+    process.env.ORBIS_PUBLISH_VERCEL_PROJECT = "../v2/aliases";
+    expect(publishConfig()).toBeNull();
+    delete process.env.ORBIS_PUBLISH_VERCEL_PROJECT;
     process.env.ORBIS_PUBLISH_VERCEL_API = "https://evil.example";
     expect(publishConfig()).toBeNull();
     process.env.ORBIS_PUBLISH_VERCEL_API = "http://127.0.0.1:4100";
@@ -135,7 +141,7 @@ describe("the hosting client", () => {
     }) as typeof fetch;
     return { f, calls };
   }
-  const cfg = { token: "secret-token", teamId: "team_abc", api: "https://api.vercel.com" };
+  const cfg = { token: "secret-token", teamId: "team_abc", api: "https://api.vercel.com", sharedProject: null };
 
   it("uploads each file by its SHA-1, then deploys exactly those files to production", async () => {
     const { f, calls } = fake((c) => (c.url.pathname === "/v13/deployments" ? { json: { id: "dpl_1", url: "s-1.vercel.app", readyState: "QUEUED", projectId: "prj_1" } } : { json: {} }));
@@ -189,5 +195,116 @@ describe("the hosting client", () => {
     expect(await checkReachable("https://x.vercel.app/", f)).toMatchObject({ ok: true, status: 200 });
     const down = (async () => new Response("no", { status: 500 })) as typeof fetch;
     expect(await checkReachable("https://x.vercel.app/", down)).toMatchObject({ ok: false, status: 500 });
+  });
+
+  describe("shared mode (every site is a deployment in one existing project)", () => {
+    type D = { id: string; projectId: string; readyState: string; createdAt: number; meta: Record<string, string>; url: string };
+    function sharedApi() {
+      const st = { deployments: [] as D[], aliases: new Map<string, string>(), patched: [] as unknown[], deleted: [] as string[], n: 0 };
+      const api = fake((c) => {
+        const p = c.url.pathname;
+        if (p === "/v9/projects/orbis-sites" && c.method === "GET") return { json: { id: "prj_s", name: "orbis-sites" } };
+        if (p.startsWith("/v9/projects/") && c.method === "GET") return { status: 404 };
+        if (p === "/v9/projects/prj_s" && c.method === "PATCH") return st.patched.push(c.body), { json: {} };
+        if (p === "/v13/deployments" && c.method === "POST") {
+          const b = c.body as { project: string; meta: Record<string, string> };
+          const d = { id: `dpl_${++st.n}`, projectId: b.project, readyState: "QUEUED", createdAt: st.n * 1000, meta: b.meta, url: `orbis-sites-${st.n}.vercel.app` };
+          st.deployments.push(d);
+          return { json: d };
+        }
+        if (p === "/v6/deployments") {
+          const want = c.url.searchParams.get("meta-orbisProject");
+          // Like Vercel's list, without projectId on each item.
+          return { json: { deployments: st.deployments.filter((d) => d.meta.orbisProject === want).reverse().map((d) => ({ ...d, projectId: undefined, uid: d.id })) } };
+        }
+        const dm = p.match(/^\/v13\/deployments\/(\w+)$/);
+        if (dm && c.method === "GET") return st.deployments.find((d) => d.id === dm[1]) ? { json: st.deployments.find((d) => d.id === dm[1]) } : { status: 404 };
+        if (dm && c.method === "DELETE") return st.deleted.push(dm[1]), { status: 204 };
+        const am = p.match(/^\/v4\/aliases\/(.+)$/);
+        if (am) return st.aliases.has(am[1]) ? { json: { alias: am[1], deploymentId: st.aliases.get(am[1]), projectId: "prj_s" } } : { status: 404 };
+        const aa = p.match(/^\/v2\/deployments\/(\w+)\/aliases$/);
+        if (aa) {
+          const alias = (c.body as { alias: string }).alias;
+          if (alias.startsWith("taken-")) return { status: 409, json: { error: { code: "alias_in_use", message: "The alias is already in use" } } };
+          return st.aliases.set(alias, aa[1]), { json: { alias, uid: "als_1" } };
+        }
+        if (p.startsWith("/v2/aliases/") && c.method === "DELETE") return st.aliases.delete(decodeURIComponent(p.slice(12))), { status: 204 };
+        return { status: 404 };
+      });
+      const shared = { ...cfg, sharedProject: "orbis-sites" };
+      const site = (id = ID) => siteHost(new VercelHost(shared, api.f), shared, id);
+      return { st, api, site };
+    }
+    const plan = planSite([{ path: "index.html", content: "<h1>Hi</h1>" }]);
+    const up = [{ file: "index.html", sha: "a".repeat(40), size: 11 }];
+
+    it("never creates a project: deploys into the shared one with every build setting given, and asks for it to stay public", async () => {
+      const { st, api, site } = sharedApi();
+      const d = await site().publish("Shop", plan, up, "fp1");
+      expect(api.calls.some((c) => c.method === "POST" && c.url.pathname.includes("/projects"))).toBe(false);
+      expect(st.patched).toEqual([{ ssoProtection: null }]);
+      const body = api.calls.find((c) => c.url.pathname === "/v13/deployments")!.body as Record<string, unknown>;
+      expect(body).toMatchObject({ project: "prj_s", name: "orbis-sites", meta: { orbisProject: ID, orbisFingerprint: "fp1", orbisAlias: "shop-3fa85f645717.vercel.app" } });
+      expect(body.target).toBeUndefined();
+      expect(body.projectSettings).toEqual({ framework: null, buildCommand: null, installCommand: null, outputDirectory: null, devCommand: null });
+      expect(d.id).toBe("dpl_1");
+    });
+
+    it("points the address at a built deployment, and only reports this project's deployments", async () => {
+      const { st, site } = sharedApi();
+      const d = await site().publish("Shop", plan, up, "fp1");
+      const other = await site("11111111-2222-3333-4444-555555555555").publish("Other", plan, up, "fp9");
+      expect(await site().deployment(other.id)).toBeNull();
+      st.deployments[0].readyState = "READY";
+      const mine = (await site().deployment(d.id))!;
+      expect(await site().address(mine)).toEqual({ url: "https://shop-3fa85f645717.vercel.app", assigned: true });
+      expect(st.aliases.get("shop-3fa85f645717.vercel.app")).toBe(d.id);
+      // A deployment claiming an address that isn't this project's is refused.
+      st.deployments.push({ ...st.deployments[0], id: "dpl_evil", meta: { orbisProject: ID, orbisAlias: "tryorbis.vercel.app" } });
+      expect(await site().deployment("dpl_evil")).toBeNull();
+      const status = await site().status();
+      expect(status.live).toMatchObject({ url: "https://shop-3fa85f645717.vercel.app", deployment: { id: d.id } });
+    });
+
+    it("keeps the address after a rename, never moves it back to an older version, and shows a publish in progress", async () => {
+      const { st, site } = sharedApi();
+      const v1 = await site().publish("Shop", plan, up, "fp1");
+      st.deployments[0].readyState = "READY";
+      const v2 = await site().publish("Renamed shop", plan, up, "fp2");
+      expect(v2.meta.orbisAlias).toBe("shop-3fa85f645717.vercel.app");
+      st.deployments[1].readyState = "READY";
+      await site().address((await site().deployment(v2.id))!);
+      await site().address((await site().deployment(v1.id))!);
+      expect(st.aliases.get("shop-3fa85f645717.vercel.app")).toBe(v2.id);
+      const v3 = await site().publish("Renamed shop", plan, up, "fp3");
+      const s = await site().status();
+      expect(s.live?.deployment.id).toBe(v2.id);
+      expect(s.pending?.id).toBe(v3.id);
+    });
+
+    it("takes the site down by removing its address and deployments", async () => {
+      const { st, site } = sharedApi();
+      expect(await site().remove()).toBe(false);
+      const d = await site().publish("Shop", plan, up, "fp1");
+      st.deployments[0].readyState = "READY";
+      await site().address((await site().deployment(d.id))!);
+      expect(await site().remove()).toBe(true);
+      expect(st.aliases.size).toBe(0);
+      expect(st.deleted).toEqual([d.id]);
+    });
+
+    it("explains a missing shared project and an address someone else owns", async () => {
+      const { api } = sharedApi();
+      const wrong = { ...cfg, sharedProject: "no-such-project" };
+      const err = await siteHost(new VercelHost(wrong, api.f), wrong, ID).status().catch((e) => e);
+      expect(err.code).toBe("not_configured");
+      expect(String(err.message)).toContain('"no-such-project"');
+      const { st, site } = sharedApi();
+      const d = await site().publish("Taken", plan, up, "fp1");
+      st.deployments[0].readyState = "READY";
+      const e2 = await site().address((await site().deployment(d.id))!).catch((e) => e);
+      expect(e2.code).toBe("conflict");
+      expect(String(e2.message)).toContain("taken-3fa85f645717.vercel.app");
+    });
   });
 });

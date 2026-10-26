@@ -11,12 +11,19 @@ import type { SiteFile } from "./site";
  *
  * Set ORBIS_PUBLISH_VERCEL_TOKEN (a Vercel access token for the account or team that hosts the sites) and, for a
  * team, ORBIS_PUBLISH_VERCEL_TEAM_ID. The token stays on the server.
+ *
+ * Shared mode: some accounts can't create projects through the API (Vercel answers 403 "You don't have permission to
+ * create the project" even for the owner). With ORBIS_PUBLISH_VERCEL_PROJECT set to an existing project (its name or
+ * id), every site is a deployment in that one project instead, and its address is a *.vercel.app alias named like
+ * a dedicated project would be (<name>-<key>.vercel.app). See src/lib/publish/sites.ts.
  */
 
 export interface PublishConfig {
   token: string;
   teamId: string | null;
   api: string;
+  /** The existing project every site is deployed into (shared mode), or null for one project per site. */
+  sharedProject: string | null;
 }
 
 const DEFAULT_API = "https://api.vercel.com";
@@ -29,7 +36,10 @@ export function publishConfig(): PublishConfig | null {
   const api = (process.env.ORBIS_PUBLISH_VERCEL_API?.trim() || DEFAULT_API).replace(/\/$/, "");
   if (!ALLOWED_API.test(api)) return null;
   const teamId = process.env.ORBIS_PUBLISH_VERCEL_TEAM_ID?.trim() || null;
-  return { token, teamId, api };
+  const shared = process.env.ORBIS_PUBLISH_VERCEL_PROJECT?.trim() || null;
+  // A project name or id goes into a URL path, so only Vercel's own characters are accepted.
+  if (shared && !/^(prj_[A-Za-z0-9]{1,64}|[a-z0-9][a-z0-9._-]{0,99})$/.test(shared)) return null;
+  return { token, teamId, api, sharedProject: shared };
 }
 
 export type ReadyState = "QUEUED" | "INITIALIZING" | "BUILDING" | "READY" | "ERROR" | "CANCELED" | "BLOCKED";
@@ -101,7 +111,11 @@ export class VercelHost {
   }
 
   /** One call to Vercel, with a short retry on network errors and 5xx; failures become plain-English API errors. */
-  private async call<T>(method: string, path: string, opts: { params?: Record<string, string | number | undefined>; json?: unknown; body?: BodyInit; headers?: Record<string, string>; allow404?: boolean; timeoutMs?: number } = {}): Promise<T | null> {
+  private async call<T>(
+    method: string,
+    path: string,
+    opts: { params?: Record<string, string | number | undefined>; json?: unknown; body?: BodyInit; headers?: Record<string, string>; allow404?: boolean; timeoutMs?: number; refused?: (why: string) => ApiError } = {},
+  ): Promise<T | null> {
     let last: unknown = null;
     for (let attempt = 0; attempt < 3; attempt++) {
       let res: Response;
@@ -131,12 +145,15 @@ export class VercelHost {
         // Vercel's own reason (e.g. an invalid token vs. a token without access to the team) — never the token itself.
         const code = (body?.error?.code ?? "").replace(/[^\w.-]/g, "").slice(0, 60);
         const why = [code, msg.split(this.cfg.token).join("[token]")].filter(Boolean).join(": ");
+        // A call that can be refused for its own reasons (e.g. an address someone else owns) says so instead.
+        if (res.status === 403 && opts.refused) throw opts.refused(why);
         console.warn(`[publish] Vercel refused the publishing token: HTTP ${res.status}${why ? ` (${why})` : ""}`);
         throw new ApiError(
           "not_configured",
           `The hosting account refused Orbis's publishing token${why ? ` (Vercel: ${why})` : ""}. Check that ORBIS_PUBLISH_VERCEL_TOKEN is a valid token with access to the ${this.cfg.teamId ? "team in ORBIS_PUBLISH_VERCEL_TEAM_ID" : "personal account"}, then replace it if needed.`,
         );
       }
+      if (res.status === 409 && opts.refused) throw opts.refused([body?.error?.code, msg].filter(Boolean).join(": "));
       if (res.status === 429 || res.status === 402) throw new ApiError("provider_unavailable", `The hosting provider is limiting new publishes right now${msg ? ` (${msg})` : ""}. Try again in a few minutes.`);
       throw new ApiError("upstream_error", `The hosting provider couldn't ${method === "GET" ? "answer" : "do that"}${msg ? `: ${msg}` : ` (HTTP ${res.status})`}.`);
     }
@@ -183,11 +200,15 @@ export class VercelHost {
     return out.map((x) => ({ file: x.f.path, sha: x.sha, size: x.size }));
   }
 
-  /** A production deployment of exactly these files. */
-  async deploy(project: HostProject, files: { file: string; sha: string; size: number }[], meta: Record<string, string>, framework: string | null, buildCommand: string | null): Promise<HostDeployment> {
+  /**
+   * A deployment of exactly these files: to production in a site's own project, or (shared mode) a preview
+   * deployment in the shared project, with every build setting given so nothing is inherited from another site.
+   */
+  async deploy(project: HostProject, files: { file: string; sha: string; size: number }[], meta: Record<string, string>, framework: string | null, buildCommand: string | null, opts: { shared?: boolean } = {}): Promise<HostDeployment> {
+    const projectSettings = opts.shared ? { framework, buildCommand, installCommand: null, outputDirectory: null, devCommand: null } : { framework, ...(buildCommand ? { buildCommand } : {}) };
     const d = await this.call<RawDeployment>("POST", "/v13/deployments", {
       params: { skipAutoDetectionConfirmation: 1, forceNew: 1 },
-      json: { name: project.name, project: project.id, target: "production", files, meta, projectSettings: { framework, ...(buildCommand ? { buildCommand } : {}) } },
+      json: { name: project.name, project: project.id, ...(opts.shared ? {} : { target: "production" }), files, meta, projectSettings },
       timeoutMs: 30_000,
     });
     if (!d) throw new ApiError("upstream_error", "The hosting provider didn't start the deployment.");
@@ -204,6 +225,54 @@ export class VercelHost {
     const r = await this.call<{ deployments?: RawDeployment[] }>("GET", "/v7/deployments", { params: { projectId, target: "production", limit: 1, state } });
     const d = r?.deployments?.[0];
     return d ? toDeployment(d) : null;
+  }
+
+  /** An existing project by name or id (shared mode), or null if there's none. */
+  async getProject(idOrName: string): Promise<HostProject | null> {
+    const p = await this.call<{ id: string; name: string }>("GET", `/v9/projects/${encodeURIComponent(idOrName)}`, { allow404: true });
+    return p?.id ? { id: p.id, name: p.name } : null;
+  }
+
+  /** Ask for the project to stay public (no Vercel login). Best effort: the account may not allow changing it. */
+  async keepPublic(id: string): Promise<boolean> {
+    try {
+      await this.call("PATCH", `/v9/projects/${encodeURIComponent(id)}`, { json: { ssoProtection: null }, refused: (why) => new ApiError("forbidden", why) });
+      return true;
+    } catch (e) {
+      if (e instanceof ApiError) return false;
+      throw e;
+    }
+  }
+
+  /** A project's newest deployments carrying these meta values (Vercel filters by meta-<key>=<value>). */
+  async deployments(projectId: string, meta: Record<string, string>, limit = 20): Promise<HostDeployment[]> {
+    const params: Record<string, string | number> = { projectId, limit };
+    for (const [k, v] of Object.entries(meta)) params[`meta-${k}`] = v;
+    const r = await this.call<{ deployments?: RawDeployment[] }>("GET", "/v6/deployments", { params });
+    // Filtered again here, in case the host ignores a filter.
+    return (r?.deployments ?? []).map(toDeployment).filter((d) => Object.entries(meta).every(([k, v]) => d.meta[k] === v));
+  }
+
+  /** The deployment an alias (a hostname) points at, or null if the alias doesn't exist. */
+  async aliasTarget(alias: string): Promise<{ deploymentId: string; projectId: string | null } | null> {
+    const a = await this.call<{ deploymentId?: string | null; projectId?: string | null }>("GET", `/v4/aliases/${encodeURIComponent(alias)}`, { allow404: true });
+    return a?.deploymentId ? { deploymentId: a.deploymentId, projectId: a.projectId ?? null } : null;
+  }
+
+  /** Point an alias at a deployment (creating the alias the first time). */
+  async assignAlias(deploymentId: string, alias: string): Promise<void> {
+    await this.call("POST", `/v2/deployments/${encodeURIComponent(deploymentId)}/aliases`, {
+      json: { alias },
+      refused: (why) => new ApiError("conflict", `The address ${alias} couldn't be given to the site${why ? ` (Vercel: ${why})` : ""}. It may belong to another Vercel account.`),
+    });
+  }
+
+  async removeAlias(alias: string): Promise<void> {
+    await this.call("DELETE", `/v2/aliases/${encodeURIComponent(alias)}`, { allow404: true });
+  }
+
+  async deleteDeployment(id: string): Promise<void> {
+    await this.call("DELETE", `/v13/deployments/${encodeURIComponent(id)}`, { allow404: true });
   }
 }
 
