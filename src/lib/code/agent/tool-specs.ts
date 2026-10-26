@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MEMORY_KINDS } from "../memory";
-import { fileContent, projectPath } from "../projects";
+import { fileContent, PREVIEW_PATH, projectPath } from "../projects";
 import type { CommandMode } from "./types";
 
 /**
@@ -95,7 +95,7 @@ export const TOOL_DEFS = {
         .string()
         .trim()
         .max(300)
-        .regex(/^\/[^\s]*$/, "a path on the site, starting with /")
+        .regex(PREVIEW_PATH, "a path on the site, starting with /")
         .optional()
         .describe('Page to check, e.g. "/" or "/about.html". Default "/".'),
     }),

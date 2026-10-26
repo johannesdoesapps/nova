@@ -144,7 +144,8 @@ describe("row level security", () => {
     await as(ALICE, async () => {
       const u = await db.query("update public.model_registry set input_price = 0 where id = 'openai:x'");
       expect(u.affectedRows).toBe(0);
-      await db.query("insert into public.model_runs (model_id, status) values ('openai:x', 'success')");
+      // Usage records are the server's (ORB-001): a user can't add one, e.g. a huge cost that trips the site-wide cap.
+      await expect(db.query("insert into public.model_runs (model_id, status, units, estimated_cost) values ('openai:x', 'success', 1, 999999)")).rejects.toThrow(/permission denied|row-level security/);
       const upd = await db.query("update public.model_runs set estimated_cost = 0");
       expect(upd.affectedRows).toBe(0);
     });

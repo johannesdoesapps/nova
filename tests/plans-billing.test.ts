@@ -162,6 +162,16 @@ async function as<T>(user: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/** As the server (service role): usage records are written by the server, never by the user's own session. */
+async function asServer<T>(user: string, fn: () => Promise<T>): Promise<T> {
+  await db.exec(`reset role; select set_config('request.jwt.claim.sub', '${user}', false);`);
+  try {
+    return await fn();
+  } finally {
+    await db.exec("reset role");
+  }
+}
+
 type R = { ok: boolean; reason?: string; scope?: string; spent?: number };
 const reserve = (user: string, id: string, o: { units?: number; est?: number; budget?: number | null; premium?: boolean; limits?: [number, number] } = {}) =>
   as(
@@ -180,7 +190,7 @@ const reserve = (user: string, id: string, o: { units?: number; est?: number; bu
       ).rows[0]!.r,
   );
 const spend = (user: string, usd: number | null, tokens: [number, number] = [1000, 500]) =>
-  as(user, () => db.query("insert into public.model_runs (model_id, status, units, estimated_cost, input_tokens, output_tokens) values ('m', 'success', 1, $1, $2, $3)", [usd, tokens[0], tokens[1]]));
+  asServer(user, () => db.query("insert into public.model_runs (model_id, status, units, estimated_cost, input_tokens, output_tokens) values ('m', 'success', 1, $1, $2, $3)", [usd, tokens[0], tokens[1]]));
 
 beforeAll(async () => {
   db = new PGlite();
@@ -298,7 +308,7 @@ const reserve3 = (
       ).rows[0]!.r,
   );
 const spendTier = (user: string, usd: number, tier: string, tokens: [number, number] = [1000, 500]) =>
-  as(user, () =>
+  asServer(user, () =>
     db.query(
       "insert into public.model_runs (model_id, status, units, estimated_cost, input_tokens, output_tokens, model_tier, request_id) values ('anthropic:m', 'success', 1, $1, $2, $3, $4, gen_random_uuid())",
       [usd, tokens[0], tokens[1], tier],
@@ -363,7 +373,7 @@ describe("admin finance summary", () => {
     await expect(as(ALICE, () => db.query("select public.admin_finance_summary(now() - interval '30 days')"))).rejects.toThrow(/Administrators only/);
     await db.exec(`insert into public.admins (user_id) values ('${BOB}')`);
     await db.exec(`insert into public.subscriptions (user_id, plan, status, billing_interval, price_usd) values ('${ALICE}', 'pro', 'active', 'month', 20)`);
-    await as(ALICE, () => db.query("insert into public.model_runs (model_id, status, units, estimated_cost, entitlement) values ('anthropic:claude-sonnet-5-5', 'success', 20, 1.25, 'plan:pro')"));
+    await asServer(ALICE, () => db.query("insert into public.model_runs (model_id, status, units, estimated_cost, entitlement) values ('anthropic:claude-sonnet-5-5', 'success', 20, 1.25, 'plan:pro')"));
     const s = await as(BOB, async () => (await db.query<{ s: FinanceSummary }>("select public.admin_finance_summary(now() - interval '30 days') as s")).rows[0]!.s);
     expect(s.subscriptions).toEqual([expect.objectContaining({ plan: "pro", interval: "month", status: "active", count: 1 })]);
     expect(Number(s.cost_by_plan["plan:pro"])).toBeCloseTo(1.25);
@@ -383,7 +393,7 @@ describe("admin finance summary", () => {
     await db.exec(`insert into public.admins (user_id) values ('${BOB}')`);
     await db.exec(`insert into public.subscriptions (user_id, plan, status, billing_interval, price_usd) values ('${ALICE}', 'pro', 'active', 'month', 15)`);
     await spendTier(ALICE, 0.5, "advanced", [2000, 800]);
-    await as(ALICE, () =>
+    await asServer(ALICE, () =>
       db.query(
         "insert into public.model_runs (model_id, status, units, estimated_cost, input_tokens, output_tokens, cached_input_tokens, model_tier, entitlement) values ('openai:gpt-5.6-luna', 'success', 1, 0.25, 4000, 800, 1000, 'standard', 'plan:pro')",
       ),
@@ -417,11 +427,11 @@ describe("admin unit economics", () => {
 
   it("aggregates cost by plan, coding tasks, revenue and concentration from records only", async () => {
     await db.exec(`insert into public.admins (user_id) values ('${BOB}')`);
-    await as(ALICE, () =>
+    await asServer(ALICE, () =>
       db.query(`insert into public.model_runs (model_id, status, units, estimated_cost, entitlement, purpose) values
         ('m', 'success', 1, 0.10, 'plan:pro', 'chat'), ('m', 'error', 0, 0.02, 'plan:pro', 'code_agent'), ('sandbox', 'success', 0, 0.05, 'plan:pro', 'code_workspace')`),
     );
-    await as(BOB, () => db.query("insert into public.model_runs (model_id, status, units, estimated_cost, entitlement, purpose) values ('m', 'success', 0, 1.00, 'admin_unlimited', 'chat')"));
+    await asServer(BOB, () => db.query("insert into public.model_runs (model_id, status, units, estimated_cost, entitlement, purpose) values ('m', 'success', 0, 1.00, 'admin_unlimited', 'chat')"));
     const pid = (await as(ALICE, () => db.query<{ id: string }>("insert into public.code_projects (name) values ('p') returning id"))).rows[0]!.id;
     await as(ALICE, () =>
       db.query(
@@ -565,7 +575,7 @@ describe("holds can't be released early to dodge the budget", () => {
     await as(ALICE, () => db.query("select public.usage_finish($1, 'settled')", [rid(201)]));
     expect(await reserve3(ALICE, rid(203), { est: 1.0 })).toMatchObject({ ok: false, scope: "insufficient" });
     // Once the real run is recorded, its actual cost replaces the estimate.
-    await as(ALICE, () => db.query("insert into public.model_runs (model_id, status, units, estimated_cost, request_id) values ('anthropic:m', 'success', 1, 0.01, $1)", [rid(201)]));
+    await asServer(ALICE, () => db.query("insert into public.model_runs (model_id, status, units, estimated_cost, request_id) values ('anthropic:m', 'success', 1, 0.01, $1)", [rid(201)]));
     expect(await reserve3(ALICE, rid(204), { est: 1.0 })).toMatchObject({ ok: true });
   });
 

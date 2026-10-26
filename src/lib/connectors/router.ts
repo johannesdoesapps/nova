@@ -268,6 +268,16 @@ const BLOCK = /```orbis-action\s*\n([\s\S]*?)```/;
  * it names an allowed action with valid arguments. Returns the reply without
  * the block (and a note when the proposal was invalid).
  */
+/** A started run counts as running for this long; after that it's taken to have failed and may be retried. */
+export const ACTION_RUNNING_MS = 5 * 60_000;
+
+/** Whether a confirmed proposal must not run again: it's done, or it started recently and hasn't finished. */
+export function actionInProgressOrDone(a: Pick<ProposedAction, "status" | "startedAt">, now: number): boolean {
+  if (a.status === "done") return true;
+  const started = a.startedAt ? Date.parse(a.startedAt) : NaN;
+  return Number.isFinite(started) && now - started < ACTION_RUNNING_MS;
+}
+
 export function extractAction(text: string, allowed: ActionDef[], id: () => string): { text: string; action: ProposedAction | null } {
   const m = BLOCK.exec(text);
   if (!m) return { text, action: null };

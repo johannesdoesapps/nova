@@ -15,6 +15,8 @@ const PROTECTED_PREFIXES = ["/projects"];
  * line of defence.
  */
 export async function proxy(request: NextRequest) {
+  const slashes = backslashRedirect(request);
+  if (slashes) return slashes;
   if (request.nextUrl.pathname.startsWith("/api/")) return guardApi(request);
   const canonical = canonicalRedirect(request);
   if (canonical) return canonical;
@@ -87,6 +89,18 @@ export function canonicalRedirect(request: NextRequest, env: Record<string, stri
   if (!host.endsWith(".vercel.app") || site.host.endsWith(".vercel.app") || host === site.host) return null;
   const to = new URL(request.nextUrl.pathname + request.nextUrl.search, site.origin);
   return NextResponse.redirect(to, 308);
+}
+
+/**
+ * A path with a backslash (/pricing%5C, often a mistyped or mangled link) made the hosted server fail with a 500;
+ * send it to the same path with forward slashes instead. Only for pages: an API path with one is simply not found.
+ */
+export function backslashRedirect(request: NextRequest): NextResponse | null {
+  const raw = request.nextUrl.pathname;
+  if (!/%5c|\\/i.test(raw)) return null;
+  if (raw.startsWith("/api/")) return NextResponse.json({ error: { code: "not_found", message: "Not found." } }, { status: 404 });
+  const clean = `/${raw.replace(/%5c|\\/gi, "/").split("/").filter(Boolean).join("/")}`;
+  return NextResponse.redirect(new URL(clean + request.nextUrl.search, request.nextUrl.origin), 308);
 }
 
 /** Endpoints other sites legitimately call (verified by their own signature). */

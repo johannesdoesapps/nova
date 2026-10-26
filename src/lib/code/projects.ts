@@ -19,6 +19,8 @@ export function projectLimits(admin: boolean): { files: number; bytes: number } 
 }
 /** The port a project's app listens on for the live preview. */
 export const PREVIEW_PORT = 3000;
+/** A page path the browser check may open: no quotes, spaces, `$`, backticks or other shell syntax. */
+export const PREVIEW_PATH = /^\/[A-Za-z0-9._~\/%+@:,=-]*(\?[A-Za-z0-9._~\/%+@:,=&-]*)?(#[A-Za-z0-9._~\/%+@:,=&-]*)?$/;
 
 /** Folders that hold installed packages or build output: never copied back from the workspace computer. */
 export const IGNORED_DIRS = ["node_modules", ".git", ".next", "dist", "build", "out", "__pycache__", ".venv", "venv", ".cache", ".npm", "coverage", ".pytest_cache", "target", ".turbo", ".vercel"];

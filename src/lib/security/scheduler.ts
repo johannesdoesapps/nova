@@ -4,7 +4,7 @@ import type { Authed } from "../connectors/runtime";
 import { getPlatformSettings } from "../ai/settings";
 import { reportError } from "../observability";
 import { runCloudflareAudit, runDeploymentAudit, runGuardianAgent, type RunContext } from "./runners";
-import { currentSchedules, describeSchedule, isDue, lastRuns, type AuditEvent, type Schedule } from "./schedules";
+import { currentSchedules, describeSchedule, interleave, isDue, lastRuns, MAX_SCHEDULES, type AuditEvent, type Schedule } from "./schedules";
 import { userScopedDb } from "./scoped-db";
 
 /**
@@ -28,11 +28,14 @@ export async function runDueSchedules(service: SupabaseClient, opts: { budgetMs:
   for (const e of (defs.data ?? []) as (AuditEvent & { user_id: string })[]) (byUser.get(e.user_id) ?? byUser.set(e.user_id, { defs: [], ran: [] }).get(e.user_id)!).defs.push(e);
   for (const e of (ran.data ?? []) as (AuditEvent & { user_id: string })[]) byUser.get(e.user_id)?.ran.push(e);
 
-  const due: { userId: string; schedule: Schedule }[] = [];
+  // The schedule rows can be written by their owner directly, so the route's limit is applied again here, and due
+  // audits are taken one person at a time: nobody's schedules can crowd out everyone else's.
+  const perUser: { userId: string; schedule: Schedule }[][] = [];
   for (const [userId, ev] of byUser) {
     const last = lastRuns(ev.ran);
-    for (const s of currentSchedules(ev.defs)) if (isDue(s, last.get(s.id), now)) due.push({ userId, schedule: s });
+    perUser.push(currentSchedules(ev.defs).slice(0, MAX_SCHEDULES).filter((s) => isDue(s, last.get(s.id), now)).map((schedule) => ({ userId, schedule })));
   }
+  const due = interleave(perUser);
 
   const results: { userId: string; id: string; outcome: string; runId: string | null }[] = [];
   for (const d of due) {

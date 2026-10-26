@@ -9,6 +9,7 @@ import { limiter } from "@/lib/rate-limit";
 import { workspaceBlockCostUsd } from "./pricing";
 import { ADMIN_MAX_PROJECT_FILES, byteLength, isIgnoredPath, MAX_FILE_BYTES, validProjectPath, type ProjectFile, type ProjectSummary } from "./projects";
 import { collectFiles, seedWorkspace, syncPlan, vercelWorkspaces, workspaceName, workspacesAvailable, type WorkspaceBackend, type WorkspaceBox } from "./workspace";
+import { usageWriter } from "../supabase/admin";
 
 /**
  * Code workspace on the server: projects and files (through the user's own
@@ -227,7 +228,7 @@ async function reserve(auth: Authed, a: WorkspaceAllowance & { entitlement: Enti
 
 /** Record a block in model_runs too, so the admin finance pages see workspace costs. */
 async function recordBlock(auth: Authed, entitlement: Entitlement, blockId: string, minutes: number) {
-  const { error } = await auth.supabase.from("model_runs").insert({
+  const { error } = await usageWriter(auth.supabase).from("model_runs").insert({
     user_id: auth.user.id,
     model_id: "vercel:sandbox",
     prompt: "Code workspace time",

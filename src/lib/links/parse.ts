@@ -1,4 +1,4 @@
-import { htmlToText } from "@/lib/connectors/http";
+import { htmlToText, mainElement, MAX_HTML_CHARS, stripComments, stripElements, titleOf } from "@/lib/connectors/http";
 
 /**
  * Reading links pasted into chat: which URLs a message contains, and the readable text of a fetched page. Pure, so
@@ -50,11 +50,12 @@ export function kindOf(contentType: string | null): PageKind {
 /** Title and readable text of a fetched page. */
 export function readablePage(body: string, contentType: string | null): { title: string | null; text: string } {
   if (kindOf(contentType) === "text") return { title: null, text: clipText(body.trim()) };
-  const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(body)?.[1];
-  const description = /<meta[^>]+(?:name|property)=["'](?:og:)?description["'][^>]*content=["']([^"']*)["']/i.exec(body)?.[1];
+  if (body.length > MAX_HTML_CHARS) body = body.slice(0, MAX_HTML_CHARS);
+  const title = titleOf(body);
+  const description = /<meta[^<>]+?(?:name|property)=["'](?:og:)?description["'][^<>]*?content=["']([^"']*)["']/i.exec(body)?.[1];
   // Prefer the page's main content when it marks it; drop navigation, footers, forms and inline SVGs either way.
-  const main = /<(main|article)[\s>][\s\S]*<\/\1>/i.exec(body)?.[0];
-  const cleaned = (main && main.length > 500 ? main : body).replace(/<(nav|footer|form|svg|noscript|template)[\s\S]*?<\/\1>/gi, " ").replace(/<!--[\s\S]*?-->/g, " ");
+  const main = mainElement(body);
+  const cleaned = stripComments(stripElements(main && main.length > 500 ? main : body, ["nav", "footer", "form", "svg", "noscript", "template"]));
   let text = decodeEntities(htmlToText(cleaned));
   if (description && !text.includes(description.slice(0, 40))) text = `${decodeEntities(description)}\n\n${text}`;
   return { title: title ? decodeEntities(htmlToText(title)).slice(0, 200) || null : null, text: clipText(text) };

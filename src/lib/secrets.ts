@@ -20,8 +20,9 @@ export const SECRET_PATTERNS: { kind: string; re: RegExp }[] = [
   { kind: "Supabase key", re: /\b(?:sb_secret|sbp)_[A-Za-z0-9_-]{20,}/ },
   { kind: "bearer token", re: /\bBearer\s+[A-Za-z0-9._~+/-]{20,}/i },
   { kind: "connection string with a password", re: /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:[^\s@/]{3,}@[^\s/]+/i },
-  // "password = hunter2", "API_KEY: abc…": a credential name followed by a value (not a sentence about passwords).
-  { kind: "password or key value", re: /\b(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key)\b["']?\s*[:=]\s*["']?[^\s"']{6,}/i },
+  // "password = hunter2", "API_KEY: abc…", "DB_PASSWORD=…", "JWT_SECRET_KEY=…": a credential name, possibly inside
+  // a longer variable name, followed by a value (not a sentence about passwords).
+  { kind: "password or key value", re: /(?<![A-Za-z0-9])(?:[A-Za-z0-9]+[_-])*(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key)(?:[_-][A-Za-z0-9]+)*["']?\s*[:=]\s*["']?[^\s"']{6,}/i },
 ];
 
 /** The kinds of credential found in the text (empty when there are none). */

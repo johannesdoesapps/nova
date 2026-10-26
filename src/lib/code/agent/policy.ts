@@ -21,7 +21,10 @@ const BLOCKED: [RegExp, string][] = [
   [/:\s*\(\s*\)\s*\{[^}]*:\s*\|\s*:/, "is a fork bomb"],
   [/\bsudo\b|\bsu\s+-?\s*\w*\s*$/, "needs administrator rights"],
   [/\b(npm|pnpm|yarn)\s+publish\b|\btwine\s+upload\b|\bcargo\s+publish\b/, "publishes a package"],
-  [/\bgit\s+push\b/, "pushes to a remote (use “Push to GitHub” in Changes instead)"],
+  // Flags may be split (rm -r -f) and git may take options before push (git -C . push).
+  [/\brm\s+(-[a-z]+\s+)*-[a-z]*r[a-z]*\s+(-[a-z]+\s+)*-[a-z]*f[a-z]*\s+(-[a-z]+\s+)*(\/|~|\$HOME|\*|\.\.?)(\s|$|\/\s|\/\*)/i, "deletes the whole workspace or system"],
+  [/\brm\s+(-[a-z]+\s+)*-[a-z]*f[a-z]*\s+(-[a-z]+\s+)*-[a-z]*r[a-z]*\s+(-[a-z]+\s+)*(\/|~|\$HOME|\*|\.\.?)(\s|$|\/\s|\/\*)/i, "deletes the whole workspace or system"],
+  [/\bgit\s+((-[Cc]|--git-dir|--work-tree)\s+\S+\s+|--?[\w-]+(=\S+)?\s+)*push\b/, "pushes to a remote (use “Push to GitHub” in Changes instead)"],
   [/\b(vercel|netlify|firebase|fly|heroku|wrangler)\b.*\b(deploy|--prod|publish)\b|\bkubectl\b|\bterraform\s+apply\b/, "deploys (Orbis doesn't deploy from the agent)"],
   [/\b(curl|wget)\b[^|]*\|\s*(ba|z)?sh\b/, "pipes a download into a shell"],
   [/\bchmod\s+-R\s+[0-7]*7\s+\//, "changes permissions across the system"],
@@ -41,7 +44,9 @@ const SAFE: [RegExp, CommandPurpose][] = [
   [/^(ruff|flake8|mypy|black\s+--check)(\s|$)/, "build"],
   [/^(npm|pnpm|yarn)\s+(install|ci|i|add)(\s|$)/, "install"],
   [/^(pip3?|python3?\s+-m\s+pip)\s+install(\s|$)/, "install"],
-  [/^(ls|cat|head|tail|wc|pwd|tree|file|stat|du|echo|which|env)(\s|$)/, "inspect"],
+  // Not `env CMD`: env runs whatever follows it. Bare `env` (print the environment) is fine.
+  [/^(ls|cat|head|tail|wc|pwd|tree|file|stat|du|echo|which)(\s|$)/, "inspect"],
+  [/^env$/, "inspect"],
   [/^(grep|rg)\s/, "inspect"],
   [/^find\s(?!.*(-delete|-exec|-execdir|-ok))/, "inspect"],
   [/^git\s+(status|diff|log|show|branch|ls-files)(\s|$)/, "inspect"],
@@ -85,6 +90,10 @@ export function splitCommands(line: string): string[] | null {
 
 /** Redirecting output into files outside the project, or overwriting with >, needs a look. */
 const RISKY_REDIRECT = />\s*\/(?!dev\/null)/;
+/** Writing a file through a redirect (other than 2>&1 or to /dev/null) or a command's own output flag. */
+const WRITES_FILE = (c: string) => />/.test(c.replace(/\d?>&\d/g, "").replace(/\d?>>?\s*\/dev\/null/g, "")) || /(^|\s)--output(=|\s)/.test(c);
+/** A shell started inside the command line runs a script the safe list never sees. */
+const NESTED_SHELL = /(^|[\s;&|(])((ba|z|da)?sh|env)\s+(-\w*\s+)*-\w*c\b|\b(node|deno|bun)\s+(-e|--eval|-p|--print)\b|\bpython3?\s+-c\b/;
 
 export function classifyCommand(command: string): CommandDecision {
   const c = command.trim();
@@ -94,6 +103,8 @@ export function classifyCommand(command: string): CommandDecision {
   const parts = splitCommands(c);
   if (!parts) return { kind: "ask", purpose: "other", reason: "It uses shell features (command substitution or background jobs) that need a look." };
   if (RISKY_REDIRECT.test(c)) return { kind: "ask", purpose: "other", reason: "It writes outside the project." };
+  if (NESTED_SHELL.test(c)) return { kind: "ask", purpose: "other", reason: "It runs a script given on the command line." };
+  if (WRITES_FILE(c)) return { kind: "ask", purpose: "other", reason: "It writes a file directly, so the change skips review." };
   let purpose: CommandPurpose | null = null;
   for (const p of parts) {
     const hit = SAFE.find(([re]) => re.test(p));

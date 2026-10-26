@@ -25,8 +25,11 @@ const SLACK_ERRORS: Record<string, ConnectorError["kind"]> = {
   ratelimited: "rate_limited",
 };
 
+/** Methods that change something in Slack: never retried, so a slow answer can't post a message twice. */
+const WRITES = new Set(["chat.postMessage"]);
+
 export async function slackApi<T>(method: string, ctx: Pick<ToolContext, "token" | "signal">, params: Record<string, string>, f: Fetch): Promise<T> {
-  const res = await call(`${API}/${method}`, { method: "POST", token: ctx.token, form: params, service: "Slack", signal: ctx.signal }, f);
+  const res = await call(`${API}/${method}`, { method: "POST", token: ctx.token, form: params, service: "Slack", signal: ctx.signal, ...(WRITES.has(method) ? { retries: 0 } : {}) }, f);
   const j = (await res.json()) as { ok: boolean; error?: string } & T;
   if (!j.ok) {
     const kind = SLACK_ERRORS[j.error ?? ""] ?? "bad_request";
@@ -72,11 +75,14 @@ const slackPost: ActionDef<{ channel: string; text: string; channelName?: string
   scope: "chat:write",
   input: z.object({ channel: z.string().regex(/^[CDG][A-Z0-9]{6,20}$/, "Use a channel id (from a Slack search)."), text: z.string().trim().min(1).max(4000), channelName: z.string().max(100).optional() }),
   args: '{"channel": channel id from slack_search, "channelName"?: name for display, "text": message}',
+  // The channel id is where the message goes; the name is only what the assistant says it is (the connection
+  // can't look channels up), so the card shows both and says so.
   fields: [
-    { key: "channelName", label: "Channel" },
+    { key: "channel", label: "Channel ID (where it's posted)" },
+    { key: "channelName", label: "Channel name (as the assistant gave it; not checked)" },
     { key: "text", label: "Message", multiline: true },
   ],
-  describe: (i) => `Post this message as you in ${i.channelName ? `#${i.channelName.replace(/^#/, "")}` : `channel ${i.channel}`}. Everyone in that conversation will see it.`,
+  describe: (i) => `Post this message as you in channel ${i.channel}${i.channelName ? ` (named #${i.channelName.replace(/^#/, "")} by the assistant)` : ""}. Everyone in that conversation will see it.`,
   async run(ctx, i) {
     const r = await slackApi<{ channel?: string; ts?: string }>("chat.postMessage", ctx, { channel: i.channel, text: i.text }, ctx.fetch);
     const link = r.ts ? await slackApi<{ permalink?: string }>("chat.getPermalink", ctx, { channel: i.channel, message_ts: r.ts }, ctx.fetch).then((p) => p.permalink ?? null).catch(() => null) : null;

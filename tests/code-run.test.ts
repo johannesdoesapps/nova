@@ -148,6 +148,16 @@ describe("code_run_status (counts, in the real migrations)", () => {
       await db.exec("reset role");
     }
   }
+
+  /** As the server (service role): usage records are written by the server, never by the user's own session. */
+  async function asServer<T>(user: string, fn: () => Promise<T>): Promise<T> {
+    await db.exec(`reset role; select set_config('request.jwt.claim.sub', '${user}', false);`);
+    try {
+      return await fn();
+    } finally {
+      await db.exec("reset role");
+    }
+  }
   type S = { user_runs: number; user_in_flight: number; site_runs: number };
   const status = (user: string) => as(user, async () => (await db.query<{ s: S }>("select public.code_run_status(date_trunc('month', now())) as s")).rows[0]!.s);
   const hold = (user: string, id: string) =>
@@ -155,7 +165,7 @@ describe("code_run_status (counts, in the real migrations)", () => {
       db.query("select public.usage_reserve_v4($1, 0, 200, 1100, 0.0016, 0, null, null, false, 0, 0, date_trunc('month', now()), 4, 20, 'code_run', null, 120, null, null)", [id]),
     );
   const record = (user: string, id: string) =>
-    as(user, () =>
+    asServer(user, () =>
       db.query("insert into public.model_runs (model_id, status, units, estimated_cost, input_tokens, output_tokens, request_id, tools, purpose) values ('vercel:sandbox', 'success', 0, 0.0002, 0, 0, $1, '{code_run}', 'code_run')", [id]),
     );
 
@@ -207,7 +217,7 @@ describe("code_run_status (counts, in the real migrations)", () => {
   });
 
   it("ignores other usage and needs a signed-in caller", async () => {
-    await as(ALICE, () => db.query("insert into public.model_runs (model_id, status, units, estimated_cost) values ('anthropic:m', 'success', 1, 0.01)"));
+    await asServer(ALICE, () => db.query("insert into public.model_runs (model_id, status, units, estimated_cost) values ('anthropic:m', 'success', 1, 0.01)"));
     expect(await status(ALICE)).toEqual({ user_runs: 0, user_in_flight: 0, site_runs: 0 });
     await db.exec("select set_config('request.jwt.claim.sub', '', false)");
     await expect(db.query("select public.code_run_status(now())")).rejects.toThrow(/Sign in required/);

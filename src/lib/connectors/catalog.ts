@@ -488,4 +488,6 @@ export interface ProposedAction {
   fields: { key: string; label: string; multiline?: boolean }[];
   status: "proposed" | "done" | "failed" | "dismissed";
   result?: { summary: string; url?: string | null };
+  /** Set while the confirmed action runs, so a second confirm (double click, retry) doesn't run it again. */
+  startedAt?: string;
 }

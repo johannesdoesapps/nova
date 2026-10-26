@@ -98,13 +98,76 @@ export async function callJson<T>(url: string, o: CallOptions, f: Fetch = fetch)
   }
 }
 
+/** HTML longer than this is cut before parsing: the text is clipped far shorter anyway. */
+export const MAX_HTML_CHARS = 400_000;
+
+/**
+ * The HTML with every <tag …>…</tag> element of the given names replaced by a space, in one pass. (A
+ * backreference regex like /<(nav|form)[\s\S]*?<\/\1>/ rescans to the end for each unclosed tag: quadratic on
+ * hostile pages.) An element with no closing tag is left as it is.
+ */
+export function stripElements(html: string, tags: string[]): string {
+  const lower = html.toLowerCase();
+  const open = new RegExp(`<(${tags.join("|")})[\\s>/]`, "g");
+  const unclosed = new Set<string>(); // no closing tag left for these, so later ones can't close either
+  let out = "";
+  let at = 0;
+  for (let m = open.exec(lower); m; m = open.exec(lower)) {
+    if (unclosed.has(m[1]!)) continue;
+    const end = lower.indexOf(`</${m[1]}`, m.index + 1);
+    if (end < 0) {
+      unclosed.add(m[1]!);
+      continue;
+    }
+    const close = lower.indexOf(">", end);
+    out += `${html.slice(at, m.index)} `;
+    at = close < 0 ? html.length : close + 1;
+    open.lastIndex = at;
+  }
+  return out + html.slice(at);
+}
+
+/** The HTML without <!-- comments -->, in one pass; an unclosed comment runs to the end, as in a browser. */
+export function stripComments(html: string): string {
+  let out = "";
+  let at = 0;
+  for (let i = html.indexOf("<!--"); i >= 0; i = html.indexOf("<!--", at)) {
+    const end = html.indexOf("-->", i + 4);
+    out += `${html.slice(at, i)} `;
+    if (end < 0) return out;
+    at = end + 3;
+  }
+  return out + html.slice(at);
+}
+
+/** The text inside the first <title>, found without backtracking. */
+export function titleOf(html: string): string | null {
+  const lower = html.toLowerCase();
+  const start = lower.search(/<title[\s>]/);
+  if (start < 0) return null;
+  const open = lower.indexOf(">", start);
+  const end = lower.indexOf("</title", open);
+  return open < 0 || end < 0 ? null : html.slice(open + 1, end);
+}
+
+/** The outermost <main> or <article> element, found without backtracking; null when there's none. */
+export function mainElement(html: string): string | null {
+  const lower = html.toLowerCase();
+  for (const tag of ["main", "article"]) {
+    const start = lower.search(new RegExp(`<${tag}[\\s>]`));
+    if (start < 0) continue;
+    const end = lower.lastIndexOf(`</${tag}>`);
+    if (end > start) return html.slice(start, end + tag.length + 3);
+  }
+  return null;
+}
+
 /** Plain text from HTML (for email bodies and similar), without scripts or styles. */
 export function htmlToText(html: string): string {
-  return html
-    .replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, " ")
+  return stripElements(html.length > MAX_HTML_CHARS ? html.slice(0, MAX_HTML_CHARS) : html, ["script", "style", "head"])
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(p|div|li|tr|h\d)>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
+    .replace(/<[^<>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")

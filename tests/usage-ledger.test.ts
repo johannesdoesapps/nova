@@ -22,12 +22,22 @@ async function as<T>(user: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/** As the server (service role): usage records are written by the server, never by the user's own session. */
+async function asServer<T>(user: string, fn: () => Promise<T>): Promise<T> {
+  await db.exec(`reset role; select set_config('request.jwt.claim.sub', '${user}', false);`);
+  try {
+    return await fn();
+  } finally {
+    await db.exec("reset role");
+  }
+}
+
 type Reserve = { ok: boolean; reason?: string; scope?: string; used?: number };
 const reserve = (user: string, id: string, units: number, limits: [number, number] = [15, 100]) =>
   as(user, async () => (await db.query<{ r: Reserve }>("select public.usage_reserve($1, $2, $3, $4, 'chat', 'm') as r", [id, units, limits[0], limits[1]])).rows[0]!.r);
 const finish = (user: string, id: string, state: "settled" | "released") => as(user, () => db.query("select public.usage_finish($1, $2)", [id, state]));
 const charge = (user: string, id: string, units: number, status = "success") =>
-  as(user, () => db.query("insert into public.model_runs (model_id, status, request_id, units) values ('m', $1, $2, $3)", [status, id, units]));
+  asServer(user, () => db.query("insert into public.model_runs (model_id, status, request_id, units) values ('m', $1, $2, $3)", [status, id, units]));
 
 beforeAll(async () => {
   db = new PGlite();
@@ -103,7 +113,7 @@ describe("usage ledger", () => {
     // Negative charges are rejected.
     await expect(charge(ALICE, rid(50), -100)).rejects.toThrow(/units_nonnegative/);
     // A backdated run gets the server's time, so it can't move the window start.
-    await as(ALICE, () => db.query("insert into public.model_runs (model_id, status, units, created_at) values ('m', 'success', 1, now() - interval '4 hours 59 minutes')"));
+    await asServer(ALICE, () => db.query("insert into public.model_runs (model_id, status, units, created_at) values ('m', 'success', 1, now() - interval '4 hours 59 minutes')"));
     const r = await db.query<{ age: number }>("select extract(epoch from now() - created_at)::int as age from public.model_runs");
     expect(r.rows[0]!.age).toBeLessThan(5);
     // Holds can't be written or deleted directly, and runs can't be deleted.
@@ -129,7 +139,7 @@ describe("usage ledger", () => {
   });
 
   it("shows request diagnostics to administrators only, without prompts", async () => {
-    await as(ALICE, () => db.query("insert into public.model_runs (model_id, status, units, prompt, routing_reason, request_id) values ('m', 'success', 1, 'secret prompt', 'Auto chose m', $1)", [rid(70)]));
+    await asServer(ALICE, () => db.query("insert into public.model_runs (model_id, status, units, prompt, routing_reason, request_id) values ('m', 'success', 1, 'secret prompt', 'Auto chose m', $1)", [rid(70)]));
     await expect(as(BOB, () => db.query("select * from public.admin_request_log_v2(10, null)"))).rejects.toThrow(/Administrators only/);
     await db.exec(`insert into public.admins (user_id) values ('${BOB}')`);
     const rows = (await as(BOB, () => db.query<Record<string, unknown>>("select * from public.admin_request_log_v2(10, null)"))).rows;
@@ -151,7 +161,7 @@ const reserve5 = (user: string, id: string, units: number, o: { window?: number;
   );
 // Runs are stamped with the server's time on insert, so an older run is moved back afterwards, as the server.
 const chargeAt = async (user: string, id: string, units: number, daysAgo: number, tier = "standard") => {
-  await as(user, () => db.query("insert into public.model_runs (model_id, status, request_id, units, model_tier) values ('m', 'success', $1, $2, $3)", [id, units, tier]));
+  await asServer(user, () => db.query("insert into public.model_runs (model_id, status, request_id, units, model_tier) values ('m', 'success', $1, $2, $3)", [id, units, tier]));
   if (daysAgo) await db.query(`update public.model_runs set created_at = now() - interval '${daysAgo} days' where request_id = $1`, [id]);
 };
 

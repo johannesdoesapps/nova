@@ -6,6 +6,7 @@ import { ApiError } from "@/lib/http";
 import { reportError } from "@/lib/observability";
 import type { CodeLanguage, CodeRunResult } from "./languages";
 import { codeRunCostUsd } from "./pricing";
+import { usageWriter } from "../supabase/admin";
 
 /**
  * Metering for code runs. A run is reserved like an AI request (so duplicates
@@ -75,7 +76,7 @@ export async function checkRunAllowance(auth: Authed, requestId: string): Promis
 /** Record a finished run: its sandbox cost, settled against the request's hold. No code or output is stored. */
 export async function recordCodeRun(auth: Authed, requestId: string, lang: CodeLanguage, run: CodeRunResult, reservedUsd: number): Promise<void> {
   const entitlement = await entitlementFor(auth);
-  const { error } = await auth.supabase.from("model_runs").insert({
+  const { error } = await usageWriter(auth.supabase).from("model_runs").insert({
     user_id: auth.user.id,
     model_id: "vercel:sandbox",
     prompt: `${lang.label} code run`,

@@ -15,3 +15,11 @@ export function serviceSupabase(): SupabaseClient | null {
   client ??= createClient(publicEnv.supabaseUrl, key, { auth: { persistSession: false, autoRefreshToken: false } });
   return client;
 }
+
+/**
+ * Where usage records (model_runs) are written: the service role, because people mustn't be able to write their own
+ * cost records (they count toward the site-wide cap). Without one (local development) the person's own session.
+ */
+export function usageWriter<T>(own: T): SupabaseClient | T {
+  return serviceSupabase() ?? own;
+}

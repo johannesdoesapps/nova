@@ -496,6 +496,26 @@ describe("building a website", () => {
     // The stored list of recent steps stays small however big the files are.
     expect(JSON.stringify(run(id).recent).length).toBeLessThan(400);
   });
+
+  it("never opens the browser check with shell syntax in the path, or with commands turned off (ORB-003)", async () => {
+    files = new Map([["index.html", "<h1>Hello</h1>\n"]]);
+    preview.problems = [];
+    const id = newRun({ status: "running", request: "Check the page", options: { approvePlans: false, reviewEdits: false, commands: "safe", modelId: null, web: true } });
+    script.turns.push(
+      turn("Starting.", call("start_preview", { command: "python3 -m http.server 3000" })),
+      turn("Checking.", call("check_preview", { path: "/$(rm${IFS}-rf${IFS}/vercel/sandbox/src)" })),
+      turn("Checking.", call("check_preview", { path: "/`id`" })),
+      turn("Done.", call("finish", { summary: "Checked." })),
+    );
+    const before = preview.checks.length;
+    await stepRun(req(), auth, id);
+    expect(preview.checks.slice(before)).toEqual([]);
+
+    const off = newRun({ status: "running", request: "Check the page", options: { approvePlans: false, reviewEdits: false, commands: "off", modelId: null, web: true } });
+    script.turns.push(turn("Checking.", call("check_preview", {})), turn("Done.", call("finish", { summary: "Couldn't check." })));
+    await stepRun(req(), auth, off);
+    expect(preview.checks.slice(before)).toEqual([]);
+  });
 });
 
 describe("builds that wait for the computer", () => {

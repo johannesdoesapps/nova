@@ -720,6 +720,14 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
         break;
       }
       case "check_preview": {
+        if (!state.planApproved) {
+          result(id, tool, false, "Not allowed yet: propose your plan and wait for the user's approval before running anything.");
+          break;
+        }
+        if (state.commands === "off") {
+          result(id, tool, false, "Commands are turned off for this run, so the preview can't be checked.");
+          break;
+        }
         if (checked) {
           result(id, tool, false, "Not run: one browser check per step. Check again in the next step.");
           break;

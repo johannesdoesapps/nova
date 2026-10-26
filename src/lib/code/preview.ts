@@ -1,5 +1,5 @@
 import "server-only";
-import { PREVIEW_PORT } from "./projects";
+import { PREVIEW_PATH, PREVIEW_PORT } from "./projects";
 import { killJob, readJob, startJob, WS_DIRS, type WorkspaceBox, type WsDirs } from "./workspace";
 import { CHECK_SCRIPT, CHECK_TOOLS, type PreviewCheckRaw } from "./preview-check";
 
@@ -147,6 +147,8 @@ const TOOLS_DIR = "/tmp/orbis-tools";
  * computer, and run the check script against the running preview.
  */
 export async function runPreviewCheck(box: WorkspaceBox, path: string, d: WsDirs = WS_DIRS, port = PREVIEW_PORT, opts: { budgetMs?: number } = {}): Promise<PreviewCheckRaw> {
+  // The path ends up on a shell command line, so anything but plain URL characters is refused here too.
+  if (!PREVIEW_PATH.test(path)) return { url: path.slice(0, 300), viewports: [], links: [], error: "That isn't a page path the browser check can open. Use a path like / or /about.html." };
   // The browser's setup (first check on a computer) and the check itself share the time the caller has left.
   const budget = Math.floor((opts.budgetMs ?? 240_000) / 1000);
   if (budget < 30) return { url: path, viewports: [], links: [], error: "There wasn't enough time left in this step for the browser check. Run it again in the next step." };
@@ -155,7 +157,7 @@ export async function runPreviewCheck(box: WorkspaceBox, path: string, d: WsDirs
   const script = `${d.jobs}/check.mjs`;
   await box.writeFiles([{ path: script, content: CHECK_SCRIPT }]);
   const install = `mkdir -p ${TOOLS_DIR} && cd ${TOOLS_DIR} && (test -f node_modules/puppeteer-core/package.json || timeout ${installS} npm i --no-audit --no-fund --no-save --prefix ${TOOLS_DIR} ${CHECK_TOOLS.join(" ")} > ${TOOLS_DIR}/install.log 2>&1 || (tail -c 1500 ${TOOLS_DIR}/install.log; exit 7))`;
-  const run = `cd /tmp && AWS_EXECUTION_ENV=AWS_Lambda_nodejs22.x timeout ${runS} node ${script} ${JSON.stringify(`http://127.0.0.1:${port}`)} ${JSON.stringify(path)} ${TOOLS_DIR}/node_modules/`;
+  const run = `cd /tmp && AWS_EXECUTION_ENV=AWS_Lambda_nodejs22.x timeout ${runS} node ${script} 'http://127.0.0.1:${port}' '${path}' ${TOOLS_DIR}/node_modules/`;
   const raw = await sh(box, `${install} && ${run} || echo '{"error":"The browser check couldn\\u0027t run (exit '$?')."}'`, d);
   const start = raw.indexOf('{"');
   try {

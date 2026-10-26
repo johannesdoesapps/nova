@@ -21,6 +21,13 @@ export type Schedule = ScheduleInput & { id: string; createdAt: string; updatedA
 
 export const MAX_SCHEDULES = 10;
 
+/** Round-robin over the lists: the first of each, then the second of each, and so on. */
+export function interleave<T>(lists: T[][]): T[] {
+  const out: T[] = [];
+  for (let i = 0; lists.some((l) => i < l.length); i++) for (const l of lists) if (i < l.length) out.push(l[i]!);
+  return out;
+}
+
 export interface AuditEvent {
   action: string;
   detail: Record<string, unknown> | null;

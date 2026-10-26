@@ -143,10 +143,10 @@ export function SentinelForm({
           <p className="mt-1">Do one of these, then press Check. (Administrators can scan this Orbis site’s own domain without this step.)</p>
           <ol className="mt-2 list-decimal space-y-1 pl-5">
             <li>
-              Publish a file at <code className="rounded bg-s-hover px-1">https://{selected.hostname}{VERIFY_PATH}</code> containing the token, or
+              Publish a file at <code className="rounded bg-s-hover px-1">https://{selected.hostname}{VERIFY_PATH}</code> with the token on a line of its own, or
             </li>
             <li>
-              Add a DNS TXT record on <code className="rounded bg-s-hover px-1">_orbis-verify.{selected.hostname}</code> with the token.
+              Add a DNS TXT record on <code className="rounded bg-s-hover px-1">_orbis-verify.{selected.hostname}</code> whose value is exactly the token.
             </li>
           </ol>
           <div className="mt-3 flex items-center gap-2">

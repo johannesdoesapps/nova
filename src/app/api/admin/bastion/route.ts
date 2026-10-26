@@ -6,6 +6,8 @@ import { getAuth } from "@/lib/auth";
 import { CAPABILITIES, DEFAULT_CONTROLS, describeChange, HISTORY_LIMIT, parseControls, RISKS, snapshotOf, validateControls, type BastionControls, type Capability } from "@/lib/bastion/policy";
 import { planTiersSchema } from "@/lib/bastion/customer/tiers";
 import { enforce, invalidateControls } from "@/lib/bastion/server";
+import { bastionMac } from "@/lib/bastion/controls";
+import { integrityOf, type AuditRow } from "@/lib/bastion/customer/records";
 import { summarise, type DecisionEvent } from "@/lib/bastion/view";
 import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
 import { serviceSupabase } from "@/lib/supabase/admin";
@@ -34,6 +36,15 @@ async function stored(auth: Awaited<ReturnType<typeof requireAdmin>>) {
   return { raw, controls, version: controls?.version ?? brokenVersion };
 }
 
+/**
+ * Only decisions Orbis itself recorded: users can add rows to their own audit trail, so an unsigned row could be
+ * used to flood this view. (Without a signing key nothing is signed, and every row is shown.)
+ */
+function signedOnly<T extends AuditRow>(rows: T[]): T[] {
+  if (!bastionMac("probe")) return rows;
+  return rows.filter((r) => !!r.user_id && integrityOf(bastionMac, r.user_id, r) === "signed");
+}
+
 /** GET /api/admin/bastion — the stored controls with their history, and decisions across all users (administrators only). */
 export async function GET() {
   try {
@@ -42,7 +53,7 @@ export async function GET() {
     const svc = serviceSupabase();
     const { data } = await (svc ?? auth.supabase).from("security_audit").select("user_id,action,detail,created_at").like("action", "bastion.%").order("created_at", { ascending: false }).limit(2000);
     return NextResponse.json(
-      { controls, valid: !!controls, version, summary: summarise((data ?? []) as DecisionEvent[], 100), scope: svc ? "all_users" : "own" },
+      { controls, valid: !!controls, version, summary: summarise(signedOnly((data ?? []) as (DecisionEvent & AuditRow)[]), 100), scope: svc ? "all_users" : "own" },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (err) {

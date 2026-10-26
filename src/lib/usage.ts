@@ -17,6 +17,7 @@ import { trackEvent } from "./analytics/server";
 import { alertOwner } from "./alerts";
 import { emailConfigured, sendCustomerEmail, type CustomerEmailKind } from "./email";
 import { maybeTopUp } from "./billing/topup";
+import { usageWriter } from "./supabase/admin";
 
 /**
  * Usage accounting. Policy (see docs/USAGE.md):
@@ -450,7 +451,7 @@ async function recordRunUnsafe(auth: AuthContext & { mode: "authenticated" }, ru
   const tokenCost = estimateCost(run.model, run.usage);
   const searchCost = searches * (entitlement?.billing.webSearchCostUsd ?? 0.01);
   const runCost = tokenCost === null ? null : tokenCost + searchCost;
-  const { error } = await auth.supabase.from("model_runs").insert({
+  const { error } = await usageWriter(auth.supabase).from("model_runs").insert({
     user_id: auth.user.id,
     conversation_id: run.conversationId ?? null,
     model_id: run.model.id,
