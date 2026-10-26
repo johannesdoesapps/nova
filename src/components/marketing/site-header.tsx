@@ -1,37 +1,18 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import { Menu, X } from "lucide-react";
 import { Logo } from "@/components/layout/logo";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
+import { StaggeredMenu } from "@/components/ui/staggered-menu";
 import { cn } from "@/lib/utils";
 import { BUILD_HREF, NAV, SIGN_IN_HREF } from "./links";
 import { TrackedLink } from "./tracked-link";
 
+/** The phone and tablet menu's sliding layers: the Orbis loop's violet and magenta. */
+const MENU_LAYERS = ["#7c3aed", "#d946ef"];
+
 export function SiteHeader() {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-  const [openedAt, setOpenedAt] = useState(pathname);
-  const button = useRef<HTMLButtonElement>(null);
-  // Close the mobile menu after navigating.
-  if (open && openedAt !== pathname) {
-    setOpen(false);
-    setOpenedAt(pathname);
-  }
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setOpen(false);
-        button.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
-
   const active = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
   return (
@@ -68,41 +49,31 @@ export function SiteHeader() {
               Start building free
             </TrackedLink>
           </div>
-          <button
-            ref={button}
-            type="button"
-            className="inline-grid h-10 w-10 place-items-center rounded-lg text-fg hover:bg-panel-2 lg:hidden"
-            aria-expanded={open}
-            aria-controls="mobile-nav"
-            aria-label={open ? "Close menu" : "Open menu"}
-            onClick={() => {
-              setOpen(!open);
-              setOpenedAt(pathname);
-            }}
-          >
-            {open ? <X className="h-5 w-5" aria-hidden /> : <Menu className="h-5 w-5" aria-hidden />}
-          </button>
+          <div className="lg:hidden">
+            <StaggeredMenu
+              className="lg:hidden"
+              portalContainer="#marketing-root"
+              position="right"
+              colors={MENU_LAYERS}
+              accentColor="var(--accent-2)"
+              items={NAV.map((n) => ({ label: n.label, link: n.href }))}
+              activeHref={NAV.find((n) => active(n.href))?.href}
+              displaySocials={false}
+              footer={
+                <div className="grid gap-2">
+                  <TrackedLink href={BUILD_HREF} event="landing_cta" where="header-menu" className="inline-flex h-11 items-center justify-center rounded-full bg-accent text-sm font-medium text-accent-fg">
+                    Start building free
+                  </TrackedLink>
+                  <Link href={SIGN_IN_HREF} className="inline-flex h-11 items-center justify-center rounded-full border border-border-strong text-sm text-fg">
+                    Sign in
+                  </Link>
+                </div>
+              }
+              toggleClassName="text-fg hover:bg-panel-2"
+            />
+          </div>
         </div>
       </div>
-      <nav id="mobile-nav" aria-label="Main" hidden={!open} className="border-t border-border px-5 pb-5 lg:hidden">
-        <ul className="py-2">
-          {NAV.map((n) => (
-            <li key={n.href}>
-              <Link href={n.href} aria-current={active(n.href) ? "page" : undefined} className="block rounded-lg px-2 py-3 text-base text-fg hover:bg-panel-2">
-                {n.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
-        <div className="grid gap-2">
-          <TrackedLink href={BUILD_HREF} event="landing_cta" where="header-menu" className="inline-flex h-11 items-center justify-center rounded-full bg-accent text-sm font-medium text-accent-fg">
-            Start building free
-          </TrackedLink>
-          <Link href={SIGN_IN_HREF} className="inline-flex h-11 items-center justify-center rounded-full border border-border-strong text-sm text-fg">
-            Sign in
-          </Link>
-        </div>
-      </nav>
     </header>
   );
 }

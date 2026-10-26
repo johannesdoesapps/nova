@@ -1,0 +1,272 @@
+/* StaggeredMenu (React Bits), adapted to Orbis's theme tokens. See staggered-menu.tsx. */
+
+.staggered-menu-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  z-index: 30;
+  pointer-events: none;
+}
+
+/* Below the sticky site header (z-index 40), so the logo and toggle stay visible on top. */
+.staggered-menu-wrapper.fixed-wrapper {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.sm-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 2.5rem;
+  padding: 0 0.6rem;
+  background: transparent;
+  border: none;
+  border-radius: 0.6rem;
+  cursor: pointer;
+  color: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1;
+  overflow: visible;
+}
+
+.sm-toggle:focus-visible {
+  outline: 2px solid var(--sm-focus, currentColor);
+  outline-offset: 2px;
+}
+
+.sm-toggle-textWrap {
+  position: relative;
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.sm-toggle-textInner {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+
+.sm-toggle-line {
+  display: block;
+  height: 1em;
+  line-height: 1;
+}
+
+.sm-icon {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  will-change: transform;
+}
+
+.sm-icon-line {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  height: 2px;
+  background: currentColor;
+  border-radius: 2px;
+  transform: translate(-50%, -50%);
+  will-change: transform;
+}
+
+.staggered-menu-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: clamp(260px, 38vw, 420px);
+  height: 100%;
+  /* Glass: the page's own background, slightly see-through, over a blur. */
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  color: var(--fg);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  display: flex;
+  flex-direction: column;
+  padding: calc(4rem + env(safe-area-inset-top) + 2rem) 1.5rem calc(1.5rem + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  z-index: 10;
+  pointer-events: auto;
+  opacity: 0;
+}
+
+[data-position="left"] .staggered-menu-panel {
+  right: auto;
+  left: 0;
+}
+
+.sm-prelayers {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: clamp(260px, 38vw, 420px);
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0;
+}
+
+[data-position="left"] .sm-prelayers {
+  right: auto;
+  left: 0;
+}
+
+.sm-prelayer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 100%;
+  transform: translateX(0);
+  opacity: 0;
+}
+
+.sm-panel-inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.sm-panel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sm-panel-itemWrap {
+  position: relative;
+  overflow: hidden;
+  line-height: 1;
+}
+
+.sm-panel-item {
+  position: relative;
+  color: var(--fg);
+  font-weight: 600;
+  font-size: clamp(2.25rem, 10vw, 3.5rem);
+  cursor: pointer;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+  transition: color 0.25s;
+  display: inline-block;
+  text-decoration: none;
+  padding-right: 1.4em;
+  border-radius: 0.4rem;
+}
+
+.sm-panel-item:hover,
+.sm-panel-item[aria-current="page"] {
+  color: var(--sm-accent, #5227ff);
+}
+
+.sm-panel-item:focus-visible {
+  outline: 2px solid var(--sm-accent, #5227ff);
+  outline-offset: 4px;
+}
+
+.sm-panel-itemLabel {
+  display: inline-block;
+  will-change: transform;
+  transform-origin: 50% 100%;
+}
+
+.sm-panel-list[data-numbering] {
+  counter-reset: smItem;
+}
+
+.sm-panel-list[data-numbering] .sm-panel-item::after {
+  counter-increment: smItem;
+  content: counter(smItem, decimal-leading-zero);
+  position: absolute;
+  top: 0.1em;
+  right: 0.2em;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--sm-accent, #5227ff);
+  letter-spacing: 0;
+  pointer-events: none;
+  user-select: none;
+  opacity: var(--sm-num-opacity, 0);
+}
+
+.sm-socials,
+.sm-footer {
+  margin-top: auto;
+  padding-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sm-socials + .sm-footer {
+  margin-top: 0;
+}
+
+.sm-socials-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--sm-accent, #5227ff);
+}
+
+.sm-socials-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.sm-socials-link {
+  font-size: 1.2rem;
+  font-weight: 500;
+  color: var(--fg);
+  text-decoration: none;
+  position: relative;
+  padding: 2px 0;
+  display: inline-block;
+  transition: color 0.3s ease, opacity 0.3s ease;
+}
+
+.sm-socials-link:hover {
+  color: var(--sm-accent, #5227ff);
+}
+
+.sm-socials-link:focus-visible {
+  outline: 2px solid var(--sm-accent, #5227ff);
+  outline-offset: 3px;
+}
+
+.sm-socials-list:hover .sm-socials-link:not(:hover),
+.sm-socials-list:focus-within .sm-socials-link:not(:focus-visible) {
+  opacity: 0.35;
+}
+
+@media (max-width: 1024px) {
+  .staggered-menu-panel,
+  .sm-prelayers {
+    width: 100%;
+    left: 0;
+    right: 0;
+  }
+}

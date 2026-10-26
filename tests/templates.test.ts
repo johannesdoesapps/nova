@@ -156,6 +156,7 @@ describe("filling in instructions", () => {
       "gooey-menu": "npm install liquid-gooey",
       "pricing-section": "export function PricingSection({",
       "theme-toggle": "export const AnimatedThemeToggler = ({ className }: AnimatedThemeTogglerProps) => {",
+      "staggered-menu": "export const StaggeredMenu = ({",
     };
     for (const e of WEBSITE_EFFECTS) {
       const md = readFileSync(`public${effectUrl(e.id)}`, "utf8");

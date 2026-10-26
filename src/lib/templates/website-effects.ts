@@ -11,6 +11,7 @@ export const WEBSITE_EFFECTS = [
   { id: "gooey-menu", name: "Gooey menu", summary: "Round buttons that melt out of one another when a menu opens." },
   { id: "pricing-section", name: "Animated pricing section", summary: "Pricing cards with a Monthly/Annual switch, animated prices and confetti." },
   { id: "theme-toggle", name: "Animated light/dark switch", summary: "A sun/moon button that reveals the new theme as a growing circle." },
+  { id: "staggered-menu", name: "Staggered menu", summary: "A full-screen menu where coloured layers slide in, then big links rise into place." },
 ] as const;
 
 export type WebsiteEffect = (typeof WEBSITE_EFFECTS)[number];
