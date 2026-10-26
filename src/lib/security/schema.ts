@@ -14,6 +14,15 @@ const filePath = z
 
 export const targetCreate = z.object({ host: z.string().trim().min(3).max(300) });
 
+/** POST /api/security/sitescan: an SSL/TLS and web-configuration scan of a verified target. */
+export const siteScanRequest = z.object({
+  targetId: z.uuid(),
+  scope: z.enum(["passive", "active"]).default("passive"),
+  authorized: z.literal(true, { error: "Confirm you own or are authorised to test this website." }),
+  /** Scan again even if a scan of the same site and scope finished in the last 15 minutes. */
+  force: z.boolean().default(false),
+});
+
 export const sentinelRequest = z.object({
   targetId: z.uuid(),
   scope: z.enum(["passive", "active"]).default("passive"),

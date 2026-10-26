@@ -38,6 +38,7 @@ export const AGENT_TINT: Record<string, string> = {
   coordinated: "from-s-accent/25 to-transparent text-s-ink",
   aegis: "from-emerald-500/25 to-teal-400/5 text-emerald-600 dark:text-emerald-300",
   bastion: "from-rose-500/25 to-red-400/5 text-rose-600 dark:text-rose-300",
+  scanner: "from-sky-500/25 to-indigo-400/5 text-sky-600 dark:text-sky-300",
   // The Security Team's agents
   auditor: "from-sky-500/25 to-cyan-400/5 text-sky-600 dark:text-sky-300",
   verification: "from-emerald-500/25 to-green-400/5 text-emerald-600 dark:text-emerald-300",

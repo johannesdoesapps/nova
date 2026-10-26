@@ -53,10 +53,19 @@ interface Overview {
 const TABS = ["overview", "agents", "findings", "history", "schedules", "setup"] as const;
 type Tab = (typeof TABS)[number];
 
-const RUN_ACTION: Record<string, string> = { audit: "code audit", pr_audit: "pull-request audit", scan: "website scan", deployment: "Vercel deployment audit", cloudflare: "Cloudflare review", investigate: "log investigation" };
+const RUN_ACTION: Record<string, string> = { audit: "code audit", pr_audit: "pull-request audit", scan: "website scan", site_scan: "SSL/TLS & website scan", deployment: "Vercel deployment audit", cloudflare: "Cloudflare review", investigate: "log investigation" };
 
 /** Aegis (coordination) and Bastion (protection): the layers above the engines, each with its own workspace. */
 const LAYERS = [
+  {
+    id: "scanner",
+    icon: "scan",
+    name: "Website scanner",
+    role: "SSL/TLS and website security audit",
+    href: "/agents/security/scanner",
+    action: "Scan a website",
+    description: "Protocols, cipher suites, the certificate chain and expiry, security headers, cookies, mixed content and DNS (CAA, DNSSEC) for a site you own, graded with evidence and fixes.",
+  },
   {
     id: "aegis",
     icon: "network",
@@ -317,7 +326,7 @@ export function SecurityView() {
                     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                       {active.map((a) => {
                         const latest = data?.latest[a.id];
-                        const workspace = a.id === "threat_hunter" ? "/agents/security/hunter" : a.id === "code_guardian" ? "/agents/security/guardian" : null;
+                        const workspace = a.id === "threat_hunter" ? "/agents/security/hunter" : a.id === "code_guardian" ? "/agents/security/guardian" : a.id === "sentinel" ? "/agents/security/scanner" : null;
                         return (
                           <article key={a.id} className="glass relative flex flex-col rounded-[22px] p-5 transition duration-300 hover:border-s-line-strong hover:shadow-[var(--s-shadow)]">
                             <div className="flex items-start gap-3.5">

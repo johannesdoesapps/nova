@@ -385,3 +385,32 @@ export async function auditLog(db: ServerSupabase, userId: string, limit = 100) 
   const { data } = await db.from("security_audit").select("id,action,run_id,finding_id,detail,created_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(limit);
   return data ?? [];
 }
+
+/* ---------------------------------------------------------------- website scans */
+
+/** Website scans are Sentinel runs with action "site_scan"; their report lives in stats.report. */
+export async function listSiteScans(db: ServerSupabase, userId: string, opts: { host?: string; limit?: number } = {}): Promise<RunRow[]> {
+  // Only the small overview from stats (the full report and the Markdown summary are tens of KB per row).
+  let q = db.from("security_runs").select("id,parent_id,agent,action,status,asset,scope,model_id,overview:stats->overview,error,started_at,finished_at").eq("user_id", userId).eq("agent", "sentinel").eq("action", "site_scan");
+  if (opts.host) q = q.eq("asset", opts.host);
+  const { data, error } = await q.order("started_at", { ascending: false }).limit(opts.limit ?? 50);
+  if (error) fail("scan history");
+  return ((data ?? []) as (Omit<RunRow, "stats" | "tools" | "summary"> & { overview: Record<string, unknown> | null })[]).map((r) => fixStale({ ...r, tools: [], summary: null, stats: { overview: r.overview } }));
+}
+
+/** The newest completed scan of a host and scope since `sinceMs` ago (the scan cache). */
+export async function recentSiteScan(db: ServerSupabase, userId: string, host: string, scope: string, sinceMs: number): Promise<RunRow | null> {
+  const { data } = await db
+    .from("security_runs")
+    .select(RUN_COLS)
+    .eq("user_id", userId)
+    .eq("agent", "sentinel")
+    .eq("action", "site_scan")
+    .eq("asset", host)
+    .eq("scope", scope)
+    .eq("status", "completed")
+    .gte("finished_at", new Date(Date.now() - sinceMs).toISOString())
+    .order("finished_at", { ascending: false })
+    .limit(1);
+  return ((data ?? []) as RunRow[])[0] ?? null;
+}

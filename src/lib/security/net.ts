@@ -16,7 +16,7 @@ export { isPublicAddress, normalizeHost } from "./net-pure";
 
 export class BlockedAddressError extends Error {}
 
-const guardedLookup: LookupFunction = (hostname, options, callback) => {
+export const guardedLookup: LookupFunction = (hostname, options, callback) => {
   dnsLookup(hostname, { ...options, all: true }, (err, addresses) => {
     if (err) return callback(err, "", 4);
     const list = addresses as { address: string; family: number }[];
@@ -35,11 +35,24 @@ export interface SafeResponse {
   truncated: boolean;
 }
 
-/** A single GET/HEAD with no redirect following. */
-export function safeRequest(
-  url: string,
-  opts: { method?: "GET" | "HEAD"; headers?: Record<string, string>; timeoutMs?: number; maxBytes?: number; signal?: AbortSignal; lookup?: LookupFunction } = {},
-): Promise<SafeResponse> {
+export interface SafeRequestOptions {
+  /** Read-only methods only. OPTIONS and TRACE are used by the website scanner's server-configuration checks. */
+  method?: "GET" | "HEAD" | "OPTIONS" | "TRACE";
+  headers?: Record<string, string>;
+  timeoutMs?: number;
+  maxBytes?: number;
+  signal?: AbortSignal;
+  lookup?: LookupFunction;
+  /**
+   * Website scanner: read a site whose certificate is invalid (the scanner reports the certificate separately and sends
+   * no credentials), and, in its local test lab only, trust the lab's CA / connect to the lab server's port.
+   */
+  tls?: { rejectUnauthorized?: boolean; ca?: string[] };
+  connectPort?: number;
+}
+
+/** A single read-only request with no redirect following. */
+export function safeRequest(url: string, opts: SafeRequestOptions = {}): Promise<SafeResponse> {
   const u = new URL(url);
   if (u.protocol !== "https:" && u.protocol !== "http:") return Promise.reject(new Error("Unsupported protocol"));
   if (u.port && u.port !== "80" && u.port !== "443") return Promise.reject(new Error("Unsupported port"));
@@ -57,6 +70,8 @@ export function safeRequest(
         lookup: opts.lookup ?? guardedLookup,
         timeout: opts.timeoutMs ?? 8000,
         signal: opts.signal,
+        ...(opts.connectPort ? { port: opts.connectPort } : {}),
+        ...(opts.tls && u.protocol === "https:" ? { rejectUnauthorized: opts.tls.rejectUnauthorized ?? true, ...(opts.tls.ca ? { ca: opts.tls.ca } : {}), agent: false } : {}),
       },
       (res) => {
         const chunks: Buffer[] = [];

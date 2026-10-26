@@ -29,15 +29,23 @@ export function siteHosts(): string[] {
 
 export type Proof = { ok: true; method: "http_file" | "dns_txt" | "site_admin" } | { ok: false; reason: string };
 
-export async function proveOwnership(target: Pick<TargetRow, "hostname" | "token">, auth: AuthContext, signal?: AbortSignal): Promise<Proof> {
+export async function proveOwnership(
+  target: Pick<TargetRow, "hostname" | "token">,
+  auth: AuthContext,
+  signal?: AbortSignal,
+  /** The website scanner's local test lab passes its own transport; everything else uses the guarded defaults. */
+  io: { request?: typeof safeRequest; txt?: typeof txtRecords } = {},
+): Promise<Proof> {
   if (siteHosts().includes(target.hostname) && (await isAdmin(auth))) return { ok: true, method: "site_admin" };
+  const request = io.request ?? safeRequest;
+  const txt = io.txt ?? txtRecords;
   try {
-    const r = await safeRequest(`https://${target.hostname}${VERIFY_PATH}`, { signal, maxBytes: 4096, timeoutMs: 6000 });
+    const r = await request(`https://${target.hostname}${VERIFY_PATH}`, { signal, maxBytes: 4096, timeoutMs: 6000 });
     if (r.status === 200 && r.body.includes(target.token)) return { ok: true, method: "http_file" };
   } catch {
     /* try DNS next */
   }
-  const records = [...(await txtRecords(`_orbis-verify.${target.hostname}`)), ...(await txtRecords(target.hostname))];
+  const records = [...(await txt(`_orbis-verify.${target.hostname}`)), ...(await txt(target.hostname))];
   if (records.some((r) => r.includes(target.token))) return { ok: true, method: "dns_txt" };
   return {
     ok: false,

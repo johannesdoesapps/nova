@@ -42,6 +42,11 @@ import { SEVERITY_ORDER, type FindingDraft, type SecurityAgentId, type ToolRun }
 import { alertText, alertWorthy, currentAlertSettings, type AuditEvent } from "./schedules";
 import { sendSecurityEmail } from "../email";
 import { publicEnv } from "../env";
+import { runSiteScan, ScanAbort, STEP_LABEL, type ScanStep } from "./sitescan/engine";
+import { scanNetFor } from "./sitescan/scan-net";
+import { clearedRules, counts, findingsFrom, readStored, toMarkdown } from "./sitescan/report";
+import { packReport, unpackReport } from "./sitescan/store";
+import type { ScanReport } from "./sitescan/types";
 
 export type Send = (event: Record<string, unknown>) => void;
 
@@ -246,6 +251,96 @@ export async function runSentinelAgent(ctx: RunContext, input: { targetId: strin
     await store.audit(db, user.id, "scan.finished", { runId, detail: base });
     ctx.send({ type: "done", agent: "sentinel", runId });
     return { runId, findings: result.findings };
+  });
+}
+
+/* ------------------------------------------------- Website security scan */
+
+/** A completed scan of the same host and scope this recent is returned instead of scanning again (unless forced). */
+export const SITE_SCAN_CACHE_MS = 15 * 60_000;
+
+/** The small per-scan summary kept beside the report (scan history reads only this). */
+export function scanOverview(r: ScanReport) {
+  return {
+    host: r.host,
+    scope: r.scope,
+    grade: r.grade?.letter ?? null,
+    score: r.grade?.score ?? null,
+    gradeNote: r.gradeNote,
+    counts: counts(r.checks),
+    certDaysLeft: r.certificate?.daysLeft ?? null,
+    certValidTo: r.certificate?.validTo ?? null,
+    finishedAt: r.finishedAt,
+  };
+}
+
+/**
+ * The Orbis website security scan (SSL/TLS, certificate, HTTP headers, cookies, content, DNS and, in active scope,
+ * well-known exposed files) of a verified target. Ownership is re-proved by the server first; every request is
+ * read-only and bounded (see sitescan/engine.ts).
+ */
+export async function runWebsiteScan(ctx: RunContext, input: { targetId: string; scope: SentinelScope; force?: boolean }) {
+  const { supabase: db, user } = ctx.auth;
+  const target = await store.getTarget(db, user.id, input.targetId);
+  const host = normalizeHost(target.hostname);
+  if (!input.force) {
+    const recent = await store.recentSiteScan(db, user.id, host, input.scope, SITE_SCAN_CACHE_MS);
+    const report = recent ? unpackReport(recent.stats, recent.id) : null;
+    if (recent && report) {
+      ctx.send({ type: "cached", agent: "sentinel", runId: recent.id, finishedAt: recent.finished_at });
+      ctx.send({ type: "scan_report", report });
+      ctx.send({ type: "done", agent: "sentinel", runId: recent.id });
+      return { runId: recent.id, cached: true };
+    }
+  }
+  const runId = await store.startRun(db, user.id, { agent: "sentinel", action: "site_scan", asset: host, scope: input.scope });
+  ctx.send({ type: "run", agent: "sentinel", runId });
+  const steps = new Steps(ctx.send, "sentinel");
+  return guarded(ctx, runId, "sentinel", steps, async () => {
+    const io = scanNetFor(host, ctx.signal);
+    const t = steps.start("authorize", "Ownership check");
+    const proof = await proveOwnership(target, ctx.auth, ctx.signal, io.lab ? { request: io.request, txt: io.txt } : {});
+    if (!proof.ok) {
+      steps.finish("authorize", "Ownership check", "failed", proof.reason, t);
+      await store.setTargetVerified(db, target.id, null);
+      throw new ApiError("forbidden", proof.reason);
+    }
+    await store.setTargetVerified(db, target.id, proof.method);
+    steps.finish("authorize", "Ownership check", "ok", `Confirmed by ${proof.method.replace("_", " ")}`, t);
+    if (!limiter("sitescan-host", 4, 10 * 60_000).check(host, 1).ok) throw new ApiError("rate_limited", `${host} was scanned several times recently. Please wait a few minutes (or open the last report from the history).`);
+    await store.audit(db, user.id, "scan.started", { runId, detail: { host, scope: input.scope, proof: proof.method, kind: "site_scan" } });
+
+    const started: Partial<Record<ScanStep, number>> = {};
+    let report: ScanReport;
+    try {
+      report = await runSiteScan(host, input.scope, io.net, io.dns, {
+        signal: ctx.signal,
+        progress: (text) => ctx.send({ type: "progress", agent: "sentinel", text }),
+        step: (id, status, detail) => {
+          if (status === "running") started[id] = steps.start(id, STEP_LABEL[id]);
+          else steps.finish(id, STEP_LABEL[id], status === "done" ? "ok" : status, detail ?? "", started[id]);
+        },
+      });
+    } catch (err) {
+      if (err instanceof ScanAbort) throw new ApiError("bad_request", err.message);
+      throw err;
+    }
+    report.runId = runId;
+    for (const n of report.notes) ctx.send({ type: "notice", agent: "sentinel", text: n });
+
+    const drafts = findingsFrom(report);
+    const saved = await store.saveFindings(db, user.id, runId, drafts);
+    await alertSerious(ctx, runId, drafts, saved);
+    const resolved = await store.markNotDetected(db, user.id, runId, "sentinel", host, clearedRules(report));
+    ctx.send({ type: "findings", agent: "sentinel", count: drafts.length, bySeverity: countBy(drafts), resolved, reopened: saved.reopened });
+
+    const overview = scanOverview(report);
+    const stats = { overview, findings: drafts.length, created: saved.created, resolved, reopened: saved.reopened, ...packReport(report, 19_000 - Buffer.byteLength(JSON.stringify(overview)) - 300) };
+    await store.finishRun(db, runId, { status: "completed", summary: toMarkdown(report), tools: steps.tools, stats });
+    await store.audit(db, user.id, "scan.finished", { runId, detail: { host, kind: "site_scan", grade: overview.grade, score: overview.score, findings: drafts.length } });
+    ctx.send({ type: "scan_report", report: "reportGz" in stats ? report : readStored(stats.report, runId) });
+    ctx.send({ type: "done", agent: "sentinel", runId });
+    return { runId, cached: false };
   });
 }
 

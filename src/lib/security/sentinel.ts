@@ -458,7 +458,7 @@ function contentChecks(res: SafeResponse, url: string): Draft[] {
   ];
 }
 
-interface Probe {
+export interface Probe {
   id: string;
   path: string;
   title: string;
@@ -472,7 +472,7 @@ interface Probe {
 
 const firstLine = (b: string) => `Starts with: "${b.split("\n")[0]!.slice(0, 60)}"`;
 
-const EXPOSURE_PROBES: Probe[] = [
+export const EXPOSURE_PROBES: Probe[] = [
   {
     id: "env-file",
     path: "/.env",

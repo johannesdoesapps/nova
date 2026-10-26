@@ -4,6 +4,7 @@ import { audit, getTarget, setTargetVerified } from "@/lib/db/security";
 import { ApiError, errorResponse, requireUuid } from "@/lib/http";
 import { limiter } from "@/lib/rate-limit";
 import { proveOwnership } from "@/lib/security/authz";
+import { scanNetFor } from "@/lib/security/sitescan/scan-net";
 
 export const maxDuration = 30;
 
@@ -14,7 +15,9 @@ export async function POST(req: Request, ctx: RouteContext<"/api/security/target
     if (!limiter("target-verify", 10, 60_000).check(auth.user.id, 1).ok) throw new ApiError("rate_limited", "Too many checks. Please wait a minute.");
     const id = requireUuid((await ctx.params).id);
     const target = await getTarget(auth.supabase, auth.user.id, id);
-    const proof = await proveOwnership(target, auth, req.signal);
+    // Production always uses the guarded defaults; only the website scanner's local test lab (*.test, never on Vercel) differs.
+    const io = scanNetFor(target.hostname, req.signal);
+    const proof = await proveOwnership(target, auth, req.signal, io.lab ? { request: io.request, txt: io.txt } : {});
     await setTargetVerified(auth.supabase, target.id, proof.ok ? proof.method : null);
     await audit(auth.supabase, auth.user.id, proof.ok ? "target.verified" : "target.verify_failed", { detail: { hostname: target.hostname, method: proof.ok ? proof.method : null } });
     return NextResponse.json(proof.ok ? { verified: true, method: proof.method } : { verified: false, reason: proof.reason });
