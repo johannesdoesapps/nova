@@ -307,17 +307,21 @@ export function Dialog({
       }}
     >
       {open && (
-        <div className="glass-strong glass-solid glass-edge s-scroll max-h-[86dvh] overflow-y-auto rounded-[24px] p-5 text-s-ink sm:p-6" style={{ width: `min(calc(100vw - 32px), ${width}px)` }}>
-          <div className="mb-4 flex items-start justify-between gap-4">
-            <div>
-              <h2 id="studio-dialog-title" className="text-[17px] font-semibold tracking-[-0.01em]">{title}</h2>
-              {description && <p className="mt-1 text-[13.5px] text-s-ink-2">{description}</p>}
+        // The glass panel and the scroller are separate: the panel's edge highlight sits 1px outside its box, which
+        // would otherwise count as overflow and show scrollbars on every dialog.
+        <div className="glass-strong glass-solid glass-edge flex max-h-[86dvh] flex-col rounded-[24px] text-s-ink" style={{ width: `min(calc(100vw - 32px), ${width}px)` }}>
+          <div className="s-scroll min-h-0 overflow-y-auto overflow-x-hidden rounded-[24px] p-5 sm:p-6">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 id="studio-dialog-title" className="text-[17px] font-semibold tracking-[-0.01em]">{title}</h2>
+                {description && <p className="mt-1 text-[13.5px] text-s-ink-2">{description}</p>}
+              </div>
+              <IconButton label="Close" size="sm" onClick={onClose} className="-mr-1.5 -mt-1">
+                <X />
+              </IconButton>
             </div>
-            <IconButton label="Close" size="sm" onClick={onClose} className="-mr-1.5 -mt-1">
-              <X />
-            </IconButton>
+            {children}
           </div>
-          {children}
         </div>
       )}
     </dialog>
