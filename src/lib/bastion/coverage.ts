@@ -79,6 +79,13 @@ export const ENFORCEMENT_POINTS: EnforcementPoint[] = [
     note: "Other exports (research reports, security reports) aren't routed through Bastion yet.",
   },
   {
+    surface: "Publishing a website",
+    state: "enforced",
+    ops: ["site.publish"],
+    where: "src/app/api/code/projects/[id]/publish/route.ts",
+    note: "The user confirms in the Publish dialog; lockdown and switching exports off still stop it. Secret files (.env, keys) are never uploaded.",
+  },
+  {
     surface: "Workforce (operators' multi-agent runs)",
     state: "enforced",
     ops: ["workforce.step"],

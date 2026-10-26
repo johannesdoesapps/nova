@@ -59,6 +59,7 @@ export const OPERATIONS = {
   "connector.write": { label: "Act in a connected service", risk: "high", capability: "connector_writes", floor: "high" },
   "github.push": { label: "Push files to GitHub", risk: "high", capability: "github_push", floor: "high" },
   "data.export": { label: "Export or download project data", risk: "moderate", capability: "exports", floor: "low" },
+  "site.publish": { label: "Publish a website to the internet", risk: "high", capability: "exports", floor: "moderate" },
   "workforce.step": { label: "Workforce step", risk: "moderate", capability: "workforce", floor: "moderate" },
   "agent.step": { label: "An agent continues a task", risk: "low", capability: null, floor: "low" },
   "policy.modify": { label: "Change Bastion policy or controls", risk: "critical", capability: null, floor: "critical" },

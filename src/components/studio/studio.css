@@ -169,6 +169,93 @@
   border: 1px solid var(--s-line);
   box-shadow: inset 0 1px 0 var(--s-hi);
 }
+/*
+ * Publish: the workspace's main action. A frosted pill with a violet-to-magenta tint from the Orbis loop, a
+ * specular top edge and a soft lift on hover; the live dot is green, amber when there are unpublished changes.
+ */
+.s-publish {
+  position: relative;
+  display: inline-flex;
+  height: 2rem;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--s-ink);
+  border: 1px solid color-mix(in srgb, #8b5cf6 34%, var(--s-line-strong));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--s-hi) 55%, transparent), transparent 55%),
+    linear-gradient(120deg, color-mix(in srgb, #7c3aed 22%, transparent), color-mix(in srgb, #d946ef 16%, transparent)),
+    var(--s-glass-strong);
+  box-shadow: inset 0 1px 0 var(--s-hi), 0 1px 2px rgba(0, 0, 0, 0.08), 0 6px 18px -8px color-mix(in srgb, #7c3aed 55%, transparent);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  transition: transform 0.2s var(--s-ease), box-shadow 0.25s var(--s-ease), border-color 0.25s var(--s-ease), filter 0.25s var(--s-ease), opacity 0.2s;
+}
+.s-publish:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, #a855f7 55%, var(--s-line-strong));
+  box-shadow: inset 0 1px 0 var(--s-hi), 0 2px 4px rgba(0, 0, 0, 0.08), 0 10px 26px -10px color-mix(in srgb, #a855f7 70%, transparent);
+  filter: brightness(1.04);
+}
+.s-publish:active:not(:disabled) { transform: translateY(0) scale(0.98); filter: brightness(0.98); }
+.s-publish:focus-visible { outline: 2px solid var(--s-ring); outline-offset: 2px; }
+.s-publish:disabled { opacity: 0.5; cursor: not-allowed; }
+.s-publish[aria-busy="true"] { cursor: progress; }
+.s-publish-lg { height: 2.5rem; padding: 0 1.15rem; font-size: 13.5px; gap: 0.5rem; }
+.s-publish-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #22c55e;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #22c55e 22%, transparent);
+}
+.s-publish-dot-changed { background: #f59e0b; box-shadow: 0 0 0 3px color-mix(in srgb, #f59e0b 24%, transparent); }
+.s-publish-ghost {
+  display: inline-flex;
+  height: 2.25rem;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.9rem;
+  border-radius: 999px;
+  font-size: 12.5px;
+  color: var(--s-ink-2);
+  border: 1px solid var(--s-line);
+  background: var(--s-card);
+  box-shadow: inset 0 1px 0 var(--s-hi);
+  transition: color 0.2s, border-color 0.2s, background-color 0.2s;
+}
+.s-publish-ghost:hover { color: var(--s-ink); border-color: var(--s-line-strong); background: var(--s-card-hover); }
+.s-publish-ghost:focus-visible { outline: 2px solid var(--s-ring); outline-offset: 2px; }
+.s-publish-live {
+  border: 1px solid color-mix(in srgb, #22c55e 30%, var(--s-line));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--s-sheen) 70%, transparent), transparent 50%),
+    linear-gradient(120deg, color-mix(in srgb, #22c55e 9%, transparent), color-mix(in srgb, #7c3aed 7%, transparent)),
+    var(--s-card);
+  box-shadow: inset 0 1px 0 var(--s-hi);
+}
+.s-publish-track { height: 4px; overflow: hidden; border-radius: 999px; background: var(--s-line); }
+.s-publish-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7c3aed, #d946ef, #7c3aed);
+  background-size: 200% 100%;
+  animation: s-publish-flow 1.6s linear infinite;
+  transition: width 0.6s var(--s-ease);
+}
+.s-publish-bar-failed { background: var(--s-danger); animation: none; }
+@keyframes s-publish-flow { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .s-publish, .s-publish-bar { transition: none; }
+  .s-publish:hover:not(:disabled), .s-publish:active:not(:disabled) { transform: none; }
+  .s-publish-bar { animation: none; }
+}
+
 .s-card-hover { transition: background-color 0.25s var(--s-ease), border-color 0.25s var(--s-ease), box-shadow 0.3s var(--s-ease); }
 .s-card-hover:hover {
   background-color: var(--s-card-hover);

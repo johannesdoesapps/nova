@@ -54,6 +54,7 @@ import { PairPanel } from "./pair-panel";
 import { api, CodeApiError, plainText, post, takeBuildRequest, type AiResult, type BuildRequest, type Allowance, type JobRead, type ProjectData, type Session } from "./api";
 import { ChangesPanel } from "./changes-panel";
 import { MemoryPanel } from "./memory-panel";
+import { PublishButton, PublishDialog, usePublishStatus } from "./publish-dialog";
 import { FileDiff } from "./diff-view";
 import { minutesLine } from "./projects-view";
 
@@ -222,6 +223,9 @@ export function CodeWorkspace({ id, pair = false }: { id: string; pair?: boolean
   const [project, setProject] = useState<ProjectSummary | null>(null);
   const [saved, setSaved] = useState<Record<string, string>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const publish = usePublishStatus(id);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [active, setActive] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [allowance, setAllowance] = useState<Allowance | null>(null);
@@ -412,6 +416,25 @@ export function CodeWorkspace({ id, pair = false }: { id: string; pair?: boolean
     timers.current.clear();
     await Promise.all(Object.keys(draftsRef.current).map((p) => save(p)));
   };
+
+  /** Before publishing: save every pending edit in one request, and fail loudly (so nothing stale goes live). */
+  const saveForPublish = async () => {
+    timers.current.forEach((t) => clearTimeout(t));
+    timers.current.clear();
+    const pending = Object.entries(draftsRef.current);
+    if (!pending.length) return;
+    await post(`/api/code/projects/${id}/files`, { changes: pending.map(([path, content]) => ({ path, content })) });
+    setSaved((s) => ({ ...s, ...Object.fromEntries(pending) }));
+    setDrafts((d) => {
+      const rest = { ...d };
+      for (const [path, value] of pending) if (rest[path] === value) delete rest[path];
+      return rest;
+    });
+  };
+  const refreshPublish = publish.refresh;
+  useEffect(() => {
+    void refreshPublish();
+  }, [refreshPublish]);
 
   const changeFiles = async (changes: { path: string; content: string | null }[]) => {
     await post(`/api/code/projects/${id}/files`, { changes });
@@ -983,7 +1006,7 @@ export function CodeWorkspace({ id, pair = false }: { id: string; pair?: boolean
                   : "Nothing is running yet."}
             </p>
             <p className="mt-1">
-              Press <strong className="text-s-ink-2">Run</strong> to start the site (apps show here when they listen on port 3000), or ask the agent to build one.
+              Choose <strong className="text-s-ink-2">Run the project</strong> in the ⋯ menu to start the site (apps show here when they listen on port 3000), or ask the agent to build one.
             </p>
             {project?.runCommand && (
               <button type="button" onClick={() => void runProject()} className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-full border border-s-line px-3 text-[12.5px] text-s-ink-2 hover:text-s-ink">
@@ -1190,9 +1213,7 @@ export function CodeWorkspace({ id, pair = false }: { id: string; pair?: boolean
                 <Power className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{starting ? "Starting…" : "Start computer"}</span>
               </Btn>
             )}
-            <Btn onClick={() => void runProject()} disabled={starting || !project} title={project?.runCommand ? `Runs: ${project.runCommand}` : "Set the command Run uses"}>
-              <Play className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Run</span>
-            </Btn>
+            <PublishButton status={publish.status} busy={publishing} onClick={() => setPublishOpen(true)} disabled={!project} />
           </div>
         }
         menu={
@@ -1206,6 +1227,9 @@ export function CodeWorkspace({ id, pair = false }: { id: string; pair?: boolean
                 Keep the computer on {block} more min
               </MenuItem>
             )}
+            <MenuItem icon={<Play />} hint={project?.runCommand ? `Runs: ${project.runCommand}` : "Set the command first"} onClick={() => void runProject()} disabled={starting || !project}>
+              Run the project
+            </MenuItem>
             <MenuItem icon={<Settings2 />} hint={project?.runCommand ? `Now: ${project.runCommand}` : "Not set"} onClick={() => void editRunCommand()}>
               Run command…
             </MenuItem>
@@ -1325,6 +1349,17 @@ export function CodeWorkspace({ id, pair = false }: { id: string; pair?: boolean
         </div>
       )}
       {allowance && running && !wide && <p className="shrink-0 border-t border-s-line px-4 py-1 text-[11px] text-s-ink-3">{minutesLine(allowance)} · counted in {block}-minute blocks.</p>}
+      <PublishDialog
+        open={publishOpen}
+        onClose={() => setPublishOpen(false)}
+        projectId={id}
+        projectName={project?.name ?? ""}
+        status={publish.status}
+        statusError={publish.error}
+        refresh={publish.refresh}
+        saveEdits={saveForPublish}
+        onBusy={setPublishing}
+      />
     </>
   );
 }
