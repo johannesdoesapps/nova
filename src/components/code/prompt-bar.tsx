@@ -66,7 +66,8 @@ export function PromptBar({
 
   const send = () => {
     if (!canSend) return;
-    if (speech.listening) speech.stop();
+    // cancel, not stop: stop() delivers one last result, which would put the sent text back in the box.
+    if (speech.listening) speech.cancel();
     onSubmit(value.trim());
   };
 

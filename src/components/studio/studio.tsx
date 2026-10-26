@@ -228,6 +228,8 @@ export function Studio({ home = false }: { home?: boolean }) {
     setInput("");
     setAttachments([]);
     void chat.send(text, { attachments });
+    // The first message swaps the big start-screen box for the docked one; keep typing where you were.
+    focusInput();
   };
 
   const newChat = () => {
@@ -275,7 +277,11 @@ export function Studio({ home = false }: { home?: boolean }) {
     (a: HomeAction) => {
       if (a.kind === "link") return router.push(a.href);
       if (a.kind === "send" && blockedGuest) return signUpWith(a.prompt);
-      if (a.kind === "send") return void send(a.prompt, { mode: a.mode, modelId: a.modelId, useWeb: a.web === undefined ? undefined : a.web && integrations.search });
+      if (a.kind === "send") {
+        void send(a.prompt, { mode: a.mode, modelId: a.modelId, useWeb: a.web === undefined ? undefined : a.web && integrations.search });
+        focusInput();
+        return;
+      }
       setMode(a.mode);
       setUseWeb(!!a.web && integrations.search);
       setInput(a.prompt);

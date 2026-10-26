@@ -320,10 +320,24 @@ export function CodeWorkspace({ id, pair = false }: { id: string; pair?: boolean
       .catch(() => {});
     const t = setInterval(() => setNow(Date.now()), 1000);
     const pending = timers.current;
+    // Edits still waiting for their save (typed in the last 0.8 s) are sent now when you leave, rather than dropped.
+    const sendPending = () => {
+      const paths = [...pending.keys()];
+      if (!paths.length) return;
+      paths.forEach((p) => clearTimeout(pending.get(p)));
+      pending.clear();
+      const changes = paths.map((path) => ({ path, content: draftsRef.current[path] })).filter((c) => c.content !== undefined);
+      if (!changes.length) return;
+      const body = JSON.stringify({ changes });
+      // keepalive lets the request outlive a closing tab, but only for small bodies (browsers cap it at 64 KB).
+      void fetch(`/api/code/projects/${id}/files`, { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: body.length < 60_000 }).catch(() => {});
+    };
+    window.addEventListener("pagehide", sendPending);
     return () => {
       alive.current = false;
       clearInterval(t);
-      pending.forEach(clearTimeout);
+      window.removeEventListener("pagehide", sendPending);
+      sendPending();
     };
   }, [id, applyData]);
 

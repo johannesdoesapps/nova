@@ -165,6 +165,15 @@ export function JarvisView() {
     window.speechSynthesis.speak(u);
   }, []);
   useEffect(() => () => void ("speechSynthesis" in window && window.speechSynthesis.cancel()), []);
+  // Leaving the page stops what Jarvis is doing: a mission left running here couldn't be paused or cancelled any
+  // more, since coming back starts a fresh page that doesn't know about it.
+  useEffect(
+    () => () => {
+      runner.current?.stop("interrupted");
+      turnAbort.current?.abort();
+    },
+    [],
+  );
 
   /* Turns and missions ------------------------------------------------------------------------------------- */
 

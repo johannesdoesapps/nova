@@ -5,7 +5,7 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react
 import { Bot, Bug, ChartColumn, Code2, FileText, Flag, Flame, Globe, GraduationCap, Lightbulb, PenLine, Play, Plug, Scale, Sparkles, Swords, Telescope, Users } from "lucide-react";
 import { greetingFor, homeActionById, planDayPrompt, type HomeAction, type IconName } from "@/lib/home";
 import type { StarterTask, StarterTaskId } from "@/lib/starter";
-import { FirstRun } from "./first-run";
+import { FirstRun, onboardingSettled } from "./first-run";
 import { TaskStarter, type StarterEnv } from "./task-starter";
 import { OrbisMark } from "./ui";
 
@@ -50,7 +50,7 @@ export function Home({ name, composer, onAction, notice, starter, firstRun = fal
   const router = useRouter();
   const params = useSearchParams();
   // First-run onboarding: new accounts, or anyone who opens "Getting started" (/home?welcome=1).
-  const [welcome, setWelcome] = useState(() => signedIn && (firstRun || params.get("welcome") === "1"));
+  const [welcome, setWelcome] = useState(() => signedIn && ((firstRun && !onboardingSettled()) || params.get("welcome") === "1"));
 
   // The time is only known in the browser; render placeholders on the server.
   const now = useSyncExternalStore(

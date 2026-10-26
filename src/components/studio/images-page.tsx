@@ -53,6 +53,9 @@ export function ImagesPage() {
     if (p.length < 3 || busy) return;
     setBusy(true);
     setError(null);
+    // The last image may still be revealing (busy ends when it arrives, the reveal takes a second or more): keep it.
+    const shown = pending;
+    if (shown?.url) setMade((xs) => [{ url: shown.url!, prompt: shown.prompt, size: shown.size }, ...xs].slice(0, 12));
     setPending({ url: null, prompt: p, size });
     try {
       const j = await jsonFetch<{ image: string }>("/api/images", { method: "POST", body: JSON.stringify({ prompt: p, size, quality, requestId: crypto.randomUUID() }) });

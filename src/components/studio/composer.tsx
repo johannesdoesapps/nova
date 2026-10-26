@@ -123,7 +123,8 @@ export function Composer(p: ComposerProps) {
   };
 
   const submit = () => {
-    if (speech.listening) speech.stop();
+    // cancel, not stop: stop() delivers one last result, which would put the sent text back in the box.
+    if (speech.listening) speech.cancel();
     if (canSend) p.onSubmit();
   };
 

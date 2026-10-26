@@ -9,6 +9,7 @@ import { routerPool } from "@/lib/ai/router";
 import { PROVIDER_INFO, providerLabel } from "@/lib/ai/provider-info";
 import type { ModelWithStatus, ProviderId } from "@/lib/ai/types";
 import { cn } from "@/lib/utils";
+import { popoverLayer } from "./ui";
 
 const PROVIDER_ORDER: ProviderId[] = ["anthropic", "openai", "google", "xai", "deepseek", "huggingface", "demo"];
 
@@ -96,8 +97,10 @@ export function ModelSelector({
     if (refocus) triggerRef.current?.focus();
   };
 
+  const [layer, setLayer] = useState<HTMLElement | null>(null);
   const toggle = () => {
     if (open) return close();
+    setLayer(popoverLayer(triggerRef.current));
     const r = triggerRef.current!.getBoundingClientRect();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
@@ -375,12 +378,13 @@ export function ModelSelector({
         <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform", open && "rotate-180")} />
       </button>
       {open &&
+        layer &&
         createPortal(
           <>
             {sheet && <div className="fixed inset-0 z-40 bg-[var(--s-scrim)] backdrop-blur-[2px]" aria-hidden onClick={() => close()} />}
             {panel}
           </>,
-          document.getElementById("studio-layer") ?? document.body,
+          layer,
         )}
     </>
   );

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Check, Lock, Search } from "lucide-react";
 import { GitHubLogo } from "@/components/common/github-logo";
 import { LOGIN_MESSAGES, loginMessage, oauthRedirectTo } from "@/lib/auth-flow";
@@ -53,12 +53,16 @@ export function GitHubPicker({
   const [busy, setBusy] = useState(false);
   const room = Math.max(0, maxFiles - attachments.length);
 
+  // The repository asked for last: a slower answer for one picked earlier is ignored.
+  const latestRepo = useRef("");
   async function chooseRepo(name: string) {
+    latestRepo.current = name;
     setRepo(name);
     setTree(null);
     setPicked([]);
     if (!name) return;
     const t = await getJson<{ files: TreeFile[]; truncated: boolean }>(`/api/github/tree?repo=${encodeURIComponent(name)}`);
+    if (latestRepo.current !== name) return;
     if (!t.ok) return setError(t.message);
     setTree(t.data);
   }

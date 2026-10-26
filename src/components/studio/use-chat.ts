@@ -107,6 +107,11 @@ export function useStudioChat({
     abortRef.current?.abort();
     setLoad({ status: "loading" });
     setMessages([]);
+    // Forget the chat that was open: if this one can't be loaded, a message typed next must start a new chat,
+    // not go into (or, for guests, overwrite) the previous one.
+    setId(null);
+    setTitle(null);
+    setProjectId(null);
     store
       .load(cParam)
       .then((r) => {
@@ -139,6 +144,8 @@ export function useStudioChat({
     async (text: string, opts: { attachments?: ChatAttachment[]; retryOf?: string; editOf?: string; mode?: ChatMode; modelId?: string; useWeb?: boolean } = {}) => {
       const content = text.trim();
       if (!content || busy) return false;
+      // Sending after "couldn't be opened" starts a new chat; the error has done its job.
+      if (load.status === "error") setLoad({ status: "idle" });
       // An edit rewrites an earlier question: it and everything after it are replaced.
       const editIdx = opts.editOf ? messages.findIndex((m) => m.id === opts.editOf && m.role === "user") : -1;
       if (opts.editOf && editIdx < 0) return false;
@@ -151,7 +158,7 @@ export function useStudioChat({
       abortRef.current = ac;
       const files = opts.attachments ?? [];
       const prior = opts.retryOf ? messages.slice(0, retryIdx) : opts.editOf ? messages.slice(0, editIdx) : messages;
-      const userMsg: Msg = { id: crypto.randomUUID(), role: "user", content, status: "done", attachments: files.map((f) => f.name), files };
+      const userMsg: Msg = { id: crypto.randomUUID(), role: "user", content, status: "done", attachments: files.map((f) => f.name), files, pending: store.kind === "local" ? undefined : true };
       const asst: Msg = { id: crypto.randomUUID(), role: "assistant", content: "", status: "streaming", notices: [] };
       setMessages(opts.retryOf ? [...prior, asst] : [...prior, userMsg, asst]);
       const patch = (fn: (m: Msg) => Msg) => setMessages((ms) => ms.map((m) => (m.id === asst.id ? fn(m) : m)));
@@ -194,7 +201,9 @@ export function useStudioChat({
             history,
             attachments: files,
             regenerate: opts.retryOf ? true : undefined,
-            editOf: opts.editOf && !local ? opts.editOf : undefined,
+            // A question whose turn never completed (stopped, failed) was never saved, so there's nothing to rewrite on
+            // the server: it goes as a new turn after the last saved one, which is what the screen shows too.
+            editOf: opts.editOf && !local && !messages[editIdx]?.pending ? opts.editOf : undefined,
             replyLength,
             replyStyle,
             useMemory,
@@ -224,7 +233,7 @@ export function useStudioChat({
             patch((m) => ({ ...m, content: ev.text, status: "done", simulated: ev.simulated, cost: ev.estimatedCost, id: ev.assistantMessageId ?? m.id, truncated: ev.truncated || undefined }));
             // The saved question's id, so it can be edited later.
             const savedId = ev.userMessageId;
-            if (savedId) setMessages((ms) => ms.map((m) => (m.id === userMsg.id ? { ...m, id: savedId } : m)));
+            if (savedId) setMessages((ms) => ms.map((m) => (m.id === userMsg.id ? { ...m, id: savedId, pending: undefined } : m)));
           }
           else if (ev.type === "error") patch((m) => ({ ...m, status: "error", error: ev.message }));
         }
@@ -245,7 +254,7 @@ export function useStudioChat({
       }
       return true;
     },
-    [busy, mode, messages, store, conversationId, title, router, modelId, allowFallback, useWeb, onHistoryChanged, setId, basePath, transport, replyLength, replyStyle, projectId, useMemory],
+    [busy, mode, messages, store, conversationId, title, router, modelId, allowFallback, useWeb, onHistoryChanged, setId, basePath, transport, replyLength, replyStyle, projectId, useMemory, load.status],
   );
 
   const stop = useCallback(() => abortRef.current?.abort(), []);

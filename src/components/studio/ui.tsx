@@ -19,6 +19,15 @@ import { InfinityMark } from "@/components/brand/infinity";
 
 /* Icon button ------------------------------------------------------------ */
 
+/**
+ * Where a popover (menu, model picker) is placed: the studio's layer, or, when its trigger is inside an open modal
+ * dialog, that dialog. A modal dialog makes everything outside it inert, so a popover placed outside it would sit
+ * behind the backdrop and couldn't be clicked or focused.
+ */
+export function popoverLayer(trigger: Element | null): HTMLElement {
+  return (trigger?.closest("dialog[open]") as HTMLElement | null) ?? document.getElementById("studio-layer") ?? document.body;
+}
+
 export function IconButton({
   label,
   size = "md",
@@ -123,7 +132,7 @@ export function Menu({
       transformOrigin: `${align === "start" ? "left" : "right"} ${up ? "bottom" : "top"}`,
       ["--s-pop-y" as string]: up ? "4px" : "-4px",
     });
-    setLayer(document.getElementById("studio-layer") ?? document.body);
+    setLayer(popoverLayer(triggerRef.current));
     setOpen(true);
   };
 

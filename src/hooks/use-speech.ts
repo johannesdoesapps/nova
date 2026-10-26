@@ -36,7 +36,16 @@ export function useSpeech(onText: (t: string) => void) {
     cb.current = onText;
   });
 
-  useEffect(() => () => rec.current?.stop(), []);
+  // Leaving the page (or a composer being replaced) ends listening without delivering more words.
+  useEffect(
+    () => () => {
+      const r = rec.current;
+      if (!r) return;
+      r.onresult = null;
+      r.abort();
+    },
+    [],
+  );
 
   const start = useCallback((base: string) => {
     const Ctor = speechCtor();

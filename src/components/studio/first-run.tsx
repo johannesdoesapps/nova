@@ -9,8 +9,16 @@ import { cn } from "@/lib/utils";
 
 const ICONS: Record<StartPath, ReactNode> = { website: <Globe />, project: <FolderGit2 />, bug: <Bug />, question: <MessageCircle /> };
 
+/**
+ * Chosen or skipped during this visit. The account's "first run" flag comes with the page and isn't refreshed by
+ * moving around the app, so without this the start screen would come back on the next "New chat".
+ */
+let settledThisVisit = false;
+export const onboardingSettled = () => settledThisVisit;
+
 /** Save the choice on the account (so it isn't shown again anywhere); never blocks what the user is doing. */
 export function saveOnboarding(status: "chosen" | "skipped", path: StartPath | null = null) {
+  settledThisVisit = true;
   try {
     void fetch("/api/onboarding", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, path }), keepalive: true }).catch(() => {});
   } catch {
