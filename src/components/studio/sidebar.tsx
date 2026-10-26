@@ -288,7 +288,13 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
         <div className={cn("mx-4 h-px shrink-0 bg-s-line", rail && "md:hidden")} />
 
         {/* History */}
-        <div className={cn("s-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-2", rail && "md:invisible")}>
+        <div
+          // Focusable so keyboard users can scroll it when it's short and overflows (it may hold only text).
+          tabIndex={rail ? -1 : 0}
+          role="region"
+          aria-label={inCode ? "Projects" : "Chat history"}
+          className={cn("s-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-2", rail && "md:invisible md:overflow-hidden")}
+        >
           {inCode ? (
             <RecentProjects signedIn={!!p.user} onNavigate={p.onCloseMobile} />
           ) : p.listError ? (

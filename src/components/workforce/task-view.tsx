@@ -108,7 +108,7 @@ export function TaskView({ id }: { id: string }) {
       <>
         {header}
         <div className="mx-auto w-full max-w-[1100px] space-y-3 px-4 pt-6 sm:px-8">
-          {error ? <h1 role="alert" className="text-[15px] font-normal text-s-danger">{error}</h1> : <><div className="s-skeleton h-10 w-2/3 rounded-xl" /><div className="s-skeleton h-60 rounded-2xl" /></>}
+          {error ? <div role="alert"><h1 className="text-[15px] font-normal text-s-danger">{error}</h1></div> : <><div className="s-skeleton h-10 w-2/3 rounded-xl" /><div className="s-skeleton h-60 rounded-2xl" /></>}
         </div>
       </>
     );

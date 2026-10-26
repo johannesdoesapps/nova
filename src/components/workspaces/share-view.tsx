@@ -6,7 +6,7 @@ import { isSafeHttpUrl, relativeTime } from "@/lib/utils";
 export function ShareView({ token }: { token: string }) {
   const s = useEngine<{ workspace: { name: string; description: string | null }; role: string; items: { id: string; type: string; title: string; data: Record<string, unknown>; updated_at: string }[] }>(`share/${token}`);
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10">
+    <main className="mx-auto max-w-3xl px-4 py-10">
       <div className="mb-1 text-xs uppercase tracking-wider text-muted">Shared from Orbis AI · read-only</div>
       {s.error && (
         <>
@@ -31,6 +31,6 @@ export function ShareView({ token }: { token: string }) {
           </div>
         </>
       )}
-    </div>
+    </main>
   );
 }
