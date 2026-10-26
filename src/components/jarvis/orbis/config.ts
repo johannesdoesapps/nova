@@ -19,10 +19,14 @@ export interface OrbisConfig {
   maxPixelRatio: number;
   /** Nearby particles drift away from the pointer. */
   pointer: boolean;
-  palette: { core: [number, number, number]; particle: [number, number, number]; link: [number, number, number]; error: [number, number, number]; warn: [number, number, number] };
+  /** Orbis's brand gradient (violet → magenta → rose, as in the logo), spread across the particles. */
+  palette: { gradient: [RGB, RGB, RGB]; core: RGB; link: RGB; grid: RGB; error: RGB; warn: RGB };
 }
 
 export type QualityTier = "high" | "medium" | "low";
+export type RGB = [number, number, number];
+
+const hex = (h: string): RGB => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
 
 const BASE: Omit<OrbisConfig, "particles" | "maxLinks" | "maxPixelRatio" | "linkEveryFrames"> = {
   radius: 10,
@@ -30,11 +34,12 @@ const BASE: Omit<OrbisConfig, "particles" | "maxLinks" | "maxPixelRatio" | "link
   maxLinksPerParticle: 3,
   pointer: true,
   palette: {
-    core: [0.78, 1, 0.8],
-    particle: [0.36, 1, 0.48],
-    link: [0.22, 0.85, 0.36],
-    error: [1, 0.36, 0.22],
-    warn: [1, 0.74, 0.25],
+    gradient: [hex("#7c3aed"), hex("#d946ef"), hex("#fb7185")],
+    core: hex("#fbeaff"),
+    link: hex("#a855f7"),
+    grid: hex("#8b5cf6"),
+    error: hex("#ff6a3d"),
+    warn: hex("#fbbf24"),
   },
 };
 

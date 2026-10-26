@@ -221,7 +221,10 @@ reached the agent at `http://127.0.0.1:47821` in this Chromium.
 ## 9. The ORBIS core (Jarvis page)
 
 The top of `/jarvis` is the ORBIS screen: a live particle core, rendered with WebGL through three.js (already a
-dependency), above a perspective floor. The system line runs along the top (core state, vault, terminals); the
+dependency), above a perspective floor. It uses Orbis's colours: the logo's gradient (violet `#7c3aed` →
+magenta `#d946ef` → rose `#fb7185`) runs across the particles from left to right, with violet links and floor
+and a deep violet-black background. Error turns it orange-red, waiting for approval turns it amber, and the
+emergency stop dims it. The system line runs along the top (core state, vault, terminals); the
 ORBIS name and the state controls sit along the bottom.
 
 | Part | File | What it does |

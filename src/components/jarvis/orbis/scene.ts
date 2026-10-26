@@ -21,6 +21,7 @@ attribute float aSize;
 attribute float aBright;
 attribute float aFlash;
 attribute float aRadial;
+attribute float aHue;
 uniform float uPixel;
 uniform float uBright;
 uniform vec3 uPulseR;
@@ -29,7 +30,9 @@ uniform float uNear;
 uniform float uDepth;
 varying float vAlpha;
 varying float vCore;
+varying float vHue;
 void main() {
+  vHue = aHue;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   gl_Position = projectionMatrix * mv;
   float depth = clamp((-mv.z - uNear) / uDepth, 0.0, 1.0);
@@ -47,16 +50,20 @@ void main() {
 }`;
 
 const POINT_FRAG = /* glsl */ `
-uniform vec3 uColor;
+uniform vec3 uColorA;
+uniform vec3 uColorB;
+uniform vec3 uColorC;
 uniform vec3 uCoreColor;
 varying float vAlpha;
 varying float vCore;
+varying float vHue;
 void main() {
   vec2 c = gl_PointCoord - 0.5;
   float d2 = dot(c, c);
   if (d2 > 0.25) discard;
   float glow = exp(-d2 * 26.0) + 0.38 * exp(-d2 * 6.0);
-  vec3 col = mix(uColor, uCoreColor, clamp(vCore * 0.55 + (vAlpha - 1.0) * 0.5, 0.0, 1.0));
+  vec3 base = vHue < 0.5 ? mix(uColorA, uColorB, vHue * 2.0) : mix(uColorB, uColorC, vHue * 2.0 - 1.0);
+  vec3 col = mix(base, uCoreColor, clamp(vCore * 0.35 + (vAlpha - 1.0) * 0.45, 0.0, 1.0));
   gl_FragColor = vec4(col * glow * vAlpha, 1.0);
 }`;
 
@@ -115,7 +122,7 @@ export interface SceneOptions {
 }
 
 const FOV = 36;
-const BACKGROUND = 0x020604;
+const BACKGROUND = 0x05030b;
 
 export class OrbisScene {
   readonly renderer: THREE.WebGLRenderer;
@@ -142,7 +149,7 @@ export class OrbisScene {
   private visual: Visual = { ...VISUALS.idle };
   private target: Visual = VISUALS.idle;
   private color = new THREE.Color();
-  private readonly palette: Record<number, { p: THREE.Color; c: THREE.Color; l: THREE.Color }>;
+  private readonly palette: Record<number, { a: THREE.Color; b: THREE.Color; p: THREE.Color; c: THREE.Color; l: THREE.Color; g: THREE.Color }>;
   private hueTarget = 0;
   private hue = [1, 0, 0, 0];
   private angle = 0;
@@ -179,11 +186,13 @@ export class OrbisScene {
 
     const pal = this.cfg.palette;
     const rgb = (v: readonly number[]) => new THREE.Color(v[0], v[1], v[2]);
+    const [violet, magenta, rose] = pal.gradient;
+    // Each state's colours: the gradient's three stops (a, p, b), the centre, the links and the floor.
     this.palette = {
-      0: { p: rgb(pal.particle), c: rgb(pal.core), l: rgb(pal.link) },
-      1: { p: rgb(pal.error), c: rgb([1, 0.78, 0.66]), l: rgb([0.9, 0.3, 0.2]) },
-      2: { p: rgb(pal.warn), c: rgb([1, 0.95, 0.75]), l: rgb([0.85, 0.62, 0.22]) },
-      3: { p: rgb(pal.particle).multiplyScalar(0.55), c: rgb(pal.core).multiplyScalar(0.5), l: rgb(pal.link).multiplyScalar(0.5) },
+      0: { a: rgb(violet), p: rgb(magenta), b: rgb(rose), c: rgb(pal.core), l: rgb(pal.link), g: rgb(pal.grid) },
+      1: { a: rgb([1, 0.3, 0.22]), p: rgb(pal.error), b: rgb([1, 0.58, 0.32]), c: rgb([1, 0.84, 0.74]), l: rgb([0.9, 0.32, 0.2]), g: rgb([0.75, 0.25, 0.18]) },
+      2: { a: rgb([0.98, 0.62, 0.2]), p: rgb(pal.warn), b: rgb([1, 0.84, 0.45]), c: rgb([1, 0.95, 0.8]), l: rgb([0.85, 0.6, 0.22]), g: rgb([0.7, 0.5, 0.2]) },
+      3: { a: rgb(violet).multiplyScalar(0.45), p: rgb(magenta).multiplyScalar(0.4), b: rgb(rose).multiplyScalar(0.4), c: rgb(pal.core).multiplyScalar(0.45), l: rgb(pal.link).multiplyScalar(0.45), g: rgb(pal.grid).multiplyScalar(0.5) },
     };
 
     this.system = new ParticleSystem(this.cfg);
@@ -200,7 +209,9 @@ export class OrbisScene {
         uPulseS: { value: new THREE.Vector3() },
         uNear: { value: 20 },
         uDepth: { value: 20 },
-        uColor: { value: new THREE.Color() },
+        uColorA: { value: new THREE.Color() },
+        uColorB: { value: new THREE.Color() },
+        uColorC: { value: new THREE.Color() },
         uCoreColor: { value: new THREE.Color() },
       },
     });
@@ -225,7 +236,7 @@ export class OrbisScene {
       transparent: true,
       depthWrite: false,
       uniforms: {
-        uColor: { value: rgb(pal.link) },
+        uColor: { value: rgb(pal.grid) },
         uCam: { value: new THREE.Vector3() },
         uTime: { value: 0 },
         uCell: { value: R * 0.24 },
@@ -249,6 +260,7 @@ export class OrbisScene {
     this.pointGeo.setAttribute("aBright", new THREE.BufferAttribute(s.bright, 1));
     this.pointGeo.setAttribute("aFlash", new THREE.BufferAttribute(s.flash, 1).setUsage(THREE.DynamicDrawUsage));
     this.pointGeo.setAttribute("aRadial", new THREE.BufferAttribute(s.radial, 1));
+    this.pointGeo.setAttribute("aHue", new THREE.BufferAttribute(s.hue, 1));
     this.pointGeo.setDrawRange(0, s.active);
     this.pointGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), this.cfg.radius * 2);
     this.linePos = new Float32Array(this.cfg.maxLinks * 6);
@@ -375,7 +387,7 @@ export class OrbisScene {
     }
   }
 
-  private mix(which: "p" | "c" | "l"): THREE.Color {
+  private mix(which: "a" | "b" | "p" | "c" | "l" | "g"): THREE.Color {
     this.color.setRGB(0, 0, 0);
     let sum = 0;
     this.hue.forEach((w, i) => {
@@ -392,7 +404,9 @@ export class OrbisScene {
   private applyVisual() {
     const v = this.visual;
     const u = this.pointMat.uniforms;
-    (u.uColor!.value as THREE.Color).copy(this.mix("p"));
+    (u.uColorA!.value as THREE.Color).copy(this.mix("a"));
+    (u.uColorB!.value as THREE.Color).copy(this.mix("p"));
+    (u.uColorC!.value as THREE.Color).copy(this.mix("b"));
     (u.uCoreColor!.value as THREE.Color).copy(this.mix("c"));
     u.uBright!.value = v.brightness;
     const r = u.uPulseR!.value as THREE.Vector3;
@@ -410,7 +424,7 @@ export class OrbisScene {
     (this.halo.material as THREE.SpriteMaterial).opacity = 0.2 * v.glow;
     (this.fog.material as THREE.SpriteMaterial).color.copy(this.mix("l"));
     (this.fog.material as THREE.SpriteMaterial).opacity = 0.1 + 0.06 * v.glow;
-    (this.gridMat.uniforms.uColor!.value as THREE.Color).copy(this.mix("l"));
+    (this.gridMat.uniforms.uColor!.value as THREE.Color).copy(this.mix("g"));
     this.gridMat.uniforms.uTime!.value = this.time;
     (this.gridMat.uniforms.uCam!.value as THREE.Vector3).copy(this.camera.position);
 

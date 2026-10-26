@@ -51,6 +51,8 @@ export class ParticleSystem {
   readonly flash: Float32Array;
   /** Distance of each particle's resting place from the centre, 0–1 (used for light waves from the centre). */
   readonly radial: Float32Array;
+  /** Where each particle sits on the brand gradient, 0 (violet) to 1 (rose): left to right, like the logo. */
+  readonly hue: Float32Array;
   readonly positions: Float32Array;
   /** Linked pairs (indices) and how many there are. */
   readonly pairs: Int32Array;
@@ -80,6 +82,7 @@ export class ParticleSystem {
     this.bright = new Float32Array(n);
     this.flash = new Float32Array(n);
     this.radial = new Float32Array(n);
+    this.hue = new Float32Array(n);
     this.positions = new Float32Array(n * 3);
     this.pairs = new Int32Array(cfg.maxLinks * 2);
     this.perLink = new Uint8Array(n);
@@ -126,6 +129,7 @@ export class ParticleSystem {
       this.size[i] = 0.5 + Math.pow(this.rand(), 3.2) * 2.4;
       this.bright[i] = 0.32 + this.rand() * 0.68;
       this.radial[i] = Math.min(1.4, Math.hypot(x, y, z) / R);
+      this.hue[i] = Math.min(1, Math.max(0, 0.5 + (x / R) * 0.6 + (y / R) * 0.06 + (this.rand() - 0.5) * 0.22));
     }
   }
 

@@ -33,6 +33,22 @@ describe("particles", () => {
     expect(r.every(Number.isFinite)).toBe(true);
   });
 
+  it("spread across Orbis's gradient, violet on one side and rose on the other", () => {
+    const s = new ParticleSystem(cfg());
+    const hue = Array.from(s.hue);
+    expect(Math.min(...hue)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...hue)).toBeLessThanOrEqual(1);
+    const side = (sign: number) => hue.filter((_, i) => Math.sign(s.base[i * 3]!) === sign && Math.abs(s.base[i * 3]!) > s.radius * 0.4);
+    const avg = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
+    expect(avg(side(-1))).toBeLessThan(0.4);
+    expect(avg(side(1))).toBeGreaterThan(0.6);
+    expect(orbisConfig("high").palette.gradient).toEqual([
+      [0x7c / 255, 0x3a / 255, 0xed / 255],
+      [0xd9 / 255, 0x46 / 255, 0xef / 255],
+      [0xfb / 255, 0x71 / 255, 0x85 / 255],
+    ]);
+  });
+
   it("finds exactly the links a brute-force search finds", () => {
     const c = cfg({ particles: 500, maxLinksPerParticle: 255, maxLinks: 100_000 });
     const s = new ParticleSystem(c, 3);

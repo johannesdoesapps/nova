@@ -28,7 +28,7 @@ export interface Visual {
   links: number; // link opacity
   autoPulse: number; // seconds between automatic brightness pulses (0: none)
   audio: number; // how much the audio level swells the core
-  hue: number; // 0 green, 1 error, 2 warn, 3 dim
+  hue: number; // 0 Orbis gradient, 1 error, 2 warn, 3 dim
 }
 
 export const VISUALS: Record<OrbisState | "approval" | "stopped", Visual> = {
