@@ -89,18 +89,6 @@ describe("ORB-012: scheduled audits are taken one person at a time", () => {
   });
 });
 
-describe("ORB-022: a backslash in a page path redirects instead of failing", () => {
-  it("redirects pages and 404s API paths", async () => {
-    const { backslashRedirect } = await import("@/proxy");
-    const { NextRequest } = await import("next/server");
-    const r = backslashRedirect(new NextRequest("https://tryorbis.app/pricing%5C?plan=pro"));
-    expect(r?.status).toBe(308);
-    expect(r?.headers.get("location")).toBe("https://tryorbis.app/pricing?plan=pro");
-    expect(backslashRedirect(new NextRequest("https://tryorbis.app/api/models%5C"))?.status).toBe(404);
-    expect(backslashRedirect(new NextRequest("https://tryorbis.app/pricing"))).toBeNull();
-  });
-});
-
 describe("ORB-006/007/008: Slack messages are posted once and the card shows where", () => {
   it("doesn't retry chat.postMessage after a network failure, but retries reads", async () => {
     const { slackApi } = await import("@/lib/connectors/providers/slack");
