@@ -1,20 +1,7 @@
 "use client";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { VoiceBeam, type VoiceBeamMotion } from "voice-glow";
-
-/** The app's theme (`data-theme` on <html>, dark unless set to light), kept in sync with the theme switch. */
-export function useDocumentTheme(): "dark" | "light" {
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-  useEffect(() => {
-    const el = document.documentElement;
-    const read = () => setTheme(el.dataset.theme === "light" ? "light" : "dark");
-    read();
-    const obs = new MutationObserver(read);
-    obs.observe(el, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => obs.disconnect();
-  }, []);
-  return theme;
-}
+import { useDocumentTheme } from "@/hooks/use-document-theme";
 
 /**
  * A sound-reactive glow along the bottom of the chat composer (voice-glow). While voice input is on it rises with

@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Logo } from "@/components/layout/logo";
+import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import { cn } from "@/lib/utils";
 import { BUILD_HREF, NAV, SIGN_IN_HREF } from "./links";
 import { TrackedLink } from "./tracked-link";
@@ -57,28 +58,31 @@ export function SiteHeader() {
             ))}
           </ul>
         </nav>
-        <div className="ml-auto hidden items-center gap-2 lg:flex">
-          <Link href={SIGN_IN_HREF} className="rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:text-fg">
-            Sign in
-          </Link>
-          <TrackedLink href={BUILD_HREF} event="landing_cta" where="header" className="inline-flex h-9 items-center rounded-full bg-accent px-4 text-sm font-medium text-accent-fg transition hover:brightness-110">
-            Start building free
-          </TrackedLink>
+        <div className="ml-auto flex items-center gap-1 lg:gap-2">
+          <AnimatedThemeToggler />
+          <div className="hidden items-center gap-2 lg:flex">
+            <Link href={SIGN_IN_HREF} className="rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:text-fg">
+              Sign in
+            </Link>
+            <TrackedLink href={BUILD_HREF} event="landing_cta" where="header" className="inline-flex h-9 items-center rounded-full bg-accent px-4 text-sm font-medium text-accent-fg transition hover:brightness-110">
+              Start building free
+            </TrackedLink>
+          </div>
+          <button
+            ref={button}
+            type="button"
+            className="inline-grid h-10 w-10 place-items-center rounded-lg text-fg hover:bg-panel-2 lg:hidden"
+            aria-expanded={open}
+            aria-controls="mobile-nav"
+            aria-label={open ? "Close menu" : "Open menu"}
+            onClick={() => {
+              setOpen(!open);
+              setOpenedAt(pathname);
+            }}
+          >
+            {open ? <X className="h-5 w-5" aria-hidden /> : <Menu className="h-5 w-5" aria-hidden />}
+          </button>
         </div>
-        <button
-          ref={button}
-          type="button"
-          className="ml-auto inline-grid h-10 w-10 place-items-center rounded-lg text-fg hover:bg-panel-2 lg:hidden"
-          aria-expanded={open}
-          aria-controls="mobile-nav"
-          aria-label={open ? "Close menu" : "Open menu"}
-          onClick={() => {
-            setOpen(!open);
-            setOpenedAt(pathname);
-          }}
-        >
-          {open ? <X className="h-5 w-5" aria-hidden /> : <Menu className="h-5 w-5" aria-hidden />}
-        </button>
       </div>
       <nav id="mobile-nav" aria-label="Main" hidden={!open} className="border-t border-border px-5 pb-5 lg:hidden">
         <ul className="py-2">

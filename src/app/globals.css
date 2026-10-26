@@ -218,3 +218,11 @@ body {
   }
 }
 
+
+/* Theme switch in the site header: the new theme grows out of the button as a circle (AnimatedThemeToggler).
+   Scoped to that switch so any other view transition keeps the browser's default crossfade. */
+html.theme-wipe::view-transition-old(root),
+html.theme-wipe::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}

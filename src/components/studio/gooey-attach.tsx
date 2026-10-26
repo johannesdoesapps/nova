@@ -4,7 +4,7 @@ import { Globe, Paperclip, Plus } from "lucide-react";
 import { Liquid } from "liquid-gooey";
 import { GitHubLogo } from "@/components/common/github-logo";
 import { cn } from "@/lib/utils";
-import { useDocumentTheme } from "./voice-glow";
+import { useDocumentTheme } from "@/hooks/use-document-theme";
 
 /** The goo's colour: a solid surface a step above the composer's glass in each theme. */
 const FILL = { dark: "#34343c", light: "#e6e5ec" } as const;
