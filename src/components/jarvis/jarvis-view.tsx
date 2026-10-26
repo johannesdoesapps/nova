@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowUp, Mic, OctagonX, Play } from "lucide-react";
+import { useMicrophone } from "voice-glow";
 import { useApp } from "@/components/layout/app-context";
 import { StudioHeader } from "@/components/studio/frame";
 import { useSpeech } from "@/hooks/use-speech";
@@ -25,7 +26,10 @@ import {
   type JarvisSettings,
 } from "@/lib/jarvis/store";
 import { cn } from "@/lib/utils";
-import { CORE_LABEL, JarvisCore, type CoreState } from "./jarvis-core";
+import { CORE_LABEL, type CoreState } from "./jarvis-core";
+import { OrbisAudioAnalyzer } from "./orbis/audio";
+import { OrbisHero } from "./orbis/orbis-hero";
+import { pulseOrbis, setOrbisState } from "./orbis/state";
 import { DesktopPanel, HistoryPanel, MissionPanel, SettingsPanel } from "./jarvis-panels";
 
 interface Turn {
@@ -44,6 +48,8 @@ const QUICK: { label: string; request: string; desktop?: boolean }[] = [
 ];
 
 const uid = () => crypto.randomUUID();
+/** iPhone and iPad: Safari may not let speech recognition share the microphone with a second capture. */
+const isAppleTouch = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const subscribeNothing = () => () => {};
 
 export function JarvisView() {
@@ -134,8 +140,22 @@ export function JarvisView() {
     u.rate = profile.rate;
     u.pitch = profile.pitch;
     u.lang = navigator.language || "en-US";
-    u.onstart = () => setSpeaking(true);
-    u.onend = u.onerror = () => setSpeaking(false);
+    // The core pulses with each spoken word. Engines that don't report words get a steady pulse while speaking.
+    let lastWord = 0;
+    let beat: ReturnType<typeof setInterval> | undefined;
+    u.onboundary = (e) => {
+      if (e.name && e.name !== "word") return;
+      lastWord = performance.now();
+      pulseOrbis(0.75);
+    };
+    u.onstart = () => {
+      setSpeaking(true);
+      beat = setInterval(() => performance.now() - lastWord > 700 && pulseOrbis(0.45), 450);
+    };
+    u.onend = u.onerror = () => {
+      clearInterval(beat);
+      setSpeaking(false);
+    };
     window.speechSynthesis.speak(u);
   }, []);
   useEffect(() => () => void ("speechSynthesis" in window && window.speechSynthesis.cancel()), []);
@@ -270,6 +290,19 @@ export function JarvisView() {
   /* Push to talk ------------------------------------------------------------------------------------------ */
 
   const speech = useSpeech(setDraft);
+  // The microphone level for the core while talking (the same approach as the chat composer's glow).
+  const mic = useMicrophone();
+  const { start: startMic, stop: stopMic, stream: micStream } = mic;
+  const analyzer = useRef<OrbisAudioAnalyzer | null>(null);
+  useEffect(() => {
+    analyzer.current ??= new OrbisAudioAnalyzer();
+    analyzer.current.connect(micStream ?? null);
+  }, [micStream]);
+  useEffect(() => () => analyzer.current?.disconnect(), []);
+  useEffect(() => {
+    if (!speech.listening) stopMic();
+  }, [speech.listening, stopMic]);
+  const audioLevel = useCallback(() => analyzer.current?.level() ?? 0, []);
   const ptt = useRef<"key" | "button" | null>(null);
   const submitOnEnd = useRef(false);
   const wasListening = useRef(false);
@@ -282,8 +315,9 @@ export function JarvisView() {
       ptt.current = via;
       submitOnEnd.current = false;
       speech.start("");
+      if (!isAppleTouch()) void startMic().catch(() => {});
     },
-    [speech, stopSpeaking],
+    [speech, stopSpeaking, startMic],
   );
   const stopListening = useCallback(
     (send: boolean) => {
@@ -360,6 +394,8 @@ export function JarvisView() {
               : error
                 ? "error"
                 : "idle";
+  // The ORBIS core shows what Jarvis is really doing.
+  useEffect(() => setOrbisState(core), [core]);
   const busy = thinking || running;
   const connected = agent.status === "connected";
   const key = shortcutLabel(settings.shortcut, mac);
@@ -406,6 +442,9 @@ export function JarvisView() {
       {header}
       <div className="s-scroll min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto grid w-full max-w-[1240px] gap-5 px-4 pb-24 pt-2 sm:px-8 lg:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="lg:col-span-2">
+            <OrbisHero vault={!!user} terminals={connected} pointer={settings.corePointer} audioLevel={audioLevel} />
+          </div>
           <main className="min-w-0">
             {halted && (
               <div role="status" className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-s-danger/50 bg-s-danger/5 p-3 text-[13px] text-s-ink-2">
@@ -417,11 +456,8 @@ export function JarvisView() {
               </div>
             )}
 
-            <section aria-label="Jarvis" className="flex flex-col items-center pt-4 text-center">
-              <JarvisCore state={core} size={168} />
-              <p className="mt-3 text-[15px] text-s-ink" aria-live="polite">
-                {CORE_LABEL[core]}
-              </p>
+            <section aria-label="Jarvis status" className="text-center">
+              <p className="text-[15px] text-s-ink">{CORE_LABEL[core]}</p>
               <p className="mt-0.5 text-[12.5px] text-s-ink-3">
                 {speech.supported ? `Hold ${key} or the microphone, speak, let go. Or type.` : "Voice input isn't available in this browser; type your request."}
                 {!connected && " Connect the Desktop Agent to let Jarvis work on this computer."}

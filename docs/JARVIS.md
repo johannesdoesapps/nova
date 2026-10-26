@@ -217,3 +217,52 @@ reached the agent at `http://127.0.0.1:47821` in this Chromium.
 | Approved commands, media and volume controls, calendar and email | Left out on purpose for the first milestone (higher risk). | Connectors, and an allow-list of commands with previews. |
 | Cross-device mission history, replay, custom voice commands, Agent Council view | History is per browser to avoid a database migration. | A table (migration to approve) and a replay that checks permissions again. |
 | Wake word | Optional by design, and needs an on-device detector. | The desktop app with a local keyword model. |
+
+## 9. The ORBIS core (Jarvis page)
+
+The top of `/jarvis` is the ORBIS screen: a live particle core, rendered with WebGL through three.js (already a
+dependency), above a perspective floor. The system line runs along the top (core state, vault, terminals); the
+ORBIS name and the state controls sit along the bottom.
+
+| Part | File | What it does |
+|---|---|---|
+| OrbisConfig | `src/components/jarvis/orbis/config.ts` | Particle counts, link distance, link limits, pixel-ratio cap, palette, and the quality tier for this device (high: 3,200 particles, medium: 2,000, low: 1,100). |
+| ParticleSystem | `orbis/particles.ts` | The cloud: denser toward the centre, an uneven edge, clusters. Smooth drift that never repeats, a travelling wave, breathing, audio swell, flashes, and particles stepping aside from the pointer. Links come from a uniform-grid neighbour search (only the 27 nearby cells), refreshed every 2–4 frames; between refreshes they follow their particles and fade with distance. |
+| OrbisCore / Lighting / Grid | `orbis/scene.ts` | Points use a soft-glow shader, with depth-dependent brightness and outward light pulses. Links use additive line segments. Glow comes from three additive sprites (centre, halo, atmosphere) rather than full-screen bloom. The floor is a shader grid that fades with distance and has a slow light sweep. If frames stay slower than about 40 fps, it draws fewer particles and then steps down a tier. |
+| OrbisStateManager | `orbis/state.ts` | Visual targets for idle, listening, thinking, speaking, error, plus approval (amber) and stopped (dimmed). Every value eases exponentially, so nothing jumps. It also holds the shared store and API (below). |
+| OrbisAudioAnalyzer | `orbis/audio.ts` | A smoothed loudness level from the microphone stream push-to-talk already opens. |
+| OrbisInterface | `orbis/orbis-hero.tsx`, `orbis/orbis-core.tsx` | The layout and controls. It loads three.js only in the browser; resizes with its box; pauses when the tab is hidden or the core is off screen; draws a still picture for reduced motion; falls back to the simple CSS core if WebGL fails or the context is lost; and frees GPU resources on unmount. |
+
+**API** (`src/components/jarvis/orbis/state.ts`):
+
+- `setOrbisState(activity)` reports what the assistant is really doing: `idle`, `listening`, `thinking`,
+  `speaking` or `error`, plus Jarvis's `working`, `approval` and `stopped`. The Jarvis page calls it from its own
+  state (speech recognition, requests in flight, missions, approvals, speech output and the emergency stop).
+- `setOrbisMode("auto" | state)`: `auto` (the default) follows the assistant. A state previews that look, and
+  the system line says **(preview)** so a preview is never mistaken for real activity.
+- `pulseOrbis(strength)` sends a wave of light from the centre. Jarvis sends one for each spoken word
+  (`SpeechSynthesisUtterance` boundary events). Speech engines that don't report words get a steady pulse while
+  they speak, because the device's speech engine doesn't expose its audio for analysis.
+
+**What the system line shows:**
+- "Connected vault" means you're signed in, so your saved memories and history are reachable.
+- "Terminals · connected" means the Desktop Agent is paired.
+- Either one shows as offline otherwise.
+
+**Settings → "Core reacts to the pointer"** turns off pointer interaction.
+
+**Tested:**
+- `tests/orbis-core.test.ts` (11 tests): tiers; the cloud's shape; the grid search giving exactly the same links
+  as a brute-force search; link limits and fading; smooth, finite motion; flash rate; stepping down; easing
+  without jumps; state mapping; preview labelling; pulses.
+- In Chromium with software WebGL (SwiftShader):
+  - the core renders, and each control changes the look and the status line;
+  - a request turns the real state to Thinking;
+  - keyboard controls work;
+  - reduced motion draws a still frame;
+  - the quality tier is low at 390 px and medium at 820 and 1440 px;
+  - no sideways scrolling;
+  - no console errors.
+
+  Software rendering ran at about 24–31 frames per second, which says nothing about real GPUs; the 60 fps target
+  hasn't been measured on real hardware.

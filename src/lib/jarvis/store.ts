@@ -35,10 +35,12 @@ export interface JarvisSettings {
   shortcut: Shortcut;
   /** Days to keep mission history (0: don't keep any). */
   keepDays: number;
+  /** The ORBIS core's particles react to the pointer. */
+  corePointer: boolean;
 }
 
 export const DEFAULT_SHORTCUT: Shortcut = { key: "j", ctrl: false, alt: true, shift: false, meta: false };
-export const DEFAULT_SETTINGS: JarvisSettings = { autonomy: 3, mode: "jarvis", voice: "classic", speak: true, shortcut: DEFAULT_SHORTCUT, keepDays: 30 };
+export const DEFAULT_SETTINGS: JarvisSettings = { autonomy: 3, mode: "jarvis", voice: "classic", speak: true, shortcut: DEFAULT_SHORTCUT, keepDays: 30, corePointer: true };
 
 const SETTINGS_KEY = "orbis:jarvis:settings";
 const HISTORY_KEY = "orbis:jarvis:missions";
@@ -75,6 +77,7 @@ export function parseSettings(v: unknown): JarvisSettings {
     speak: typeof s.speak === "boolean" ? s.speak : DEFAULT_SETTINGS.speak,
     shortcut: validShortcut(s.shortcut) ? s.shortcut : DEFAULT_SHORTCUT,
     keepDays: typeof s.keepDays === "number" && [0, 1, 7, 30, 90].includes(s.keepDays) ? s.keepDays : DEFAULT_SETTINGS.keepDays,
+    corePointer: typeof s.corePointer === "boolean" ? s.corePointer : DEFAULT_SETTINGS.corePointer,
   };
 }
 

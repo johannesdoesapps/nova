@@ -445,6 +445,13 @@ export function SettingsPanel({ settings, onChange, mac }: { settings: JarvisSet
         <span className="text-[13px] text-s-ink">Speak replies</span>
         <Switch checked={settings.speak} onChange={(v) => set("speak", v)} label="Speak replies" />
       </div>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span className="text-[13px] text-s-ink">
+          Core reacts to the pointer
+          <span className="block text-[12px] text-s-ink-3">Particles near the pointer move aside a little.</span>
+        </span>
+        <Switch checked={settings.corePointer} onChange={(v) => set("corePointer", v)} label="Core reacts to the pointer" />
+      </div>
       <div className="mt-3">
         <p className="text-[13px] text-s-ink">Push to talk</p>
         <p className="mb-1.5 text-[12px] text-s-ink-3">Hold the keys while this page is open, speak, then let go. Esc cancels.</p>
