@@ -78,7 +78,7 @@ export function ProductPanel() {
           <p className="mt-4 text-[12.5px] text-s-ink-3">
             {data.raw.people} people in total · {data.raw.signups} signed up in the period · {data.raw.active_users} used AI in the period · {data.raw.projects_created} projects created
           </p>
-          <dl className="mt-3 divide-y divide-s-line rounded-2xl border border-s-line">
+          <dl className="mt-3 divide-y divide-s-line s-card rounded-2xl">
             {METRICS.map((m) => {
               const r = rows.get(m.id);
               return (

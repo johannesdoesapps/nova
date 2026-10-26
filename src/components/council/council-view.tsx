@@ -525,7 +525,7 @@ export function CouncilView() {
           {!!sessions?.length && (
             <section className="mt-12">
               <h2 className="mb-3 text-[13px] font-medium uppercase tracking-[0.1em] text-s-ink-3">Recent councils</h2>
-              <ul className="divide-y divide-s-line rounded-[20px] border border-s-line">
+              <ul className="divide-y divide-s-line s-card rounded-[20px]">
                 {sessions.map((s) => (
                   <li key={s.id} className="flex items-center gap-3 px-4 py-2.5">
                     <button type="button" onClick={() => void openSession(s.id)} className="min-w-0 flex-1 text-left">

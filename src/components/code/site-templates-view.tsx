@@ -572,7 +572,7 @@ function DescribeStep({
       </div>
 
       <div className="mx-auto mt-6 max-w-[820px] sm:mt-8">
-        <section aria-label="Selected template" className="flex items-center gap-3 rounded-2xl border border-s-line bg-s-glass-strong p-2.5 pr-4">
+        <section aria-label="Selected template" className="flex items-center gap-3 s-card rounded-2xl bg-s-glass-strong p-2.5 pr-4">
           <div className="w-[88px] shrink-0 overflow-hidden rounded-lg border border-black/[0.06] bg-white sm:w-[112px]">
             <Shot template={t} eager sizes="112px" />
           </div>

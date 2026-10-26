@@ -293,7 +293,7 @@ export function RunProgress({ state, showAgent }: { state: RunState; showAgent?:
 export function ReportBlock({ text, title = "AI report" }: { text: string; title?: string }) {
   const [open, setOpen] = useState(true);
   return (
-    <section className="rounded-2xl border border-s-line bg-s-hover/50 p-4">
+    <section className="s-card rounded-2xl bg-s-hover/50 p-4">
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="text-[12px] font-medium uppercase tracking-[0.08em] text-s-ink-3">
         {title} {open ? "–" : "+"}
       </button>

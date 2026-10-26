@@ -349,7 +349,7 @@ export function PairPanel({
             rows={4}
             maxLength={8000}
             placeholder="e.g. A REST API for a todo list in Node.js with input validation and tests"
-            className="mt-1.5 block w-full resize-y rounded-2xl border border-s-line bg-transparent p-3 text-[14px] outline-none placeholder:text-s-ink-3 focus:border-s-line-strong"
+            className="mt-1.5 block w-full resize-y s-card rounded-2xl bg-transparent p-3 text-[14px] outline-none placeholder:text-s-ink-3 focus:border-s-line-strong"
           />
           <div className="mt-3">
             <PairSettingsForm value={settings} onChange={setSettings} />
@@ -421,7 +421,7 @@ export function PairPanel({
       <div className="s-scroll min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
         {run.pending && !driving && <PendingCard run={run} computerOn={computerOn} onRespond={respond} onStartComputer={async () => void (await startComputer())} />}
         {!ended && !driving && WORKING_STATUSES.includes(run.status) && !run.busy && (
-          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-s-line p-3 text-[13px] text-s-ink-2">
+          <div className="mb-3 flex flex-wrap items-center gap-2 s-card rounded-2xl p-3 text-[13px] text-s-ink-2">
             The agents are paused (the page was reloaded or a step didn&apos;t finish). Nothing is lost.
             <button type="button" onClick={() => void drive(run.id)} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-s-accent px-3.5 text-[12.5px] font-medium text-s-accent-ink">
               <Play className="h-3.5 w-3.5" aria-hidden /> Continue
@@ -463,7 +463,7 @@ export function PairPanel({
         <Tests tests={s.tests} />
 
         {general.length > 0 && (
-          <details className="mt-3 rounded-2xl border border-s-line p-3 text-[12.5px]">
+          <details className="mt-3 s-card rounded-2xl p-3 text-[12.5px]">
             <summary className="cursor-pointer text-s-ink-2">Activity ({general.length})</summary>
             <ul className="mt-2 space-y-1 text-s-ink-3">
               {general.map((e) => (
@@ -699,7 +699,7 @@ function Findings({ findings }: { findings: PairFinding[] }) {
   const list = openOnly ? findings.filter((f) => f.status === "open") : findings;
   const icon = { open: CircleDashed, fixed: CircleCheck, rejected: CircleX } as const;
   return (
-    <section aria-label="Review findings" className="mt-3 rounded-2xl border border-s-line p-3">
+    <section aria-label="Review findings" className="mt-3 s-card rounded-2xl p-3">
       <div className="flex items-center gap-2">
         <h3 className="text-[13.5px] font-medium text-s-ink">Findings</h3>
         <span className="text-[12px] text-s-ink-3">
@@ -767,7 +767,7 @@ function Findings({ findings }: { findings: PairFinding[] }) {
 function Tests({ tests }: { tests: PairState["tests"] }) {
   if (!tests.length) return null;
   return (
-    <section aria-label="Test runs" className="mt-3 rounded-2xl border border-s-line p-3">
+    <section aria-label="Test runs" className="mt-3 s-card rounded-2xl p-3">
       <h3 className="text-[13.5px] font-medium text-s-ink">Tests</h3>
       <ul className="mt-1.5 space-y-1 text-[12.5px]">
         {tests.map((t, i) => (

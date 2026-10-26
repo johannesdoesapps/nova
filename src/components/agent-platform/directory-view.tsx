@@ -235,7 +235,7 @@ export function DirectoryView({ catalogue }: { catalogue: CatalogueEntry[] }) {
                           <button
                             type="button"
                             onClick={() => setOpen(e)}
-                            className="flex h-full w-full flex-col rounded-2xl border border-s-line p-3.5 text-left transition hover:border-s-line-strong hover:bg-s-hover/40"
+                            className="flex h-full w-full flex-col s-card rounded-2xl p-3.5 text-left transition hover:border-s-line-strong hover:bg-s-hover/40"
                           >
                             <span className="flex w-full items-start justify-between gap-3">
                               <span className="text-[14.5px] font-medium">{e.name}</span>
@@ -530,7 +530,7 @@ function RiskTable() {
       <p className="mt-0.5 text-[13.5px] text-s-ink-2">
         Low-risk, reversible work runs on its own; anything consequential waits for you. These rules are enforced where each action runs, not just in the agents&apos; instructions.
       </p>
-      <div tabIndex={0} role="region" aria-label="What agents may do (scrolls sideways)" className="mt-3 overflow-x-auto rounded-2xl border border-s-line">
+      <div tabIndex={0} role="region" aria-label="What agents may do (scrolls sideways)" className="mt-3 overflow-x-auto s-card rounded-2xl">
         <table className="w-full min-w-[640px] text-left text-[13px]">
           <thead className="text-[12px] text-s-ink-3">
             <tr className="border-b border-s-line">

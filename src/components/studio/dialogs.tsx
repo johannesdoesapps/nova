@@ -138,7 +138,7 @@ function SettingsBody({
               <div className="flex gap-1.5">
                 <button
                   type="button"
-                  className={cn(btn, "bg-s-danger text-white hover:brightness-110")}
+                  className={cn(btn, "bg-s-danger text-s-danger-ink hover:brightness-110")}
                   onClick={() => {
                     onClearLocal();
                     setConfirmClear(false);
@@ -530,7 +530,7 @@ export function PromptsDialog({
                 editing === p.id ? (
                   <PromptEditor key={p.id} prompt={p} folders={folders} onCancel={() => setEditing(null)} onSave={(patch) => { onUpdate(p.id, patch); setEditing(null); }} />
                 ) : (
-                  <li key={p.id} className="group flex items-start gap-1 rounded-2xl border border-s-line p-1.5 transition hover:border-s-line-strong">
+                  <li key={p.id} className="group flex items-start gap-1 s-card rounded-2xl p-1.5 transition hover:border-s-line-strong">
                     <button type="button" onClick={() => onUse(p.text)} className="min-w-0 flex-1 rounded-xl px-2.5 py-1.5 text-left text-[13.5px] leading-relaxed text-s-ink-2 transition hover:text-s-ink" title="Use this prompt">
                       {(p.title || p.folder) && (
                         <span className="mb-0.5 flex items-center gap-1.5 text-[12.5px]">
@@ -620,7 +620,7 @@ function DeleteBody({ conv, onClose, onConfirm }: { conv: ConvSummary; onClose: 
         <button
           type="button"
           disabled={busy}
-          className={cn(btn, "bg-s-danger text-white hover:brightness-110")}
+          className={cn(btn, "bg-s-danger text-s-danger-ink hover:brightness-110")}
           onClick={async () => {
             setBusy(true);
             try {
@@ -743,7 +743,7 @@ function ConfirmBody({ confirmLabel, onClose, onConfirm }: { confirmLabel: strin
         <button
           type="button"
           disabled={busy}
-          className={cn(btn, "bg-s-danger text-white hover:brightness-110")}
+          className={cn(btn, "bg-s-danger text-s-danger-ink hover:brightness-110")}
           onClick={async () => {
             setBusy(true);
             try {
@@ -1040,7 +1040,7 @@ export function ShortcutsDialog({ open, onClose, mac }: { open: boolean; onClose
         {groups.map((g) => (
           <section key={g}>
             <h3 className="mb-1.5 text-[11.5px] font-medium uppercase tracking-[0.08em] text-s-ink-3">{g}</h3>
-            <dl className="divide-y divide-s-line rounded-2xl border border-s-line">
+            <dl className="divide-y divide-s-line s-card rounded-2xl">
               {SHORTCUTS.filter((s) => s.group === g).map((s) => (
                 <div key={s.id} className="flex items-center justify-between gap-3 px-3 py-2 text-[13.5px]">
                   <dt>{s.label}</dt>

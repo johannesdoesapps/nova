@@ -461,7 +461,7 @@ function RuleCard({ rule, results }: { rule: HuntRule; results: ReturnType<typeo
   const [lang, setLang] = useState<"splunk" | "sentinel" | "shell">("splunk");
   const passed = results.filter((r) => r.passed).length;
   return (
-    <li className="rounded-2xl border border-s-line">
+    <li className="s-card rounded-2xl">
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left text-[13.5px]">
         <span className="min-w-0 flex-1 font-medium">{rule.title}</span>
         <span className="text-[12px] text-s-ink-3">

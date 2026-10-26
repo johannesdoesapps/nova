@@ -75,7 +75,7 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
           const warn = id !== "free" && month.aiBudgetUsd <= 0;
           const hiBudget = hi && tierOf(hi.m) !== "standard" ? Math.min(month.aiBudgetUsd, month.premiumBudgetUsd) : month.aiBudgetUsd;
           return (
-            <div key={id} className="rounded-2xl border border-s-line p-4">
+            <div key={id} className="s-card rounded-2xl p-4">
               <input aria-label="Plan name" name={`${id}-label`} autoComplete="off" value={p.label} onChange={(e) => setPlan(id, { label: e.target.value })} className={cn(input, "font-semibold")} />
               <div className="mt-3 grid grid-cols-2 gap-2">
                 {id !== "free" ? (

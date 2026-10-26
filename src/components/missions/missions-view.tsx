@@ -199,7 +199,7 @@ export function MissionsView() {
                       aria-label="Milestone name"
                       className="w-full bg-transparent text-[13px] font-medium uppercase tracking-[0.08em] text-s-ink-2 outline-none"
                     />
-                    <ul className="mt-2 divide-y divide-s-line rounded-2xl border border-s-line">
+                    <ul className="mt-2 divide-y divide-s-line s-card rounded-2xl">
                       {m.tasks.map((t, ti) => (
                         <li key={ti} className="flex flex-wrap items-center gap-2 px-3 py-2">
                           <input value={t.title} onChange={(e) => editTask(mi, ti, { title: e.target.value })} aria-label="Task title" className="min-w-0 flex-1 bg-transparent text-[14px] outline-none" />
@@ -229,7 +229,7 @@ export function MissionsView() {
                   </div>
                 ))}
                 {plan.researchNeeds.length > 0 && (
-                  <div className="rounded-2xl border border-s-line px-4 py-3">
+                  <div className="s-card rounded-2xl px-4 py-3">
                     <div className="text-[13px] font-medium">Research needed</div>
                     <ul className="mt-1 list-disc pl-5 text-[13.5px] text-s-ink-2">
                       {plan.researchNeeds.map((r, i) => (

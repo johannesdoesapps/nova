@@ -518,7 +518,7 @@ export function JarvisView() {
           onClick={halted ? resume : emergencyStop}
           className={cn(
             "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-[12.5px] font-medium transition",
-            halted ? "border border-s-line text-s-ink-2 hover:text-s-ink" : "bg-s-danger text-white hover:brightness-110",
+            halted ? "border border-s-line text-s-ink-2 hover:text-s-ink" : "bg-s-danger text-s-danger-ink hover:brightness-110",
           )}
         >
           {halted ? <Play className="h-3.5 w-3.5" aria-hidden /> : <OctagonX className="h-3.5 w-3.5" aria-hidden />}
@@ -554,7 +554,7 @@ export function JarvisView() {
           <div className="lg:col-span-2">
             <OrbisHero vault={!!user} terminals={connected} pointer={settings.corePointer} audioLevel={audioLevel} />
           </div>
-          <main className="min-w-0">
+          <div className="min-w-0">
             {halted && (
               <div role="status" className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-s-danger/50 bg-s-danger/5 p-3 text-[13px] text-s-ink-2">
                 <OctagonX className="h-4 w-4 text-s-danger" aria-hidden />
@@ -689,7 +689,7 @@ export function JarvisView() {
                 {speech.error}
               </p>
             )}
-          </main>
+          </div>
 
           <aside className="min-w-0 space-y-4" aria-label="Jarvis controls">
             <MissionPanel

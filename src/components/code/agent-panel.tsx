@@ -731,7 +731,7 @@ export function AgentPanel({
 
           {run && (
             <div className="space-y-3">
-              <header className="rounded-2xl border border-s-line bg-s-hover/40 px-4 py-3">
+              <header className="s-card rounded-2xl bg-s-hover/40 px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <span
                     className={cn(
@@ -818,7 +818,7 @@ export function AgentPanel({
               {run.pending && !busy && <PendingCard run={run} computerOn={computerOn} onRespond={respond} onStartComputer={startAndContinue} />}
 
               {working && !busy && !error && (
-                <div className="rounded-2xl border border-s-line p-3 text-[13px]">
+                <div className="s-card rounded-2xl p-3 text-[13px]">
                   <p className="text-s-ink-2">The agent is paused (the page was reloaded or a step didn&apos;t finish). Nothing is lost.</p>
                   <button
                     type="button"
@@ -1080,7 +1080,7 @@ function StageRow({ block, current }: { block: StageBlock; current: boolean }) {
   const summary = stageSummary(block);
   const id = `stage-${block.stage}-${block.events[0]?.seq ?? 0}`;
   return (
-    <li className="rounded-2xl border border-s-line px-3.5 py-2.5">
+    <li className="s-card rounded-2xl px-3.5 py-2.5">
       <div className="flex items-center gap-2.5">
         <span
           className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-full", failed ? "bg-s-danger/10 text-s-danger" : current ? "bg-s-hover text-s-ink" : "bg-s-hover text-s-ink-3")}

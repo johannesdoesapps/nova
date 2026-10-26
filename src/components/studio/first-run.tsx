@@ -63,7 +63,7 @@ export function FirstRun({ name, onAction, onClose, github = false }: { name: st
 
   /** What the chosen starting point needs, and its actions. Shown under the card on phones, under its row on wider screens. */
   const detail = (c: (typeof START)[number], id: string) => (
-    <div id={id} className="s-in rounded-2xl border border-s-line p-4">
+    <div id={id} className="s-in s-card rounded-2xl p-4">
       {c.needs && (
         <p className="flex gap-2 text-[12.5px] leading-relaxed text-s-ink-2">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-s-ink-3" aria-hidden />
@@ -112,8 +112,8 @@ export function FirstRun({ name, onAction, onClose, github = false }: { name: st
               aria-controls={open === p.id ? "first-run-detail-m first-run-detail-d" : undefined}
               onClick={() => setOpen(open === p.id ? null : p.id)}
               className={cn(
-                "flex h-full w-full items-start gap-3 rounded-2xl border p-3.5 text-left transition active:scale-[0.99] [&_svg]:h-4 [&_svg]:w-4",
-                open === p.id ? "border-s-line-strong bg-s-hover" : "border-s-line hover:border-s-line-strong hover:bg-s-hover",
+                "s-card s-card-hover flex h-full w-full items-start gap-3 rounded-2xl p-3.5 text-left transition active:scale-[0.99] [&_svg]:h-4 [&_svg]:w-4",
+                open === p.id && "border-s-line-strong bg-s-hover",
               )}
             >
               <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-s-line text-s-ink-2">{ICONS[p.id]}</span>

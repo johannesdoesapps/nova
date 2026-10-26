@@ -338,7 +338,7 @@ export function TeachMimic({ samples, ledger, onCreated }: { samples: SampleInvo
       </div>
 
       {recording && events.length > 0 && (
-        <section className="rounded-[22px] border border-s-line p-4" aria-label="What Mimic has seen so far">
+        <section className="s-card rounded-[22px] p-4" aria-label="What Mimic has seen so far">
           <h3 className="text-[12px] font-medium uppercase tracking-[0.08em] text-s-ink-3">What Mimic has seen</h3>
           <ol className="mt-2 space-y-1 text-[13px]">
             {events.slice(-8).map((e, i) => (

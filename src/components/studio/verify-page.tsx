@@ -548,7 +548,7 @@ function Revise({ run, notify }: { run: Extract<Run, { status: "done" }>; notify
     }
   };
   return (
-    <div className="mt-8 rounded-2xl border border-s-line p-4">
+    <div className="mt-8 s-card rounded-2xl p-4">
       <h4 className="text-[14px] font-medium">Revised answer</h4>
       <p className="mt-1 text-[12.5px] text-s-ink-3">Keeps what the sources support, corrects or flags the rest, and cites only the sources reviewed above. One AI model call.</p>
       {state.status === "idle" && (

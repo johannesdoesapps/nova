@@ -318,7 +318,7 @@ export function WorkflowDetail({ id }: { id: string }) {
               )}
 
               {w.status === "completed" && w.decision?.action === "approve" && (
-                <section className="mt-6 rounded-[22px] border border-s-line p-5 text-[13.5px]">
+                <section className="mt-6 s-card rounded-[22px] p-5 text-[13.5px]">
                   <h2 className="text-[15px] font-semibold">Approved</h2>
                   <p className="mt-1 text-s-ink-2">The changes are in the project. Nothing has been pushed anywhere.</p>
                   <div className="mt-3 flex flex-wrap gap-2">

@@ -23,7 +23,7 @@ function ConnectorCard({ c, onOpen }: { c: CatalogEntry; onOpen: () => void }) {
   const action =
     status === "connected" ? "Manage" : status === "reauth_required" || status === "error" ? "Fix" : !c.available ? "Not set up yet" : c.auth === "none" ? "Turn on" : "Connect";
   return (
-    <article className="group flex flex-col rounded-2xl border border-s-line bg-[var(--s-glass)] p-4 transition hover:border-s-line-strong">
+    <article className="group flex flex-col s-card rounded-2xl bg-[var(--s-glass)] p-4 transition hover:border-s-line-strong">
       <div className="flex items-start gap-3">
         <BrandIcon id={c.id} size={40} />
         <div className="min-w-0 flex-1">
@@ -274,7 +274,7 @@ function ConnectedTab({ connected, onOpen, signedIn }: { connected: CatalogEntry
   return (
     <div className="mt-6 space-y-8">
       {usable.length > 0 && (
-        <section aria-labelledby="search-all" className="rounded-2xl border border-s-line p-4 sm:p-5">
+        <section aria-labelledby="search-all" className="s-card rounded-2xl p-4 sm:p-5">
           <h2 id="search-all" className="text-[15px] font-medium">
             Search your connected apps
           </h2>

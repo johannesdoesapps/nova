@@ -184,7 +184,7 @@ export function TaskHistory({ initialProject = null }: { initialProject?: string
             ))}
           </div>
         ) : page.status === "error" ? (
-          <div role="alert" className="flex flex-wrap items-center gap-3 rounded-2xl border border-s-line px-4 py-3 text-[13.5px] text-s-ink-2">
+          <div role="alert" className="flex flex-wrap items-center gap-3 s-card rounded-2xl px-4 py-3 text-[13.5px] text-s-ink-2">
             <span>Tasks couldn&apos;t load: {page.message}</span>
             <button
               type="button"
@@ -248,7 +248,7 @@ export function TaskRow({ task: t, onDelete }: { task: TaskSummary; onDelete: ()
     t.costUsd !== null ? usd(t.costUsd) : null,
   ].filter(Boolean);
   return (
-    <li className="rounded-2xl border border-s-line p-3.5 transition hover:border-s-line-strong">
+    <li className="s-card rounded-2xl p-3.5 transition hover:border-s-line-strong">
       <div className="flex items-start gap-3">
         <style.icon className={cn("mt-0.5 h-4 w-4 shrink-0", style.tone, (t.state === "running" || t.state === "verifying") && "animate-spin")} aria-hidden />
         <div className="min-w-0 flex-1">

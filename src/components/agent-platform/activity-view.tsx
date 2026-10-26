@@ -191,7 +191,7 @@ export function ActivityView() {
                     {visible.map((i) => {
                       const def = agentDef(i.agent);
                       return (
-                        <li key={`${i.kind}-${i.id}`} className="flex items-start gap-3 rounded-2xl border border-s-line p-3.5 transition hover:border-s-line-strong">
+                        <li key={`${i.kind}-${i.id}`} className="flex items-start gap-3 s-card rounded-2xl p-3.5 transition hover:border-s-line-strong">
                           {def && <AgentIconTile agent={def} />}
                           <div className="min-w-0 flex-1">
                             <Link href={i.href} className="block truncate text-[14.5px] font-medium hover:underline">

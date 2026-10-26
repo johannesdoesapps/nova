@@ -183,7 +183,7 @@ export function PostureCard({ team, onSeverity }: { team: Team; onSeverity: (s: 
       </div>
       <div className="mt-3 grid grid-cols-5 gap-2">
         {(["critical", "high", "medium", "low", "info"] as const).map((s) => (
-          <button key={s} type="button" onClick={() => onSeverity(s)} className="rounded-2xl border border-s-line px-1 py-2.5 text-center transition hover:bg-s-hover">
+          <button key={s} type="button" onClick={() => onSeverity(s)} className="s-card rounded-2xl px-1 py-2.5 text-center transition hover:bg-s-hover">
             <span className="block text-[22px] font-semibold tabular-nums">{team.bySeverity[s] ?? 0}</span>
             <span className="mt-0.5 inline-flex items-center gap-1.5 text-[12px] capitalize text-s-ink-2">
               <span className={cn("h-2 w-2 rounded-full", SEVERITY_DOT[s])} aria-hidden /> {s}

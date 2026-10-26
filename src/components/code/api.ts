@@ -1,6 +1,7 @@
 "use client";
 import type { FileChange, ProjectFile, ProjectSummary } from "@/lib/code/projects";
 import { isSiteTemplateId, type SiteTemplateId } from "@/lib/code/site-templates";
+import { statusMessage } from "@/hooks/use-ndjson";
 
 /** An API error with its code and details, so the page can offer the right next step (sign in, start, upgrade). */
 export class CodeApiError extends Error {
@@ -32,7 +33,7 @@ export async function api<T>(url: string, init?: RequestInit): Promise<T> {
     try {
       body = await res.json();
     } catch {}
-    throw new CodeApiError(body.error?.message ?? `Request failed (${res.status}).`, res.status, body.error?.code ?? null, body.error?.details ?? null);
+    throw new CodeApiError(body.error?.message ?? statusMessage(res.status), res.status, body.error?.code ?? null, body.error?.details ?? null);
   }
   return (await res.json()) as T;
 }

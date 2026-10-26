@@ -191,7 +191,7 @@ function Decision({ run, onChanged }: { run: RunView; onChanged?: (r: RunView) =
 
   if (confirmedDup)
     return (
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-s-line px-4 py-3 text-[13.5px]">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 s-card rounded-2xl px-4 py-3 text-[13.5px]">
         <span>This invoice is already in Demo Books. Mimic won&apos;t create it twice.</span>
         <button type="button" onClick={() => send("reject")} disabled={!!busy} className="rounded-xl border border-s-line-strong px-3 py-1.5 text-[13px] hover:bg-s-hover disabled:opacity-50">
           {busy === "reject" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Dismiss"}
@@ -200,7 +200,7 @@ function Decision({ run, onChanged }: { run: RunView; onChanged?: (r: RunView) =
     );
 
   return (
-    <div className="mt-4 rounded-2xl border border-s-line p-4">
+    <div className="mt-4 s-card rounded-2xl p-4">
       <p className="text-[13.5px] font-medium">{run.status === "proposal" ? "Create this draft?" : run.status === "needs_approval" ? "Approve the draft?" : "Fix what's needed, then approve"}</p>
       {fixable.length > 0 && (
         <div className="mt-3 grid gap-3 sm:grid-cols-2">

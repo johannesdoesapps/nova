@@ -33,6 +33,8 @@
   --s-brand: #5b54c4;
   --s-user: rgba(20, 20, 24, 0.045);
   --s-danger: #a8443e;
+  /* Text on a solid danger button: white on the deep red, near-black on the dark theme's light coral. */
+  --s-danger-ink: #ffffff;
   --s-code: rgba(20, 20, 24, 0.03);
   --s-scrim: rgba(30, 30, 34, 0.16);
   --s-shadow-sm: 0 1px 1px rgba(20, 20, 24, 0.04), 0 8px 22px -12px rgba(20, 20, 24, 0.14);
@@ -41,6 +43,12 @@
   --s-light-b: rgba(196, 192, 214, 0.22);
   --s-grain: 0.022;
   --s-ring: rgba(29, 29, 33, 0.6);
+  /* Cards: a lighter glass for content blocks (no blur, so they nest cheaply inside glass panels). */
+  --s-card: rgba(255, 255, 255, 0.46);
+  --s-card-hover: rgba(255, 255, 255, 0.7);
+  /* Orbis's colours, very faint, in the ambient light the glass refracts. */
+  --s-tint-a: rgba(124, 58, 237, 0.07);
+  --s-tint-b: rgba(217, 70, 239, 0.045);
   --s-ease: cubic-bezier(0.22, 0.8, 0.24, 1);
   --s-spring: cubic-bezier(0.3, 1.35, 0.45, 1);
   color-scheme: light;
@@ -75,6 +83,7 @@
   --s-brand: #a59cf0;
   --s-user: rgba(255, 255, 255, 0.06);
   --s-danger: #ef948c;
+  --s-danger-ink: #1c0b0a;
   --s-code: rgba(0, 0, 0, 0.3);
   --s-scrim: rgba(4, 4, 6, 0.55);
   --s-shadow-sm: 0 1px 1px rgba(0, 0, 0, 0.3), 0 10px 24px -12px rgba(0, 0, 0, 0.6);
@@ -83,6 +92,10 @@
   --s-light-b: rgba(170, 164, 210, 0.055);
   --s-grain: 0.035;
   --s-ring: rgba(230, 228, 236, 0.62);
+  --s-card: rgba(255, 255, 255, 0.024);
+  --s-card-hover: rgba(255, 255, 255, 0.05);
+  --s-tint-a: rgba(124, 58, 237, 0.11);
+  --s-tint-b: rgba(217, 70, 239, 0.06);
   color-scheme: dark;
 }
 
@@ -100,7 +113,9 @@
   pointer-events: none;
   background:
     radial-gradient(1100px 620px at 64% -18%, var(--s-light-a), transparent 64%),
+    radial-gradient(900px 560px at 12% -8%, var(--s-tint-a), transparent 66%),
     radial-gradient(760px 520px at -6% 104%, var(--s-light-b), transparent 62%),
+    radial-gradient(820px 520px at 100% 100%, var(--s-tint-b), transparent 66%),
     radial-gradient(520px 360px at 104% 70%, var(--s-light-b), transparent 64%);
 }
 .studio-ambient::after {
@@ -131,6 +146,23 @@
   border: 1px solid var(--s-line);
   box-shadow: inset 0 1px 0 var(--s-hi), inset 0 -1px 0 var(--s-lo), var(--s-shadow);
 }
+/*
+ * Cards: content blocks on a page (lists, summaries, settings groups). A faint translucent tint with the same top
+ * specular line and hairline edge as the glass, but no backdrop blur, so many of them (and nested ones) stay cheap.
+ * Add .s-card-hover when the whole card is clickable.
+ */
+.s-card {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--s-sheen) 70%, transparent), transparent 44%), var(--s-card);
+  border: 1px solid var(--s-line);
+  box-shadow: inset 0 1px 0 var(--s-hi);
+}
+.s-card-hover { transition: background-color 0.25s var(--s-ease), border-color 0.25s var(--s-ease), box-shadow 0.3s var(--s-ease); }
+.s-card-hover:hover {
+  background-color: var(--s-card-hover);
+  border-color: var(--s-line-strong);
+  box-shadow: inset 0 1px 0 var(--s-hi), var(--s-shadow-sm);
+}
+
 /* Menus and dialogs sit over text, so they stay readable first. */
 .glass-strong.glass-solid { background: linear-gradient(180deg, var(--s-sheen), transparent 40%), var(--s-glass-menu); }
 

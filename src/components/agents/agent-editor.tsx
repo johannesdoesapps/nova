@@ -336,7 +336,7 @@ function EditorForm({
 
       <fieldset>
         <legend className={label}>Capabilities</legend>
-        <ul className="divide-y divide-s-line rounded-2xl border border-s-line">
+        <ul className="divide-y divide-s-line s-card rounded-2xl">
           {AGENT_CAPABILITIES.map((c) => {
             const status = capabilities[c];
             const on = v.capabilities.includes(c);

@@ -196,7 +196,7 @@ function AssistantMessage({
       )}
 
       {m.notices?.map((n, i) => (
-        <p key={i} className="mb-3 flex items-start gap-2 rounded-2xl border border-s-line px-3.5 py-2.5 text-[13.5px] text-s-ink-2">
+        <p key={i} className="mb-3 flex items-start gap-2 s-card rounded-2xl px-3.5 py-2.5 text-[13.5px] text-s-ink-2">
           <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" /> {n}
         </p>
       ))}
@@ -248,7 +248,7 @@ function AssistantMessage({
       {!streaming && m.tasks?.map((t) => <TaskCard key={t.id} proposal={t} messageId={m.id} />)}
 
       {m.status === "error" && (
-        <div role={m.stopped ? "status" : "alert"} className="s-in mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-s-line bg-s-hover px-4 py-3 text-[14px]">
+        <div role={m.stopped ? "status" : "alert"} className="s-in mt-3 flex flex-wrap items-center gap-3 s-card rounded-2xl bg-s-hover px-4 py-3 text-[14px]">
           {m.stopped ? (
             <Square className="h-3.5 w-3.5 shrink-0 fill-current text-s-ink-3" aria-hidden />
           ) : (
@@ -284,7 +284,7 @@ function AssistantMessage({
       )}
 
       {m.status === "done" && m.truncated && (
-        <div role="status" className="s-in mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-s-line px-4 py-2.5 text-[13.5px] text-s-ink-2">
+        <div role="status" className="s-in mt-3 flex flex-wrap items-center gap-3 s-card rounded-2xl px-4 py-2.5 text-[13.5px] text-s-ink-2">
           <span className="min-w-0 flex-1">This reply reached its length limit and was cut off.</span>
           {isLast && onContinue && (
             <button type="button" onClick={onContinue} disabled={busy} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-s-line-strong px-3 text-[13px] text-s-ink hover:bg-s-hover disabled:opacity-40">
@@ -387,7 +387,7 @@ function ToolRow({ tool }: { tool: NonNullable<Msg["tools"]>[number] }) {
     </>
   );
   return (
-    <div className="s-in mb-3 overflow-hidden rounded-2xl border border-s-line text-[13px] text-s-ink-2">
+    <div className="s-in mb-3 overflow-hidden s-card rounded-2xl text-[13px] text-s-ink-2">
       {tool.detail ? (
         <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-2.5 px-2.5 py-2 text-left transition hover:bg-s-hover">
           {body}

@@ -249,7 +249,7 @@ export function ConnectorDialog({
         </section>
 
         {connected ? (
-          <section className="space-y-4 rounded-2xl border border-s-line p-4">
+          <section className="space-y-4 s-card rounded-2xl p-4">
             <h3 className="text-[14px] font-medium">Manage</h3>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[13px]">
               <dt className="text-s-ink-3">Account</dt>
@@ -364,7 +364,7 @@ export function ConnectorDialog({
             )}
           </section>
         ) : (
-          <section className="space-y-3 rounded-2xl border border-s-line p-4">
+          <section className="space-y-3 s-card rounded-2xl p-4">
             <h3 className="text-[14px] font-medium">{c.auth === "none" ? "Turn on" : "Connect"}</h3>
             <p className="leading-relaxed text-s-ink-2">{HOW[c.auth](c.name, c.vendor)}</p>
             {CHOOSE[c.id] && <p className="leading-relaxed text-s-ink-2">{CHOOSE[c.id]}</p>}

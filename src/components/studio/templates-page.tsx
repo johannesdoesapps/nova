@@ -375,7 +375,7 @@ function TemplateView({ template: t, own, mine, setMine }: { template: Template;
             )}
 
             {t.steps ? (
-              <div className="rounded-2xl border border-s-line p-3.5 text-[13px]">
+              <div className="s-card rounded-2xl p-3.5 text-[13px]">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-s-ink-2">Model</span>
                   <ModelSelector models={models} value={modelId} onChange={setModelId} auto={catalog?.auto ?? null} />
@@ -392,7 +392,7 @@ function TemplateView({ template: t, own, mine, setMine }: { template: Template;
                 <p className="mt-1.5 text-[12.5px] text-s-ink-2">{est ? `Estimated: ${est.text}.` : "Estimate unavailable until models load."}</p>
               </div>
             ) : (
-              <p className="rounded-2xl border border-s-line px-3.5 py-3 text-[13px] text-s-ink-2">{t.handoff!.why}</p>
+              <p className="s-card rounded-2xl px-3.5 py-3 text-[13px] text-s-ink-2">{t.handoff!.why}</p>
             )}
 
             {t.steps && (
@@ -574,7 +574,7 @@ function StepRow({ n, title, doing, state, canRedo, onRedo, isLast }: { n: numbe
   const label = { pending: "Waiting", running: doing, done: "Done", failed: "Failed", cancelled: "Cancelled" }[state.status];
   const showText = state.text && (open || state.status === "running");
   return (
-    <li className="rounded-2xl border border-s-line px-3.5 py-3">
+    <li className="s-card rounded-2xl px-3.5 py-3">
       <div className="flex items-center gap-2.5">
         {icon}
         <span className="min-w-0 flex-1 text-[14px]">

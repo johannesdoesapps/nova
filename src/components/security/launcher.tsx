@@ -149,7 +149,7 @@ function LauncherBody({ mode, onClose, targets, onTargetsChanged, onFinished }: 
             </p>
           </div>
           {auditMode === "release_gate" && (
-            <div className="rounded-2xl border border-s-line p-3">
+            <div className="s-card rounded-2xl p-3">
               <span className="block text-[12.5px] font-medium text-s-ink-2">The gate fails on open findings of these severities</span>
               <div className="mt-2 flex flex-wrap gap-3">
                 {SEVERITIES.map((sv) => (

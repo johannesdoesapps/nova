@@ -127,7 +127,7 @@ export function WorkflowPanel({ workflow, data, onBack, onChanged, onRun }: { wo
           <p className="text-[13px] text-s-ink-2">One demonstration can&apos;t show everything. Mimic asks instead of guessing.</p>
           <div className="mt-3 space-y-4">
             {workflow.questions.map((q) => (
-              <fieldset key={q.id} className="rounded-2xl border border-s-line p-4">
+              <fieldset key={q.id} className="s-card rounded-2xl p-4">
                 <legend className="px-1 text-[14px] font-medium">{q.text}</legend>
                 <div className="mt-1 flex flex-wrap gap-2">
                   {q.options.map((o) => (
@@ -157,7 +157,7 @@ export function WorkflowPanel({ workflow, data, onBack, onChanged, onRun }: { wo
           <p className="text-[13px] text-s-ink-2">&ldquo;Learned&rdquo; steps came from your demonstration; &ldquo;Added&rdquo; ones are safeguards Mimic includes. Safety steps can&apos;t be turned off.</p>
           <ol className="mt-3 space-y-3">
             {def.steps.map((s, i) => (
-              <li key={s.id} className={cn("flex gap-3 rounded-2xl border border-s-line p-3", !s.enabled && "opacity-60")}>
+              <li key={s.id} className={cn("flex gap-3 s-card rounded-2xl p-3", !s.enabled && "opacity-60")}>
                 <span className="mt-0.5 w-5 shrink-0 text-right text-[13px] tabular-nums text-s-ink-3">{i + 1}.</span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -180,7 +180,7 @@ export function WorkflowPanel({ workflow, data, onBack, onChanged, onRun }: { wo
             {showDemo ? "Hide" : "Show"} what Mimic learned from
           </button>
           {showDemo && (
-            <div className="mt-2 rounded-2xl border border-s-line p-3 text-[12.5px]">
+            <div className="mt-2 s-card rounded-2xl p-3 text-[12.5px]">
               <ul className="space-y-1">
                 {workflow.observed.map((o, i) => (
                   <li key={i}>{o}</li>

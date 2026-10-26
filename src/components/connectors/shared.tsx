@@ -1,11 +1,12 @@
 "use client";
 import { STATUS_LABEL, type ConnectionStatus } from "@/lib/connectors/catalog";
 import { cn } from "@/lib/utils";
+import { statusMessage } from "@/hooks/use-ndjson";
 
 export async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) }, cache: "no-store" });
   const body = await res.json().catch(() => null);
-  if (!res.ok && !(body && "ok" in body)) throw new Error(body?.error?.message ?? `Request failed (${res.status}).`);
+  if (!res.ok && !(body && "ok" in body)) throw new Error(body?.error?.message ?? statusMessage(res.status));
   return body as T;
 }
 

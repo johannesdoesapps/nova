@@ -273,7 +273,7 @@ export function MissionView({ id }: { id: string }) {
                           {tasks.filter((t) => t.status === "completed").length}/{tasks.filter((t) => t.status !== "cancelled").length}
                         </span>
                       </h2>
-                      <ul className="divide-y divide-s-line overflow-hidden rounded-[20px] border border-s-line">
+                      <ul className="divide-y divide-s-line overflow-hidden s-card rounded-[20px]">
                         {tasks.map((t) => (
                           <TaskRow
                             key={t.id}
@@ -504,7 +504,7 @@ function TaskRow({
           </div>
 
           {live && (
-            <div className="rounded-2xl border border-s-line p-4">
+            <div className="s-card rounded-2xl p-4">
               {live.status === "error" && <p className="mb-2 text-[13px] text-s-danger">{live.error}</p>}
               {live.text ? <Markdown text={live.text} className="s-prose text-[14px]" /> : live.status === "running" ? <p className="text-[13px] text-s-ink-3">Drafting…</p> : null}
               {live.status === "error" && (
@@ -516,7 +516,7 @@ function TaskRow({
           )}
 
           {!live && t.output && (
-            <div className="rounded-2xl border border-s-line p-4">
+            <div className="s-card rounded-2xl p-4">
               <div className="mb-2 flex items-center justify-between gap-2 text-[11.5px] text-s-ink-3">
                 <span>AI draft{outputModel ? ` · ${outputModel}` : ""} · review before marking done</span>
                 <span className="flex items-center gap-1">

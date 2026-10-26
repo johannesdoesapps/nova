@@ -115,7 +115,7 @@ export function ResearchHome() {
             each source.
           </p>
 
-          <section aria-label="Start research" className="mt-6 rounded-2xl border border-s-line p-4">
+          <section aria-label="Start research" className="mt-6 s-card rounded-2xl p-4">
             <label htmlFor="rs-q" className="block text-[13px] font-medium">
               What do you want to find out?
             </label>
@@ -216,7 +216,7 @@ export function ResearchHome() {
             ) : (
               <ul className="mt-3 flex flex-col gap-2">
                 {runs.map((r) => (
-                  <li key={r.id} className="flex items-center gap-3 rounded-2xl border border-s-line px-3 py-2.5">
+                  <li key={r.id} className="flex items-center gap-3 s-card rounded-2xl px-3 py-2.5">
                     <Link href={`/research/${r.id}`} className="min-w-0 flex-1">
                       <span className="block truncate text-[14px]">{r.question}</span>
                       <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-s-ink-3">
@@ -371,7 +371,7 @@ export function ResearchDetail({ id }: { id: string }) {
           </p>
 
           {run.status === "running" && (
-            <div className="mt-4 rounded-2xl border border-s-line p-3">
+            <div className="mt-4 s-card rounded-2xl p-3">
               <div className="flex flex-wrap items-center gap-3 text-[13.5px]">
                 <Loader2 className="h-4 w-4 animate-spin text-s-ink-2" aria-hidden />
                 <span className="min-w-0 flex-1">
@@ -436,7 +436,7 @@ export function ResearchDetail({ id }: { id: string }) {
           )}
 
           {run.plan && (
-            <section aria-labelledby="rs-plan" className="mt-5 rounded-2xl border border-s-line p-3.5">
+            <section aria-labelledby="rs-plan" className="mt-5 s-card rounded-2xl p-3.5">
               <h2 id="rs-plan" className="text-[14px] font-medium">
                 Research plan
               </h2>
@@ -496,7 +496,7 @@ export function ResearchDetail({ id }: { id: string }) {
                 </a>
               </div>
               {run.report_check && <SupportNote check={run.report_check} sources={run.sources.length} />}
-              <div className="mt-3 rounded-2xl border border-s-line p-4 sm:p-5">
+              <div className="mt-3 s-card rounded-2xl p-4 sm:p-5">
                 <Markdown text={run.report} onCitation={showSource} validCitations={new Set(run.sources.map((s) => s.n))} className="s-prose text-[15px]" />
               </div>
             </section>
@@ -527,7 +527,7 @@ export function ResearchDetail({ id }: { id: string }) {
           )}
 
           {run.notes.length > 0 && (
-            <details className="mt-6 rounded-2xl border border-s-line p-3.5">
+            <details className="mt-6 s-card rounded-2xl p-3.5">
               <summary className="cursor-pointer text-[14px] font-medium">Research notes ({run.notes.length})</summary>
               <div className="mt-3 space-y-5">
                 {run.notes.map((n, i) => (
@@ -597,7 +597,7 @@ function ActivityLog({ log }: { log: ResearchView["log"] }) {
   const [open, setOpen] = useState(false);
   if (!log.length) return null;
   return (
-    <section className="mt-6 rounded-2xl border border-s-line">
+    <section className="mt-6 s-card rounded-2xl">
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13.5px]">
         {open ? <ChevronDown className="h-4 w-4" aria-hidden /> : <ChevronRight className="h-4 w-4" aria-hidden />}
         What Orbis did <span className="text-s-ink-3">({log.length} steps)</span>

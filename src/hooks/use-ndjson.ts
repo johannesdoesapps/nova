@@ -2,10 +2,22 @@
 
 export type ApiErrorBody = { error?: { code?: string; message?: string; details?: { resetsAt?: string } } };
 
+/** A plain-English message for an HTTP status when the response carries no message of its own (e.g. a proxy's HTML error page). */
+export function statusMessage(status: number): string {
+  if (status === 401) return "Your session has ended. Sign in again to continue.";
+  if (status === 403) return "You don't have access to this.";
+  if (status === 404) return "That couldn't be found. It may have been deleted.";
+  if (status === 413) return "That's too large to send.";
+  if (status === 429) return "Too many requests. Please wait a moment and try again.";
+  if (status === 502 || status === 503 || status === 504) return "Orbis is temporarily unavailable. Please try again in a moment.";
+  if (status >= 500) return "Something went wrong on Orbis's side. Please try again.";
+  return `Request failed (${status}).`;
+}
+
 export async function readApiError(res: Response): Promise<string> {
   try {
     const j = (await res.json()) as ApiErrorBody;
-    const message = j.error?.message ?? `Request failed (${res.status}).`;
+    const message = j.error?.message ?? statusMessage(res.status);
     const resetsAt = j.error?.details?.resetsAt ? new Date(j.error.details.resetsAt) : null;
     if (resetsAt && !Number.isNaN(resetsAt.getTime())) {
       const sameDay = resetsAt.toDateString() === new Date().toDateString();
@@ -14,7 +26,7 @@ export async function readApiError(res: Response): Promise<string> {
     }
     return message;
   } catch {
-    return `Request failed (${res.status}).`;
+    return statusMessage(res.status);
   }
 }
 

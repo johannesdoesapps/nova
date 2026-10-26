@@ -120,7 +120,7 @@ export function AttackPaths({ paths }: { paths: StoredAnalysis["paths"] }) {
       ) : (
         <ol className="space-y-3">
           {paths.map((p) => (
-            <li key={p.id} className="rounded-2xl border border-s-line p-4">
+            <li key={p.id} className="s-card rounded-2xl p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <Route className="h-4 w-4 text-s-ink-3" aria-hidden />
                 <span className="text-[14.5px] font-semibold">{p.title}</span>

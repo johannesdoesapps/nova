@@ -90,7 +90,7 @@ export function TaskStarter({
       </div>
 
       {task && (
-        <section id="starter-panel" aria-label={`${task.label}: suggested setup and examples`} className="s-in mt-3 w-full rounded-2xl border border-s-line p-4 text-left">
+        <section id="starter-panel" aria-label={`${task.label}: suggested setup and examples`} className="s-in mt-3 w-full s-card rounded-2xl p-4 text-left">
           <p className="text-[14px] font-medium text-s-ink">{task.short}</p>
           <Setup task={task} env={env} />
           <p className="mt-1.5 text-[12.5px] leading-relaxed text-s-ink-3">{task.why}</p>

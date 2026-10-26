@@ -344,7 +344,7 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
                     <button
                       type="button"
                       onClick={() => send(s)}
-                      className="group flex h-full w-full items-center justify-between gap-3 rounded-2xl border border-s-line px-4 py-3 text-left text-[13.5px] text-s-ink-2 transition duration-200 hover:border-s-line-strong hover:bg-s-glass hover:text-s-ink active:scale-[0.99]"
+                      className="group flex h-full w-full items-center justify-between gap-3 s-card rounded-2xl px-4 py-3 text-left text-[13.5px] text-s-ink-2 transition duration-200 hover:border-s-line-strong hover:bg-s-glass hover:text-s-ink active:scale-[0.99]"
                     >
                       {s}
                       <ArrowUpRight className="h-4 w-4 shrink-0 text-s-ink-3 transition group-hover:text-s-accent" />

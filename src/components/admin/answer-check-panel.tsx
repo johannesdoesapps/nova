@@ -174,7 +174,7 @@ export function AnswerCheckPanel() {
               ))}
             </ul>
           )}
-          <ul className="mt-3 divide-y divide-s-line rounded-2xl border border-s-line">
+          <ul className="mt-3 divide-y divide-s-line s-card rounded-2xl">
             {rows.map((r) => (
               <li key={r.id}>
                 <button

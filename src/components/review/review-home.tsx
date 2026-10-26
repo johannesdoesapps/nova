@@ -137,7 +137,7 @@ export function ReviewHome() {
             and says how sure it is. Nothing is run and nothing is changed until you ask.
           </p>
 
-          <section aria-label="Start a review" className="mt-6 rounded-2xl border border-s-line p-4">
+          <section aria-label="Start a review" className="mt-6 s-card rounded-2xl p-4">
             <div role="tablist" aria-label="What to review" className="flex flex-wrap gap-1.5">
               {TABS.map((t) => (
                 <button
@@ -348,7 +348,7 @@ export function ReviewHome() {
             ) : (
               <ul className="mt-3 flex flex-col gap-2">
                 {reviews.map((r) => (
-                  <li key={r.id} className="flex items-center gap-3 rounded-2xl border border-s-line px-3 py-2.5">
+                  <li key={r.id} className="flex items-center gap-3 s-card rounded-2xl px-3 py-2.5">
                     <Link href={`/review/${r.id}`} className="min-w-0 flex-1">
                       <span className="block truncate text-[14px] text-s-ink">{r.title}</span>
                       <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-s-ink-3">

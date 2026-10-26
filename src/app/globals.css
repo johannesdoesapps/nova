@@ -83,6 +83,7 @@
   --color-s-accent-soft: var(--s-accent-soft);
   --color-s-user: var(--s-user);
   --color-s-danger: var(--s-danger);
+  --color-s-danger-ink: var(--s-danger-ink);
 }
 
 html,

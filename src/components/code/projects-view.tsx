@@ -438,7 +438,7 @@ export function CodeProjectsView() {
             )}
 
             {guided && !site.trim() && !busy && (
-              <section aria-label="How Orbis Code works" className="s-in mt-4 rounded-2xl border border-s-line p-4 text-[13px] leading-relaxed">
+              <section aria-label="How Orbis Code works" className="s-in mt-4 s-card rounded-2xl p-4 text-[13px] leading-relaxed">
                 <p className="text-s-ink-2">
                   Describe what you want: a website, an app, a script or a bot, or a change to one of your projects. The agent writes the files, runs them on the project&apos;s private computer, runs
                   the tests, opens websites in a real browser at desktop, tablet and phone sizes, fixes what it finds, and reports what it checked. You can watch each step and stop it at any time;
@@ -633,7 +633,7 @@ export function CodeProjectsView() {
               </button>
               {showAll && data && (
                 <div id="code-projects" className="mt-2">
-                  <ul className="divide-y divide-s-line rounded-2xl border border-s-line">
+                  <ul className="divide-y divide-s-line s-card rounded-2xl">
                     {data.projects.map((p) => {
                       const Icon = ICON[p.template as TemplateId] ?? FolderGit2;
                       return (

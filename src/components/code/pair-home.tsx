@@ -123,7 +123,7 @@ export function PairHome() {
             </li>
           </ol>
 
-          <section aria-label="Start a pair task" className="mt-6 rounded-2xl border border-s-line p-4">
+          <section aria-label="Start a pair task" className="mt-6 s-card rounded-2xl p-4">
             <label htmlFor="pair-home-request" className="block text-[13px] font-medium text-s-ink">
               What should they build or fix?
             </label>

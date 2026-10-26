@@ -96,7 +96,7 @@ export function WorkflowList() {
             ) : (
               <ul className="mt-3 space-y-2">
                 {list.map((w) => (
-                  <li key={w.id} className="rounded-2xl border border-s-line p-3.5 hover:border-s-line-strong">
+                  <li key={w.id} className="s-card rounded-2xl p-3.5 hover:border-s-line-strong">
                     <Link href={`/agents/workflows/${w.id}`} className="block text-[14px] font-medium hover:underline">
                       {w.summary}
                     </Link>

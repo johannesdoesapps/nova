@@ -207,7 +207,7 @@ export function ProfileWorkspace({ profile }: { profile: CodeProfile }) {
           </ul>
 
           {!user ? (
-            <p className="mt-8 rounded-2xl border border-s-line px-4 py-3 text-[14px]">
+            <p className="mt-8 s-card rounded-2xl px-4 py-3 text-[14px]">
               <Link href={`/login?next=${encodeURIComponent(def.href)}`} className="font-medium text-s-accent underline-offset-4 hover:underline">
                 Sign in
               </Link>{" "}
@@ -371,7 +371,7 @@ export function ProfileWorkspace({ profile }: { profile: CodeProfile }) {
               )}
 
               {profile === "bug_fixer" && workflowsReady && (
-                <div className="rounded-2xl border border-s-line p-4">
+                <div className="s-card rounded-2xl p-4">
                   <Toggle
                     label="Run the full workflow"
                     hint="After the fix: QA Testing adds regression tests and runs them, Code Review checks the changes for bugs and security problems, then you approve or reject (rejecting undoes everything)."
@@ -384,7 +384,7 @@ export function ProfileWorkspace({ profile }: { profile: CodeProfile }) {
                 </div>
               )}
 
-              <fieldset className="space-y-3 rounded-2xl border border-s-line p-4">
+              <fieldset className="space-y-3 s-card rounded-2xl p-4">
                 <legend className="px-1 text-[13px] font-medium">Approvals and model</legend>
                 <Toggle
                   label="Approve the plan before anything changes"
@@ -465,7 +465,7 @@ export function ProfileWorkspace({ profile }: { profile: CodeProfile }) {
               ) : (
                 <ul className="mt-3 space-y-2">
                   {tasks.map((t) => (
-                    <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-s-line p-3.5">
+                    <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 s-card rounded-2xl p-3.5">
                       <div className="min-w-0 flex-1">
                         <Link href={`/code/${t.projectId}?run=${t.id}`} className="block truncate text-[14px] font-medium hover:underline">
                           {t.title}

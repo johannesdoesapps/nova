@@ -232,7 +232,7 @@ function TeamView({ state, onChanged }: { state: State & { team: Team }; onChang
         <h3 id="team-members" className="text-[15px] font-semibold">
           Members
         </h3>
-        <ul className="mt-2 divide-y divide-s-line rounded-[18px] border border-s-line">
+        <ul className="mt-2 divide-y divide-s-line s-card rounded-[18px]">
           {members.map((m) => (
             <li key={m.user_id} className="flex items-center gap-3 px-4 py-3 text-[13.5px]">
               <span className="min-w-0 flex-1 truncate">{m.email}</span>
@@ -262,7 +262,7 @@ function TeamView({ state, onChanged }: { state: State & { team: Team }; onChang
         {owner && invites.length > 0 && (
           <>
             <h4 className="mt-5 text-[13.5px] font-medium">Invited</h4>
-            <ul className="mt-2 divide-y divide-s-line rounded-[18px] border border-s-line">
+            <ul className="mt-2 divide-y divide-s-line s-card rounded-[18px]">
               {invites.map((i) => (
                 <li key={i.id} className="flex items-center gap-3 px-4 py-3 text-[13.5px]">
                   <span className="min-w-0 flex-1 truncate text-s-ink-2">{i.email}</span>

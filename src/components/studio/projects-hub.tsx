@@ -171,7 +171,7 @@ export function ProjectsHub() {
           </div>
 
           {errors.length > 0 && (
-            <div role="alert" className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-s-line px-4 py-3 text-[13.5px] text-s-ink-2">
+            <div role="alert" className="mt-4 flex flex-wrap items-center gap-3 s-card rounded-2xl px-4 py-3 text-[13.5px] text-s-ink-2">
               <span>Some projects couldn’t load. {errors.join(" · ")}</span>
               <button
                 type="button"

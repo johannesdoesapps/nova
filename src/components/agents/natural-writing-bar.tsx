@@ -39,7 +39,7 @@ export function NaturalWritingBar({ nw, disabled }: { nw: ReturnType<typeof useN
   const id = useId();
   const { on, settings: s } = nw;
   return (
-    <div className="mb-2 rounded-2xl border border-s-line bg-s-glass px-3 py-2 text-[13px]">
+    <div className="mb-2 s-card rounded-2xl bg-s-glass px-3 py-2 text-[13px]">
       <label className="flex cursor-pointer items-center gap-2">
         <input type="checkbox" checked={on} disabled={disabled} onChange={(e) => nw.setOn(e.target.checked)} className="h-4 w-4 accent-[var(--s-accent)]" />
         <Feather className="h-3.5 w-3.5 text-s-ink-3" aria-hidden />

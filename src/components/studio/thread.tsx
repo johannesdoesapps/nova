@@ -107,7 +107,7 @@ export function ConversationPane({
             <ThreadSkeleton />
           ) : load.status === "error" ? (
             <div role="alert" className="s-in mx-auto mt-[12vh] flex max-w-sm flex-col items-center text-center">
-              <span className="grid h-11 w-11 place-items-center rounded-2xl border border-s-line text-s-danger">
+              <span className="grid h-11 w-11 place-items-center s-card rounded-2xl text-s-danger">
                 <CircleAlert className="h-5 w-5" />
               </span>
               <h2 className="mt-4 text-[16px] font-semibold">This conversation couldn’t be opened</h2>

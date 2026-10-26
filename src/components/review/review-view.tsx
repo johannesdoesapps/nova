@@ -171,7 +171,7 @@ export function ReviewDetail({ id }: { id: string }) {
           </p>
 
           {review.status === "running" && (
-            <div className="mt-4 rounded-2xl border border-s-line p-3">
+            <div className="mt-4 s-card rounded-2xl p-3">
               <div className="flex items-center gap-3 text-[13.5px]">
                 <Loader2 className="h-4 w-4 animate-spin text-s-ink-2" aria-hidden />
                 <span className="flex-1">
@@ -308,7 +308,7 @@ function Activity({ review }: { review: Review }) {
   const [open, setOpen] = useState(false);
   if (!review.log.length) return null;
   return (
-    <section className="mt-4 rounded-2xl border border-s-line">
+    <section className="mt-4 s-card rounded-2xl">
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13.5px]">
         {open ? <ChevronDown className="h-4 w-4" aria-hidden /> : <ChevronRight className="h-4 w-4" aria-hidden />}
         What Orbis did <span className="text-s-ink-3">({review.log.length} steps)</span>
@@ -363,7 +363,7 @@ function FindingCard({
   };
 
   return (
-    <li className={cn("rounded-2xl border border-s-line p-3.5", f.status !== "open" && "opacity-70")}>
+    <li className={cn("s-card rounded-2xl p-3.5", f.status !== "open" && "opacity-70")}>
       <div className="flex flex-wrap items-center gap-2">
         <SeverityBadge severity={f.severity} />
         <span className="text-[12px] text-s-ink-2">{CATEGORY_LABEL[f.category]}</span>

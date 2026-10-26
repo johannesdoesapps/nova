@@ -107,7 +107,7 @@ export function MimicView() {
             </div>
           )}
           {error && (
-            <div role="alert" className="mt-5 flex items-center gap-3 rounded-2xl border border-s-line px-4 py-3 text-[14px]">
+            <div role="alert" className="mt-5 flex items-center gap-3 s-card rounded-2xl px-4 py-3 text-[14px]">
               <CircleAlert className="h-4 w-4 text-s-danger" /> <span className="flex-1">{error}</span>
               <button type="button" onClick={reload} className="rounded-xl border border-s-line-strong px-3 py-1.5 text-[13px] hover:bg-s-hover">
                 Try again
