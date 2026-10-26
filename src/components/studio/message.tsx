@@ -179,6 +179,12 @@ function AssistantMessage({
   verify: ReturnType<typeof useVerify>;
 }) {
   const [asking, setAsking] = useState(false);
+  // A rating that didn't reach the server is said so, not shown as saved.
+  const [rateFailed, setRateFailed] = useState(false);
+  const rate = (rating: FeedbackRating | null) => {
+    setRateFailed(false);
+    void onRate?.(m, rating).catch(() => setRateFailed(true));
+  };
   const streaming = m.status === "streaming";
   const valid = new Set((m.sources ?? []).map((s) => s.index));
   // A proposed connector action arrives as a block at the end of the reply; it becomes a review card, not text.
@@ -310,7 +316,7 @@ function AssistantMessage({
             onClick={() => {
               onFeedback(m.id, "up");
               setAsking(false);
-              void onRate?.(m, feedback === "up" ? null : "helpful").catch(() => {});
+              rate(feedback === "up" ? null : "helpful");
             }}
             className={cn(feedback === "up" && "text-s-accent hover:text-s-accent")}
           >
@@ -324,7 +330,7 @@ function AssistantMessage({
               onFeedback(m.id, "down");
               if (feedback === "down") {
                 setAsking(false);
-                void onRate?.(m, null).catch(() => {});
+                rate(null);
               } else setAsking(!!onRate);
             }}
             className={cn(feedback === "down" && "text-s-accent hover:text-s-accent")}
@@ -364,6 +370,11 @@ function AssistantMessage({
             </span>
           )}
         </div>
+      )}
+      {rateFailed && (
+        <p role="alert" className="mt-1.5 text-[12.5px] text-s-danger">
+          Your rating wasn&apos;t saved. Try again in a moment.
+        </p>
       )}
       {asking && onRate && <FeedbackReasons className="mt-2 max-w-[520px]" onCancel={() => setAsking(false)} onSend={(rating, comment) => onRate(m, rating, comment)} />}
       {m.status === "done" && <VerifyPanel state={verify.state} onClose={verify.close} onRetry={verify.run} onOpenFull={verify.openFull} />}

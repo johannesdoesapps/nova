@@ -126,7 +126,11 @@ export function WorkforceView() {
                   type="button"
                   onClick={async () => {
                     if (!data.settings.emergencyStop && !confirm("Emergency stop: pause every active task and stop running checks?")) return;
-                    await saveSettings({ ...data.settings, emergencyStop: !data.settings.emergencyStop });
+                    try {
+                      await saveSettings({ ...data.settings, emergencyStop: !data.settings.emergencyStop });
+                    } catch (e) {
+                      setError(`${data.settings.emergencyStop ? "The emergency stop wasn't released" : "The emergency stop was NOT turned on"}: ${(e as Error).message}`);
+                    }
                   }}
                   className={cn(btn, data.settings.emergencyStop ? "border-red-500/40 bg-red-500/10 text-s-danger" : "")}
                 >

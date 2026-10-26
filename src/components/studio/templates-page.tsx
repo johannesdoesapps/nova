@@ -44,6 +44,12 @@ import { useStoredJson } from "./prefs";
 const btn = "inline-flex h-9 items-center justify-center gap-1.5 rounded-xl px-3.5 text-[13.5px] font-medium transition disabled:opacity-40 [&_svg]:h-4 [&_svg]:w-4";
 const field = "w-full rounded-xl border border-s-line bg-transparent px-3 py-2 text-[14px] outline-none transition placeholder:text-s-ink-3 focus:border-s-line-strong";
 
+function withoutKey(o: Record<string, string>, key: string): Record<string, string> {
+  const next = { ...o };
+  delete next[key];
+  return next;
+}
+
 /** A user's own version of a template: their step instructions and model, kept in this browser. */
 export interface MyTemplate {
   id: string;
@@ -415,19 +421,31 @@ function TemplateView({ template: t, own, mine, setMine }: { template: Template;
                               {s.web ? ", uses web sources when available" : ""})
                             </span>
                           </span>
-                          {instructions[s.id] && (
-                            <button type="button" onClick={() => setInstructions((x) => ({ ...x, [s.id]: "" }))} className="text-[12px] text-s-ink-3 underline underline-offset-4 hover:text-s-ink">
+                          {instructions[s.id] !== undefined && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setInstructions((x) => withoutKey(x, s.id))
+                              }
+                              className="text-[12px] text-s-ink-3 underline underline-offset-4 hover:text-s-ink"
+                            >
                               Reset
                             </button>
                           )}
                         </span>
                         <textarea
-                          value={instructions[s.id] || s.prompt}
-                          onChange={(e) => setInstructions((x) => ({ ...x, [s.id]: e.target.value === s.prompt ? "" : e.target.value }))}
+                          // No entry means the default; an emptied box stays empty while you write your own.
+                          value={instructions[s.id] ?? s.prompt}
+                          onChange={(e) =>
+                            setInstructions((x) => (e.target.value === s.prompt ? withoutKey(x, s.id) : { ...x, [s.id]: e.target.value }))
+                          }
                           rows={8}
                           maxLength={8000}
                           className={cn(field, "mt-1 font-mono text-[12.5px]")}
                         />
+                        {instructions[s.id] !== undefined && !instructions[s.id]!.trim() && (
+                          <span className="mt-1 block text-[12px] text-s-ink-3">Empty: this step will use its standard instructions.</span>
+                        )}
                       </label>
                     ))}
                     <button type="button" onClick={saveMine} className={cn(btn, "border border-s-line-strong hover:bg-s-hover")}>

@@ -11,6 +11,7 @@ import type { ProjectSummary } from "@/lib/code/projects";
 import { ago } from "@/lib/home";
 import { api, CodeApiError, post } from "./api";
 import { DEFAULT_PAIR, PairSettingsForm, startPair, type PairSettingsInput } from "./pair-panel";
+import { LoadFailed } from "@/components/common/load-failed";
 
 const TEMPLATES = [
   { id: "blank", label: "Blank" },
@@ -39,9 +40,24 @@ export function PairHome() {
   const [settings, setSettings] = useState<PairSettingsInput>(DEFAULT_PAIR);
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [tasks, setTasks] = useState<TaskSummary[] | null>(null);
+  const [taskNotice, setTaskNotice] = useState<string | null>(null);
+  // The same delete as History: confirmed, the record removed, the project's files left as they are.
+  const removeTask = async (t: TaskSummary) => {
+    if (!confirm(`Delete the record of “${t.title}”?\n\nIts activity log, change history and checkpoints are removed for good. The project's files stay as they are now, so this task's changes can no longer be undone from Orbis.`)) return;
+    setTaskNotice(null);
+    try {
+      await api(`/api/code/agent/${t.id}`, { method: "DELETE" });
+      setTasks((ts) => ts?.filter((x) => x.id !== t.id) ?? ts);
+      setTaskNotice(`Deleted the record of “${t.title}”.`);
+    } catch (e) {
+      setTaskNotice(`Couldn't delete it: ${(e as Error).message}`);
+    }
+  };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<CodeApiError | null>(null);
 
+  const [tasksFailed, setTasksFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!user) return;
     let alive = true;
@@ -49,12 +65,12 @@ export function PairHome() {
       .then((r) => alive && setProjects(r.projects))
       .catch(() => alive && setProjects([]));
     api<{ tasks: TaskSummary[] }>("/api/code/tasks?kind=pair&sort=activity")
-      .then((r) => alive && setTasks(r.tasks))
-      .catch(() => alive && setTasks([]));
+      .then((r) => alive && (setTasks(r.tasks), setTasksFailed(false)))
+      .catch(() => alive && (setTasks([]), setTasksFailed(true)));
     return () => {
       alive = false;
     };
-  }, [user]);
+  }, [user, attempt]);
 
   const start = async () => {
     const text = request.trim();
@@ -217,14 +233,27 @@ export function PairHome() {
             </div>
             {tasks === null ? (
               <div className="s-skeleton mt-3 h-14 rounded-2xl" role="status" aria-label="Loading tasks" />
+            ) : tasksFailed ? (
+              <LoadFailed
+                what="your pair tasks"
+                onRetry={() => {
+                  setTasks(null);
+                  setAttempt((a) => a + 1);
+                }}
+              />
             ) : tasks.length === 0 ? (
               <p className="mt-2 text-[13.5px] text-s-ink-3">None yet. Your first pair task will show here with its outcome, so you can open it again.</p>
             ) : (
               <ul className="mt-3 flex flex-col gap-2">
                 {tasks.slice(0, 8).map((t) => (
-                  <TaskRow key={t.id} task={t} onDelete={() => router.push("/history?tab=tasks")} />
+                  <TaskRow key={t.id} task={t} onDelete={() => void removeTask(t)} />
                 ))}
               </ul>
+            )}
+            {taskNotice && (
+              <p role="status" className="mt-2 text-[13px] text-s-ink-2">
+                {taskNotice}
+              </p>
             )}
           </section>
 

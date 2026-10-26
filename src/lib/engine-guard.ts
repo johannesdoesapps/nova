@@ -24,7 +24,9 @@ export function engineRequestUsesModel(path: string, body: string | undefined): 
   try {
     parsed = JSON.parse(body);
   } catch {
-    return false; // The engine rejects bodies that aren't JSON.
+    // Fail closed. "Not JSON" here isn't "not JSON" to the engine: Python's json.loads accepts NaN and Infinity
+    // (which JSON.parse rejects), and bool(NaN) is True, so {"use_model": NaN} would slip past as "no model".
+    return true;
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
   const b = parsed as Record<string, unknown>;

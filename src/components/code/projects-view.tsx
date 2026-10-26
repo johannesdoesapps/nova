@@ -99,8 +99,19 @@ export function CodeProjectsView() {
     };
   }, [user]);
 
-  // "New project" from the sidebar or the command palette opens the form.
+  // "New project" from the sidebar or the command palette opens the form, also when this page is already open
+  // (only the query changes then, so the page isn't mounted again).
   const wantsNew = params.get("new");
+  const [seenNew, setSeenNew] = useState(wantsNew);
+  if (wantsNew !== seenNew) {
+    setSeenNew(wantsNew);
+    if (wantsNew) setOpen("new");
+  }
+  /** Close the new-project form, and drop ?new so "New project" can open it again. */
+  const closeNew = () => {
+    setOpen(null);
+    if (wantsNew) router.replace("/code", { scroll: false });
+  };
   useEffect(() => {
     if (!wantsNew) return;
     newRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
@@ -557,7 +568,7 @@ export function CodeProjectsView() {
               <section ref={newRef} className="glass-strong mt-4 scroll-mt-4 rounded-2xl p-4" aria-label="New project">
                 <div className="mb-3 flex items-center justify-between">
                   <h2 className="text-[14px] font-medium text-s-ink">New project</h2>
-                  <button type="button" onClick={() => setOpen(null)} aria-label="Close" className="grid h-8 w-8 place-items-center rounded-full text-s-ink-3 hover:bg-s-hover hover:text-s-ink">
+                  <button type="button" onClick={closeNew} aria-label="Close" className="grid h-8 w-8 place-items-center rounded-full text-s-ink-3 hover:bg-s-hover hover:text-s-ink">
                     <X className="h-4 w-4" />
                   </button>
                 </div>

@@ -79,6 +79,7 @@ export function ConnectorsView() {
   const load = useCallback(async () => {
     try {
       setData(await api<CatalogResponse>("/api/connectors"));
+      setLoadError(null);
     } catch (e) {
       setLoadError((e as Error).message);
     }
@@ -136,7 +137,7 @@ export function ConnectorsView() {
               </button>
             </div>
           )}
-          {loadError && <p className="mt-5 rounded-xl border border-s-line px-3.5 py-2.5 text-[13px] text-s-danger">{loadError}</p>}
+          {loadError && <p role="alert" className="mt-5 rounded-xl border border-s-line px-3.5 py-2.5 text-[13px] text-s-danger">{loadError}</p>}
           {!user && (
             <p className="mt-5 rounded-xl border border-s-line px-3.5 py-2.5 text-[13px] text-s-ink-2">
               <Link href="/login?next=/connectors" className="font-medium text-s-ink underline">
@@ -226,7 +227,7 @@ export function ConnectorsView() {
               )}
             </>
           ) : (
-            <ConnectedTab connected={connected} onOpen={setOpen} signedIn={!!user} />
+            <ConnectedTab connected={connected} onOpen={setOpen} signedIn={!!user} status={data ? "ready" : loadError ? "error" : "loading"} />
           )}
         </div>
       </div>
@@ -247,7 +248,18 @@ export function ConnectorsView() {
   );
 }
 
-function ConnectedTab({ connected, onOpen, signedIn }: { connected: CatalogEntry[]; onOpen: (id: string) => void; signedIn: boolean }) {
+function ConnectedTab({
+  connected,
+  onOpen,
+  signedIn,
+  status,
+}: {
+  connected: CatalogEntry[];
+  onOpen: (id: string) => void;
+  signedIn: boolean;
+  /** Until the list arrives (or if it fails) there's no "nothing connected" to say. */
+  status: "loading" | "error" | "ready";
+}) {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ items: ConnectorItem[]; runs: { connectorId: string; ok: boolean; summary: string | null; error: string | null }[] } | null>(null);
@@ -268,6 +280,9 @@ function ConnectedTab({ connected, onOpen, signedIn }: { connected: CatalogEntry
   };
 
   if (!signedIn) return <p className="mt-6 text-[14px] text-s-ink-3">Sign in to see your connections.</p>;
+  if (status === "loading") return <div className="s-skeleton mt-6 h-24 rounded-2xl" role="status" aria-label="Loading your connections" />;
+  // The page shows why loading failed; don't also claim there's nothing connected.
+  if (status === "error") return null;
   if (!connected.length) return <p className="mt-6 text-[14px] text-s-ink-3">Nothing connected yet. Pick an app under Discover.</p>;
   const name = (id: string) => connected.find((c) => c.id === id)?.name ?? id;
 

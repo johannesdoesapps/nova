@@ -256,6 +256,8 @@ describe("permissions and boundaries", () => {
       ["src/app/api/security/hunter/route.ts", '"security"'],
       ["src/app/api/security/guardian/route.ts", '"security"'],
       ["src/app/api/security/coordinate/route.ts", '"security"'],
+      // Re-checking a finding is a new scan.
+      ["src/app/api/security/findings/[id]/recheck/route.ts", '"security"'],
       ["src/lib/agent-platform/tasks.ts", "t.agent"],
       ["src/lib/agent-platform/delegate-server.ts", "agent"],
     ];

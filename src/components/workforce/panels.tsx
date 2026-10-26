@@ -38,21 +38,34 @@ export interface AgentPerf {
 
 export function AgentsPanel({ agents, perf, settings, onSettings }: { agents: AgentRow[]; perf: AgentPerf[]; settings: WorkforceSettings; onSettings: (s: WorkforceSettings) => Promise<void> }) {
   const [busy, setBusy] = useState<string | null>(null);
-  const toggle = async (id: string, enabled: boolean) => {
+  const [error, setError] = useState<string | null>(null);
+  // Saves one change; a failure is shown, and the controls keep showing what's actually saved.
+  const save = async (id: string, next: WorkforceSettings) => {
     setBusy(id);
+    setError(null);
     try {
-      await onSettings({ ...settings, disabledAgents: enabled ? settings.disabledAgents.filter((x) => x !== id) : [...settings.disabledAgents, id] });
+      await onSettings(next);
+    } catch (e) {
+      setError(`That change wasn't saved: ${(e as Error).message}`);
     } finally {
       setBusy(null);
     }
   };
-  const setModel = async (id: string, model: string) => {
+  const toggle = (id: string, enabled: boolean) =>
+    save(id, { ...settings, disabledAgents: enabled ? settings.disabledAgents.filter((x) => x !== id) : [...settings.disabledAgents, id] });
+  const setModel = (id: string, model: string) => {
     const models = { ...settings.models };
     if (model) models[id] = model;
     else delete models[id];
-    await onSettings({ ...settings, models });
+    return save(id, { ...settings, models });
   };
   return (
+    <>
+    {error && (
+      <p role="alert" className="mb-3 rounded-xl border border-s-danger/40 px-3 py-2 text-[13px] text-s-danger">
+        {error}
+      </p>
+    )}
     <div className="grid gap-3 lg:grid-cols-2">
       {agents.map((a) => {
         const p = perf.find((x) => x.id === a.id);
@@ -96,7 +109,7 @@ export function AgentsPanel({ agents, perf, settings, onSettings }: { agents: Ag
                 <>
                   <dt className="text-s-ink-3">Model</dt>
                   <dd>
-                    <select aria-label={`Model for ${a.name}`} defaultValue={settings.models[a.id] ?? ""} onChange={(e) => void setModel(a.id, e.target.value)} className="rounded-lg border border-s-line bg-transparent px-2 py-1 text-[12px]">
+                    <select aria-label={`Model for ${a.name}`} value={settings.models[a.id] ?? ""} disabled={busy === a.id} onChange={(e) => void setModel(a.id, e.target.value)} className="rounded-lg border border-s-line bg-transparent px-2 py-1 text-[12px]">
                       <option value="">Default ({a.model})</option>
                       {["auto", "auto:quick", "auto:deep", "auto:coding", "auto:research"].map((m) => (
                         <option key={m} value={m}>
@@ -120,6 +133,7 @@ export function AgentsPanel({ agents, perf, settings, onSettings }: { agents: Ag
         );
       })}
     </div>
+    </>
   );
 }
 

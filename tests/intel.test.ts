@@ -174,3 +174,13 @@ describe("pricing", () => {
     expect(reconcile(130, 100).verdict).toBe("investigate");
   });
 });
+
+describe("custom test sets", () => {
+  it("refuse regex checkers, which could freeze the server (ReDoS)", async () => {
+    const { customTestSet } = await import("@/lib/validation-research");
+    const base = { id: "my-set", name: "Mine", category: "analysis", version: "1", items: [{ id: "a", prompt: "Write about cats.", checker: { type: "contains_any", values: ["cat"] } }] };
+    expect(customTestSet.safeParse(base).success).toBe(true);
+    const evil = { ...base, items: [{ id: "a", prompt: "Write about cats.", checker: { type: "regex", pattern: "([a-z ,.']+)*#" } }] };
+    expect(customTestSet.safeParse(evil).success).toBe(false);
+  });
+});

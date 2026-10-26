@@ -22,8 +22,12 @@ describe("engine AI model gate", () => {
     expect(engineRequestUsesModel("radar/items", '{"mode":"live"}')).toBe(false);
   });
 
-  it("ignores bodies that aren't JSON objects", () => {
-    expect(engineRequestUsesModel("lab/plan", "not json")).toBe(false);
+  it("fails closed on unreadable bodies, and ignores JSON that isn't an object", () => {
+    // Anything this side can't read is treated as a model request (admins only): Python's json.loads accepts NaN
+    // and Infinity, which JSON.parse rejects, and bool(NaN) is True in the engine.
+    expect(engineRequestUsesModel("lab/plan", "not json")).toBe(true);
+    expect(engineRequestUsesModel("lab/plan", '{"goal":"x","use_model":NaN}')).toBe(true);
+    expect(engineRequestUsesModel("lab/workflows/abc/runs", '{"mode":"live","x":Infinity}')).toBe(true);
     expect(engineRequestUsesModel("lab/plan", "[true]")).toBe(false);
     expect(engineRequestUsesModel("lab/plan", undefined)).toBe(false);
   });

@@ -12,6 +12,7 @@ import { ago } from "@/lib/home";
 import { DEPTHS, type Depth } from "@/lib/research/research";
 import type { ResearchView } from "@/lib/research/server";
 import { cn } from "@/lib/utils";
+import { LoadFailed } from "@/components/common/load-failed";
 
 type Row = Pick<ResearchView, "id" | "question" | "depth" | "status" | "phase" | "created_at" | "usage">;
 
@@ -49,16 +50,18 @@ export function ResearchHome() {
     }
   }, []);
 
+  const [runsFailed, setRunsFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!user) return;
     let alive = true;
     api<{ runs: Row[] }>("/api/research")
-      .then((r) => alive && setRuns(r.runs))
-      .catch(() => alive && setRuns([]));
+      .then((r) => alive && (setRuns(r.runs), setRunsFailed(false)))
+      .catch(() => alive && (setRuns([]), setRunsFailed(true)));
     return () => {
       alive = false;
     };
-  }, [user]);
+  }, [user, attempt]);
 
   const start = async () => {
     if (question.trim().length < 5 || busy) return;
@@ -211,6 +214,14 @@ export function ResearchHome() {
             </h3>
             {runs === null ? (
               <div className="s-skeleton mt-3 h-14 rounded-2xl" role="status" aria-label="Loading research" />
+            ) : runsFailed ? (
+              <LoadFailed
+                what="your research"
+                onRetry={() => {
+                  setRuns(null);
+                  setAttempt((a) => a + 1);
+                }}
+              />
             ) : runs.length === 0 ? (
               <p className="mt-2 text-[13.5px] text-s-ink-3">None yet. Each run is kept here with its report and sources.</p>
             ) : (

@@ -106,6 +106,7 @@ export function FeedbackReasons({ onSend, onCancel, className }: { onSend: (rati
 export function WasThisUseful({ feature, subjectId, modelId, className }: { feature: FeedbackFeature; subjectId: string; modelId?: string; className?: string }) {
   const [state, setState] = useState<"ask" | "reasons" | "thanks">("ask");
   const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
   if (state === "thanks")
     return (
       <p role="status" className={cn("flex items-center gap-1.5 text-[12.5px] text-s-ink-3", className)}>
@@ -121,23 +122,31 @@ export function WasThisUseful({ feature, subjectId, modelId, className }: { feat
       <span>Was this useful?</span>
       <button
         type="button"
+        disabled={sending}
         onClick={async () => {
           setError(null);
+          setSending(true);
           try {
             await sendFeedback({ feature, subjectId, rating: "helpful", modelId });
             setState("thanks");
           } catch (e) {
             setError((e as Error).message);
+          } finally {
+            setSending(false);
           }
         }}
-        className="inline-flex h-7 items-center gap-1 rounded-full border border-s-line px-2.5 text-s-ink-2 hover:bg-s-hover hover:text-s-ink"
+        className="inline-flex h-7 items-center gap-1 rounded-full border border-s-line px-2.5 text-s-ink-2 hover:bg-s-hover hover:text-s-ink disabled:opacity-50"
       >
         <ThumbsUp className="h-3.5 w-3.5" /> Yes
       </button>
       <button type="button" onClick={() => setState("reasons")} className="inline-flex h-7 items-center gap-1 rounded-full border border-s-line px-2.5 text-s-ink-2 hover:bg-s-hover hover:text-s-ink">
         <ThumbsDown className="h-3.5 w-3.5" /> Not quite
       </button>
-      {error && <span className="text-s-danger">{error}</span>}
+      {error && (
+        <span role="alert" className="text-s-danger">
+          {error}
+        </span>
+      )}
     </div>
   );
 }

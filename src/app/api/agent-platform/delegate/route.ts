@@ -18,6 +18,12 @@ export async function POST(req: Request) {
   try {
     const input = await parseJsonBody(req, startDelegated, 260_000);
     const auth = await codeContext("agent-delegate", 10);
+    // A proposal starts once: a retried or replayed request for one that already started is refused, not run again.
+    if (input.messageId && input.proposalId) {
+      const { data } = await auth.supabase.from("messages").select("usage_metadata").eq("id", input.messageId).maybeSingle();
+      const done = ((data?.usage_metadata ?? null) as { tasks?: TaskProposal[] } | null)?.tasks?.find((t) => t.id === input.proposalId && t.status === "started");
+      if (done) throw new ApiError("conflict", "This task was already started. Open it from Activity.", { href: done.result?.href ?? null });
+    }
     let outcome: { ok: boolean; summary: string; href: string | null };
     let assignment: TaskAssignment | null = null;
     let failure: unknown = null;

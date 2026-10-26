@@ -108,11 +108,14 @@ function StartTeam({ offer, pending }: { offer: Offer; pending: Team | null }) {
   const [name, setName] = useState(pending?.name ?? "");
   const [plan, setPlan] = useState<"pro" | "max">(pending?.plan ?? "pro");
   const [interval, setInterval] = useState<"month" | "year">(pending?.interval ?? "month");
-  const [seats, setSeats] = useState(Math.max(offer.minSeats, 3));
+  // The typed text, so a number can be typed digit by digit; it's checked, not rewritten, while typing.
+  const [seatsText, setSeatsText] = useState(String(Math.max(offer.minSeats, 3)));
+  const seats = Number(seatsText);
+  const seatsOk = Number.isInteger(seats) && seats >= offer.minSeats && seats <= offer.maxSeats;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const price = offer[plan][interval];
-  const total = price * seats;
+  const total = seatsOk ? price * seats : 0;
   const start = async () => {
     setBusy(true);
     setError(null);
@@ -143,10 +146,18 @@ function StartTeam({ offer, pending }: { offer: Offer; pending: Team | null }) {
             type="number"
             min={offer.minSeats}
             max={offer.maxSeats}
-            value={seats}
-            onChange={(e) => setSeats(Math.max(offer.minSeats, Math.min(offer.maxSeats, Math.round(Number(e.target.value) || offer.minSeats))))}
+            inputMode="numeric"
+            value={seatsText}
+            aria-invalid={!seatsOk}
+            aria-describedby={seatsOk ? undefined : "team-seats-error"}
+            onChange={(e) => setSeatsText(e.target.value)}
             className={cn(field, "mt-1.5 font-normal")}
           />
+          {!seatsOk && (
+            <span id="team-seats-error" className="mt-1 block text-[12.5px] font-normal text-s-danger">
+              Choose between {offer.minSeats} and {offer.maxSeats} seats.
+            </span>
+          )}
         </label>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -169,7 +180,7 @@ function StartTeam({ offer, pending }: { offer: Offer; pending: Team | null }) {
           ]}
         />
       </div>
-      <p className="mt-4 text-[14px]">
+      <p className={cn("mt-4 text-[14px]", !seatsOk && "invisible")}>
         <span className="font-semibold">
           ${total.toLocaleString("en-US")} {interval === "month" ? "a month" : "a year"}
         </span>{" "}
@@ -183,7 +194,7 @@ function StartTeam({ offer, pending }: { offer: Offer; pending: Team | null }) {
         </p>
       )}
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button type="button" className={primary} disabled={busy || !name.trim() || !offer.paymentsReady} onClick={() => void start()}>
+        <button type="button" className={primary} disabled={busy || !name.trim() || !seatsOk || !offer.paymentsReady} onClick={() => void start()}>
           {busy ? <Loader2 className="animate-spin" /> : <Users />} Continue to payment
         </button>
         {!offer.paymentsReady && <span className="text-[13px] text-s-ink-3">Payments aren’t switched on yet.</span>}
@@ -199,13 +210,19 @@ function TeamView({ state, onChanged }: { state: State & { team: Team }; onChang
   const members = state.members ?? [];
   const invites = state.invites ?? [];
   const [error, setError] = useState<string | null>(null);
-  const act = async (fn: () => Promise<unknown>) => {
+  // One change at a time, each confirmed first: removing someone ends their access to the team's plan.
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const act = async (key: string, question: string, fn: () => Promise<unknown>) => {
+    if (pendingKey || !window.confirm(question)) return;
+    setPendingKey(key);
     setError(null);
     try {
       await fn();
       onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "That didn't work. Try again.");
+    } finally {
+      setPendingKey(null);
     }
   };
   const renews = team.periodEnd ? new Date(team.periodEnd).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" }) : null;
@@ -240,9 +257,14 @@ function TeamView({ state, onChanged }: { state: State & { team: Team }; onChang
               {owner && m.role !== "owner" && (
                 <button
                   type="button"
-                  className="rounded-lg p-1.5 text-s-ink-3 hover:bg-s-hover hover:text-s-ink"
+                  className="rounded-lg p-1.5 text-s-ink-3 hover:bg-s-hover hover:text-s-ink disabled:opacity-40"
                   aria-label={`Remove ${m.email}`}
-                  onClick={() => void act(() => jsonFetch("/api/team/members", { method: "DELETE", body: JSON.stringify({ userId: m.user_id }) }))}
+                  disabled={pendingKey !== null}
+                  onClick={() =>
+                    void act(`m:${m.user_id}`, `Remove ${m.email} from the team? They lose the team's plan straight away.`, () =>
+                      jsonFetch("/api/team/members", { method: "DELETE", body: JSON.stringify({ userId: m.user_id }) }),
+                    )
+                  }
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -250,8 +272,13 @@ function TeamView({ state, onChanged }: { state: State & { team: Team }; onChang
               {!owner && m.user_id === user?.id && (
                 <button
                   type="button"
-                  className="text-[12.5px] text-s-ink-2 underline-offset-2 hover:underline"
-                  onClick={() => void act(() => jsonFetch("/api/team/members", { method: "DELETE", body: JSON.stringify({ userId: m.user_id }) }))}
+                  className="text-[12.5px] text-s-ink-2 underline-offset-2 hover:underline disabled:opacity-40"
+                  disabled={pendingKey !== null}
+                  onClick={() =>
+                    void act("leave", "Leave this team? You lose the team's plan straight away.", () =>
+                      jsonFetch("/api/team/members", { method: "DELETE", body: JSON.stringify({ userId: m.user_id }) }),
+                    )
+                  }
                 >
                   Leave team
                 </button>
@@ -268,8 +295,13 @@ function TeamView({ state, onChanged }: { state: State & { team: Team }; onChang
                   <span className="min-w-0 flex-1 truncate text-s-ink-2">{i.email}</span>
                   <button
                     type="button"
-                    className="text-[12.5px] text-s-ink-2 underline-offset-2 hover:underline"
-                    onClick={() => void act(() => jsonFetch("/api/team/invites", { method: "DELETE", body: JSON.stringify({ id: i.id }) }))}
+                    className="text-[12.5px] text-s-ink-2 underline-offset-2 hover:underline disabled:opacity-40"
+                    disabled={pendingKey !== null}
+                    onClick={() =>
+                      void act(`i:${i.id}`, `Withdraw the invitation to ${i.email}?`, () =>
+                        jsonFetch("/api/team/invites", { method: "DELETE", body: JSON.stringify({ id: i.id }) }),
+                      )
+                    }
                   >
                     Withdraw
                   </button>

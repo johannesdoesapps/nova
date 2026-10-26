@@ -15,6 +15,7 @@ import { useApp } from "@/components/layout/app-context";
 import { useAnalyticsChoice } from "@/components/common/analytics-choice";
 import { LEGAL } from "@/content/legal-meta";
 import { SHORTCUTS, shortcutKeys } from "@/lib/shortcuts";
+import { LoadFailed } from "@/components/common/load-failed";
 
 const btn =
   "inline-flex h-9 items-center justify-center gap-1.5 rounded-xl px-3.5 text-[13.5px] font-medium transition active:scale-[0.98] disabled:opacity-40 [&_svg]:h-4 [&_svg]:w-4";
@@ -195,15 +196,17 @@ function MemorySettings({ on, onToggle }: { on: boolean; onToggle: (v: boolean) 
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let alive = true;
     jsonFetch<{ memories: MemoryItem[] }>("/api/memories")
-      .then((j) => alive && setItems(j.memories))
-      .catch(() => alive && setItems([]));
+      .then((j) => alive && (setItems(j.memories), setLoadFailed(false)))
+      .catch(() => alive && (setItems([]), setLoadFailed(true)));
     return () => {
       alive = false;
     };
-  }, []);
+  }, [attempt]);
   const add = async () => {
     const content = draft.trim();
     if (content.length < 2 || busy) return;
@@ -261,6 +264,15 @@ function MemorySettings({ on, onToggle }: { on: boolean; onToggle: (v: boolean) 
       {error && <p className="mt-2 text-[12.5px] text-s-danger" role="alert">{error}</p>}
       {items === null ? (
         <div className="s-skeleton mt-3 h-4 w-2/3" role="status" aria-label="Loading" />
+      ) : loadFailed ? (
+        <LoadFailed
+          what="what Orbis remembers"
+          className="mt-3 text-[12.5px]"
+          onRetry={() => {
+            setItems(null);
+            setAttempt((a) => a + 1);
+          }}
+        />
       ) : items.length === 0 ? (
         <p className="mt-3 text-[12.5px] text-s-ink-3">Nothing remembered yet.</p>
       ) : (

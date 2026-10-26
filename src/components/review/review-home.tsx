@@ -11,6 +11,7 @@ import { ago } from "@/lib/home";
 import type { ReviewView } from "@/lib/review/server";
 import { cn } from "@/lib/utils";
 import { SeverityCounts, StatusPill } from "./bits";
+import { LoadFailed } from "@/components/common/load-failed";
 
 type Kind = "paste" | "diff" | "zip" | "github" | "project";
 const TABS: { id: Kind; label: string; icon: typeof FileCode2 }[] = [
@@ -42,19 +43,26 @@ export function ReviewHome() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<CodeApiError | null>(null);
 
+  const [loadFailed, setLoadFailed] = useState<{ reviews?: boolean; projects?: boolean }>({});
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!user) return;
     let alive = true;
     api<{ reviews: ReviewView[] }>("/api/review")
-      .then((r) => alive && setReviews(r.reviews))
-      .catch(() => alive && setReviews([]));
+      .then((r) => alive && (setReviews(r.reviews), setLoadFailed((f) => ({ ...f, reviews: false }))))
+      .catch(() => alive && (setReviews([]), setLoadFailed((f) => ({ ...f, reviews: true }))));
     api<{ projects: ProjectSummary[] }>("/api/code/projects")
-      .then((r) => alive && setProjects(r.projects))
-      .catch(() => alive && setProjects([]));
+      .then((r) => alive && (setProjects(r.projects), setLoadFailed((f) => ({ ...f, projects: false }))))
+      .catch(() => alive && (setProjects([]), setLoadFailed((f) => ({ ...f, projects: true }))));
     return () => {
       alive = false;
     };
-  }, [user]);
+  }, [user, attempt]);
+  const retryLoad = () => {
+    setReviews(null);
+    setProjects(null);
+    setAttempt((a) => a + 1);
+  };
 
   const ready = kind === "paste" ? files.some((f) => f.content.trim()) : kind === "diff" ? diff.trim().length > 10 : kind === "github" ? url.trim().length > 2 : kind === "zip" ? !!zip : !!projectId;
 
@@ -275,6 +283,8 @@ export function ReviewHome() {
                   </label>
                   {projects === null ? (
                     <div className="s-skeleton mt-1.5 h-10 rounded-xl" role="status" aria-label="Loading projects" />
+                  ) : loadFailed.projects ? (
+                    <LoadFailed what="your code projects" onRetry={retryLoad} />
                   ) : projects.length ? (
                     <select
                       id="rv-project"
@@ -343,6 +353,8 @@ export function ReviewHome() {
             </h3>
             {reviews === null ? (
               <div className="s-skeleton mt-3 h-14 rounded-2xl" role="status" aria-label="Loading reviews" />
+            ) : loadFailed.reviews ? (
+              <LoadFailed what="your reviews" onRetry={retryLoad} />
             ) : reviews.length === 0 ? (
               <p className="mt-2 text-[13.5px] text-s-ink-3">None yet. Each review is kept here with its findings, so you can come back to it.</p>
             ) : (

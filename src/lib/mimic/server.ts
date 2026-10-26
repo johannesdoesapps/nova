@@ -241,6 +241,8 @@ export async function updateRule(auth: Authed, id: string, patch: { category?: C
 async function documentFor(auth: Authed, documentId: string): Promise<{ id: string; name: string; text: string }> {
   const sample = sampleById(documentId);
   if (sample) return ensureSample(auth, sample.id);
+  // Not a sample and not a document id: say so, rather than letting the database reject it (a 502).
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(documentId)) throw new ApiError("not_found", "Document not found.");
   const { data, error } = await auth.supabase.from("mimic_documents").select("id, name, text").eq("id", documentId).maybeSingle();
   if (error) dbFail(error, "mimic.document");
   if (!data) throw new ApiError("not_found", "Document not found.");

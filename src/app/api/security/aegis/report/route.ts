@@ -14,8 +14,10 @@ export async function GET(req: Request) {
   try {
     const auth = await requireUser();
     await assertAgentAccess(auth, "security");
-    const type = new URL(req.url).searchParams.get("type") ?? "executive";
-    const make = KINDS[type as keyof typeof KINDS] ?? KINDS.executive;
+    // Only the three known kinds; the name goes into the download's file name and the audit log.
+    const asked = new URL(req.url).searchParams.get("type") ?? "executive";
+    const type: keyof typeof KINDS = Object.hasOwn(KINDS, asked) ? (asked as keyof typeof KINDS) : "executive";
+    const make = KINDS[type];
     const text = make(await loadAegis(auth.supabase, auth.user.id));
     await audit(auth.supabase, auth.user.id, "aegis.report", { detail: { type } });
     return new Response(text, {

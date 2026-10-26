@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { billingConfigured, planPriceId, stripeClient } from "@/lib/billing/stripe";
+import { billingConfigured, checkoutIdempotencyKey, planPriceId, stripeClient } from "@/lib/billing/stripe";
 import { requireUser } from "@/lib/auth";
 import { getBilling } from "@/lib/entitlements";
 import { publicEnv } from "@/lib/env";
@@ -21,9 +21,10 @@ export async function POST(req: Request) {
     }
     const site = publicEnv.siteUrl.replace(/\/$/, "");
     const customer = (sub?.stripe_customer_id as string | null) ?? undefined;
+    const price = await planPriceId(stripe, await getBilling(), plan, interval);
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
-      line_items: [{ price: await planPriceId(stripe, await getBilling(), plan, interval), quantity: 1 }],
+      line_items: [{ price, quantity: 1 }],
       ...(customer ? { customer } : { customer_email: user.email ?? undefined }),
       client_reference_id: user.id,
       metadata: { user_id: user.id },
@@ -31,7 +32,7 @@ export async function POST(req: Request) {
       allow_promotion_codes: true,
       success_url: `${site}/usage?upgraded=${plan}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${site}/pricing`,
-    });
+    }, { idempotencyKey: checkoutIdempotencyKey([user.id, plan, interval, price]) });
     if (!session.url) throw new ApiError("upstream_error", "Stripe didn't return a checkout page.");
     return NextResponse.json({ url: session.url });
   } catch (err) {

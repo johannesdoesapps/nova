@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, CircleAlert, Download, ShieldCheck } from "lucide-react";
 import { useApp } from "@/components/layout/app-context";
 import { StudioHeader, useStudio } from "@/components/studio/frame";
@@ -52,9 +52,13 @@ export function AegisWorkspace() {
     };
   }, [signedOut, load]);
 
-  /** Record a decision, then reload (the state is rebuilt from the recorded decisions). */
+  /** Record a decision, then reload (the state is rebuilt from the recorded decisions). One at a time, so a
+   *  double click can't record the same note, exception or task decision twice. */
+  const acting = useRef(false);
   const act = useCallback(
     async (body: Record<string, unknown>, done?: string) => {
+      if (acting.current) return false;
+      acting.current = true;
       try {
         await jsonFetch("/api/security/aegis/actions", { method: "POST", body: JSON.stringify(body) });
         await load();
@@ -63,6 +67,8 @@ export function AegisWorkspace() {
       } catch (e) {
         notify((e as Error).message);
         return false;
+      } finally {
+        acting.current = false;
       }
     },
     [load, notify],
@@ -297,12 +303,14 @@ function Risks({ s, act }: { s: AegisState; act: Act }) {
 function ExceptionForm({ id, act, onDone }: { id: string; act: Act; onDone: () => void }) {
   const [until, setUntil] = useState(() => new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10));
   const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
   return (
     <form
       className="mt-2 flex flex-wrap items-end gap-2 rounded-xl border border-s-line p-3"
       onSubmit={(e) => {
         e.preventDefault();
-        void act({ kind: "exception", findingId: id, until, reason }, "Exception recorded. It ends on the date you chose.").then((ok) => ok && onDone());
+        setBusy(true);
+        void act({ kind: "exception", findingId: id, until, reason }, "Exception recorded. It ends on the date you chose.").then((ok) => (ok ? onDone() : setBusy(false)));
       }}
     >
       <label className="flex flex-col gap-1 text-[12px] text-s-ink-3">
@@ -313,7 +321,7 @@ function ExceptionForm({ id, act, onDone }: { id: string; act: Act; onDone: () =
         Reason (who decided, and what compensates)
         <input value={reason} onChange={(e) => setReason(e.target.value)} className={input} minLength={10} maxLength={1000} required />
       </label>
-      <button type="submit" className={btn}>
+      <button type="submit" className={btn} disabled={busy}>
         Record exception
       </button>
     </form>
@@ -438,15 +446,18 @@ function InvestigationForm({ id, act }: { id: string; act: Act }) {
   const [note, setNote] = useState("");
   const [conclusion, setConclusion] = useState("");
   const [outcome, setOutcome] = useState("");
+  const [busy, setBusy] = useState(false);
   return (
     <form
       className="space-y-2 rounded-xl border border-s-line p-3"
       onSubmit={(e) => {
         e.preventDefault();
+        setBusy(true);
         void act(
           { kind: "investigation", findingId: id, ...(note.trim() ? { note } : {}), ...(conclusion.trim() ? { conclusion, outcome: outcome || undefined } : {}) },
           conclusion.trim() ? "Conclusion recorded." : "Note added.",
         ).then((ok) => {
+          setBusy(false);
           if (ok) {
             setNote("");
             setConclusion("");
@@ -474,7 +485,7 @@ function InvestigationForm({ id, act }: { id: string; act: Act }) {
             <option value="inconclusive">Inconclusive</option>
           </select>
         </label>
-        <button type="submit" className={btn} disabled={!note.trim() && !conclusion.trim()}>
+        <button type="submit" className={btn} disabled={busy || (!note.trim() && !conclusion.trim())}>
           Save
         </button>
       </div>
@@ -592,12 +603,14 @@ function AssetForm({ a, act, onDone }: { a: Asset; act: Act; onDone: () => void 
   const [data, setData] = useState<string[]>(a.facts.data);
   const [owner, setOwner] = useState(a.facts.owner ?? "");
   const kinds = ["personal", "financial", "credentials", "health", "public"];
+  const [busy, setBusy] = useState(false);
   return (
     <form
       className="mt-3 space-y-2 rounded-xl border border-s-line p-3"
       onSubmit={(e) => {
         e.preventDefault();
-        void act({ kind: "asset", asset: a.key, criticality: criticality || null, exposure: exposure || null, data, owner: owner.trim() || null }, "Saved.").then((ok) => ok && onDone());
+        setBusy(true);
+        void act({ kind: "asset", asset: a.key, criticality: criticality || null, exposure: exposure || null, data, owner: owner.trim() || null }, "Saved.").then((ok) => (ok ? onDone() : setBusy(false)));
       }}
     >
       <div className="flex flex-wrap gap-2">
@@ -634,7 +647,7 @@ function AssetForm({ a, act, onDone }: { a: Asset; act: Act; onDone: () => void 
           </label>
         ))}
       </fieldset>
-      <button type="submit" className={btn}>
+      <button type="submit" className={btn} disabled={busy}>
         Save facts
       </button>
     </form>

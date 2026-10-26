@@ -310,3 +310,12 @@ export async function applyCheckoutSession(stripe: Stripe, sessionId: string, us
   }
   return "pending";
 }
+
+/**
+ * An idempotency key for starting a Checkout: the same account asking for the same thing (plan, interval, price,
+ * seats…) within 15 minutes gets the same Checkout page back instead of a second one. That stops a double click or
+ * a second tab from leading to two paid subscriptions. Anything that differs (another plan, more seats) gets a new key.
+ */
+export function checkoutIdempotencyKey(parts: (string | number)[], now = Date.now()): string {
+  return ["checkout", ...parts, Math.floor(now / (15 * 60_000))].join(":");
+}

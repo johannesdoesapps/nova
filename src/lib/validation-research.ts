@@ -69,11 +69,15 @@ export const trialVoteRequest = z.object({
   note: z.string().max(1000).nullable().optional(),
 });
 
+/**
+ * Checkers a user's own test set may use. No "regex": a user-supplied pattern runs on the server against a
+ * model's reply, and JavaScript's backtracking engine can be made to take minutes or hours (ReDoS), freezing the
+ * instance for everyone. The built-in test sets (lib/intel/testsets.ts) still use regex; those patterns are ours.
+ */
 export const checkerSpec = z.discriminatedUnion("type", [
   z.object({ type: z.literal("exact"), answer: z.string().max(500) }),
   z.object({ type: z.literal("contains_all"), values: z.array(z.string().max(200)).min(1).max(20) }),
   z.object({ type: z.literal("contains_any"), values: z.array(z.string().max(200)).min(1).max(20) }),
-  z.object({ type: z.literal("regex"), pattern: z.string().max(300), flags: z.string().regex(/^[gimsuy]{0,6}$/).optional() }),
   z.object({ type: z.literal("numeric"), answer: z.number(), tolerance: z.number().nonnegative() }),
   z.object({ type: z.literal("json_keys"), keys: z.array(z.string().max(100)).min(1).max(30) }),
   z.object({ type: z.literal("bullets"), count: z.number().int().min(1).max(30), maxWords: z.number().int().min(1).max(200).optional() }),

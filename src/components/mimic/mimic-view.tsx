@@ -189,16 +189,22 @@ export function MimicView() {
 
 function EmergencyStop({ stopped, onChange }: { stopped: boolean; onChange: (s: Overview["settings"]) => void }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const flip = async () => {
     setBusy(true);
+    setError(null);
     try {
       const r = await jsonFetch<{ settings: Overview["settings"] }>("/api/mimic/settings", { method: "PATCH", body: JSON.stringify({ stopped: !stopped }) });
       onChange(r.settings);
+    } catch (e) {
+      // Never leave someone believing automations stopped when they didn't.
+      setError(`${stopped ? "Automations weren't resumed" : "Automations were NOT stopped"}: ${(e as Error).message}`);
     } finally {
       setBusy(false);
     }
   };
   return (
+    <span className="inline-flex flex-col items-end gap-1">
     <button
       type="button"
       onClick={flip}
@@ -208,6 +214,12 @@ function EmergencyStop({ stopped, onChange }: { stopped: boolean; onChange: (s: 
       {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : stopped ? <Play className="h-4 w-4" /> : <OctagonX className="h-4 w-4" />}
       {stopped ? "Resume automations" : "Emergency stop"}
     </button>
+      {error && (
+        <span role="alert" className="max-w-[320px] text-right text-[12.5px] text-s-danger">
+          {error}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -359,9 +371,11 @@ function Accounting({ data, onAdded }: { data: Overview; onAdded: () => void }) 
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
   const add = async (source: "paste" | "upload", n = name, t = text) => {
     setBusy(true);
     setMsg(null);
+    setErr(null);
     try {
       const r = await jsonFetch<{ runs: RunView[] }>("/api/mimic/documents", { method: "POST", body: JSON.stringify({ name: n.trim() || "Pasted invoice", text: t, source }) });
       setMsg(r.runs.length ? `Added. ${r.runs.length} automation${r.runs.length === 1 ? "" : "s"} ran on it: see Needs my attention or Activity.` : "Added to the inbox. No automation is set to run on new invoices; run one from My automations.");
@@ -369,14 +383,15 @@ function Accounting({ data, onAdded }: { data: Overview; onAdded: () => void }) 
       setText("");
       onAdded();
     } catch (e) {
-      setMsg((e as Error).message);
+      setErr((e as Error).message);
     } finally {
       setBusy(false);
     }
   };
   const upload = async (f: File | undefined) => {
     if (!f) return;
-    if (f.size > 60_000) return setMsg("That file is over 60 KB. Mimic reads text invoices (.txt) for now.");
+    setMsg(null);
+    if (f.size > 60_000) return setErr("That file is over 60 KB. Mimic reads text invoices (.txt) for now.");
     await add("upload", f.name, await f.text());
   };
   const total = useMemo(() => {
@@ -392,8 +407,8 @@ function Accounting({ data, onAdded }: { data: Overview; onAdded: () => void }) 
         </h2>
         <p className="mt-1 text-[13px] text-s-ink-2">Paste an invoice&apos;s text or upload a .txt file. Automations set to &ldquo;When I add an invoice&rdquo; run on it straight away. PDF and image invoices aren&apos;t read yet.</p>
         <div className="mt-3 grid gap-2">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (e.g. Paper & Co. October)" className="h-9 rounded-xl border border-s-line-strong bg-transparent px-3 text-[13.5px]" />
-          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} placeholder="Paste the invoice text here" className="rounded-xl border border-s-line-strong bg-transparent px-3 py-2 font-mono text-[12.5px]" />
+          <input value={name} onChange={(e) => setName(e.target.value)} aria-label="Invoice name" placeholder="Name (e.g. Paper & Co. October)" className="h-9 rounded-xl border border-s-line-strong bg-transparent px-3 text-[13.5px]" />
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} aria-label="Invoice text" placeholder="Paste the invoice text here" className="rounded-xl border border-s-line-strong bg-transparent px-3 py-2 font-mono text-[12.5px]" />
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => add("paste")} disabled={busy || text.trim().length < 20} className="inline-flex h-9 items-center gap-2 rounded-xl bg-s-accent px-4 text-[13.5px] font-medium text-s-accent-ink disabled:opacity-50">
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Inbox className="h-4 w-4" />} Add to inbox
@@ -403,7 +418,16 @@ function Accounting({ data, onAdded }: { data: Overview; onAdded: () => void }) 
               <input type="file" accept=".txt,text/plain" className="sr-only" onChange={(e) => upload(e.target.files?.[0])} />
             </label>
           </div>
-          {msg && <p className="text-[13px] text-s-ink-2">{msg}</p>}
+          {msg && (
+            <p role="status" className="text-[13px] text-s-ink-2">
+              {msg}
+            </p>
+          )}
+          {err && (
+            <p role="alert" className="text-[13px] text-s-danger">
+              {err}
+            </p>
+          )}
         </div>
         {data.documents.length > 0 && <p className="mt-3 text-[12.5px] text-s-ink-3">In the inbox: {data.documents.map((d) => d.name).join(", ")}</p>}
       </section>
@@ -622,9 +646,12 @@ function SettingsPanel({ data, onChange, onDeleted }: { data: Overview; onChange
   const [msg, setMsg] = useState<string | null>(null);
   const set = async (body: Partial<Overview["settings"]>) => {
     setBusy(true);
+    setMsg(null);
     try {
       const r = await jsonFetch<{ settings: Overview["settings"] }>("/api/mimic/settings", { method: "PATCH", body: JSON.stringify(body) });
       onChange(r.settings);
+    } catch (e) {
+      setMsg(`That setting wasn't saved: ${(e as Error).message}`);
     } finally {
       setBusy(false);
     }
@@ -677,7 +704,11 @@ function SettingsPanel({ data, onChange, onDeleted }: { data: Overview; onChange
             Delete everything
           </button>
         </div>
-        {msg && <p className="mt-2 text-[13px] text-s-ink-2">{msg}</p>}
+        {msg && (
+          <p role="status" className="mt-2 text-[13px] text-s-ink-2">
+            {msg}
+          </p>
+        )}
       </section>
     </div>
   );

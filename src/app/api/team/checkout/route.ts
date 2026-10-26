@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { billingConfigured, planPriceId, stripeClient } from "@/lib/billing/stripe";
+import { billingConfigured, planPriceId, stripeClient, checkoutIdempotencyKey } from "@/lib/billing/stripe";
 import { getBilling } from "@/lib/entitlements";
 import { publicEnv } from "@/lib/env";
 import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
@@ -34,9 +34,10 @@ export async function POST(req: Request) {
     if (error || !teamId) throw new ApiError("conflict", teamErrorMessage(error, "The team couldn't be created."));
     const site = publicEnv.siteUrl.replace(/\/$/, "");
     const meta = { kind: "team", team_id: teamId as string, owner_id: user.id, orbis_plan: plan };
+    const price = await planPriceId(stripe, await getBilling(), plan, interval);
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
-      line_items: [{ price: await planPriceId(stripe, await getBilling(), plan, interval), quantity: seats }],
+      line_items: [{ price, quantity: seats }],
       ...(existing?.stripe_customer_id ? { customer: existing.stripe_customer_id } : { customer_email: user.email ?? undefined }),
       client_reference_id: user.id,
       metadata: meta,
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
       allow_promotion_codes: true,
       success_url: `${site}/team?created=1&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${site}/team`,
-    });
+    }, { idempotencyKey: checkoutIdempotencyKey([user.id, teamId as string, plan, interval, seats, price]) });
     if (!session.url) throw new ApiError("upstream_error", "Stripe didn't return a checkout page.");
     return NextResponse.json({ url: session.url });
   } catch (err) {

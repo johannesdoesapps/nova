@@ -226,6 +226,8 @@ describe("POST /api/billing/checkout", () => {
         subscription_data: { metadata: { user_id: "user-1", orbis_plan: "pro" } },
         success_url: "https://orbis.example/usage?upgraded=pro&session_id={CHECKOUT_SESSION_ID}",
       }),
+      // A double click or a second tab gets the same Checkout back, not a second subscription.
+      { idempotencyKey: expect.stringMatching(/^checkout:user-1:pro:month:price_pro:\d+$/) },
     );
   });
 
@@ -240,7 +242,7 @@ describe("POST /api/billing/checkout", () => {
     // $100 × 12 × (1 − 10%) = $1,080 a year.
     expect(list).toHaveBeenCalledWith(expect.objectContaining({ lookup_keys: ["orbis_max_year_usd_108000"] }));
     expect(createPrice).not.toHaveBeenCalled();
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ line_items: [{ price: "price_max_year", quantity: 1 }] }));
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ line_items: [{ price: "price_max_year", quantity: 1 }] }), expect.objectContaining({ idempotencyKey: expect.any(String) }));
   });
 
   it("won't sell a second subscription", async () => {
