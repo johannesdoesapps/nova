@@ -2,7 +2,7 @@
 
 A WebGL pixel mosaic that churns while an image is on its way, then resolves into the real image (img-fx from Libraries.dev).
 
-This file was added by the Orbis template "Add an effect to your website". It holds the full instructions for the effect: Orbis's notes first, then the original prompt.
+This file was added by the Orbis template "Add an effect". It holds the full instructions for the effect: Orbis's notes first, then the original prompt.
 
 ## How to use these instructions
 

@@ -2,7 +2,7 @@
 
 A sound-reactive glow along the bottom edge of an input or card that rises with the voice (voice-glow from Libraries.dev).
 
-This file was added by the Orbis template "Add an effect to your website". It holds the full instructions for the effect: Orbis's notes first, then the original prompt.
+This file was added by the Orbis template "Add an effect". It holds the full instructions for the effect: Orbis's notes first, then the original prompt.
 
 ## How to use these instructions
 

@@ -425,7 +425,7 @@ Write corrected code for the High and Medium findings (only the parts that chang
   },
   {
     id: "add-website-effect",
-    name: "Add an effect to your website",
+    name: "Add an effect",
     description: "Add an animated effect to a website: an image loader, a voice glow, a gooey menu, an animated pricing section or a light/dark switch.",
     outcome: "The effect added to your website, matched to its design and checked at desktop and phone sizes.",
     category: "code",

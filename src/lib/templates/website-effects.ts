@@ -1,5 +1,5 @@
 /**
- * Effects the "Add an effect to your website" template can add to a project. Each effect's full instructions
+ * Effects the "Add an effect" template can add to a project. Each effect's full instructions
  * (Orbis's notes, then the original integration prompt with its component code) are a Markdown file in
  * public/template-effects/. They're too long for an agent request, so the file is copied into the project and
  * the request asks the agent to read it, follow it, and delete it once the effect works.

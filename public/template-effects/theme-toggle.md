@@ -2,7 +2,7 @@
 
 A sun/moon button that reveals the new theme as a circle growing out of the button (View Transitions API).
 
-This file was added by the Orbis template "Add an effect to your website". It holds the full instructions for the effect: Orbis's notes first, then the original prompt.
+This file was added by the Orbis template "Add an effect". It holds the full instructions for the effect: Orbis's notes first, then the original prompt.
 
 ## How to use these instructions
 

@@ -2,7 +2,7 @@
 
 Pricing cards with a Monthly/Annual switch, animated prices, a starfield that follows the pointer and confetti when Annual is chosen.
 
-This file was added by the Orbis template "Add an effect to your website". It holds the full instructions for the effect: Orbis's notes first, then the original prompt.
+This file was added by the Orbis template "Add an effect". It holds the full instructions for the effect: Orbis's notes first, then the original prompt.
 
 ## How to use these instructions
 

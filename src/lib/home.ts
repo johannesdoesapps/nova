@@ -130,6 +130,15 @@ export const DISCOVER: DiscoverItem[] = [
     cta: "Build a website",
   },
   {
+    id: "add-effect",
+    kind: "capability",
+    title: "Add an effect",
+    text: "Add an animated effect to one of your websites: an image loader, a voice glow, a gooey menu, an animated pricing section or a light/dark switch.",
+    icon: "lightbulb",
+    action: { kind: "link", href: "/templates?t=add-website-effect" },
+    cta: "Add an effect",
+  },
+  {
     id: "fix-bug",
     kind: "capability",
     title: "Watch an agent fix a bug",
