@@ -9,6 +9,8 @@ import { StudioHeader } from "@/components/studio/frame";
 import { Menu, MenuItem } from "@/components/studio/ui";
 import { CODE_EXAMPLES, projectTypeFor, SITE_DETAIL_FIELDS, SITE_EXAMPLES, siteExample, siteName, withSiteDetails, type SiteDetails } from "@/lib/code/site-examples";
 import { EXAMPLE_PROJECT, TEMPLATES, TEMPLATE_IDS, type ProjectSummary, type TemplateId } from "@/lib/code/projects";
+import { latestWebsite, takeCodePrefill, type CodePrefill } from "@/lib/code/handoff";
+import { effectPath, effectUrl, findEffect } from "@/lib/templates/website-effects";
 import { cn } from "@/lib/utils";
 import { api, CodeApiError, post, putBuildRequest, type Allowance } from "./api";
 import { useAttachments } from "./attachments";
@@ -72,8 +74,10 @@ export function CodeProjectsView() {
   const [site, setSite] = useState(() => siteExample(params.get("idea"))?.prompt ?? "");
   const catalog = useCatalog();
   const [modelId, setModelId] = useCodeModel(catalog);
-  /** Where the request goes: "new" (a new project, its type taken from the request), "new:<type>", or a project id. */
-  const [siteTarget, setSiteTarget] = useState<string>("new");
+  /** Where the request goes: "new" (a new project, its type taken from the request), "new:<type>", or a project id. Null until chosen. */
+  const [pickedTarget, setSiteTarget] = useState<string | null>(null);
+  /** A request handed over by another page (a template): where it should go and the effect it adds, if any. */
+  const [handoff, setHandoff] = useState<Pick<CodePrefill, "target" | "effect"> | null>(null);
   /** Optional details for a new site; closed unless asked for, since most requests say enough. */
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [details, setDetails] = useState<SiteDetails>({ purpose: "", audience: "", style: "", sections: "" });
@@ -101,6 +105,26 @@ export function CodeProjectsView() {
     if (!wantsNew) return;
     newRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
   }, [wantsNew]);
+
+  // A request handed over by a template (see lib/code/handoff), read once the user is known.
+  const handedOver = useRef(false);
+  useEffect(() => {
+    if (!user || handedOver.current) return;
+    handedOver.current = true;
+    const p = takeCodePrefill();
+    if (!p) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a request left by another page, read once after hydration (storage isn't readable on the server)
+    setSite(p.request);
+    setHandoff({ target: p.target, effect: p.effect });
+    if (p.details && Object.values(p.details).some(Boolean)) {
+      setDetails((d) => ({ ...d, ...p.details }));
+      setDetailsOpen(true);
+    }
+  }, [user]);
+
+  const handoffTarget = handoff?.target === "latest-website" ? (data && latestWebsite(data.projects)?.id) || "new:website" : handoff?.target;
+  const siteTarget = pickedTarget ?? handoffTarget ?? "new";
+  const effect = handoff?.effect ? findEffect(handoff.effect) : undefined;
 
   const full = !!data && data.maxProjects !== null && data.projects.length >= data.maxProjects;
   const isNew = siteTarget === "new" || siteTarget.startsWith("new:");
@@ -134,6 +158,12 @@ export function CodeProjectsView() {
       let pid = siteTarget;
       if (isNew) pid = created.current ??= (await post<{ project: ProjectSummary }>("/api/code/projects", { name: siteName(site.trim()), template: newType })).project.id;
       const ids = await attachments.uploadTo(pid);
+      // An effect's full instructions go into the project, where the request points the agent to them.
+      if (effect && text.includes(effectPath(effect.id))) {
+        const res = await fetch(effectUrl(effect.id));
+        if (!res.ok) throw new Error(`The instructions for ${effect.name} couldn't be loaded. Try again.`);
+        await post(`/api/code/projects/${pid}/files`, { changes: [{ path: effectPath(effect.id), content: await res.text() }] });
+      }
       putBuildRequest(pid, text, ids, modelId);
       router.push(`/code/${pid}?build=1`);
     } catch (e) {
@@ -358,6 +388,13 @@ export function CodeProjectsView() {
                 }
               />
             </section>
+
+            {effect && site.includes(effectPath(effect.id)) && (
+              <p className="mt-2 px-1 text-[12.5px] text-s-ink-3">
+                Adds {effect.name}. Its full instructions are copied into the project as {effectPath(effect.id)} for the agent to follow; it deletes the file when it&apos;s done. Choose the project to
+                change in the menu below the box.
+              </p>
+            )}
 
             {isNew && (
               <p className="mt-2 px-1 text-[12.5px] text-s-ink-3" aria-live="polite">

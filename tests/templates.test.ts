@@ -4,7 +4,10 @@
  * search fallbacks, errors) and saved-prompt editing.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { checkInputs, defaultInputs, findTemplate, handoffHref, renderPrompt, stepInputChars, TEMPLATES } from "@/lib/templates/registry";
+import { readFileSync } from "node:fs";
+import { checkInputs, codeHandoff, defaultInputs, findTemplate, handoffHref, renderPrompt, stepInputChars, TEMPLATES } from "@/lib/templates/registry";
+import { effectPath, effectRequest, effectUrl, findEffect, WEBSITE_EFFECTS } from "@/lib/templates/website-effects";
+import { latestWebsite, openInCode, takeCodePrefill } from "@/lib/code/handoff";
 import { templateEstimate } from "@/lib/templates/estimate";
 import { templateStepRequest } from "@/lib/templates/schema";
 import { patchPrompt } from "@/components/studio/prefs";
@@ -54,7 +57,7 @@ vi.mock("@/lib/ai", () => ({
 }));
 
 describe("the library", () => {
-  it("has the ten starting workflows, each complete", () => {
+  it("has the starting workflows, each complete", () => {
     expect(TEMPLATES.map((t) => t.id)).toEqual([
       "research-topic",
       "compare-competitors",
@@ -62,6 +65,8 @@ describe("the library", () => {
       "write-article",
       "debug-code",
       "review-code",
+      "build-website",
+      "add-website-effect",
       "weekly-plan",
       "plan-project",
       "compare-responses",
@@ -111,6 +116,83 @@ describe("filling in instructions", () => {
     expect(handoffHref(findTemplate("compare-responses")!, { prompt: "What is RAG?" })).toBe("/arena?q=What%20is%20RAG%3F");
     expect(handoffHref(findTemplate("review-claims")!, { text: "x" })).toBe("/verify");
     expect(handoffHref(findTemplate("debug-code")!, {})).toBeNull();
+    expect(handoffHref(findTemplate("build-website")!, { idea: "x" })).toBe("/code");
+    expect(handoffHref(findTemplate("add-website-effect")!, { effect: "Gooey menu" })).toBe("/code");
+  });
+
+  it("builds a website from a prompt: the description and details go to a new website project in Code", () => {
+    const t = findTemplate("build-website")!;
+    expect(checkInputs(t, {})).toMatchObject({ idea: "Describe your website is needed." });
+    expect(codeHandoff(t, { idea: "  A site for my bakery  ", style: "warm" })).toEqual({
+      request: "A site for my bakery",
+      details: { purpose: "", audience: "", style: "warm", sections: "" },
+      target: "new:website",
+    });
+    expect(codeHandoff(findTemplate("plan-project")!, { goal: "x" })).toBeNull();
+  });
+
+  it("adds an effect: a short request pointing at the effect's full instructions, for the latest website", () => {
+    const t = findTemplate("add-website-effect")!;
+    expect(t.inputs.find((f) => f.id === "effect")!.options).toEqual(WEBSITE_EFFECTS.map((e) => e.name));
+    expect(checkInputs(t, { effect: "Sparkles" }).effect).toMatch(/Choose one/);
+    const h = codeHandoff(t, { effect: "Animated pricing section", where: "below the hero", notes: "Basic $9, Pro $19" })!;
+    expect(h).toMatchObject({ target: "latest-website", effect: "pricing-section" });
+    expect(h.request).toContain("orbis-effects/pricing-section.md");
+    expect(h.request).toContain("Where to put it: below the hero.");
+    expect(h.request).toContain("Basic $9, Pro $19");
+    expect(h.request).toMatch(/delete orbis-effects\/pricing-section\.md/);
+    expect(t.inputLink!.href("Gooey menu")).toBe("/template-effects/gooey-menu.md");
+    expect(t.inputLink!.href("Nope")).toBeNull();
+  });
+
+  it("keeps every effect request within the agent's 8,000-character limit", () => {
+    for (const e of WEBSITE_EFFECTS) expect(effectRequest(e, "w".repeat(5000), "n".repeat(5000)).length).toBeLessThanOrEqual(8000);
+  });
+
+  it("ships each effect's instructions with the original prompt", () => {
+    const original: Record<string, string> = {
+      "image-generation-loader": "npm install img-fx three",
+      "voice-glow": "npm install voice-glow",
+      "gooey-menu": "npm install liquid-gooey",
+      "pricing-section": "export function PricingSection({",
+      "theme-toggle": "export const AnimatedThemeToggler = ({ className }: AnimatedThemeTogglerProps) => {",
+    };
+    for (const e of WEBSITE_EFFECTS) {
+      const md = readFileSync(`public${effectUrl(e.id)}`, "utf8");
+      expect(md).toContain(`# Add an effect: ${e.name}`);
+      expect(md).toContain("## The original prompt");
+      expect(md).toContain(original[e.id]);
+      expect(md.split("You are given a task").length, `${e.id} holds one copy of the prompt`).toBeLessThanOrEqual(2);
+      expect(Buffer.byteLength(md)).toBeLessThan(200 * 1024);
+    }
+    expect(findEffect("theme-toggle")?.name).toBe("Animated light/dark switch");
+    expect(effectPath("voice-glow")).toBe("orbis-effects/voice-glow.md");
+  });
+
+  it("hands the request to Code once, and drops anything that doesn't fit", () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal("sessionStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v), removeItem: (k: string) => store.delete(k) });
+    try {
+      openInCode({ request: "Add it", target: "latest-website", effect: "voice-glow" });
+      expect(takeCodePrefill()).toEqual({ request: "Add it", details: { purpose: "", audience: "", style: "", sections: "" }, target: "latest-website", effect: "voice-glow" });
+      expect(takeCodePrefill()).toBeNull();
+      store.set("orbis:code:prefill", JSON.stringify({ request: "x".repeat(9000), target: "elsewhere", effect: "../../etc", details: { style: 5 } }));
+      const p = takeCodePrefill()!;
+      expect(p.request).toHaveLength(8000);
+      expect(p.target).toBe("new:website");
+      expect(p.effect).toBeUndefined();
+      expect(p.details?.style).toBe("");
+      store.set("orbis:code:prefill", "{not json");
+      expect(takeCodePrefill()).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("sends an effect to the most recently edited website, or a new one", () => {
+    const p = (id: string, template: string, updatedAt: string) => ({ id, template, updatedAt });
+    expect(latestWebsite([p("a", "website", "2026-10-01"), p("b", "node", "2026-10-20"), p("c", "website", "2026-10-10")])?.id).toBe("c");
+    expect(latestWebsite([p("b", "node", "2026-10-20")])).toBeUndefined();
   });
 });
 

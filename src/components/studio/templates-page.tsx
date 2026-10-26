@@ -11,6 +11,7 @@ import {
   CircleX,
   Copy,
   Download,
+  FileText,
   FolderPlus,
   Loader2,
   MessageSquarePlus,
@@ -29,8 +30,9 @@ import { postNdjson } from "@/hooks/use-ndjson";
 import { autoIdFor, isAutoId, ROUTER_MODES } from "@/lib/ai/router-modes";
 import type { SearchSource } from "@/lib/search/types";
 import { templateEstimate } from "@/lib/templates/estimate";
-import { CATEGORY_LABELS, checkInputs, defaultInputs, findTemplate, handoffHref, TEMPLATES, type Template, type TemplateCategory, type TemplateInput } from "@/lib/templates/registry";
+import { CATEGORY_LABELS, checkInputs, codeHandoff, defaultInputs, findTemplate, HANDOFF_NAMES, handoffHref, TEMPLATES, type Template, type TemplateCategory, type TemplateInput } from "@/lib/templates/registry";
 import { openInVerify } from "@/lib/verify/handoff";
+import { openInCode } from "@/lib/code/handoff";
 import { cn } from "@/lib/utils";
 import { SaveToProjectDialog } from "./dialogs";
 import { reportEvent, WasThisUseful } from "./feedback";
@@ -159,7 +161,7 @@ function Library({ mine, setMine }: { mine: MyTemplate[]; setMine: (v: MyTemplat
                       <span className="text-s-ink-2">You get:</span> {t.outcome}
                     </span>
                     <span className="mt-auto flex items-center justify-between pt-4 text-[12.5px] text-s-ink-3">
-                      {t.steps ? `${t.steps.length} step${t.steps.length === 1 ? "" : "s"}` : `Opens ${t.handoff!.to === "missions" ? "Missions" : t.handoff!.to === "arena" ? "Arena" : "Verify"}`}
+                      {t.steps ? `${t.steps.length} step${t.steps.length === 1 ? "" : "s"}` : `Opens ${HANDOFF_NAMES[t.handoff!.to]}`}
                       <span className="inline-flex items-center gap-1 text-s-ink-2 group-hover:text-s-ink">
                         Start <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
                       </span>
@@ -227,6 +229,9 @@ function TemplateView({ template: t, own, mine, setMine }: { template: Template;
 
   const errors = checkInputs(t, inputs);
   const valid = Object.keys(errors).length === 0;
+  const linkValue = t.inputLink ? (inputs[t.inputLink.input] ?? "").trim() : "";
+  const linkHref = t.inputLink && linkValue ? t.inputLink.href(linkValue) : null;
+  const inputLink = t.inputLink && linkHref ? { href: linkHref, label: t.inputLink.label(linkValue) } : null;
   const models = catalog?.models ?? null;
   const est = useMemo(() => (models ? templateEstimate(t, models, modelId, inputs, instructions, isAutoId(modelId)) : null), [models, t, modelId, inputs, instructions]);
   const steps = t.steps ?? [];
@@ -285,6 +290,10 @@ function TemplateView({ template: t, own, mine, setMine }: { template: Template;
     if (!valid) return;
     if (t.handoff) {
       if (t.handoff.to === "verify") openInVerify(inputs.question ?? "", inputs.text ?? "");
+      if (t.handoff.to === "code") {
+        const prefill = codeHandoff(t, inputs);
+        if (prefill) openInCode(prefill);
+      }
       router.push(handoffHref(t, inputs)!);
       return;
     }
@@ -359,6 +368,11 @@ function TemplateView({ template: t, own, mine, setMine }: { template: Template;
             {t.inputs.map((f) => (
               <Field key={f.id} f={f} value={inputs[f.id] ?? ""} error={touched ? errors[f.id] : undefined} onChange={(v) => setInputs((x) => ({ ...x, [f.id]: v }))} />
             ))}
+            {inputLink && (
+              <a href={inputLink.href} target="_blank" rel="noopener" className="inline-flex items-center gap-1.5 text-[13px] text-s-ink-2 underline-offset-4 hover:text-s-ink hover:underline">
+                <FileText className="h-3.5 w-3.5" aria-hidden /> {inputLink.label}
+              </a>
+            )}
 
             {t.steps ? (
               <div className="rounded-2xl border border-s-line p-3.5 text-[13px]">

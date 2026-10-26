@@ -1,4 +1,4 @@
-import { CalendarDays, ChartColumn, FileText, FolderKanban, LayoutTemplate, PenLine, ScanSearch, ShieldCheck, Swords, Telescope, Bug, type LucideIcon } from "lucide-react";
+import { CalendarDays, ChartColumn, FileText, FolderKanban, Globe, LayoutTemplate, PenLine, ScanSearch, ShieldCheck, Sparkles, Swords, Telescope, Bug, type LucideIcon } from "lucide-react";
 import type { TemplateCategory } from "@/lib/templates/registry";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +14,8 @@ const LOGO: Record<string, LucideIcon> = {
   "plan-project": FolderKanban,
   "compare-responses": Swords,
   "review-claims": ShieldCheck,
+  "build-website": Globe,
+  "add-website-effect": Sparkles,
 };
 const BY_CATEGORY: Record<TemplateCategory, LucideIcon> = {
   research: LOGO["research-topic"]!,

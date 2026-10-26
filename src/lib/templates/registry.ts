@@ -1,5 +1,7 @@
 import type { ChatMode } from "../ai/modes";
 import type { RouterMode } from "../ai/platform";
+import type { CodePrefill } from "../code/handoff";
+import { effectRequest, effectUrl, findEffect, WEBSITE_EFFECTS } from "./website-effects";
 
 /**
  * The template library: common workflows a user can start without writing
@@ -46,7 +48,9 @@ export interface TemplateStep {
   maxOutputTokens: number;
 }
 
-export type Handoff = "missions" | "arena" | "verify";
+export type Handoff = "missions" | "arena" | "verify" | "code";
+
+export const HANDOFF_NAMES: Record<Handoff, string> = { missions: "Missions", arena: "Arena", verify: "Verify", code: "Code" };
 
 export type TemplateCategory = "research" | "writing" | "code" | "planning" | "evaluation";
 
@@ -63,6 +67,8 @@ export interface Template {
   steps?: TemplateStep[];
   /** Instead of steps: open an existing tool with the inputs filled in. */
   handoff?: { to: Handoff; label: string; why: string };
+  /** A link shown with the inputs that depends on one of them (for example, the chosen effect's full instructions). */
+  inputLink?: { input: string; label: (value: string) => string; href: (value: string) => string | null };
 }
 
 export const CATEGORY_LABELS: Record<TemplateCategory, string> = { research: "Research", writing: "Writing", code: "Code", planning: "Planning", evaluation: "Checking and comparing" };
@@ -390,6 +396,68 @@ Write corrected code for the High and Medium findings (only the parts that chang
     ],
   },
   {
+    id: "build-website",
+    name: "Build your website from a prompt",
+    description: "Describe the website you want; the coding agent builds it, runs it and checks it in a real browser.",
+    outcome: "A new website project built from your description, checked at desktop, tablet and phone sizes.",
+    category: "code",
+    inputs: [
+      {
+        id: "idea",
+        label: "Describe your website",
+        kind: "longtext",
+        required: true,
+        placeholder: "e.g. A website for my bakery, Crumb & Co: our story, the menu with prices, opening hours and how to find us",
+        help: "Say what it's for and what should be on it. You can change anything in Code before it starts.",
+        max: 6000,
+      },
+      { id: "purpose", label: "Purpose", kind: "text", required: false, placeholder: "e.g. bring in orders for collection", max: 300 },
+      { id: "audience", label: "Who it's for", kind: "text", required: false, placeholder: "e.g. families and office workers nearby", max: 300 },
+      { id: "style", label: "Look and feel", kind: "text", required: false, placeholder: "e.g. warm and friendly, cream and brown", max: 300 },
+      { id: "sections", label: "Key sections", kind: "text", required: false, placeholder: "e.g. menu, about us, opening hours, contact", max: 300 },
+    ],
+    suggested: { router: "coding", why: "Auto · Coding picks a model that is good at building and fixing websites; you can choose another in Code." },
+    handoff: {
+      to: "code",
+      label: "Build in Code",
+      why: "Code's website builder already builds the site in a new project, runs it and checks it in a real browser, so this template opens it with your description filled in.",
+    },
+  },
+  {
+    id: "add-website-effect",
+    name: "Add an effect to your website",
+    description: "Add an animated effect to a website: an image loader, a voice glow, a gooey menu, an animated pricing section or a light/dark switch.",
+    outcome: "The effect added to your website, matched to its design and checked at desktop and phone sizes.",
+    category: "code",
+    inputs: [
+      { id: "effect", label: "Effect", kind: "select", required: true, options: WEBSITE_EFFECTS.map((e) => e.name), max: 40 },
+      { id: "where", label: "Where on your site", kind: "text", required: false, placeholder: "e.g. in the header, next to the Contact link", max: 300 },
+      {
+        id: "notes",
+        label: "Anything else",
+        kind: "longtext",
+        required: false,
+        placeholder: "e.g. our plans are Basic at $9 and Pro at $19 a month",
+        help: "For the pricing section, give your real plans and prices.",
+        max: 2000,
+      },
+    ],
+    suggested: { router: "coding", why: "Auto · Coding picks a model that is good at changing websites; you can choose another in Code." },
+    handoff: {
+      to: "code",
+      label: "Add in Code",
+      why: "The coding agent adds the effect to the project you choose in Code (your most recently edited website is chosen for you), following the effect's full instructions, and checks it in a real browser. Every change can be undone.",
+    },
+    inputLink: {
+      input: "effect",
+      label: (v) => `Read the full instructions for ${v}`,
+      href: (v) => {
+        const e = findEffect(v);
+        return e ? effectUrl(e.id) : null;
+      },
+    },
+  },
+  {
     id: "weekly-plan",
     name: "Create a weekly work plan",
     description: "A realistic day-by-day plan around your fixed commitments.",
@@ -510,6 +578,8 @@ export function handoffHref(t: Template, inputs: Record<string, string>): string
       return `/arena?q=${encodeURIComponent(v("prompt").slice(0, 4000))}`;
     case "verify":
       return "/verify";
+    case "code":
+      return "/code";
     default:
       return null;
   }
@@ -520,4 +590,15 @@ export function stepInputChars(t: Template, step: TemplateStep, inputs: Record<s
   const prior = (t.steps ?? []).slice(0, (t.steps ?? []).indexOf(step));
   const placeholders = Object.fromEntries(prior.map((p) => [p.id, "x".repeat(p.maxOutputTokens * 4)]));
   return renderPrompt(override ?? step.prompt, inputs, placeholders).length;
+}
+
+/** What a Code hand-off fills in on Code's start page. */
+export function codeHandoff(t: Template, inputs: Record<string, string>): CodePrefill | null {
+  const v = (k: string) => (inputs[k] ?? "").trim();
+  if (t.handoff?.to !== "code") return null;
+  if (t.id === "add-website-effect") {
+    const effect = findEffect(v("effect"));
+    return effect ? { request: effectRequest(effect, v("where"), v("notes")), target: "latest-website", effect: effect.id } : null;
+  }
+  return { request: v("idea"), details: { purpose: v("purpose"), audience: v("audience"), style: v("style"), sections: v("sections") }, target: "new:website" };
 }
