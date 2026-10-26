@@ -288,7 +288,7 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
         <div className={cn("mx-4 h-px shrink-0 bg-s-line", rail && "md:hidden")} />
 
         {/* History */}
-        <div className={cn("s-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-2", rail && "md:invisible")}>
+        <div className={cn("s-scroll s-scroll-glass min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-2", rail && "md:invisible")}>
           {inCode ? (
             <RecentProjects signedIn={!!p.user} onNavigate={p.onCloseMobile} />
           ) : p.listError ? (

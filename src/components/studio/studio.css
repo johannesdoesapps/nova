@@ -49,6 +49,13 @@
   /* Orbis's colours, very faint, in the ambient light the glass refracts. */
   --s-tint-a: rgba(124, 58, 237, 0.07);
   --s-tint-b: rgba(217, 70, 239, 0.045);
+  /* Glass scrollbar (sidebar): the thumb's tint at rest, hovered and dragged, its specular edge and its rim. */
+  --s-sb-thumb: rgba(28, 26, 38, 0.17);
+  --s-sb-thumb-hover: rgba(28, 26, 38, 0.3);
+  --s-sb-thumb-active: rgba(28, 26, 38, 0.4);
+  --s-sb-glint: rgba(255, 255, 255, 0.85);
+  --s-sb-rim: rgba(20, 20, 24, 0.09);
+  --s-sb-shade: rgba(20, 20, 24, 0.07);
   --s-ease: cubic-bezier(0.22, 0.8, 0.24, 1);
   --s-spring: cubic-bezier(0.3, 1.35, 0.45, 1);
   color-scheme: light;
@@ -96,6 +103,12 @@
   --s-card-hover: rgba(255, 255, 255, 0.05);
   --s-tint-a: rgba(124, 58, 237, 0.11);
   --s-tint-b: rgba(217, 70, 239, 0.06);
+  --s-sb-thumb: rgba(226, 222, 245, 0.15);
+  --s-sb-thumb-hover: rgba(226, 222, 245, 0.27);
+  --s-sb-thumb-active: rgba(226, 222, 245, 0.36);
+  --s-sb-glint: rgba(255, 255, 255, 0.32);
+  --s-sb-rim: rgba(255, 255, 255, 0.08);
+  --s-sb-shade: rgba(0, 0, 0, 0.28);
   color-scheme: dark;
 }
 
@@ -323,14 +336,85 @@ html.theming .studio * {
 .s-scroll::-webkit-scrollbar { width: 9px; }
 .s-scroll::-webkit-scrollbar-thumb { background: var(--s-line-strong); border-radius: 10px; border: 3px solid transparent; background-clip: content-box; }
 
+/*
+ * The sidebar's scrollbar: a slim pill of frosted glass floating off the edge. Pseudo-element scrollbars can't
+ * blur what's behind them, so the glass is drawn: a faint tint, a specular glint down the lit (left) edge and
+ * across the top, a hairline rim and a soft shade at the bottom. It rests quietly, clears up when the pointer
+ * or keyboard focus is in the list, and firms up under the cursor and while dragged. Native scrolling throughout.
+ *
+ * Chrome 121+ ignores ::-webkit-scrollbar once scrollbar-width or scrollbar-color is set, so those standard
+ * properties are reset to auto where the pseudo-elements work, and used only as the fallback (Firefox).
+ */
+.s-scroll.s-scroll-glass {
+  --s-sb-mix: 0%;
+  transition: --s-sb-mix 0.45s var(--s-ease);
+}
+.s-scroll.s-scroll-glass:hover,
+.s-scroll.s-scroll-glass:focus-within { --s-sb-mix: 100%; }
+
+@supports selector(::-webkit-scrollbar) {
+  .s-scroll.s-scroll-glass { scrollbar-width: auto; scrollbar-color: auto; }
+  .s-scroll-glass::-webkit-scrollbar { width: 10px; background: transparent; }
+  .s-scroll-glass::-webkit-scrollbar-track { background: transparent; margin-block: 8px; }
+  .s-scroll-glass::-webkit-scrollbar-corner,
+  .s-scroll-glass::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+  .s-scroll-glass::-webkit-scrollbar-thumb {
+    min-height: 36px;
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background:
+      linear-gradient(90deg, var(--s-sb-glint) 0, transparent 1.6px),
+      linear-gradient(180deg, color-mix(in srgb, var(--s-sb-glint) 55%, transparent) 0, transparent 9px),
+      linear-gradient(180deg, color-mix(in srgb, var(--s-tint-a) 60%, transparent), color-mix(in srgb, var(--s-tint-b) 60%, transparent)),
+      color-mix(in srgb, var(--s-sb-thumb-hover) var(--s-sb-mix), var(--s-sb-thumb));
+    background-clip: padding-box;
+    box-shadow:
+      inset 0 0 0 1px var(--s-sb-rim),
+      inset 0 -2px 3px -1px var(--s-sb-shade);
+  }
+  .s-scroll-glass::-webkit-scrollbar-thumb:hover {
+    background:
+      linear-gradient(90deg, var(--s-sb-glint) 0, transparent 1.6px),
+      linear-gradient(180deg, color-mix(in srgb, var(--s-sb-glint) 65%, transparent) 0, transparent 9px),
+      linear-gradient(180deg, var(--s-tint-a), var(--s-tint-b)),
+      color-mix(in srgb, var(--s-sb-thumb-active) 55%, var(--s-sb-thumb-hover));
+    background-clip: padding-box;
+  }
+  .s-scroll-glass::-webkit-scrollbar-thumb:active {
+    background:
+      linear-gradient(90deg, var(--s-sb-glint) 0, transparent 1.6px),
+      linear-gradient(180deg, color-mix(in srgb, var(--s-sb-glint) 65%, transparent) 0, transparent 9px),
+      linear-gradient(180deg, var(--s-tint-a), var(--s-tint-b)),
+      var(--s-sb-thumb-active);
+    background-clip: padding-box;
+  }
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .s-scroll.s-scroll-glass {
+    scrollbar-width: thin;
+    scrollbar-color: var(--s-sb-thumb) transparent;
+    transition: scrollbar-color 0.45s var(--s-ease);
+  }
+  .s-scroll.s-scroll-glass:hover,
+  .s-scroll.s-scroll-glass:focus-within { scrollbar-color: var(--s-sb-thumb-hover) transparent; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .s-in, .s-pop, .s-prose > *, .studio-dialog[open] > div { animation-duration: 0.01ms; }
   .s-shimmer { animation: none; color: var(--s-ink-2); background: none; }
   .s-dot { animation: none; opacity: 1; }
   .s-caret > .s-prose > :last-child::after { animation: none; }
+  .s-scroll.s-scroll-glass { transition: none; }
 }
 
 }
 .s-prose .orbis-run-out { border-top: 1px solid var(--s-line); }
 .s-prose .orbis-run-meta { color: var(--s-ink-3); }
 .s-prose .orbis-run-stderr, .s-prose .orbis-run-bad { color: var(--s-danger); }
+
+@property --s-sb-mix {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 0%;
+}
