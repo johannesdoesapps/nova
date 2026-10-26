@@ -237,105 +237,108 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
           )}
         </div>
 
-        <nav aria-label="Main" className={cn("shrink-0 px-3 pb-2", rail && "md:px-0")}>
-          <ul className={cn("flex flex-col gap-0.5", rail && "md:items-center")}>
-            {entries
-              .filter((e) => e.group === "main")
-              .map((e) => (
-                <NavLink key={e.id} entry={e} rail={rail} active={current === e.id} onClick={p.onCloseMobile} />
-              ))}
-            {/* Tools wait behind one toggle (always open on the page of one of them; icons stay in the narrow rail). */}
-            <li className={cn(rail && "md:hidden")}>
-              <button
-                type="button"
-                onClick={() => setMoreOpen(!showMore)}
-                aria-expanded={showMore}
-                aria-controls="nav-more"
-                title="Arena, Council, Connectors, Discover and saved prompts"
-                className="flex h-9 w-full items-center gap-3 rounded-xl px-3 text-[13.5px] text-s-ink-2 transition duration-200 hover:bg-s-hover hover:text-s-ink [&_svg]:h-[17px] [&_svg]:w-[17px] [&_svg]:shrink-0"
-              >
-                <LayoutGrid />
-                <span className="flex-1 text-left">Tools</span>
-                <ChevronDown className={cn("transition", showMore && "rotate-180")} aria-hidden />
-              </button>
-            </li>
-          </ul>
-          <ul id="nav-more" className={cn("flex flex-col gap-0.5", !showMore && "hidden", rail && "md:flex md:items-center", showMore && !rail && "mt-0.5 border-l border-s-line pl-1.5 ml-3")}>
-            {entries
-              .filter((e) => e.group === "tools")
-              .map((e) => (
-                <NavLink key={e.id} entry={e} rail={rail} active={current === e.id} onClick={p.onCloseMobile} />
-              ))}
-            <NavItem rail={rail} icon={<Bookmark />} label="Saved prompts" onClick={p.onOpenPrompts} />
-          </ul>
-          {entries.some((e) => e.group === "admin") && (
-            <div className="mt-2">
-              <h2 className={cn("px-3 pb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-s-ink-3", rail && "md:sr-only")}>Admin</h2>
-              <ul className={cn("flex flex-col gap-0.5", rail && "md:items-center")}>
-                {entries
-                  .filter((e) => e.group === "admin")
-                  .map((e) => (
-                    <NavLink key={e.id} entry={e} rail={rail} active={current === e.id} onClick={p.onCloseMobile} />
-                  ))}
-              </ul>
-            </div>
-          )}
-          <ul className={cn("mt-2 flex flex-col gap-0.5", rail && "md:items-center")}>
-            <NavItem rail={rail} icon={<Settings2 />} label="Settings" onClick={p.onOpenSettings} />
-          </ul>
-        </nav>
-
-        <div className={cn("mx-4 h-px shrink-0 bg-s-line", rail && "md:hidden")} />
-
-        {/* History */}
-        <div className={cn("s-scroll s-scroll-glass min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-2", rail && "md:invisible")}>
-          {inCode ? (
-            <RecentProjects signedIn={!!p.user} onNavigate={p.onCloseMobile} />
-          ) : p.listError ? (
-            <p className="px-3 py-2 text-[13px] text-s-ink-3">History couldn’t load: {p.listError}</p>
-          ) : p.conversations === null ? (
-            <div className="space-y-2.5 px-3 pt-3" role="status" aria-label="Loading chats">
-              {[70, 88, 56, 80].map((w, i) => (
-                <div key={i} className="s-skeleton h-3.5" style={{ width: `${w}%` }} />
-              ))}
-            </div>
-          ) : p.conversations.length === 0 ? (
-            <p className="px-3 py-3 text-[13px] leading-relaxed text-s-ink-3">
-              No chats yet.
-              {p.historyKind === "local" && " As a guest, your chats are kept in this browser only."}
-            </p>
-          ) : groups.length === 0 ? (
-            <p className="px-3 py-3 text-[13px] text-s-ink-3">{searching ? "Searching…" : `No chats match “${query}”.`}</p>
-          ) : (
-            groups.map((g) => (
-              <section key={g.label} className="mt-3 first:mt-1">
-                <h2 className="px-3 pb-1 text-[11.5px] font-medium text-s-ink-3">{g.label}</h2>
-                <ul className="flex flex-col gap-px">
-                  {g.items.map((c) => (
-                    <HistoryItem
-                      key={`${c.id}:${c.title}`}
-                      conv={c}
-                      active={c.id === p.activeId}
-                      onNavigate={p.onCloseMobile}
-                      onRename={p.onRename}
-                      onRequestDelete={p.onRequestDelete}
-                      onArchive={p.onArchive}
-                      onPin={p.onPin}
-                      onMove={p.onMove}
-                      onDownload={p.onDownload}
-                      onShare={p.onShare}
-                      showSnippet={!!query.trim()}
-                    />
-                  ))}
+        {/* The links and the history scroll together, so nothing is cut off on short screens or with Tools open. */}
+        <div className="s-scroll s-scroll-glass min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <nav aria-label="Main" className={cn("px-3 pb-2", rail && "md:px-0")}>
+            <ul className={cn("flex flex-col gap-0.5", rail && "md:items-center")}>
+              {entries
+                .filter((e) => e.group === "main")
+                .map((e) => (
+                  <NavLink key={e.id} entry={e} rail={rail} active={current === e.id} onClick={p.onCloseMobile} />
+                ))}
+              {/* Tools wait behind one toggle (always open on the page of one of them; icons stay in the narrow rail). */}
+              <li className={cn(rail && "md:hidden")}>
+                <button
+                  type="button"
+                  onClick={() => setMoreOpen(!showMore)}
+                  aria-expanded={showMore}
+                  aria-controls="nav-more"
+                  title="Arena, Council, Connectors, Discover and saved prompts"
+                  className="flex h-9 w-full items-center gap-3 rounded-xl px-3 text-[13.5px] text-s-ink-2 transition duration-200 hover:bg-s-hover hover:text-s-ink [&_svg]:h-[17px] [&_svg]:w-[17px] [&_svg]:shrink-0"
+                >
+                  <LayoutGrid />
+                  <span className="flex-1 text-left">Tools</span>
+                  <ChevronDown className={cn("transition", showMore && "rotate-180")} aria-hidden />
+                </button>
+              </li>
+            </ul>
+            <ul id="nav-more" className={cn("flex flex-col gap-0.5", !showMore && "hidden", rail && "md:flex md:items-center", showMore && !rail && "mt-0.5 border-l border-s-line pl-1.5 ml-3")}>
+              {entries
+                .filter((e) => e.group === "tools")
+                .map((e) => (
+                  <NavLink key={e.id} entry={e} rail={rail} active={current === e.id} onClick={p.onCloseMobile} />
+                ))}
+              <NavItem rail={rail} icon={<Bookmark />} label="Saved prompts" onClick={p.onOpenPrompts} />
+            </ul>
+            {entries.some((e) => e.group === "admin") && (
+              <div className="mt-2">
+                <h2 className={cn("px-3 pb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-s-ink-3", rail && "md:sr-only")}>Admin</h2>
+                <ul className={cn("flex flex-col gap-0.5", rail && "md:items-center")}>
+                  {entries
+                    .filter((e) => e.group === "admin")
+                    .map((e) => (
+                      <NavLink key={e.id} entry={e} rail={rail} active={current === e.id} onClick={p.onCloseMobile} />
+                    ))}
                 </ul>
-              </section>
-            ))
-          )}
-          {!inCode && p.historyKind === "server" && !!p.conversations?.length && !query.trim() && (
-            <Link href="/history" onClick={p.onCloseMobile} className="mt-3 flex h-8 items-center rounded-xl px-3 text-[12.5px] text-s-ink-3 transition hover:bg-s-hover hover:text-s-ink">
-              All conversations
-            </Link>
-          )}
+              </div>
+            )}
+            <ul className={cn("mt-2 flex flex-col gap-0.5", rail && "md:items-center")}>
+              <NavItem rail={rail} icon={<Settings2 />} label="Settings" onClick={p.onOpenSettings} />
+            </ul>
+          </nav>
+
+          <div className={cn("mx-4 h-px bg-s-line", rail && "md:hidden")} />
+
+          {/* History */}
+          <div className={cn("px-3 pb-4 pt-2", rail && "md:hidden")}>
+            {inCode ? (
+              <RecentProjects signedIn={!!p.user} onNavigate={p.onCloseMobile} />
+            ) : p.listError ? (
+              <p className="px-3 py-2 text-[13px] text-s-ink-3">History couldn’t load: {p.listError}</p>
+            ) : p.conversations === null ? (
+              <div className="space-y-2.5 px-3 pt-3" role="status" aria-label="Loading chats">
+                {[70, 88, 56, 80].map((w, i) => (
+                  <div key={i} className="s-skeleton h-3.5" style={{ width: `${w}%` }} />
+                ))}
+              </div>
+            ) : p.conversations.length === 0 ? (
+              <p className="px-3 py-3 text-[13px] leading-relaxed text-s-ink-3">
+                No chats yet.
+                {p.historyKind === "local" && " As a guest, your chats are kept in this browser only."}
+              </p>
+            ) : groups.length === 0 ? (
+              <p className="px-3 py-3 text-[13px] text-s-ink-3">{searching ? "Searching…" : `No chats match “${query}”.`}</p>
+            ) : (
+              groups.map((g) => (
+                <section key={g.label} className="mt-3 first:mt-1">
+                  <h2 className="px-3 pb-1 text-[11.5px] font-medium text-s-ink-3">{g.label}</h2>
+                  <ul className="flex flex-col gap-px">
+                    {g.items.map((c) => (
+                      <HistoryItem
+                        key={`${c.id}:${c.title}`}
+                        conv={c}
+                        active={c.id === p.activeId}
+                        onNavigate={p.onCloseMobile}
+                        onRename={p.onRename}
+                        onRequestDelete={p.onRequestDelete}
+                        onArchive={p.onArchive}
+                        onPin={p.onPin}
+                        onMove={p.onMove}
+                        onDownload={p.onDownload}
+                        onShare={p.onShare}
+                        showSnippet={!!query.trim()}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              ))
+            )}
+            {!inCode && p.historyKind === "server" && !!p.conversations?.length && !query.trim() && (
+              <Link href="/history" onClick={p.onCloseMobile} className="mt-3 flex h-8 items-center rounded-xl px-3 text-[12.5px] text-s-ink-3 transition hover:bg-s-hover hover:text-s-ink">
+                All conversations
+              </Link>
+            )}
+          </div>
         </div>
 
         <ProfileMenu {...p} rail={rail} />
