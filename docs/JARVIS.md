@@ -149,8 +149,21 @@ the full steps with `use_skill` when a request matches. Press **Use** on a skill
 its steps are then given up front. A skill only shapes how Jarvis uses its tools: it can't add tools or change the
 permission rules, and its text is shown as "written by the user" for your own.
 
-**In the conversation:** each tool Jarvis used on the server appears as a small line with a wrench ("Searched the
-web for …", "Calculated …"), in red when it failed. These lines are never sent back as conversation history.
+**In the conversation:** the tools Jarvis used on the server appear as one small line with a wrench ("Searched the
+web for … · Calculated …"); a failed one gets its own line, in red. These lines are never sent back as conversation
+history. After a mission, the conversation (and the voice) gets a one- or two-sentence report ("Done: 3 steps. …");
+the full step-by-step report stays in Mission control.
+
+**Brevity.** The prompt asks for one or two short sentences, the answer first, no preamble, no recap of the tools
+used and no closing offers; before actions, a few words at most ("On it.").
+
+**Interrupting.** Jarvis can be stopped at any point, without the emergency stop:
+- the **Stop** button (the Send button turns into Stop while Jarvis thinks, speaks or works), or **Esc**;
+- sending a new request, typed or spoken, also stops the current one. The microphone works while Jarvis is busy.
+
+Stopping cancels the request to the model, stops the speech and cancels the running mission (steps already finished
+stay done). Its late answer is dropped, and nothing more is sent. In conversation mode Jarvis still doesn't listen
+while it speaks, so it can't hear itself. To cut it off by voice, hold the push-to-talk key or press Esc.
 
 ## 4. The Orbis Desktop Agent
 

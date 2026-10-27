@@ -5,7 +5,9 @@
  */
 import { describe, expect, it } from "vitest";
 import { evaluate, formatNumber } from "@/lib/jarvis/calc";
-import { newMission, stepFeedback, wantsFollowUp, type Mission, type Step } from "@/lib/jarvis/mission";
+import { briefSummary, newMission, stepFeedback, wantsFollowUp, type Mission, type Step } from "@/lib/jarvis/mission";
+import { systemPrompt, turnRequest } from "@/lib/jarvis/planner";
+import { offeredTools } from "@/lib/jarvis/tools";
 import { allSkills, BUILTIN_SKILLS, findSkill, MAX_USER_SKILLS, skillCatalog, skillId, skillText } from "@/lib/jarvis/skills";
 import { parseSkills } from "@/lib/jarvis/store";
 
@@ -159,5 +161,33 @@ describe("feeding a mission's results back to the model", () => {
     expect(stepFeedback(denied!)).toEqual({ ok: false, text: "Not allowed: Autonomy is set to Observe." });
     const failed = mission([{ status: "failed", result: { outcome: "failure", summary: "The folder isn't allowed.", verified: null } }]).steps[0]!;
     expect(stepFeedback(failed)).toEqual({ ok: false, text: "The folder isn't allowed." });
+  });
+});
+
+describe("keeping Jarvis brief", () => {
+  const mk = (steps: Partial<Step>[], status: Mission["status"]): Mission => {
+    const m = newMission("x", "x", steps.map((st) => ({ tool: st.tool ?? "open_url", args: {} })));
+    return { ...m, status, steps: m.steps.map((st, i) => ({ ...st, ...steps[i] })) };
+  };
+  const did = (summary: string) => ({ status: "completed" as const, result: { outcome: "success" as const, summary, verified: true } });
+
+  it("says a mission's outcome in a sentence or two", () => {
+    expect(briefSummary(mk([did("Opened a.com.")], "completed"))).toBe("Done. Opened a.com.");
+    expect(briefSummary(mk([did("Made the folder."), did("Moved 3 files."), did("Opened it.")], "completed"))).toBe("Done: 3 steps. Opened it.");
+    expect(briefSummary(mk([did("Opened a.com."), { status: "cancelled" }], "cancelled"))).toBe("Stopped.");
+    expect(briefSummary(mk([{ status: "rejected" }], "cancelled"))).toBe("Cancelled: you didn't approve a step.");
+    expect(briefSummary(mk([did("Listed it."), { status: "failed", result: { outcome: "failure", summary: "The folder isn't allowed.", verified: null } }], "failed"))).toBe(
+      "That didn't fully work. The folder isn't allowed. 1 step was done first.",
+    );
+    expect(briefSummary(mk([{ status: "denied", decision: { kind: "deny", reason: "Autonomy is set to Observe." } }], "failed"))).toBe("Blocked by your permission settings. Autonomy is set to Observe.");
+    expect(briefSummary(mk([did("x")], "interrupted"))).toBe("Stopped by the emergency stop.");
+  });
+
+  it("tells the model to be brief and not to narrate its steps", () => {
+    const p = systemPrompt(turnRequest.parse({ message: "x" }), offeredTools(false), false);
+    expect(p).toMatch(/Be brief: this is spoken aloud\. Lead with the answer\./);
+    expect(p).toMatch(/say a few words at most/);
+    expect(p).toMatch(/one or two short sentences, then act/);
+    expect(p).not.toMatch(/say briefly what you are about to do/);
   });
 });

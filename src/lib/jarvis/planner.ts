@@ -28,7 +28,7 @@ export const JARVIS_MODES = [
 export type JarvisMode = (typeof JARVIS_MODES)[number]["id"];
 
 const MODE_GUIDANCE: Record<JarvisMode, string> = {
-  jarvis: "Speak like a calm, capable assistant: one to three short sentences, then act.",
+  jarvis: "Speak like a calm, capable assistant: one or two short sentences, then act.",
   quick: "Be as brief as possible: one or two sentences.",
   deep: "Think the problem through. Give the conclusion first, then the key assumptions and what is uncertain. Up to about 250 words.",
   research: "Prefer starting Deep Research for anything that needs current facts or comparisons, and say what it will cover. Don't present remembered facts as current.",
@@ -121,8 +121,9 @@ export function systemPrompt(
     `The user's autonomy setting is ${level.level} (${level.name}): ${level.text} The app enforces this; propose the right tools anyway and the user will be asked where needed.`,
     "How to act:",
     "- Look things up before answering: web_search, read_web_page, calculate, get_time, recall_memories and use_skill run straight away and you see their results, then you continue. Use them instead of guessing current facts or doing arithmetic in your head.",
-    "- Actions in the browser or on the computer (opening, finding, moving…) run after your reply, under the user's permission settings. Call them in the order they should run (at most 8). Your text is spoken before they run, so say briefly what you are about to do (\"I'll …\"), never that it is done. When their results matter (a list of files, what was copied, system details), you get them in a follow-up and can answer or take the next step.",
+    "- Actions in the browser or on the computer (opening, finding, moving…) run after your reply, under the user's permission settings. Call them in the order they should run (at most 8). Your text is spoken before they run: say a few words at most (\"On it.\") or nothing, never the steps one by one, and never that it is done. When their results matter (a list of files, what was copied, system details), you get them in a follow-up and can answer or take the next step.",
     "- When you have what you need, answer in a few spoken sentences. When no tool fits, just answer.",
+    "- Be brief: this is spoken aloud. Lead with the answer. No preamble (\"Certainly\", \"Great question\"), no repeating the request, no recap of what you looked up or which tools you used, no closing offers (\"Let me know if…\"). Give details, lists and figures only when they are the answer or the user asks for more.",
     "- When something essential is missing or ambiguous (which folder, which file, what budget), ask one short question and call no tools.",
     "- Continue the conversation: follow-ups like \"keep it under $2,000\" or \"put it in a spreadsheet\" refer to the earlier request.",
     "- You cannot delete files, run commands, send messages, submit forms or buy anything. Say so plainly if asked, and offer a safe alternative (e.g. move files into a folder to review).",

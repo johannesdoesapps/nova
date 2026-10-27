@@ -99,6 +99,22 @@ export function missionSummary(m: Mission): string {
   return `${head}${where}${before}`;
 }
 
+/**
+ * The report said in the conversation (and aloud): the outcome in a sentence or two. The full step-by-step report
+ * stays in Mission control.
+ */
+export function briefSummary(m: Mission): string {
+  const done = m.steps.filter((s) => s.status === "completed");
+  const last = done.at(-1)?.result?.summary;
+  if (m.status === "completed") return done.length > 1 ? `Done: ${done.length} steps.${last ? ` ${last}` : ""}` : last ? `Done. ${last}` : "Done.";
+  if (m.status === "interrupted") return "Stopped by the emergency stop.";
+  const stopped = m.steps.find((s) => ["failed", "denied", "rejected", "cancelled"].includes(s.status));
+  if (m.status === "cancelled") return stopped?.status === "rejected" ? "Cancelled: you didn't approve a step." : "Stopped.";
+  const why = stopped?.result?.summary ?? (stopped?.decision?.kind === "deny" ? stopped.decision.reason : null);
+  const head = stopped?.status === "denied" ? "Blocked by your permission settings." : "That didn't fully work.";
+  return `${head}${why ? ` ${why}` : ""}${done.length ? ` ${done.length} step${done.length === 1 ? " was" : "s were"} done first.` : ""}`;
+}
+
 /** Kinds of result that tell Jarvis something it can use (what was found or read), not just that a step ran. */
 const INFORMATIVE: ReadonlySet<StepDetails["kind"]> = new Set(["files", "info", "text"]);
 

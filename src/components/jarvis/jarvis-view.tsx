@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowUp, AudioLines, Mic, OctagonX, Play, Sparkles, Wrench, X } from "lucide-react";
+import { ArrowUp, AudioLines, Mic, OctagonX, Play, Sparkles, Square, Wrench, X } from "lucide-react";
 import { useMicrophone } from "voice-glow";
 import { useApp } from "@/components/layout/app-context";
 import { StudioHeader } from "@/components/studio/frame";
@@ -9,7 +9,7 @@ import { useSpeech } from "@/hooks/use-speech";
 import { END_OF_TURN_MS, isStopPhrase, QUIET_ROUND_MS, QUIET_ROUNDS, RELISTEN_DELAY_MS, shouldListen } from "@/lib/jarvis/conversation";
 import { agentState, haltAgent, pairAgent, resumeAgent, unpairAgent, type AgentState } from "@/lib/jarvis/desktop-client";
 import { executeStep, prepareStep } from "@/lib/jarvis/executors";
-import { MissionRunner, newMission, stepFeedback, wantsFollowUp, type Mission } from "@/lib/jarvis/mission";
+import { briefSummary, MissionRunner, newMission, stepFeedback, wantsFollowUp, type Mission } from "@/lib/jarvis/mission";
 import { decide } from "@/lib/jarvis/permissions";
 import { MAX_ROUNDS, type PlannedCall, type TraceRound } from "@/lib/jarvis/planner";
 import { allSkills, findSkill, type SkillInput } from "@/lib/jarvis/skills";
@@ -113,6 +113,8 @@ export function JarvisView() {
   const runner = useRef<MissionRunner | null>(null);
   const approval = useRef<((ok: boolean) => void) | null>(null);
   const turnAbort = useRef<AbortController | null>(null);
+  // Each request gets a number; stopping or a newer request makes an older one finish quietly.
+  const generation = useRef(0);
   const input = useRef<HTMLTextAreaElement>(null);
 
   // Settings, history and the emergency stop live in this browser; read them once after hydration.
@@ -201,15 +203,13 @@ export function JarvisView() {
   /* Turns and missions ------------------------------------------------------------------------------------- */
 
   const turn = useCallback(
-    async (message: string, opts: { history?: Turn[]; skill?: string | null; trace?: TraceRound[]; modelId?: string } = {}): Promise<TurnReply> => {
+    async (message: string, signal: AbortSignal, opts: { history?: Turn[]; skill?: string | null; trace?: TraceRound[]; modelId?: string } = {}): Promise<TurnReply> => {
       const s = settingsRef.current;
       const a = agentRef.current;
-      const abort = new AbortController();
-      turnAbort.current = abort;
       const res = await fetch("/api/jarvis/turn", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        signal: abort.signal,
+        signal,
         body: JSON.stringify({
           message: message.slice(0, 4000),
           history: (opts.history ?? turnsRef.current)
@@ -244,16 +244,20 @@ export function JarvisView() {
         prepare: prepareStep,
         execute: executeStep,
         approve: () => new Promise<boolean>((resolve) => (approval.current = resolve)),
-        update: setMission,
+        // A stopped mission still reports its last state; a newer one may already be on screen.
+        update: (m) => (runner.current === r || !runner.current) && setMission(m),
         // Generous: looking at the screen waits for the user to pick one.
         timeoutMs: 120_000,
       });
       runner.current = r;
       setRunning(true);
-      const done = await r.run().finally(() => setRunning(false));
-      runner.current = null;
-      approval.current = null;
-      setMission(done);
+      const done = await r.run();
+      if (runner.current === r) {
+        runner.current = null;
+        approval.current = null;
+        setRunning(false);
+        setMission(done);
+      }
       setHistory((h) => {
         const next = [done, ...h.filter((x) => x.id !== done.id)];
         saveHistory(next, settingsRef.current.keepDays);
@@ -264,11 +268,32 @@ export function JarvisView() {
     [],
   );
 
+  /** Stop what Jarvis is doing now: speaking, waiting for the model, or a mission (finished steps stay done). */
+  const interrupt = useCallback(() => {
+    const busyNow = !!turnAbort.current || !!runner.current;
+    generation.current++;
+    stopSpeaking();
+    turnAbort.current?.abort();
+    turnAbort.current = null;
+    runner.current?.stop("cancelled");
+    setThinking(false);
+    return busyNow;
+  }, [stopSpeaking]);
+
+  const stop = useCallback(() => {
+    if (interrupt()) say("activity", "Stopped.");
+  }, [interrupt, say]);
+
   const submit = useCallback(
     async (raw: string) => {
       const text = raw.trim();
-      if (!text || thinking || runner.current) return;
-      stopSpeaking();
+      if (!text) return;
+      // A new request interrupts the current one.
+      interrupt();
+      const gen = generation.current;
+      const stale = () => gen !== generation.current;
+      const abort = new AbortController();
+      turnAbort.current = abort;
       setError(false);
       setDraft("");
       const before = turnsRef.current;
@@ -278,43 +303,46 @@ export function JarvisView() {
       say("user", text);
       setThinking(true);
       try {
-        let r = await turn(text, { history: before, skill });
+        let r = await turn(text, abort.signal, { history: before, skill });
         for (;;) {
+          if (stale()) return;
           setThinking(false);
-          for (const a of r.activity) say("activity", a.summary, a.ok);
+          const used = r.activity.filter((a) => a.ok).map((a) => a.summary);
+          if (used.length) say("activity", used.join(" · "), true);
+          for (const a of r.activity.filter((x) => !x.ok)) say("activity", a.summary, false);
           if (r.say) {
             say("assistant", r.say);
             speak(r.say);
           }
           if (!r.calls.length) return;
           const done = await runMission(text, r.calls);
+          if (stale()) return;
           const pending = r.trace?.at(-1);
           // Jarvis continues from what its actions found (files, details, copied text), within the round limit;
-          // otherwise the mission's own report is the answer.
+          // otherwise the mission's short report is the answer (the full one is in Mission control).
           if (!r.trace || !pending || r.trace.length >= MAX_ROUNDS || haltedRef.current || !wantsFollowUp(done)) {
-            if (done.summary) {
-              say("assistant", done.summary);
-              speak(done.summary);
-            }
+            const brief = briefSummary(done);
+            say("assistant", brief);
+            speak(brief);
             return;
           }
-          if (done.summary) say("activity", done.summary, done.status === "completed");
           // Steps are in the same order as the calls (newMission).
           const results = r.calls.flatMap((c, i) => (c.id && done.steps[i] ? [{ id: c.id, ...stepFeedback(done.steps[i]) }] : []));
           const trace = [...r.trace.slice(0, -1), { ...pending, results: [...pending.results, ...results] }];
           setThinking(true);
-          r = await turn(text, { history: before, skill, trace, modelId: r.model?.id });
+          r = await turn(text, abort.signal, { history: before, skill, trace, modelId: r.model?.id });
         }
       } catch (err) {
+        if (stale()) return;
         setThinking(false);
         if ((err as Error)?.name === "AbortError") return;
         setError(true);
         say("notice", err instanceof Error ? err.message : "Something went wrong.");
       } finally {
-        turnAbort.current = null;
+        if (turnAbort.current === abort) turnAbort.current = null;
       }
     },
-    [thinking, stopSpeaking, say, turn, speak, runMission],
+    [interrupt, say, turn, speak, runMission],
   );
 
   /* Emergency stop --------------------------------------------------------------------------------------- */
@@ -324,11 +352,10 @@ export function JarvisView() {
     saveHalted(true);
     setConvo(false);
     runner.current?.stop("interrupted");
-    turnAbort.current?.abort();
-    stopSpeaking();
+    interrupt();
     if (agentRef.current.status === "connected") void haltAgent().catch(() => {});
     say("notice", "Emergency stop: nothing new will run until you resume. Anything already finished stays done.");
-  }, [stopSpeaking, say]);
+  }, [interrupt, say]);
 
   const resume = useCallback(() => {
     setHalted(false);
@@ -496,7 +523,7 @@ export function JarvisView() {
       if (e.key === "Escape") {
         if (convoRef.current) {
           e.preventDefault();
-          stopSpeaking();
+          interrupt();
           stopListening(false);
           endConversation("Conversation ended.");
           return;
@@ -504,7 +531,7 @@ export function JarvisView() {
         if (ptt.current) {
           e.preventDefault();
           stopListening(false);
-        } else stopSpeaking();
+        } else stop();
         return;
       }
       if (!e.repeat && matchesShortcut(e, settingsRef.current.shortcut)) {
@@ -527,7 +554,7 @@ export function JarvisView() {
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", blur);
     };
-  }, [startListening, stopListening, stopSpeaking, endConversation]);
+  }, [startListening, stopListening, interrupt, stop, endConversation]);
 
   /* State ------------------------------------------------------------------------------------------------- */
 
@@ -669,7 +696,7 @@ export function JarvisView() {
                 <button
                   key={q.label}
                   type="button"
-                  disabled={busy || (q.desktop && !connected)}
+                  disabled={q.desktop && !connected}
                   title={q.desktop && !connected ? "Connect the Desktop Agent first" : q.request}
                   onClick={() => void submit(q.request)}
                   className="inline-flex h-8 items-center rounded-full border border-s-line px-3 text-[12.5px] text-s-ink-2 transition hover:border-s-line-strong hover:text-s-ink disabled:opacity-45"
@@ -718,7 +745,7 @@ export function JarvisView() {
               />
               <button
                 type="button"
-                disabled={!speech.supported || busy}
+                disabled={!speech.supported}
                 aria-pressed={speech.listening}
                 aria-label={speech.listening ? "Release to send" : `Hold to talk (${key})`}
                 title={speech.supported ? `Hold to talk, or press ${key}` : "Voice input isn't available in this browser"}
@@ -742,9 +769,15 @@ export function JarvisView() {
               >
                 <Mic className="h-5 w-5" aria-hidden />
               </button>
-              <button type="submit" disabled={!draft.trim() || busy} aria-label="Send" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-s-ink text-s-bg disabled:opacity-40">
-                <ArrowUp className="h-5 w-5" aria-hidden />
-              </button>
+              {(busy || speaking) && !draft.trim() ? (
+                <button type="button" onClick={stop} aria-label="Stop" title="Stop (Esc)" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-s-ink text-s-bg">
+                  <Square className="h-4 w-4 fill-current" aria-hidden />
+                </button>
+              ) : (
+                <button type="submit" disabled={!draft.trim()} aria-label="Send" title={busy ? "Send (stops what Jarvis is doing)" : "Send"} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-s-ink text-s-bg disabled:opacity-40">
+                  <ArrowUp className="h-5 w-5" aria-hidden />
+                </button>
+              )}
             </form>
             {speech.error && (
               <p role="alert" className="mt-2 text-[12.5px] text-s-danger">
