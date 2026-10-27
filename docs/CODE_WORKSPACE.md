@@ -84,8 +84,8 @@ Each plan's minutes are set aside at that worst case before its AI budget is wor
 
 | | Workspace, worst case / month | AI budget / month, before → after |
 | --- | --- | --- |
-| Pro | $0.63 | $4.12 → **$3.59** |
-| Max | $3.14 | $26.74 → **$24.07** |
+| Pro | $0.63 | $4.12 → **$3.59** (now raised to the $5 minimum) |
+| Max | $3.14 | $26.74 → **$24.07** (now raised to the $35 minimum) |
 
 **This lowers each paid plan's AI budget**, so Pro users get about 13% fewer messages on budget-limited models and Max users about 10% fewer. The owner needs to approve this. The alternatives are:
 

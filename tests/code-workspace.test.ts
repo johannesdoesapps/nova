@@ -159,14 +159,14 @@ describe("plan economics for workspace time", () => {
   it("sets each plan's minutes aside before the AI budget, so the margin holds with every minute used", () => {
     for (const id of PLAN_IDS) {
       for (const interval of ["month", "year"] as const) {
-        const e = planEconomics(DEFAULT_BILLING, id, interval);
+        const e = planEconomics({ ...DEFAULT_BILLING, plans: { ...DEFAULT_BILLING.plans, [id]: { ...DEFAULT_BILLING.plans[id], minAiBudgetUsd: 0 } } }, id, interval);
         expect(e.workspaceUsd).toBeCloseTo(DEFAULT_BILLING.plans[id].workspaceMinutesPerPeriod * workspaceMinuteCostUsd(), 3);
         if (id === "free") continue;
         expect((e.revenueUsd - e.feesUsd - e.overheadUsd - e.codeRunsUsd - e.workspaceUsd - e.aiBudgetUsd) / e.revenueUsd).toBeGreaterThanOrEqual(0.6);
       }
     }
-    const pro = DEFAULT_BILLING.plans.pro;
-    expect(priceForBudget(DEFAULT_BILLING, planEconomics(DEFAULT_BILLING, "pro").aiBudgetUsd, pro)).toBeCloseTo(pro.priceUsd, 0);
+    const pro = { ...DEFAULT_BILLING.plans.pro, minAiBudgetUsd: 0 };
+    expect(priceForBudget(DEFAULT_BILLING, planEconomics({ ...DEFAULT_BILLING, plans: { ...DEFAULT_BILLING.plans, pro } }, "pro").aiBudgetUsd, pro)).toBeCloseTo(pro.priceUsd, 0);
   });
 
   it("validates the workspace settings", () => {

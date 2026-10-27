@@ -84,6 +84,24 @@ Daily cost is the monthly cost ÷ 30. For example, Opus at 100 messages a day co
 
 ## 4. Prices and the 60% contribution margin
 
+> **Minimum AI budgets (owner's decision, 2026-10-27).** Pro gets at least **$5** and Max at least **$35** of AI a
+> month, on monthly and yearly billing (`minAiBudgetUsd` per plan; Admin → Plans & pricing → "Minimum AI budget /
+> month"). The margin formula below gives less ($3.59 / $24.07), so the minimums apply and the margin is lower than
+> the 60% target:
+>
+> | | Pro monthly | Pro yearly | Max monthly | Max yearly |
+> | --- | --- | --- | --- | --- |
+> | AI budget / month | **$5.00** | **$5.00** | **$35.00** | **$35.00** |
+> | … of which advanced/premium models | $3.00 (60%) | $3.00 | $29.75 (85%) | $29.75 |
+> | Safety buffer | $0 | $0 | $0 | $0 |
+> | Contribution if the whole budget, every code run and every workspace minute are used | $10.98 (**56.0%**) | $9.37 (**53.1%**) | $52.12 (**53.2%**) | $42.95 (**48.7%**) |
+>
+> In the usage scenarios below (10–300 messages a day on each model), the lowest margin is now **53.1%**: a yearly
+> Pro user sending 300 GPT Luna messages a day. Max users run into the advanced-model part, the premium weekly limit
+> or the token cap before using the whole $35, so they don't reach the 48.7% worst case. The table and
+> scenarios below show the margin formula on its own (no minimum), as before; Finance's "plans below the target margin" alert
+> compares real spending with the 60% target and may now fire for heavy users.
+
 ```
 contribution margin = (revenue − variable costs) / revenue
 revenue          = price, excluding tax collected for authorities, less expected refunds (2%)
@@ -141,13 +159,13 @@ Use the real "AI cost per paying subscriber" in Finance after launch.
 | | Free | Pro ($20) | Max ($100) |
 | --- | --- | --- | --- |
 | Models | Standard: Haiku, Luna | + Advanced: Sonnet, Terra | + Premium: Opus, Sol |
-| Monthly AI budget | $0.10 | $3.59 | $24.07 |
-| Advanced-model part | — | $2.15 | $20.46 |
+| Monthly AI budget | $0.10 | $5.00 (minimum) | $35.00 (minimum) |
+| Advanced-model part | — | $3.00 | $29.75 |
 | Messages / month, Auto (Haiku) | about 128 (weekly cap) | about 4,714 (157/day) | about 20,400 (680/day; token cap) |
-| Messages / month, GPT Luna | about 65 | about 2,341 | about 15,700 |
-| Messages / month, advanced models | — | about 140 (Terra) – 170 (Sonnet) | about 1,334 (Terra) – 1,623 (Sonnet) |
-| Messages / month, premium models | — | — | about 749 (Sol) – 811 (Opus) |
-| Mix: 80% Auto, 20% top model | — | about 702 | about 3,746 |
+| Messages / month, GPT Luna | about 65 | about 3,261 | about 20,400 (token cap) |
+| Messages / month, advanced models | — | about 195 (Terra) – 235 (Sonnet) | about 1,940 (Terra) – 2,142 (Sonnet) |
+| Messages / month, premium models | — | — | about 1,071 (Sol and Opus) |
+| Mix: 80% Auto, 20% top model | — | about 978 | about 4,870 |
 | Code workspace | 3 projects, 20 minutes | 25 projects, 200 minutes | 100 projects, 1,000 minutes |
 | Messages / day | 10 | no daily cap | no daily cap |
 | Tokens / month | 400,000 | 15,000,000 | 60,000,000 |

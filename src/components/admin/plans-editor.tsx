@@ -82,6 +82,7 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
                   <>
                     <Num label="Price / month" value={p.priceUsd} step={1} onChange={(v) => setPlan(id, { priceUsd: v })} />
                     <Num label="Yearly discount %" value={p.annualDiscountPct} onChange={(v) => setPlan(id, { annualDiscountPct: v })} hint={`${usd(chargeUsd(planOf(b, id), "year"), 0)} / year`} />
+                    <Num label="Minimum AI budget / month" value={p.minAiBudgetUsd} step={0.5} onChange={(v) => setPlan(id, { minAiBudgetUsd: v })} hint="0 = from the margin target" />
                   </>
                 ) : (
                   <Num label="AI budget / month" value={p.aiBudgetUsd ?? 0} step={0.05} onChange={(v) => setPlan(id, { aiBudgetUsd: v })} />

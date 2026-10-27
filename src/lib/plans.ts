@@ -39,6 +39,8 @@ const planSchema = z.object({
   webSearchesPerPeriod: z.number().int().min(0).max(100_000),
   /** Free only: fixed monthly AI budget in USD (paid plans derive theirs from the margin). */
   aiBudgetUsd: z.number().min(0).max(10_000).optional(),
+  /** Paid plans: the least AI budget a subscriber gets per month, whatever the margin target allows (0 = none). */
+  minAiBudgetUsd: z.number().min(0).max(10_000).default(0),
   /** Share of the AI budget that advanced and premium models may use, in percent (the rest is for standard models). */
   premiumBudgetPct: z.number().min(0).max(100).default(0),
   /** User messages per day (UTC); 0 = no daily cap. */
@@ -135,6 +137,7 @@ export const DEFAULT_BILLING: BillingSettings = {
       label: "Free",
       priceUsd: 0,
       annualDiscountPct: 0,
+      minAiBudgetUsd: 0,
       windowUnits: 10,
       weeklyUnits: 30,
       topWeeklyUnits: 0,
@@ -155,6 +158,7 @@ export const DEFAULT_BILLING: BillingSettings = {
       label: "Pro",
       priceUsd: 20,
       annualDiscountPct: 10,
+      minAiBudgetUsd: 5,
       windowUnits: 200,
       weeklyUnits: 1100,
       topWeeklyUnits: 0,
@@ -174,6 +178,7 @@ export const DEFAULT_BILLING: BillingSettings = {
       label: "Max",
       priceUsd: 100,
       annualDiscountPct: 10,
+      minAiBudgetUsd: 35,
       windowUnits: 2000,
       weeklyUnits: 10_000,
       topWeeklyUnits: 5000,
@@ -296,7 +301,8 @@ export interface PlanEconomics {
  * The monthly AI budget that keeps the target contribution margin:
  *   revenue      = price ÷ (1 + tax included) × (1 − refunds)
  *   allowed cost = revenue × (1 − margin)
- *   AI budget    = (allowed cost − payment fees − hosting − Free users' share − code runs − workspace time) × (1 − safety buffer)
+ *   AI budget    = (allowed cost − payment fees − hosting − Free users' share − code runs − workspace time) × (1 − safety buffer),
+ *                  but never less than the plan's minimum AI budget
  * Fixed overhead is not a variable cost and is shown separately.
  */
 export function planEconomics(billing: BillingSettings, id: PlanId, interval: BillingInterval = "month"): PlanEconomics {
@@ -319,8 +325,9 @@ export function planEconomics(billing: BillingSettings, id: PlanId, interval: Bi
   const feesUsd = ((charge * billing.paymentFeePercent) / 100 + billing.paymentFeeFixedUsd) * perMonth;
   const overheadUsd = billing.overheadPerSubscriberUsd + billing.freeSubsidyPerSubscriberUsd;
   const beforeBuffer = Math.max(0, maxCostUsd - feesUsd - overheadUsd - codeRunsUsd - workspaceUsd);
-  const bufferUsd = (beforeBuffer * billing.safetyBufferPct) / 100;
-  const aiBudgetUsd = beforeBuffer - bufferUsd;
+  // The owner's minimum AI budget wins over the margin target (the margin is then lower; Finance shows it).
+  const aiBudgetUsd = Math.max(beforeBuffer * (1 - billing.safetyBufferPct / 100), plan.minAiBudgetUsd);
+  const bufferUsd = Math.max(0, beforeBuffer - aiBudgetUsd);
   return {
     revenueUsd: r(revenueUsd),
     taxUsd: r(taxUsd),

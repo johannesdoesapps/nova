@@ -117,14 +117,16 @@ describe("cost and margins", () => {
   it("sets each plan's runs aside before its AI budget, so the margin holds with every run used", () => {
     for (const id of PLAN_IDS) {
       for (const interval of ["month", "year"] as const) {
-        const e = planEconomics(DEFAULT_BILLING, id, interval);
+        const e = planEconomics({ ...DEFAULT_BILLING, plans: { ...DEFAULT_BILLING.plans, [id]: { ...DEFAULT_BILLING.plans[id], minAiBudgetUsd: 0 } } }, id, interval);
         expect(e.codeRunsUsd).toBeCloseTo(DEFAULT_BILLING.plans[id].codeRunsPerPeriod * maxCodeRunCostUsd(DEFAULT_BILLING.codeRunSeconds), 3);
         if (id === "free") continue;
         expect((e.revenueUsd - e.feesUsd - e.overheadUsd - e.codeRunsUsd - e.aiBudgetUsd) / e.revenueUsd).toBeGreaterThanOrEqual(0.6);
       }
     }
-    const noRuns = planEconomics({ ...DEFAULT_BILLING, plans: { ...DEFAULT_BILLING.plans, pro: { ...DEFAULT_BILLING.plans.pro, codeRunsPerPeriod: 0 } } }, "pro");
-    expect(noRuns.aiBudgetUsd).toBeGreaterThan(planEconomics(DEFAULT_BILLING, "pro").aiBudgetUsd);
+    // (Without the minimum AI budget, which would otherwise hide the difference.)
+    const pro = { ...DEFAULT_BILLING.plans.pro, minAiBudgetUsd: 0 };
+    const noRuns = planEconomics({ ...DEFAULT_BILLING, plans: { ...DEFAULT_BILLING.plans, pro: { ...pro, codeRunsPerPeriod: 0 } } }, "pro");
+    expect(noRuns.aiBudgetUsd).toBeGreaterThan(planEconomics({ ...DEFAULT_BILLING, plans: { ...DEFAULT_BILLING.plans, pro } }, "pro").aiBudgetUsd);
   });
 
   it("validates the run settings", () => {
