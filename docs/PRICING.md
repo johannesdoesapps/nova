@@ -82,25 +82,23 @@ Daily cost is the monthly cost ÷ 30. For example, Opus at 100 messages a day co
 - An advanced model (Sonnet or Terra) costs about 20× a Haiku message.
 - Someone sending 300 premium messages a day would cost $227–$246 a month. That's more than any plan's price, which is why the limits below exist.
 
-## 4. Prices and the 60% contribution margin
+## 4. Prices and the contribution margin (now 65%)
 
-> **Minimum AI budgets (owner's decision, 2026-10-27).** Pro gets at least **$5** and Max at least **$35** of AI a
-> month, on monthly and yearly billing (`minAiBudgetUsd` per plan; Admin → Plans & pricing → "Minimum AI budget /
-> month"). The margin formula below gives less ($3.59 / $24.07), so the minimums apply and the margin is lower than
-> the 60% target:
+> **Current prices (owner's decisions, 2026-10-27): Pro $28 and Max $153 a month, 65% target margin, and a minimum AI
+> budget of $5 (Pro) and $35 (Max)** on monthly and yearly billing (`minAiBudgetUsd` per plan; Admin → Plans & pricing).
+> Yearly: $302 and $1,652 (10% off). The prices were chosen so that 65% holds even if every subscriber uses the whole
+> budget, every code run and every workspace minute:
 >
 > | | Pro monthly | Pro yearly | Max monthly | Max yearly |
 > | --- | --- | --- | --- | --- |
+> | Price | **$28 / month** | $302 / year | **$153 / month** | $1,652 / year |
 > | AI budget / month | **$5.00** | **$5.00** | **$35.00** | **$35.00** |
 > | … of which advanced/premium models | $3.00 (60%) | $3.00 | $29.75 (85%) | $29.75 |
-> | Safety buffer | $0 | $0 | $0 | $0 |
-> | Contribution if the whole budget, every code run and every workspace minute are used | $10.98 (**56.0%**) | $9.37 (**53.1%**) | $52.12 (**53.2%**) | $42.95 (**48.7%**) |
+> | Contribution, worst case | **67.5%** | **65.4%** | **68.1%** | **65.2%** |
 >
-> In the usage scenarios below (10–300 messages a day on each model), the lowest margin is now **53.1%**: a yearly
-> Pro user sending 300 GPT Luna messages a day. Max users run into the advanced-model part, the premium weekly limit
-> or the token cap before using the whole $35, so they don't reach the 48.7% worst case. The table and
-> scenarios below show the margin formula on its own (no minimum), as before; Finance's "plans below the target margin" alert
-> compares real spending with the 60% target and may now fire for heavy users.
+> Every usage scenario (10–300 messages a day on each model, monthly and yearly) stays at or above 65% (checked in a
+> test). The table and scenarios below are the earlier analysis at $20 / $100 with a 60% margin, kept as the reference for
+> the formula; message allowances in section 5 are unchanged, because the AI budgets are the same.
 
 ```
 contribution margin = (revenue − variable costs) / revenue
@@ -156,7 +154,7 @@ Use the real "AI cost per paying subscriber" in Finance after launch.
 
 ## 5. Recommended allowances
 
-| | Free | Pro ($20) | Max ($100) |
+| | Free | Pro ($28) | Max ($153) |
 | --- | --- | --- | --- |
 | Models | Standard: Haiku, Luna | + Advanced: Sonnet, Terra | + Premium: Opus, Sol |
 | Monthly AI budget | $0.10 | $5.00 (minimum) | $35.00 (minimum) |

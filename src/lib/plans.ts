@@ -61,7 +61,7 @@ export type Plan = z.infer<typeof planSchema> & { id: PlanId };
 export const billingSettingsSchema = z.object({
   plans: z.object({ free: planSchema, pro: planSchema, max: planSchema }),
   /** Share of revenue that must remain as profit after all costs below and AI usage. */
-  targetMargin: z.number().min(0).max(0.95).default(0.6),
+  targetMargin: z.number().min(0).max(0.95).default(0.65),
   /** Payment processing per charge: percent (card + Stripe Billing) and fixed USD. */
   paymentFeePercent: z.number().min(0).max(20).default(3.6),
   paymentFeeFixedUsd: z.number().min(0).max(5).default(0.3),
@@ -125,11 +125,12 @@ export type BillingSettings = z.infer<typeof billingSettingsSchema>;
 
 /**
  * Defaults, from docs/PRICING.md: official API prices (2026-10-19), a
- * conservative request mix, 60% margin, 3.6% + $0.30 per charge, $0.50
+ * conservative request mix, 65% margin, 3.6% + $0.30 per charge, $0.50
  * hosting and $1 free-user subsidy per subscriber, 15% safety buffer.
  * Code runs and Code workspace minutes: each plan's monthly allowance at
- * its most expensive is set aside before the AI budget. Pro $20 → $3.59/month
- * AI budget; Max $100 → $24.07.
+ * its most expensive is set aside before the AI budget. Pro $28 and Max $153
+ * (owner's decision, 2026-10-27) keep at least 65% with their minimum AI
+ * budgets of $5 and $35 fully used, monthly and yearly.
  */
 export const DEFAULT_BILLING: BillingSettings = {
   plans: {
@@ -156,7 +157,7 @@ export const DEFAULT_BILLING: BillingSettings = {
     },
     pro: {
       label: "Pro",
-      priceUsd: 20,
+      priceUsd: 28,
       annualDiscountPct: 10,
       minAiBudgetUsd: 5,
       windowUnits: 200,
@@ -176,7 +177,7 @@ export const DEFAULT_BILLING: BillingSettings = {
     },
     max: {
       label: "Max",
-      priceUsd: 100,
+      priceUsd: 153,
       annualDiscountPct: 10,
       minAiBudgetUsd: 35,
       windowUnits: 2000,
@@ -195,7 +196,7 @@ export const DEFAULT_BILLING: BillingSettings = {
       codeProjects: 100,
     },
   },
-  targetMargin: 0.6,
+  targetMargin: 0.65,
   paymentFeePercent: 3.6,
   paymentFeeFixedUsd: 0.3,
   overheadPerSubscriberUsd: 0.5,

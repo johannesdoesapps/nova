@@ -208,7 +208,7 @@ describe("POST /api/stripe/webhook", () => {
 });
 
 describe("POST /api/billing/checkout", () => {
-  it("opens a $20/month USD Pro checkout tied to the user", async () => {
+  it("opens a $28/month USD Pro checkout tied to the user", async () => {
     const { stripeClient } = await import("@/lib/billing/stripe");
     const s = stripeClient()!;
     vi.spyOn(s.prices, "list").mockResolvedValue({ data: [] } as never);
@@ -217,7 +217,7 @@ describe("POST /api/billing/checkout", () => {
     const { POST } = await import("@/app/api/billing/checkout/route");
     const res = await POST(post({ plan: "pro", interval: "month" }));
     expect(await res.json()).toEqual({ url: "https://checkout.stripe.com/c/pay_1" });
-    expect(createPrice).toHaveBeenCalledWith(expect.objectContaining({ currency: "usd", unit_amount: 2000, recurring: { interval: "month" }, lookup_key: "orbis_pro_month_usd_2000" }));
+    expect(createPrice).toHaveBeenCalledWith(expect.objectContaining({ currency: "usd", unit_amount: 2800, recurring: { interval: "month" }, lookup_key: "orbis_pro_month_usd_2800" }));
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: "subscription",
@@ -241,7 +241,7 @@ describe("POST /api/billing/checkout", () => {
     const { POST } = await import("@/app/api/billing/checkout/route");
     await POST(post({ plan: "max", interval: "year" }));
     // $100 × 12 × (1 − 10%) = $1,080 a year.
-    expect(list).toHaveBeenCalledWith(expect.objectContaining({ lookup_keys: ["orbis_max_year_usd_108000"] }));
+    expect(list).toHaveBeenCalledWith(expect.objectContaining({ lookup_keys: ["orbis_max_year_usd_165200"] }));
     expect(createPrice).not.toHaveBeenCalled();
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ line_items: [{ price: "price_max_year", quantity: 1 }] }), expect.objectContaining({ idempotencyKey: expect.any(String) }));
   });
@@ -274,7 +274,7 @@ describe("POST /api/billing/change", () => {
     const { update, POST } = await setup({});
     const res = await POST(post({ plan: "max", interval: "month" }));
     expect(res.status).toBe(200);
-    expect(update).toHaveBeenCalledWith("sub_123", { items: [{ id: "si_1", price: "price_orbis_max_month_usd_10000" }], proration_behavior: "always_invoice", payment_behavior: "pending_if_incomplete" });
+    expect(update).toHaveBeenCalledWith("sub_123", { items: [{ id: "si_1", price: "price_orbis_max_month_usd_15300" }], proration_behavior: "always_invoice", payment_behavior: "pending_if_incomplete" });
     expect(update).toHaveBeenCalledWith("sub_123", expect.objectContaining({ cancel_at_period_end: false, metadata: expect.objectContaining({ orbis_plan: "max" }) }));
     expect(upserts.length).toBeGreaterThan(0); // allowance updated immediately
   });

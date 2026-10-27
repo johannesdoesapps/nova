@@ -17,8 +17,8 @@ import { DAYS_PER_MONTH, messageCostUsd, modelCostTable, planCapacity, planScena
 import { DEFAULT_BILLING, chargeUsd, modelTier, planEconomics, planForTier, planOf, priceForBudget, resolveBilling, validateBilling } from "@/lib/plans";
 
 const B = DEFAULT_BILLING;
-/** The defaults without the owner's minimum AI budgets: the margin-target formula on its own. */
-const NOMIN = { ...B, plans: { ...B.plans, pro: { ...B.plans.pro, minAiBudgetUsd: 0 }, max: { ...B.plans.max, minAiBudgetUsd: 0 } } };
+/** A fixed reference for the margin-target formula on its own: $20 / $100, 60% margin, no minimum AI budgets. */
+const NOMIN = { ...B, targetMargin: 0.6, plans: { ...B.plans, pro: { ...B.plans.pro, priceUsd: 20, minAiBudgetUsd: 0 }, max: { ...B.plans.max, priceUsd: 100, minAiBudgetUsd: 0 } } };
 
 const model = (id: string) => DEFAULT_MODELS.find((m) => m.id === id)!;
 const CONFIGURED = ["anthropic:claude-haiku-5-5", "openai:gpt-5.6-luna", "anthropic:claude-sonnet-5-5", "openai:gpt-5.6-terra", "anthropic:claude-opus-5-5", "openai:gpt-5.6-sol"].map(model);
@@ -77,12 +77,12 @@ describe("usage scenarios (2,000 in / 800 out per call, 1.05 calls per message, 
     }
   });
 
-  it("with the minimum AI budgets ($5 Pro, $35 Max), still keeps at least 48% in every scenario", () => {
+  it("with the defaults ($28 / $153, $5 / $35 minimum AI budgets), keeps at least 65% in every scenario", () => {
     for (const plan of ["pro", "max"] as const) {
       for (const m of CONFIGURED.filter((x) => B.plans[plan].tiers.includes(modelTier(x)))) {
         for (const perDay of [10, 50, 100, 300]) {
           for (const interval of ["month", "year"] as const) {
-            expect(planScenario(B, plan, m, perDay, interval)!.marginPct!, `${plan} ${interval} ${m.displayName} ${perDay}/day`).toBeGreaterThanOrEqual(48);
+            expect(planScenario(B, plan, m, perDay, interval)!.marginPct!, `${plan} ${interval} ${m.displayName} ${perDay}/day`).toBeGreaterThanOrEqual(65);
           }
         }
       }
@@ -98,28 +98,29 @@ describe("usage scenarios (2,000 in / 800 out per call, 1.05 calls per message, 
 describe("plan economics (60% contribution margin)", () => {
   it("gives Pro at least $5 and Max at least $35 of AI a month, monthly and yearly", () => {
     for (const [id, interval, budget, margin] of [
-      ["pro", "month", 5, 0.56],
-      ["pro", "year", 5, 0.531],
-      ["max", "month", 35, 0.532],
-      ["max", "year", 35, 0.487],
+      ["pro", "month", 5, 0.675],
+      ["pro", "year", 5, 0.654],
+      ["max", "month", 35, 0.681],
+      ["max", "year", 35, 0.652],
     ] as const) {
       const e = planEconomics(B, id, interval);
       expect(e.aiBudgetUsd).toBe(budget);
       expect(e.premiumBudgetUsd).toBeCloseTo((budget * B.plans[id].premiumBudgetPct) / 100, 6);
       // Worst case: every subscriber uses the whole budget, every code run and every workspace minute.
       expect(e.contributionUsd / e.revenueUsd).toBeCloseTo(margin, 3);
+      expect(e.contributionUsd / e.revenueUsd).toBeGreaterThanOrEqual(0.65);
     }
   });
 
   it("uses the margin formula when it gives more than the minimum", () => {
-    const low = { ...B, plans: { ...B.plans, pro: { ...B.plans.pro, minAiBudgetUsd: 1 } } };
+    const low = { ...NOMIN, plans: { ...NOMIN.plans, pro: { ...NOMIN.plans.pro, minAiBudgetUsd: 1 } } };
     expect(planEconomics(low, "pro").aiBudgetUsd).toBeCloseTo(3.59, 2);
-    const rich = { ...B, plans: { ...B.plans, pro: { ...B.plans.pro, priceUsd: 40 } } };
+    const rich = { ...B, plans: { ...B.plans, pro: { ...B.plans.pro, priceUsd: 60 } } };
     expect(planEconomics(rich, "pro").aiBudgetUsd).toBeGreaterThan(5);
   });
 
   it("keeps the minimum when a stored configuration predates it", () => {
-    expect(planEconomics(resolveBilling({ plans: { pro: { priceUsd: 20 } } }), "pro").aiBudgetUsd).toBe(5);
+    expect(planEconomics(resolveBilling({ plans: { pro: { priceUsd: 28 } } }), "pro").aiBudgetUsd).toBe(5);
   });
 
   it("derives each paid plan's AI budget so 60% of revenue remains after every variable cost", () => {
@@ -146,13 +147,13 @@ describe("plan economics (60% contribution margin)", () => {
   });
 
   it("charges yearly plans 12 months less the discount, in whole dollars", () => {
-    expect(chargeUsd(planOf(B, "pro"), "year")).toBe(216);
-    expect(chargeUsd(planOf(B, "max"), "year")).toBe(1080);
+    expect(chargeUsd(planOf(B, "pro"), "year")).toBe(302); // $28 × 12 × 0.9 = $302.40
+    expect(chargeUsd(planOf(B, "max"), "year")).toBe(1652); // $153 × 12 × 0.9 = $1,652.40
     expect(chargeUsd(planOf(B, "free"), "year")).toBe(0);
   });
 
   it("inverts: the price needed for a given AI budget", () => {
-    expect(priceForBudget(B, planEconomics(NOMIN, "pro").aiBudgetUsd, B.plans.pro)).toBeCloseTo(20, 0);
+    expect(priceForBudget(NOMIN, planEconomics(NOMIN, "pro").aiBudgetUsd, NOMIN.plans.pro)).toBeCloseTo(20, 0);
     expect(priceForBudget({ ...B, targetMargin: 0.97 }, 5)).toBeNull();
   });
 
@@ -589,7 +590,7 @@ describe("finance report alerts", () => {
     expect(text).toMatch(/a@example\.com \(pro\) is at 90% of their AI budget/);
     expect(text).toMatch(/more than twice the previous 7-day average/);
     expect(text).toMatch(/1 subscription has a failed payment/);
-    expect(text).toMatch(/Pro margin is .*below the 60% target/);
+    expect(text).toMatch(/Pro margin is .*below the 65% target/);
     expect(r.plans.find((p) => p.plan === "pro")!.canceling).toBe(1);
     expect(r.pastDue).toBe(1);
     expect(r.projection.aiCostUsd).toBeGreaterThan(0);

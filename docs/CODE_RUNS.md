@@ -43,8 +43,8 @@ Each plan's runs are set aside at that worst case **before** its AI budget is wo
 
 | | Code runs, worst case / month | AI budget / month |
 | --- | --- | --- |
-| Pro ($20) | $0.47 | $3.59 by the margin formula (after Code workspace minutes are also set aside); $5 minimum applies |
-| Max ($100) | $2.34 | $24.07 by the margin formula (likewise); $35 minimum applies |
+| Pro (at $20, 60%) | $0.47 | $3.59 by the margin formula (after Code workspace minutes are also set aside); $5 minimum applies |
+| Max (at $100, 60%) | $2.34 | $24.07 by the margin formula (likewise); $35 minimum applies |
 
 ## Known limits
 

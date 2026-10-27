@@ -2,13 +2,13 @@
 
 ## Plans
 
-Free ($0), **Pro ($20/month)** and **Max ($100/month)**, in USD, plus tax where it applies. Yearly billing is 10% off ($216 and $1,080).
+Free ($0), **Pro ($28/month)** and **Max ($153/month)**, in USD, plus tax where it applies. Yearly billing is 10% off ($302 and $1,652).
 
-The numbers behind these prices, the 60% margin and the allowances are in **docs/PRICING.md**. Admins change prices, allowances, model tiers, costs and the margin in **Admin → Plans & pricing**, without code.
+The numbers behind these prices, the 65% margin and the allowances are in **docs/PRICING.md**. Admins change prices, allowances, model tiers, costs and the margin in **Admin → Plans & pricing**, without code.
 
 ## The budget guard
 
-Each paid plan's monthly AI budget is derived from its price, so 60% stays as profit after:
+Each paid plan's monthly AI budget is derived from its price, so 65% stays as profit after (and never falls below the plan's minimum AI budget: $5 Pro, $35 Max):
 - AI usage,
 - payment fees,
 - hosting,

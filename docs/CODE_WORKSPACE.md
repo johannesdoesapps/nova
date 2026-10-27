@@ -57,7 +57,7 @@ The API starts the computer first and then reserves its block. If the reserve is
 
 Each block is also recorded in `model_runs` (`tools = {code_workspace}`, `units = 0`, its worst-case cost) so the Finance pages show workspace costs. Admin → Plans changes everything below.
 
-| | Free | Pro ($20) | Max ($100) |
+| | Free | Pro ($28) | Max ($153) |
 | --- | --- | --- | --- |
 | Projects | 3 | 25 | 100 |
 | Computer minutes / month | 20 | 200 | 1,000 |
@@ -80,7 +80,7 @@ Prices are from https://vercel.com/docs/sandbox/pricing, checked 2026-10-20:
 
 A minute is costed as if the CPU were busy the whole time, plus 2 MB of preview traffic. That comes to at most **$0.00314 a minute** (`workspaceMinuteCostUsd`).
 
-Each plan's minutes are set aside at that worst case before its AI budget is worked out (`planEconomics` → `workspaceUsd`), as with code runs. The contribution margin therefore stays at or above 60% even if every minute is used:
+Each plan's minutes are set aside at that worst case before its AI budget is worked out (`planEconomics` → `workspaceUsd`), as with code runs. The contribution margin therefore stays at or above the target (65% since 2026-10-27) even if every minute is used:
 
 | | Workspace, worst case / month | AI budget / month, before → after |
 | --- | --- | --- |
