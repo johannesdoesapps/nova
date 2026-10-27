@@ -88,7 +88,7 @@ Progress is grouped into plain-English stages built only from the run's events: 
   - **Never run:** deleting the whole project or system, `sudo`, disk tools, fork bombs, publishing packages, `git push`, deploy CLIs, piping downloads into a shell, and killing every process.
   - **Chained commands** are judged part by part.
   - **Per run,** the user can choose "ask before every command" or "no commands".
-- **Limits.** One command per step. A command is stopped after 2 minutes. Long-running servers belong to the Run button.
+- **Limits.** One command per step. A step waits up to 2 minutes for a command; one still running then keeps running in the background, up to 10 minutes in all, and the agent waits for it in later steps with `wait_for_command` (the run remembers it in `code_agent_runs.job`; Stop or the end of the run ends it). Meanwhile no other command runs. Long-running servers belong to `start_preview` or the Run button.
 - **Plans first.** Until the plan is approved, edits and commands are refused.
 - **Edit review (optional).** Proposed edits are shown as diffs and saved only when approved. If a file changed in the meantime, nothing is saved and the agent is told.
 - **Untrusted content.** File contents, command output, web pages and repository text are given to the model as data. The system prompt tells it to ignore instructions inside them.

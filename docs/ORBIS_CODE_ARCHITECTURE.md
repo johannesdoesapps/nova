@@ -22,7 +22,7 @@ Before this work, Code already had: projects with files in the database, a CodeM
 
 **Gaps found and closed in this round:** native tool calling for Claude and GPT, checkpoints, a test runner with parsed results, project inspection, diff and status tools, file-name search, secret files kept out of model context, token and working-time budgets, a failed-test attempt limit, repeated-action detection, recovery of an interrupted step, step requests that are safe to retry, per-run usage and cost, a final report built from records, and file search in the explorer.
 
-**Gaps remaining** (§8): runs that continue with no page open, interactive commands, persistent installed packages, and live provider verification for models other than those listed in the QA report.
+**Gaps remaining** (§8): interactive commands, and live provider verification for models other than those listed in the QA report. (Runs that continue with no page open, installed packages kept between sessions, and commands up to 10 minutes were added on 2026-10-27.)
 
 ## 2. Components
 
@@ -50,7 +50,7 @@ Next.js route handlers (Vercel Functions)
 
 - **Project** = a row in `code_projects` (stable UUID, owner `user_id`, name, run command, template, optional source repository). Files are rows in `code_files`, one per path.
 - **Paths** are validated twice: by `projectPath` (Zod) in the API and tools, and by database checks. Only plain relative paths: no leading `/`, no `.`/`..` segments, no backslashes or control characters; package/build folders (`node_modules`, `.git`, `dist`, …) are excluded. There is no way for a tool to name a path outside the project, because tools never touch a host filesystem: they read and write database rows.
-- **Limits** (database-enforced): 300 files, 3 MB per project, 200 KB per file.
+- **Limits** (database-enforced): 1,000 files and 20 MB per project (administrators: 2,000 files), 1 MB per file.
 - **The computer**: when a command needs it, the project's files are copied into a Vercel Sandbox microVM (`/vercel/sandbox`); changed files are copied back after each command, binary/oversized files skipped. A local Git repository is initialised there so `git status/diff/log` work in the terminal.
 - **GitHub**: repositories are imported or pushed through the GitHub App (no passwords; installation tokens; push only to a *new* branch, confirmed by the user).
 
@@ -98,7 +98,7 @@ A run is a row in `code_agent_runs`. A **step** is one model turn plus the actio
 3. **Pauses**: plan approval, command approval, edit review, a question, starting the computer, or a limit (steps, tokens, time, failed tests, repeated actions). `POST …/respond` answers; `continue` raises the relevant limit.
 4. **End**: `finish`, two replies in a row with no actions, a model refusal, unreadable replies, or Stop. The server then builds the **report** from records (§7).
 
-Bounds (defaults, unchanged by the 2026-10-27 upgrades): 20 steps (+10 per approval, max 100), 600,000 tokens (+300,000, max 10 M), 30 minutes of agent working time (+15, max 4 h), 3 failed test runs in a row (+2), 3 identical steps in a row, 8 actions per step, 1 command per step, 2 minutes per command, the plan's output-token limit per reply.
+Bounds (defaults, unchanged by the 2026-10-27 upgrades): 20 steps (+10 per approval, max 100), 600,000 tokens (+300,000, max 10 M), 30 minutes of agent working time (+15, max 4 h), 3 failed test runs in a row (+2), 3 identical steps in a row, 8 actions per step, 1 command per step, 2 minutes of waiting per step for a command and 10 minutes per command in all (`wait_for_command`), the plan's output-token limit per reply.
 
 **Streaming and reconnection.** The page asks the step route for a stream (`Accept: application/x-ndjson`). While the request takes its steps it sends JSON lines: `step` (a step starts), `text` (the model's words as it writes them; Claude tool turns are streamed for this), `model_done`, `events` (each activity event as it's saved), `ping` every 15 s, then `done` with the usual result or `error` with the usual error body. The live channel is in-process (`src/lib/code/agent/live.ts`: `addEvents` and the engine publish to watchers of that run), so it costs no extra database reads. The activity log stays the record: it is append-only and numbered, the page still reads `GET /api/code/agent/[runId]?after=<seq>` every 2.5 s for the run's state, and it advances its read position only through numbers it has seen without a gap, so an event written by another request in between is fetched rather than missed. A reloaded page or another device picks up from the log. Without the Accept header the route answers plain JSON as before (pair coding uses that). GPT and the JSON-format providers don't stream text yet; their activity still streams.
 
@@ -142,7 +142,6 @@ The **report** (`report.ts`) is built by the server when a run ends: files chang
 
 - **Runs started before 2026-10-27, or with "Pauses if closed"** still advance only through the page's requests; a closed page pauses them after the current step, and **Continue** resumes them.
 - **Interactive commands** (waiting for keyboard input) and long-running servers via the agent (use Run).
-- **Installed packages don't persist** between computer sessions (snapshots cost storage).
 - **Editor**: CodeMirror 6 is kept (already integrated, smaller than Monaco, works on phones).
 - **Token budgets** are stored in the user's own run row; a user can raise their own run's budget. Spending is still bounded by the plan's monthly budget, which is enforced server-side in the usage ledger.
 - **Model coverage**: native tool calling is implemented for Anthropic and OpenAI; see the QA report for which models were verified live.

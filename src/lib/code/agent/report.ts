@@ -46,8 +46,9 @@ export function buildReport(input: {
 
   const commands: RunReport["commands"] = [];
   for (const e of input.events) {
-    const d = e.detail as { command?: string; exitCode?: number | null; blocked?: string; timedOut?: boolean; cancelled?: boolean } | null;
-    if (e.kind !== "command" || !d?.command || d.blocked) continue;
+    const d = e.detail as { command?: string; exitCode?: number | null; blocked?: string; timedOut?: boolean; cancelled?: boolean; running?: boolean } | null;
+    // "Still running" is a progress note; the command's own event comes when it ends.
+    if (e.kind !== "command" || !d?.command || d.blocked || d.running) continue;
     commands.push({
       command: d.command.slice(0, 300),
       exitCode: d.exitCode ?? null,

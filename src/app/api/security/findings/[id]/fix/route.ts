@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isAdmin } from "@/lib/admin";
 import { audit, getFinding } from "@/lib/db/security";
 import { codeContext, createProject } from "@/lib/code/server";
-import { byteLength, MAX_FILE_BYTES, projectLimits, validProjectPath } from "@/lib/code/projects";
+import { byteLength, MAX_FILE_BYTES, MAX_FILE_LABEL, projectLimits, validProjectPath } from "@/lib/code/projects";
 import { ApiError, errorResponse, requireUuid } from "@/lib/http";
 import { findingDetails, securityFixTask } from "@/lib/security/details";
 import { githubReadToken } from "@/lib/security/connections";
@@ -41,7 +41,7 @@ export async function POST(_req: Request, ctx: RouteContext<"/api/security/findi
     if (tooBig)
       throw new ApiError(
         "bad_request",
-        `${file} is larger than the 200 KB per-file limit for Code projects, so the coding agent can't edit it here. ${engineeringKind(finding.rule_id) === "dependency" ? "Run npm install on a clean checkout, review the lockfile diff and run the tests, then commit package.json and the lockfile together." : "Fix it in your editor; the finding's page lists the steps."}`,
+        `${file} is larger than the ${MAX_FILE_LABEL} per-file limit for Code projects, so the coding agent can't edit it here. ${engineeringKind(finding.rule_id) === "dependency" ? "Run npm install on a clean checkout, review the lockfile diff and run the tests, then commit package.json and the lockfile together." : "Fix it in your editor; the finding's page lists the steps."}`,
       );
     let total = 0;
     const files = repo.files

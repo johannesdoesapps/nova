@@ -79,6 +79,18 @@ export type Pending =
   /** A command is running right now (so Stop can end it). */
   | { kind: "job"; jobId: string; command: string };
 
+/** A command still running in the project's computer after its step ended (the agent waits for it with wait_for_command). */
+export interface RunningJob {
+  jobId: string;
+  command: string;
+  /** The tool that started it (run_command or run_tests), so its result is read the same way. */
+  tool: "run_command" | "run_tests";
+  /** When it started (ms). */
+  startedAt: number;
+  /** How much of its output has been read already. */
+  offset: number;
+}
+
 export type LimitReason = "steps" | "tokens" | "time" | "tests" | "repeat";
 
 /** Model usage for a run. Cost is null when a model used has no verified price. */

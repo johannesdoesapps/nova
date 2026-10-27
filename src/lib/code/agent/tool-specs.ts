@@ -78,8 +78,14 @@ export const TOOL_DEFS = {
   },
   run_command: {
     description:
-      "Run a shell command in the project's folder on its own computer (Linux, Node.js and Python, internet limited to npm and PyPI). Waits up to 2 minutes, then stops it. One command per step. Returns the exit code and the end of the output.",
+      "Run a shell command in the project's folder on its own computer (Linux, Node.js and Python, internet limited to npm and PyPI). One command per step. Returns the exit code and the end of the output. A command still running after 2 minutes keeps running in the background (up to 10 minutes in all): wait for it with wait_for_command.",
     schema: z.object({ command: z.string().trim().min(1).max(2_000) }),
+    when: commandsOn,
+  },
+  wait_for_command: {
+    description:
+      "Wait for the command still running in the background (a long install, build or test run) to finish, up to 2 more minutes per call; returns its result like run_command, or that it's still running. Counts as the step's one command.",
+    schema: z.object({}),
     when: commandsOn,
   },
   run_tests: {
@@ -196,6 +202,7 @@ const READ_ONLY_HIDDEN = new Set<string>([
   "create_checkpoint",
   "run_command",
   "run_tests",
+  "wait_for_command",
   "start_preview",
   "check_preview",
   "propose_plan",

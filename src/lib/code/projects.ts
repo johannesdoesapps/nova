@@ -7,10 +7,12 @@ import { SITE_TEMPLATE_IDS } from "./site-templates";
  * (supabase/migrations/20261020020000_code_workspace.sql).
  */
 
-export const MAX_PROJECT_FILES = 300;
-export const MAX_FILE_BYTES = 204_800;
-export const MAX_PROJECT_BYTES = 3 * 1024 * 1024;
-/** Administrators' projects are larger, so Orbis's own code fits (the database applies the same rule). */
+export const MAX_PROJECT_FILES = 1000;
+export const MAX_FILE_BYTES = 1024 * 1024;
+/** MAX_FILE_BYTES in words, for messages. */
+export const MAX_FILE_LABEL = "1 MB";
+export const MAX_PROJECT_BYTES = 20 * 1024 * 1024;
+/** Administrators' projects hold more files, so Orbis's own code fits (the database applies the same rule). */
 export const ADMIN_MAX_PROJECT_FILES = 2000;
 export const ADMIN_MAX_PROJECT_BYTES = 20 * 1024 * 1024;
 
@@ -36,7 +38,7 @@ export function validProjectPath(path: string): boolean {
 }
 
 export const projectPath = z.string().refine(validProjectPath, "Use a plain file path like src/app.js.");
-export const fileContent = z.string().refine((s) => byteLength(s) <= MAX_FILE_BYTES, "Files can be at most 200 KB.");
+export const fileContent = z.string().refine((s) => byteLength(s) <= MAX_FILE_BYTES, `Files can be at most ${MAX_FILE_LABEL}.`);
 
 export function byteLength(s: string): number {
   return new TextEncoder().encode(s).length;

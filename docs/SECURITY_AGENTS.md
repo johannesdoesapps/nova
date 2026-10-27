@@ -228,7 +228,7 @@ failed attempts), look for side effects and the same root cause elsewhere, and r
 failed, whether the defect was reproduced and resolved, remaining risks and what couldn't be verified —
 "implemented but unverified" when no check could run. Dependency changes, migrations, auth changes, CI changes,
 refactors across modules and interface changes to widely used files need the user's approval first. Nothing is
-pushed or deployed. Files over the Code project's 200 KB file limit (often lockfiles) can't be edited there; the
+pushed or deployed. Files over the Code project's 1 MB file limit (often lockfiles) can't be edited there; the
 route says so and gives the manual steps.
 
 **Regression memory** (`memory.ts`): from this repository's stored findings — findings that came back after being

@@ -93,7 +93,7 @@ export interface ProfileReport {
   otherFiles?: string[];
 }
 
-type CommandDetail = { command?: string; exitCode?: number | null; blocked?: string; tests?: { verdict?: string; passed?: number | null; failed?: number | null; failures?: string[] } };
+type CommandDetail = { command?: string; exitCode?: number | null; blocked?: string; running?: boolean; tests?: { verdict?: string; passed?: number | null; failed?: number | null; failures?: string[] } };
 
 export function profileReport(profile: CodeProfile, events: Pick<AgentEvent, "kind" | "detail">[], files: { path: string }[]): ProfileReport {
   if (profile === "qa_tester") {
@@ -105,7 +105,7 @@ export function profileReport(profile: CodeProfile, events: Pick<AgentEvent, "ki
   for (const e of events) {
     if (e.kind === "edit") break;
     const d = e.detail as CommandDetail | null;
-    if (e.kind !== "command" || !d?.command || d.blocked) continue;
+    if (e.kind !== "command" || !d?.command || d.blocked || d.running) continue;
     if (d.tests) lastTest = d;
     else lastCommand = d;
   }

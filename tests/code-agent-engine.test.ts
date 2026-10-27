@@ -7,7 +7,7 @@
  * a provider failure, an interrupted step, cancellation, refusals and
  * replies cut off at the output limit. Commands take one poll (1.5 s).
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ModelInfo, ToolTurnParams, ToolTurnResult } from "@/lib/ai/types";
 import type { RunRow } from "@/lib/code/agent/runs";
 import type { AgentChange, AgentEvent } from "@/lib/code/agent/types";
@@ -106,7 +106,7 @@ let files = new Map<string, string>();
 let computerOn = true;
 const commands: string[] = [];
 const runCommands: string[] = [];
-let commandOutput: (cmd: string) => { output: string; exitCode: number } = () => ({ output: "", exitCode: 0 });
+let commandOutput: (cmd: string) => { output: string; exitCode: number; running?: boolean } = () => ({ output: "", exitCode: 0 });
 vi.mock("@/lib/code/server", async (orig) => ({
   ...(await orig<typeof import("@/lib/code/server")>()),
   getProjectRow: async (_a: unknown, id: string) => ({ id, name: "calc", runCommand: "npm start", template: "node", createdAt: "", updatedAt: "" }),
@@ -121,7 +121,10 @@ vi.mock("@/lib/code/server", async (orig) => ({
   syncBack: vi.fn(),
   setRunCommand: async (_a: unknown, _p: string, cmd: string) => void runCommands.push(cmd),
 }));
-const jobs = new Map<string, { output: string; exitCode: number; read: boolean }>();
+const jobs = new Map<string, { output: string; exitCode: number; read: boolean; running?: boolean }>();
+const killed: string[] = [];
+/** Added to Date.now() by tests about long commands: each read of a running command moves the clock on 61 s. */
+const clock = { skew: 0 };
 vi.mock("@/lib/code/workspace", () => ({
   startJob: async (_b: unknown, jobId: string, cmd: string) => {
     commands.push(cmd);
@@ -129,11 +132,15 @@ vi.mock("@/lib/code/workspace", () => ({
   },
   readJob: async (_b: unknown, jobId: string, offset: number) => {
     const j = jobs.get(jobId)!;
+    if (j.running) {
+      clock.skew += 61_000;
+      return { done: false, output: "", offset, exitCode: null, startedAt: Date.now() };
+    }
     const output = j.read ? "" : j.output;
     j.read = true;
     return { done: true, output, offset: offset + output.length, exitCode: j.exitCode, startedAt: Date.now() };
   },
-  killJob: async () => {},
+  killJob: async (_b: unknown, jobId: string) => void killed.push(jobId),
   claimSync: async () => false,
   removeFromWorkspace: async () => {},
   writeToWorkspace: async () => {},
@@ -732,6 +739,62 @@ describe("recovery", () => {
     expect(v.status).toBe("cancelled");
     expect(v.report).toMatchObject({ outcome: "cancelled" });
     expect((await stepRun(req(), auth, id)).skipped).toBe("not_working");
+  });
+
+  describe("a command longer than a step", () => {
+    const realNow = Date.now.bind(Date);
+    beforeEach(() => {
+      clock.skew = 0;
+      killed.length = 0;
+      vi.spyOn(Date, "now").mockImplementation(() => realNow() + clock.skew);
+      commandOutput = (cmd) => (cmd === "npm ci" ? { output: "added 812 packages\n", exitCode: 0, running: true } : { output: "", exitCode: 0 });
+    });
+    afterEach(() => vi.restoreAllMocks());
+
+    it("keeps running in the background after the step's wait, and the agent picks up its result in a later step", async () => {
+      const id = newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true } });
+      script.turns.push(turn("Installing.", call("run_command", { command: "npm ci" })));
+      await stepRun(req(), auth, id, { expectStep: 0 });
+      const job = run(id).job!;
+      expect(job).toMatchObject({ command: "npm ci", tool: "run_command" });
+      expect(killed).toEqual([]);
+      expect(run(id).status).toBe("running");
+      expect(run(id).transcript.at(-1)!.results![0]!.text).toContain("still running after");
+      expect(events(id).some((e) => e.title === "Still running in the background: npm ci")).toBe(true);
+
+      // It finishes; the next step waits for it and gets its result. No new command was started.
+      jobs.get(job.jobId)!.running = false;
+      script.turns.push(turn("Waiting.", call("wait_for_command")), turn("Done.", call("finish", { summary: "Installed." })));
+      await stepRun(req(), auth, id, { expectStep: run(id).steps });
+      expect(commands).toEqual(["npm ci"]);
+      expect(run(id).job).toBeNull();
+      const waited = run(id).transcript.find((m) => m.results?.some((r) => r.text.includes("added 812 packages")));
+      expect(waited).toBeTruthy();
+      expect(killed).toEqual([]);
+    });
+
+    it("is stopped once it has run 10 minutes in all", async () => {
+      const id = newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true } });
+      script.turns.push(turn("Installing.", call("run_command", { command: "npm ci" })));
+      await stepRun(req(), auth, id, { expectStep: 0 });
+      const job = run(id).job!;
+      clock.skew += 10 * 60_000;
+      script.turns.push(turn("Waiting.", call("wait_for_command")));
+      await stepRun(req(), auth, id, { expectStep: run(id).steps });
+      expect(killed).toEqual([job.jobId]);
+      expect(run(id).job).toBeNull();
+      expect(run(id).transcript.some((m) => m.results?.some((r) => r.text.includes("stopped at its time limit")))).toBe(true);
+    });
+
+    it("is ended when the user stops the run", async () => {
+      const id = newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true } });
+      script.turns.push(turn("Installing.", call("run_command", { command: "npm ci" })));
+      await stepRun(req(), auth, id, { expectStep: 0 });
+      const job = run(id).job!;
+      await cancelRun(auth, id);
+      expect(killed).toContain(job.jobId);
+      expect(run(id).job).toBeNull();
+    });
   });
 
   it("ends the run honestly when the model declines the request", async () => {

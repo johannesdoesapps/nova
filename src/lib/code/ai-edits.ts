@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MAX_FILE_BYTES, byteLength, validProjectPath, type FileChange, type ProjectFile } from "./projects";
+import { MAX_FILE_BYTES, MAX_FILE_LABEL, byteLength, validProjectPath, type FileChange, type ProjectFile } from "./projects";
 
 /**
  * The AI editor: the model sees the request and as many of the project's
@@ -103,7 +103,7 @@ export function applyAiEdits(files: ProjectFile[], edits: AiEdits["edits"]): { o
       continue;
     }
     if (e.action === "write") {
-      if (byteLength(e.content) > MAX_FILE_BYTES) errors.push(`${p}: too large (files can be at most 200 KB).`);
+      if (byteLength(e.content) > MAX_FILE_BYTES) errors.push(`${p}: too large (files can be at most ${MAX_FILE_LABEL}).`);
       else next.set(p, e.content);
       continue;
     }
@@ -117,7 +117,7 @@ export function applyAiEdits(files: ProjectFile[], edits: AiEdits["edits"]): { o
     else if (count > 1) errors.push(`${p}: the search text appears ${count} times. Include more lines so it's unique.`);
     else {
       const out = base.replace(e.search, () => e.replace);
-      if (byteLength(out) > MAX_FILE_BYTES) errors.push(`${p}: the result would be over 200 KB.`);
+      if (byteLength(out) > MAX_FILE_BYTES) errors.push(`${p}: the result would be over ${MAX_FILE_LABEL}.`);
       else next.set(p, out);
     }
   }

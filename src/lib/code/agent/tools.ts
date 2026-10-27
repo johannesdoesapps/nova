@@ -36,6 +36,8 @@ export interface CommandOutcome {
   skipped: string[];
   /** Orbis Bastion refused the command (it didn't run). */
   blocked?: string;
+  /** Still running after this step's wait: it keeps going in the background (wait_for_command waits for it). */
+  running?: boolean;
 }
 
 /** What the run has done to a file: its content before the run first touched it, and the run's latest. */
@@ -59,8 +61,13 @@ export interface AgentEnv {
   save(changes: FileChange[]): Promise<{ path: string; reason: string }[] | void>;
   /** Whether the project's computer is running. */
   computer(): Promise<boolean>;
-  /** Run a command in the computer and wait for it (up to the time limit). `approved`: the user approved exactly this command. */
-  exec(command: string, approved?: boolean): Promise<CommandOutcome>;
+  /**
+   * Run a command in the computer and wait for it (up to the time limit). `approved`: the user approved exactly this
+   * command. With `tool`, a command still running after the wait is left running in the background (`running`).
+   */
+  exec(command: string, approved?: boolean, tool?: "run_command" | "run_tests"): Promise<CommandOutcome>;
+  /** Wait again for the command this run left running; null when there's none. */
+  waitCommand?(): Promise<{ command: string; tool: "run_command" | "run_tests"; out: CommandOutcome } | null>;
   /** This run's changes so far. */
   changes(): Promise<RunChange[]>;
   checkpoints: { list(): Promise<Checkpoint[]>; create(label: string, files: Record<string, string | null>): Promise<Checkpoint> };
@@ -113,6 +120,8 @@ export interface StepState {
   readOnly?: boolean;
   /** QA Testing: only test files, test helpers and test configuration may change. */
   testsOnly?: boolean;
+  /** A command the run left running in the background (no other command runs until it ends). */
+  runningCommand?: string | null;
 }
 
 export interface StepOutcome {
@@ -144,6 +153,13 @@ const MAX_PROPOSALS = 2;
 const MAX_MATCHES = 80;
 const OUTPUT_FOR_MODEL = 6_000;
 const OUTPUT_FOR_LOG = 20_000;
+function isBuildCommand(cmd: string): boolean {
+  const d = classifyCommand(cmd);
+  return d.kind !== "block" && d.purpose === "build";
+}
+
+/** How long a command may run in all, across steps (the engine's LONG_COMMAND_MS), in the agent's words. */
+const LONG_COMMAND_MINUTES = 10;
 const MAX_DIFF_CHARS = 40_000;
 /** Edits shown for review together (they're kept with the run while it waits). */
 const MAX_REVIEW_CHARS = 700_000;
@@ -161,9 +177,9 @@ export function isSecretPath(path: string): boolean {
 }
 
 /** Actions that change the project or run something: re-checked against Stop right before they run. */
-const CHANGES_PROJECT = new Set(["write_file", "edit_file", "delete_file", "restore_checkpoint", "run_command", "run_tests", "start_preview"]);
+const CHANGES_PROJECT = new Set(["write_file", "edit_file", "delete_file", "restore_checkpoint", "run_command", "run_tests", "wait_for_command", "start_preview"]);
 
-const READ_ONLY_REFUSED = new Set(["write_file", "edit_file", "delete_file", "restore_checkpoint", "create_checkpoint", "run_command", "run_tests", "start_preview", "check_preview", "propose_plan"]);
+const READ_ONLY_REFUSED = new Set(["write_file", "edit_file", "delete_file", "restore_checkpoint", "create_checkpoint", "run_command", "run_tests", "wait_for_command", "start_preview", "check_preview", "propose_plan"]);
 
 const WITHHELD = "(withheld: this looks like a file with secrets, so Orbis doesn't send its contents to the AI)";
 
@@ -299,6 +315,7 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
   let files: ProjectFile[] | null = null;
   const current = async () => (files ??= await env.files());
   let commandRan = false;
+  let running = state.runningCommand ?? null;
   // With review on, edits are collected here and shown together at the end of the step.
   let proposed: FileChange[] = [];
   const checks: StepOutcome["checks"] = {};
@@ -351,6 +368,10 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
       result(id, tool, false, "Not run: one command per step. Run it in the next step.");
       return null;
     }
+    if (running) {
+      result(id, tool, false, `Not run: \`${running.slice(0, 200)}\` is still running in the background. Call wait_for_command to wait for it first.`);
+      return null;
+    }
     if (tool === "run_command" && isServerCommand(cmd)) {
       result(id, tool, false, `Not run: \`${cmd}\` starts a server that keeps running, and run_command waits for commands to finish. Use start_preview for servers.`);
       return null;
@@ -382,16 +403,27 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
       return done({ status: "needs_input", pending: { kind: "computer", command: cmd } });
     }
     commandRan = true;
-    const out = await env.exec(cmd, approved);
+    const kind = tool === "run_tests" ? "run_tests" : "run_command";
+    return commandDone(i, id, tool, kind, cmd, await env.exec(cmd, approved, kind));
+  };
+
+  /** What a command did (now, or after waiting for it in a later step): test results, the build check, the log and the result. */
+  const commandDone = async (i: number, id: string | undefined, tool: string, kind: "run_command" | "run_tests", cmd: string, out: CommandOutcome): Promise<StepOutcome | null> => {
+    if (out.running) {
+      running = cmd;
+      await log(commandEvent(cmd, out));
+      result(id, tool, true, commandResultText(cmd, out));
+      return null;
+    }
     if (out.changed.length) {
       files = null;
       edited = true;
       editedAt = new Date().toISOString();
     }
     if (out.blocked) denied++;
-    const t = !out.blocked && (isTestCommand(cmd) || tool === "run_tests") ? testResult({ command: cmd, ...out }) : null;
+    const t = !out.blocked && (isTestCommand(cmd) || kind === "run_tests") ? testResult({ command: cmd, ...out }) : null;
     if (t) tests.push(t);
-    else if (decision.purpose === "build" && !out.cancelled) {
+    else if (!out.cancelled && isBuildCommand(cmd)) {
       checks.build = { command: cmd.slice(0, 300), exitCode: out.exitCode, passed: out.exitCode === 0 && !out.timedOut, ranAt: new Date().toISOString() };
     }
     await log(commandEvent(cmd, out, t));
@@ -646,6 +678,22 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
       }
       case "run_command": {
         const pause = await command(i, id, tool, a.command as string);
+        if (pause) return pause;
+        break;
+      }
+      case "wait_for_command": {
+        if (commandRan) {
+          result(id, tool, false, "Not now: one command per step. Wait for it in the next step.");
+          break;
+        }
+        const w = running && env.waitCommand ? await env.waitCommand() : null;
+        if (!w) {
+          result(id, tool, false, "No command is running in the background.");
+          break;
+        }
+        commandRan = true;
+        running = null;
+        const pause = await commandDone(i, id, tool, w.tool, w.command, w.out);
         if (pause) return pause;
         break;
       }
@@ -946,10 +994,13 @@ export function testDetails(t: TestResult): string {
 
 export function commandResultText(command: string, out: CommandOutcome, test: TestResult | null = null): string {
   if (out.blocked) return `$ ${command}\nNot run: blocked by Orbis Bastion — ${out.blocked}`;
+  if (out.running) {
+    return `$ ${command}\nstill running after ${(out.durationMs / 1000).toFixed(0)}s. It keeps running in the background (up to ${LONG_COMMAND_MINUTES} minutes in all): call wait_for_command to wait for it to finish. Until then you can read and change files, but not run other commands.\nOutput so far:\n${untrusted(redactAll(tailText(out.output, OUTPUT_FOR_MODEL))) || "(no output yet)"}`;
+  }
   const status = out.cancelled
     ? "stopped by the user"
     : out.timedOut
-      ? "stopped after 2 minutes (still running). Long-running servers should be started with the Run button."
+      ? "stopped at its time limit (still running). Long-running servers should be started with start_preview or the Run button."
       : `exit code ${out.exitCode}`;
   const files = out.changed.length
     ? `\nFiles it changed in the project: ${out.changed
@@ -965,6 +1016,13 @@ export function commandResultText(command: string, out: CommandOutcome, test: Te
 
 export function commandEvent(command: string, out: CommandOutcome, test: TestResult | null = null): NewEvent {
   if (out.blocked) return { kind: "command", title: `Blocked by Bastion: ${command.slice(0, 200)}`, detail: { command, blocked: out.blocked, bastion: true } };
+  if (out.running) {
+    return {
+      kind: "command",
+      title: `Still running in the background: ${command.slice(0, 200)}`,
+      detail: { command, running: true, durationMs: Math.round(out.durationMs), output: redactAll(tailText(out.output, OUTPUT_FOR_LOG)) },
+    };
+  }
   const verdict = out.cancelled ? "stopped" : out.timedOut ? "timed out" : out.exitCode === 0 ? "passed" : `failed (exit ${out.exitCode})`;
   return {
     kind: "command",

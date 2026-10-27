@@ -250,7 +250,7 @@ export function stageSummary(b: StageBlock): string {
       return edits.length ? `${plural(new Set(edits.map((e) => (e.detail?.path as string) ?? e.title)).size, "file")} changed` : (b.events[0]?.title ?? "");
     }
     case "check": {
-      const ran = b.events.filter((e) => e.kind === "command");
+      const ran = b.events.filter((e) => e.kind === "command" && !e.detail?.running);
       const tests = ran.filter((e) => e.detail?.tests);
       if (tests.length) return tests[tests.length - 1]!.title;
       const blocked = ran.filter((e) => e.detail?.blocked).length;
@@ -1334,7 +1334,8 @@ function EventRow({ event: e }: { event: AgentEvent }) {
   const output = typeof d.output === "string" ? d.output : typeof d.report === "string" ? d.report : null;
   const shot = typeof d.screenshot === "string" ? d.screenshot : null;
   const steps = Array.isArray(d.steps) ? (d.steps as string[]) : null;
-  const failed = e.kind === "error" || (e.kind === "command" && (d.exitCode !== 0 || d.timedOut === true) && !d.blocked) || (e.kind === "command" && !!d.blocked);
+  // A command still running in the background (d.running) hasn't failed or passed yet.
+  const failed = e.kind === "error" || (e.kind === "command" && !d.running && (d.exitCode !== 0 || d.timedOut === true) && !d.blocked) || (e.kind === "command" && !!d.blocked);
   const passed = e.kind === "command" && d.exitCode === 0 && !d.timedOut;
   const expandable = !!output || !!shot || (e.kind === "summary" && typeof d.summary === "string");
   return (

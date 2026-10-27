@@ -193,7 +193,55 @@ describe("running tests", () => {
     const out = await runActions(act(["run_tests"]), working, env);
     expect(out.tests[0]!.verdict).toBe("timed_out");
     expect(out.results[0]).toMatchObject({ ok: false });
-    expect(out.results[0]!.text).toContain("stopped after 2 minutes");
+    expect(out.results[0]!.text).toContain("stopped at its time limit");
+  });
+});
+
+describe("commands that outlast a step", () => {
+  const project: ProjectFile[] = [{ path: "package.json", content: '{"scripts":{"test":"vitest run","build":"next build"}}' }];
+
+  it("a command still running is left running, and the agent is told to wait for it", async () => {
+    const tools: (string | undefined)[] = [];
+    const { env } = fakeEnv(project, { exec: () => ({ exitCode: null, running: true, durationMs: 120_000, output: "installing…" }) });
+    const exec = env.exec;
+    env.exec = (cmd, approved, tool) => (tools.push(tool), exec(cmd, approved, tool));
+    const out = await runActions(act(["run_command", { command: "npm install" }]), working, env);
+    expect(tools).toEqual(["run_command"]); // allowed to keep running
+    expect(out.results[0]).toMatchObject({ ok: true });
+    expect(out.results[0]!.text).toContain("still running after 120s");
+    expect(out.results[0]!.text).toContain("wait_for_command");
+    expect(out.events.at(-1)).toMatchObject({ kind: "command", title: "Still running in the background: npm install", detail: { running: true } });
+    expect(out.tests).toEqual([]);
+  });
+
+  it("no other command runs until it ends; wait_for_command reads its result like the original tool", async () => {
+    const { env, ran } = fakeEnv(project);
+    const busy = { ...working, runningCommand: "npm test" };
+    const refused = await runActions(act(["run_command", { command: "ls" }]), busy, env);
+    expect(refused.results[0]!.text).toContain("is still running in the background");
+    expect(ran).toEqual([]);
+    env.waitCommand = async () => ({ command: "npm test", tool: "run_tests", out: { exitCode: 1, output: VITEST_FAIL, durationMs: 300_000, timedOut: false, cancelled: false, changed: [], skipped: [] } });
+    const waited = await runActions(act(["wait_for_command"], ["run_command", { command: "ls" }]), busy, env);
+    expect(waited.tests[0]).toMatchObject({ verdict: "failed", failed: 1 });
+    expect(waited.results[0]!.text).toContain("Tests failed (1 passed, 1 failed)");
+    // Waiting is the step's one command.
+    expect(waited.results[1]!.text).toContain("one command per step");
+  });
+
+  it("waiting again when it's still running, and when nothing is running", async () => {
+    const { env } = fakeEnv(project);
+    env.waitCommand = async () => ({ command: "npm run build", tool: "run_command", out: { exitCode: null, output: "", durationMs: 240_000, timedOut: false, cancelled: false, changed: [], skipped: [], running: true } });
+    const again = await runActions(act(["wait_for_command"]), { ...working, runningCommand: "npm run build" }, env);
+    expect(again.results[0]!.text).toContain("still running after 240s");
+    expect(again.checks.build).toBeUndefined();
+    const none = await runActions(act(["wait_for_command"]), working, env);
+    expect(none.results[0]).toMatchObject({ ok: false, text: "No command is running in the background." });
+  });
+
+  it("is offered only when commands are on, and never to read-only runs", () => {
+    expect(toolsFor({ commands: "safe", docs: false, github: false, approvePlans: true })).toContain("wait_for_command");
+    expect(toolsFor({ commands: "off", docs: false, github: false, approvePlans: true })).not.toContain("wait_for_command");
+    expect(toolsFor({ commands: "safe", docs: false, github: false, approvePlans: false, readOnly: true })).not.toContain("wait_for_command");
   });
 });
 

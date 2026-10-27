@@ -77,40 +77,37 @@ describe("projects and files", () => {
     expect(await as(ALICE, () => q("select name, run_command from public.code_projects"))).toEqual([{ name: "Renamed", run_command: "npm start" }]);
   });
 
-  it("refuses unsafe paths and files over 200 KB", async () => {
+  it("refuses unsafe paths and files over 1 MB", async () => {
     const p = await newProject(ALICE);
     for (const bad of ["/etc/passwd", "../x", "a/../b", "./a", "a//b", "a\\b", "a\nb"]) {
       await expect(as(ALICE, () => q("insert into public.code_files (project_id, path) values ($1, $2)", [p, bad]))).rejects.toThrow(/check constraint/);
     }
-    await expect(as(ALICE, () => q("insert into public.code_files (project_id, path, content) values ($1, 'big.txt', repeat('x', 204801))", [p]))).rejects.toThrow(/check constraint/);
-    await as(ALICE, () => q("insert into public.code_files (project_id, path, content) values ($1, 'ok.txt', repeat('x', 204800))", [p]));
+    await expect(as(ALICE, () => q("insert into public.code_files (project_id, path, content) values ($1, 'big.txt', repeat('x', 1048577))", [p]))).rejects.toThrow(/check constraint/);
+    await as(ALICE, () => q("insert into public.code_files (project_id, path, content) values ($1, 'ok.txt', repeat('x', 1048576))", [p]));
   });
 
-  it("limits a project to 300 files and 3 MB, counting renames correctly", async () => {
+  it("limits a project to 1,000 files and 20 MB, counting renames correctly", async () => {
     const p = await newProject(ALICE);
-    await as(ALICE, () => q("insert into public.code_files (project_id, path) select $1, 'f' || g from generate_series(1, 300) g", [p]));
-    await expect(as(ALICE, () => q("insert into public.code_files (project_id, path) values ($1, 'one-more')", [p]))).rejects.toThrow(/at most 300 files/);
+    await as(ALICE, () => q("insert into public.code_files (project_id, path) select $1, 'f' || g from generate_series(1, 1000) g", [p]));
+    await expect(as(ALICE, () => q("insert into public.code_files (project_id, path) values ($1, 'one-more')", [p]))).rejects.toThrow(/at most 1000 files/);
     // Renaming and saving existing files still works at the limit.
     await as(ALICE, () => q("update public.code_files set path = 'renamed', content = 'x' where project_id = $1 and path = 'f1'", [p]));
     await as(ALICE, () => q("insert into public.code_files (project_id, path, content) values ($1, 'f2', 'y') on conflict (project_id, path) do update set content = excluded.content", [p]));
 
     const p2 = await newProject(ALICE, "Big");
-    await as(ALICE, () => q("insert into public.code_files (project_id, path, content) select $1, 'f' || g, repeat('x', 200000) from generate_series(1, 15) g", [p2]));
-    await expect(as(ALICE, () => q("insert into public.code_files (project_id, path, content) values ($1, 'f16', repeat('x', 200000))", [p2]))).rejects.toThrow(/at most 3 MB/);
+    await as(ALICE, () => q("insert into public.code_files (project_id, path, content) select $1, 'f' || g, repeat('x', 1000000) from generate_series(1, 20) g", [p2]));
+    await expect(as(ALICE, () => q("insert into public.code_files (project_id, path, content) values ($1, 'f21', repeat('x', 1000000))", [p2]))).rejects.toThrow(/at most 20 MB/);
   });
 
-  it("gives administrators larger projects (2,000 files, 20 MB), and only them", async () => {
+  it("gives administrators more files (2,000), and only them", async () => {
     await db.exec(`reset role; insert into public.admins (user_id) values ('${BOB}') on conflict do nothing;`);
     try {
       const big = await newProject(BOB, "Orbis itself");
       await as(BOB, () => q("insert into public.code_files (project_id, path) select $1, 'f' || g from generate_series(1, 2000) g", [big]));
       await expect(as(BOB, () => q("insert into public.code_files (project_id, path) values ($1, 'one-more')", [big]))).rejects.toThrow(/at most 2000 files/);
-      const heavy = await newProject(BOB, "Heavy");
-      await as(BOB, () => q("insert into public.code_files (project_id, path, content) select $1, 'f' || g, repeat('x', 200000) from generate_series(1, 30) g", [heavy])); // 6 MB: over the usual 3
-      await expect(as(BOB, () => q("insert into public.code_files (project_id, path, content) select $1, 'g' || g, repeat('x', 200000) from generate_series(1, 80) g", [heavy]))).rejects.toThrow(/at most 20 MB/);
-      // Alice isn't an administrator: still 300 files.
+      // Alice isn't an administrator: 1,000 files.
       const p = await newProject(ALICE);
-      await expect(as(ALICE, () => q("insert into public.code_files (project_id, path) select $1, 'f' || g from generate_series(1, 301) g", [p]))).rejects.toThrow(/at most 300 files/);
+      await expect(as(ALICE, () => q("insert into public.code_files (project_id, path) select $1, 'f' || g from generate_series(1, 1001) g", [p]))).rejects.toThrow(/at most 1000 files/);
     } finally {
       await db.exec(`reset role; delete from public.admins where user_id = '${BOB}';`);
     }

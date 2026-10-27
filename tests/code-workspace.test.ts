@@ -282,6 +282,32 @@ describe("the computer's scripts (local bash and node standing in for the VM)", 
     expect(plan.deletes).toEqual(["old.txt"]);
   });
 
+  it("starting from the previous session's disk: keeps installed packages, removes files the project no longer has", async () => {
+    const b = box();
+    const root = join(base, "restored");
+    const dd = { root, jobs: join(base, "jobs-restored") };
+    // What the previous session left behind.
+    for (const [p, c] of [["index.js", "old"], ["gone.js", "deleted in Orbis since"], ["lib/old/x.js", "x"], ["node_modules/pkg/index.js", "dep"], [".venv/bin/python", "py"], [".git/HEAD", "ref"]] as const) {
+      mkdirSync(dirname(join(root, p)), { recursive: true });
+      writeFileSync(join(root, p), c);
+    }
+    await ws.seedWorkspace(b, [{ path: "index.js", content: "new" }, { path: "src/a.js", content: "A" }], dd, { restored: true });
+    expect(readFileSync(join(root, "index.js"), "utf8")).toBe("new");
+    expect(readFileSync(join(root, "src/a.js"), "utf8")).toBe("A");
+    expect(existsSync(join(root, "gone.js"))).toBe(false);
+    expect(existsSync(join(root, "lib"))).toBe(false); // emptied folders go too
+    expect(readFileSync(join(root, "node_modules/pkg/index.js"), "utf8")).toBe("dep");
+    expect(existsSync(join(root, ".venv/bin/python"))).toBe(true);
+    expect(existsSync(join(root, ".git/HEAD"))).toBe(true);
+  });
+
+  it("a fresh computer isn't cleaned (nothing to remove)", async () => {
+    const calls: string[] = [];
+    const b = { ...box(), runCommand: async (p: { cmd: string; args: string[] }) => (calls.push(`${p.cmd} ${p.args[0]}`), { exitCode: 0, stdout: async () => "" }) };
+    await ws.seedWorkspace(b, [{ path: "a.txt", content: "a" }], { root: join(base, "fresh"), jobs: join(base, "jobs-fresh") });
+    expect(calls.some((c) => c.includes("prune"))).toBe(false);
+  });
+
   it("deletes nothing when it can't tell what was there before", () => {
     expect(ws.syncPlan([{ path: "a", content: "" }], { paths: [], changed: {}, skipped: [], overflow: false, before: null }).deletes).toEqual([]);
     expect(ws.syncPlan([{ path: "a", content: "" }], { paths: [], changed: {}, skipped: [], overflow: true, before: ["a"] }).deletes).toEqual([]);

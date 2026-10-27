@@ -14,8 +14,12 @@ import { ADMIN_MAX_PROJECT_FILES, IGNORED_DIRS, isIgnoredPath, MAX_FILE_BYTES, P
  *   packages but can't reach anything else.
  * - Nothing from Orbis's own environment (keys, database credentials) is
  *   passed in.
- * - Not persistent: stopping discards the computer, so there's no snapshot
- *   storage to pay for. Installed packages are reinstalled next session.
+ * - Installed packages are kept between sessions: a stopped computer's disk
+ *   is saved (one snapshot, kept WORKSPACE_KEEP_MS), and the project's next
+ *   session starts as a copy of it. The project's files are then written in
+ *   again and files the project no longer has are removed, so only package
+ *   and build folders (IGNORED_DIRS) carry over. Without a saved disk (first
+ *   session, or it expired) the computer starts fresh.
  * - The live preview is the app on port 3000, at the sandbox's public URL.
  */
 
@@ -44,25 +48,46 @@ export interface WorkspaceBox {
 }
 
 export interface WorkspaceBackend {
-  create(name: string, minutes: number): Promise<WorkspaceBox>;
+  /**
+   * A new computer. `from` names the project's previous one: the new one starts from its saved disk when there is
+   * one (`restored`), else fresh.
+   */
+  create(name: string, minutes: number, from?: string | null): Promise<{ box: WorkspaceBox; restored: boolean }>;
   /** The running computer, or null when it has stopped or doesn't exist. */
   get(name: string): Promise<WorkspaceBox | null>;
+  /** Delete a computer that's been copied (the copy doesn't need it; its saved disk expires on its own). */
+  remove(name: string): Promise<void>;
 }
+
+/** How long a stopped computer's disk (installed packages, build caches) is kept for the project's next session. */
+export const WORKSPACE_KEEP_MS = 7 * 24 * 60 * 60_000;
 
 export const workspaceName = (sessionId: string) => `orbis-ws-${sessionId}`;
 
 export const vercelWorkspaces: WorkspaceBackend = {
-  async create(name, minutes) {
-    return (await Sandbox.create({
+  async create(name, minutes, from) {
+    const params = {
       name,
-      image: "vercel/sandbox/universal",
       resources: { vcpus: 1 },
       timeout: minutes * 60_000,
       ports: [PREVIEW_PORT],
       networkPolicy: { allow: WORKSPACE_DOMAINS },
-      persistent: false,
+      // Stopping saves the disk (one snapshot, then it expires), so the next session can start from it.
+      persistent: true,
+      snapshotExpiration: WORKSPACE_KEEP_MS,
+      keepLastSnapshots: { count: 1, expiration: WORKSPACE_KEEP_MS },
       ...sandboxCredentials(),
-    } as Parameters<typeof Sandbox.create>[0])) as unknown as WorkspaceBox;
+    };
+    if (from) {
+      try {
+        const box = await Sandbox.fork({ ...params, sourceSandbox: from } as Parameters<typeof Sandbox.fork>[0]);
+        return { box: box as unknown as WorkspaceBox, restored: true };
+      } catch {
+        // The previous computer is gone (deleted, or from before disks were kept): start fresh.
+      }
+    }
+    const box = await Sandbox.create({ ...params, image: "vercel/sandbox/universal" } as Parameters<typeof Sandbox.create>[0]);
+    return { box: box as unknown as WorkspaceBox, restored: false };
   },
   async get(name) {
     try {
@@ -73,6 +98,10 @@ export const vercelWorkspaces: WorkspaceBackend = {
     } catch {
       return null;
     }
+  },
+  async remove(name) {
+    const s = await Sandbox.get({ name, ...sandboxCredentials() });
+    await s.delete();
   },
 };
 
@@ -149,8 +178,46 @@ export const GIT_SEED = [
   "true",
 ].join(" ; ");
 
-/** Copy the project into a new computer, with the helper script, and start its Git history. */
-export async function seedWorkspace(box: WorkspaceBox, files: ProjectFile[], d: WsDirs = WS_DIRS): Promise<void> {
+/**
+ * Removes files the project doesn't have (outside package and build folders) from a computer that started from the
+ * previous session's disk, so files deleted in Orbis since don't come back. Reads the project's paths from a file.
+ */
+export const pruneScript = (root: string) => `import { readdirSync, readFileSync, rmSync, rmdirSync } from "node:fs";
+import { join, relative } from "node:path";
+const root = ${JSON.stringify(root)};
+const keep = new Set(JSON.parse(readFileSync(process.argv[2], "utf8")));
+const ignored = new Set(${JSON.stringify(IGNORED_DIRS)});
+let removed = 0;
+function walk(dir) {
+  let entries;
+  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+  for (const e of entries) {
+    const full = join(dir, e.name);
+    if (e.isDirectory()) {
+      if (ignored.has(e.name)) continue;
+      walk(full);
+      try { rmdirSync(full); } catch {} // only when it's now empty
+      continue;
+    }
+    if (!keep.has(relative(root, full))) { try { rmSync(full, { force: true }); removed++; } catch {} }
+  }
+}
+walk(root);
+process.stdout.write(String(removed));
+`;
+
+/**
+ * Copy the project into a new computer, with the helper script, and start its Git history. `restored`: the computer
+ * started from the previous session's disk, so files the project no longer has are removed first.
+ */
+export async function seedWorkspace(box: WorkspaceBox, files: ProjectFile[], d: WsDirs = WS_DIRS, opts: { restored?: boolean } = {}): Promise<void> {
+  if (opts.restored) {
+    await box.writeFiles([
+      { path: `${d.jobs}/prune.mjs`, content: pruneScript(d.root) },
+      { path: `${d.jobs}/keep.json`, content: JSON.stringify(files.map((f) => f.path)) },
+    ]);
+    await box.runCommand({ cmd: "node", args: [`${d.jobs}/prune.mjs`, `${d.jobs}/keep.json`], cwd: d.root });
+  }
   await box.writeFiles([
     { path: `${d.jobs}/collect.mjs`, content: collectScript(d.root) },
     ...files.map((f) => ({ path: `${d.root}/${f.path}`, content: f.content })),

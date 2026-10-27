@@ -173,6 +173,13 @@ export async function liveSession(auth: Authed, projectId: string): Promise<Live
   return data ? { sessionId: (data as { session_id: string }).session_id, endsAt: (data as { ends_at: string }).ends_at } : null;
 }
 
+/** The project's most recent session (running or not), whose computer the next one starts from. */
+async function lastSession(auth: Authed, projectId: string): Promise<string | null> {
+  const { data, error } = await auth.supabase.from("code_workspace_blocks").select("session_id").eq("project_id", projectId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (error) throw dbError(error, "code.session.last");
+  return (data as { session_id: string } | null)?.session_id ?? null;
+}
+
 /** The caller's other running sessions (one computer at a time per user). */
 async function otherSessions(auth: Authed, projectId: string): Promise<{ session_id: string; project_id: string | null }[]> {
   const { data, error } = await auth.supabase.from("code_workspace_live").select("session_id, project_id").neq("project_id", projectId);
@@ -275,11 +282,12 @@ export async function startSession(auth: Authed, project: ProjectSummary, backen
   }
   const a = await workspaceAllowance(auth);
   precheck(a, true);
-  const files = await getFiles(auth, project.id);
+  const [files, previous] = await Promise.all([getFiles(auth, project.id), lastSession(auth, project.id)]);
   const blockId = randomUUID();
   let box: WorkspaceBox;
+  let restored = false;
   try {
-    box = await backend.create(workspaceName(blockId), a.blockMinutes);
+    ({ box, restored } = await backend.create(workspaceName(blockId), a.blockMinutes, previous ? workspaceName(previous) : null));
   } catch (err) {
     reportError(err, { where: "code_workspace.create" });
     throw new ApiError("upstream_error", "The workspace computer couldn't start right now. No time was used. Please try again.");
@@ -287,11 +295,14 @@ export async function startSession(auth: Authed, project: ProjectSummary, backen
   try {
     const r = await reserve(auth, a, blockId, project.id, null);
     if (!r.ok) throw refusal(r.reason, { ...a, used: r.used });
-    await seedWorkspace(box, files);
+    await seedWorkspace(box, files, undefined, { restored });
   } catch (err) {
-    await box.stop().catch(() => {});
+    // Delete rather than stop: stopping would save its disk, and the project's next session starts from the old one.
+    await backend.remove(workspaceName(blockId)).catch(() => box.stop().catch(() => {}));
     throw err;
   }
+  // The new computer has its own copy of the old one's disk; the old one isn't needed any more.
+  if (restored && previous) await backend.remove(workspaceName(previous)).catch((err) => reportError(err, { where: "code_workspace.remove" }));
   await recordBlock(auth, a.entitlement, blockId, a.blockMinutes);
   const used = a.used + a.blockMinutes;
   return {
@@ -365,7 +376,7 @@ export function previewUrl(box: WorkspaceBox): string | null {
 export interface SyncResult {
   changed: string[];
   deleted: string[];
-  /** Files left out: binary, over 200 KB, or over the project's limits. */
+  /** Files left out: binary, over MAX_FILE_BYTES, or over the project's limits. */
   skipped: string[];
 }
 

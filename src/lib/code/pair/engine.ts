@@ -5,7 +5,7 @@ import type { ModelInfo, Usage } from "@/lib/ai/types";
 import { ApiError } from "@/lib/http";
 import { reportError } from "@/lib/observability";
 import { enforceLimits, planLimits, recordRunLater, releaseUsage } from "@/lib/usage";
-import { byteLength, MAX_FILE_BYTES, validProjectPath, type FileChange } from "../projects";
+import { byteLength, MAX_FILE_BYTES, MAX_FILE_LABEL, validProjectPath, type FileChange } from "../projects";
 import { getFiles, getProjectRow, optionalBox, setRunCommand, type Authed } from "../server";
 import { AGENT_OUTPUT_TOKENS, MAX_MODEL_FAILURES, addTests, addUsage, codeAgentId, execCommand, finishStep, modelTimeoutFor, pauseFor, saveChanges } from "../agent/engine";
 import { commandOp } from "../../bastion/guards";
@@ -295,7 +295,7 @@ async function applyCode(auth: Authed, row: RunRow, code: { files: { path: strin
   for (const f of code.files) {
     if (!allowed.has(f.path)) continue;
     if (byteLength(f.content) > MAX_FILE_BYTES) {
-      rejected.push({ path: f.path, why: "over 200 KB" });
+      rejected.push({ path: f.path, why: `over ${MAX_FILE_LABEL}` });
       continue;
     }
     if (current.get(f.path) === f.content) continue;

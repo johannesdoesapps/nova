@@ -93,6 +93,7 @@ import {
   type RunTests,
   type RunUsage,
   type RunView,
+  type RunningJob,
   type AgentEvent,
   type FailureKind,
   type RunReport,
@@ -115,8 +116,10 @@ import {
  * actions. Each pauses the run and asks the user whether to go on.
  */
 
-/** How long a command may run before it's stopped. */
+/** How long a step waits for a command; one still running then keeps going in the background (see LONG_COMMAND_MS). */
 export const COMMAND_LIMIT_MS = 120_000;
+/** How long a command may run in all, across steps (the agent waits for it with wait_for_command), before it's stopped. */
+export const LONG_COMMAND_MS = 10 * 60_000;
 const MODEL_TIMEOUT_MS = 170_000;
 /**
  * Output tokens the agent may use per step (or the plan's reply limit when
@@ -281,33 +284,50 @@ export async function saveChanges(auth: Authed, runId: string, projectId: string
   return refused;
 }
 
-/** Run a command in the project's computer, wait for it, and copy back the files it changed. */
 /** Which files a run's commands may change; the rest are put back (QA Testing may only change tests). */
 export function commandKeeps(row: Pick<RunRow, "options">): ((path: string) => boolean) | undefined {
   return runOptions(row).agent === "qa_tester" ? qaMayEdit : undefined;
 }
 
-export async function execCommand(auth: Authed, runId: string, projectId: string, command: string, keep: ((path: string) => boolean) | undefined, gate: Gate): Promise<CommandOutcome> {
+export interface ExecOptions {
+  /** Keep a command that's still running after the wait going in the background (up to LONG_COMMAND_MS in all), instead of stopping it. */
+  background?: { tool: RunningJob["tool"] };
+  /** Wait for a command this run left running (no new command is started). */
+  resume?: RunningJob;
+}
+
+/**
+ * Run a command in the project's computer, wait for it (up to COMMAND_LIMIT_MS this step), and copy back the files it
+ * changed. With `background`, a command still running then is left running and remembered on the run (`running` in
+ * the outcome); `resume` waits for it again later. Past LONG_COMMAND_MS in all it's stopped.
+ */
+export async function execCommand(auth: Authed, runId: string, projectId: string, command: string, keep: ((path: string) => boolean) | undefined, gate: Gate, opts: ExecOptions = {}): Promise<CommandOutcome> {
+  const resume = opts.resume;
   // Every command an agent runs passes Orbis Bastion here, however it got here (a step, an approval, pair coding, verification).
-  const d = await bastionGuard(gateCtx(auth, runId, gate.agent), commandOp(command), command, { approved: gate.approved });
-  if (d.outcome !== "allow") return { exitCode: null, output: "", durationMs: 0, timedOut: false, cancelled: false, changed: [], skipped: [], blocked: d.reason };
+  // A command being waited for again passed it when it started.
+  if (!resume) {
+    const d = await bastionGuard(gateCtx(auth, runId, gate.agent), commandOp(command), command, { approved: gate.approved });
+    if (d.outcome !== "allow") return { exitCode: null, output: "", durationMs: 0, timedOut: false, cancelled: false, changed: [], skipped: [], blocked: d.reason };
+  }
   const box = await optionalBox(auth, projectId);
   if (!box) throw new ApiError("conflict", "The project's computer isn't running.", { scope: "workspace_stopped" });
   const before = await getFiles(auth, projectId);
-  const jobId = `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-  const started = Date.now();
+  const jobId = resume?.jobId ?? `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  const started = resume?.startedAt ?? Date.now();
+  const waitUntil = Date.now() + COMMAND_LIMIT_MS;
+  const limit = opts.background || resume ? LONG_COMMAND_MS : COMMAND_LIMIT_MS;
   await updateRun(auth, runId, { pending: { kind: "job", jobId, command } });
-  await startJob(box, jobId, command);
+  if (!resume) await startJob(box, jobId, command);
 
   let output = "";
-  let offset = 0;
+  let offset = resume?.offset ?? 0;
   let exitCode: number | null = null;
   let done = false;
   let cancelled = false;
   let startedAt = started;
   let polls = 0;
   let more = false;
-  while (Date.now() - started < COMMAND_LIMIT_MS) {
+  while (Date.now() < waitUntil && Date.now() - started < limit) {
     if (!more) await sleep(POLL_MS);
     const r = await readJob(box, jobId, offset);
     // A finished command's remaining output is read straight away.
@@ -326,6 +346,14 @@ export async function execCommand(auth: Authed, runId: string, projectId: string
       break;
     }
   }
+  if (!done && !cancelled && Date.now() - started < limit - 5_000) {
+    // Still running: leave it going, and remember it so a later step can wait for it (and Stop can end it).
+    const tool = resume?.tool ?? opts.background?.tool ?? "run_command";
+    await updateRun(auth, runId, { job: { jobId, command, tool, startedAt: started, offset } });
+    return { exitCode: null, output, durationMs: Date.now() - started, timedOut: false, cancelled: false, changed: [], skipped: [], running: true };
+  }
+  // It's over (finished, stopped, or out of time): forget it as a running command.
+  if (resume) await updateRun(auth, runId, { job: null });
   const timedOut = !done && !cancelled;
   if (!done) {
     await killJob(box, jobId).catch(() => {});
@@ -393,7 +421,12 @@ function realEnv(c: EnvContext): AgentEnv {
     files: () => getFiles(auth, project.id),
     save: (changes) => saveChanges(auth, run.id, project.id, changes, { agent }),
     computer: async () => Boolean(await optionalBox(auth, project.id)),
-    exec: (command, approved) => execCommand(auth, run.id, project.id, command, commandKeeps(run), { agent, approved }),
+    exec: (command, approved, tool) => execCommand(auth, run.id, project.id, command, commandKeeps(run), { agent, approved }, tool ? { background: { tool } } : {}),
+    waitCommand: async () => {
+      const job = run.job;
+      if (!job) return null;
+      return { command: job.command, tool: job.tool, out: await execCommand(auth, run.id, project.id, job.command, commandKeeps(run), { agent, approved: true }, { resume: job }) };
+    },
     guard: (op, resource, approved) => bastionGuard(gateCtx(auth, run.id, agent), op, resource, { approved }),
     changes: async () => (await listChanges(auth, run.id)).map((ch) => ({ path: ch.path, before: ch.before, after: ch.after })),
     checkpoints: { list: () => listCheckpoints(auth, run.id), create: (label, files) => createCheckpoint(auth, run.id, label, files) },
@@ -472,6 +505,8 @@ async function githubUsable(auth: Authed): Promise<boolean> {
 async function finalize(auth: Authed, runId: string, unresolved: string[] = [], skipped: SkippedCheck[] = [], failure?: FailureKind): Promise<RunRow | null> {
   try {
     const row = await getRun(auth, runId);
+    // The run is over: a command it left running in the background is ended.
+    if (row.job) await endRunningJob(auth, row);
     const [changes, files, events, checkpoints] = await Promise.all([listChanges(auth, runId), getFiles(auth, row.project_id), listEvents(auth, runId), listCheckpoints(auth, runId)]);
     const report = buildReport({
       status: row.status,
@@ -911,7 +946,11 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
       });
   }
   if (reply.thought) await addEvents(auth, row.id, [{ kind: "note", title: clipText(reply.thought, 380) }]);
-  const outcome = await runActions(reply, { planApproved, approvePlans: opts.approvePlans, reviewEdits: opts.reviewEdits, commands: ctx.commands, lastTests: row.tests?.last ?? null, readOnly, testsOnly: opts.agent === "qa_tester" }, env);
+  const outcome = await runActions(
+    reply,
+    { planApproved, approvePlans: opts.approvePlans, reviewEdits: opts.reviewEdits, commands: ctx.commands, lastTests: row.tests?.last ?? null, readOnly, testsOnly: opts.agent === "qa_tester", runningCommand: row.job?.command ?? null },
+    env,
+  );
   record(webSearches.count ? ["web_search"] : []);
   for (const u of helperUsage) usage = addUsage(usage, model, u, 0, 0);
 
@@ -1344,6 +1383,14 @@ export async function cancelRun(auth: Authed, runId: string): Promise<RunView> {
     if (box) await killJob(box, row.pending.jobId).catch((err) => reportError(err, { where: "code.agent.cancel.kill" }));
   }
   return toRunView((await finalize(auth, runId)) ?? (await getRun(auth, runId)));
+}
+
+/** End a command the run left running in the background, and forget it. */
+async function endRunningJob(auth: Authed, row: Pick<RunRow, "id" | "project_id" | "job">): Promise<void> {
+  if (!row.job) return;
+  const box = await optionalBox(auth, row.project_id);
+  if (box) await killJob(box, row.job.jobId).catch((err) => reportError(err, { where: "code.agent.job.kill" }));
+  await updateRun(auth, row.id, { job: null });
 }
 
 export interface RevertResult {

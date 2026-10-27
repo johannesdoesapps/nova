@@ -89,4 +89,4 @@ A Code project imported from GitHub remembers the git blob id of each file as it
 - **Update from GitHub** brings in the default branch. A file changed only on GitHub is updated; a file changed only in Orbis is kept; a file changed in both places keeps Orbis's version and is listed. Files deleted on GitHub are removed only if Orbis didn't change them.
 - **Push to GitHub** (to the repository the project came from) sends only the files changed or deleted in Orbis since the last import or update, as one commit on a new branch. If GitHub changed any of the same files meanwhile, it stops and lists them; the user can update first or push anyway (the pull request shows both versions).
 
-Administrators' projects can hold 2,000 files and 20 MB (others: 300 files, 3 MB), so Orbis's own repository fits. Logic: `src/lib/code/github-sync.ts`; tests: `tests/github-sync.test.ts`.
+Projects hold up to 1,000 files and 20 MB (administrators: 2,000 files, so Orbis's own repository fits). Logic: `src/lib/code/github-sync.ts`; tests: `tests/github-sync.test.ts`.

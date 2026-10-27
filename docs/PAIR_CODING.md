@@ -21,7 +21,7 @@ Pair Coding is built on Orbis Code's existing, tested infrastructure rather than
 ## Workflow
 
 1. **Plan** (Architect): summary, architecture, files, tasks, decisions with reasons, test and run commands. Optionally waits for the user's approval or changes.
-2. **Implement** (Architect): complete files, applied through the controlled path — paths must be plain project-relative paths (no `..`, no absolute paths), secret files (`.env`, keys) can't be written, 200 KB per file; a checkpoint first; every change recorded.
+2. **Implement** (Architect): complete files, applied through the controlled path — paths must be plain project-relative paths (no `..`, no absolute paths), secret files (`.env`, keys) can't be written, 1 MB per file; a checkpoint first; every change recorded.
 3. **Test**: the plan's test command in the project's computer, if the computer is on and the command is safe (otherwise it waits for approval, or is skipped with the reason).
 4. **Review** (Reviewer): independent review against the priorities (correctness, security, architecture, performance, readability, requirements). Findings without evidence are refused by the format.
 5. **Revise** (Architect): answers every open finding — accept (and change the code) or reject with a specific reason — and revises.

@@ -1,8 +1,9 @@
 /**
  * Starting, extending and stopping a project's workspace computer, with
  * stand-ins for Supabase and Vercel Sandbox: time is checked before a
- * computer starts, a computer whose time block is refused is stopped at once,
- * a user runs one computer at a time, and a stopped computer is never resumed.
+ * computer starts, a computer whose time block is refused is deleted at once,
+ * a user runs one computer at a time, a stopped computer is never resumed, and
+ * a project's next session starts from its previous computer's disk.
  * tests/code-workspace-db.test.ts covers the SQL.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,6 +17,8 @@ const state = {
   status: { user_minutes: 0, site_minutes: 0, site_live: 0 },
   reserve: { ok: true } as Record<string, unknown>,
   live: [] as { session_id: string; project_id: string; ends_at: string }[],
+  /** The project's sessions, newest first (code_workspace_blocks). */
+  blocks: [] as { session_id: string; project_id: string }[],
   rpc: [] as { fn: string; args: Record<string, unknown> }[],
   inserts: [] as { table: string; row: unknown }[],
 };
@@ -26,6 +29,7 @@ function table(name: string) {
   const rows = () => {
     if (name === "code_workspace_live") return state.live.filter((r) => filters.every(([op, col, v]) => (op === "eq" ? r[col as keyof typeof r] === v : r[col as keyof typeof r] !== v)));
     if (name === "code_files") return [{ path: "index.html", content: "<h1>hi</h1>" }];
+    if (name === "code_workspace_blocks") return state.blocks.filter((r) => filters.every(([, col, v]) => r[col as keyof typeof r] === v));
     return [];
   };
   const b = {
@@ -62,19 +66,23 @@ vi.mock("@/lib/entitlements", () => ({
 const { startSession, extendSession, requireBox, stopSession } = await import("@/lib/code/server");
 
 function fakeBackend() {
-  const boxes = new Map<string, { stopped: boolean; files: string[]; extended: number }>();
+  const boxes = new Map<string, { stopped: boolean; files: string[]; extended: number; commands: string[] }>();
+  const removed: string[] = [];
   const backend = {
-    create: vi.fn(async (name: string) => {
-      const rec = { stopped: false, files: [] as string[], extended: 0 };
+    create: vi.fn(async (name: string, _minutes: number, from?: string | null) => {
+      const rec = { stopped: false, files: [] as string[], extended: 0, commands: [] as string[] };
       boxes.set(name, rec);
-      return {
+      const box = {
         writeFiles: async (f: { path: string }[]) => void rec.files.push(...f.map((x) => x.path)),
-        runCommand: async () => ({ exitCode: 0, stdout: async () => "" }),
+        runCommand: async (p: { cmd: string; args: string[] }) => (rec.commands.push(`${p.cmd} ${p.args.join(" ")}`), { exitCode: 0, stdout: async () => "" }),
         domain: () => `https://${name}.vercel.run`,
         extendTimeout: async (ms: number) => void (rec.extended += ms),
         stop: async () => void (rec.stopped = true),
       };
+      // Only a computer that still exists can be copied.
+      return { box, restored: !!from && boxes.has(from) && !removed.includes(from) };
     }),
+    remove: vi.fn(async (name: string) => void removed.push(name)),
     get: vi.fn(async (name: string) => {
       const rec = boxes.get(name);
       if (!rec || rec.stopped) return null;
@@ -87,14 +95,14 @@ function fakeBackend() {
       };
     }),
   };
-  return { backend, boxes };
+  return { backend, boxes, removed };
 }
 
 const project = { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "Site", description: null, template: "website", runCommand: "", sourceRepo: null, updatedAt: "" };
 
 beforeEach(() => {
   process.env.ORBIS_SANDBOX_TOKEN = "test";
-  Object.assign(state, { plan: "pro", status: { user_minutes: 0, site_minutes: 0, site_live: 0 }, reserve: { ok: true }, live: [], rpc: [], inserts: [] });
+  Object.assign(state, { plan: "pro", status: { user_minutes: 0, site_minutes: 0, site_live: 0 }, reserve: { ok: true }, live: [], blocks: [], rpc: [], inserts: [] });
 });
 
 describe("workspace sessions", () => {
@@ -102,8 +110,9 @@ describe("workspace sessions", () => {
     const { backend, boxes } = fakeBackend();
     const s = await startSession(auth, project, backend);
     const name = `orbis-ws-${s.sessionId}`;
-    expect(backend.create).toHaveBeenCalledWith(name, DEFAULT_BILLING.workspaceBlockMinutes);
+    expect(backend.create).toHaveBeenCalledWith(name, DEFAULT_BILLING.workspaceBlockMinutes, null);
     expect(boxes.get(name)!.files).toEqual(["/tmp/orbis-jobs/collect.mjs", "/vercel/sandbox/index.html"]);
+    expect(boxes.get(name)!.commands.some((c) => c.includes("prune"))).toBe(false);
     const r = state.rpc.find((x) => x.fn === "code_workspace_reserve")!.args;
     expect(r).toMatchObject({ p_block: s.sessionId, p_project: project.id, p_session: null, p_minutes: 10, p_user_limit: DEFAULT_BILLING.plans.pro.workspaceMinutesPerPeriod });
     expect(state.inserts[0]).toMatchObject({ table: "model_runs", row: { tools: ["code_workspace"], latency_ms: 600_000, request_id: s.sessionId, units: 0 } });
@@ -122,12 +131,30 @@ describe("workspace sessions", () => {
     await expect(startSession(auth, project, backend)).rejects.toThrow(/All workspace computers are busy/);
   });
 
-  it("stops the new computer at once when the reserve is refused (a concurrent start won)", async () => {
-    const { backend, boxes } = fakeBackend();
+  it("deletes the new computer at once when the reserve is refused (a concurrent start won)", async () => {
+    const { backend, boxes, removed } = fakeBackend();
     state.reserve = { ok: false, reason: "user", used: 200 };
     await expect(startSession(auth, project, backend)).rejects.toThrow(/workspace minutes/);
-    expect([...boxes.values()].every((b) => b.stopped)).toBe(true);
+    // Deleted, not stopped: stopping would save its disk.
+    expect(removed).toEqual([...boxes.keys()]);
     expect(state.inserts).toEqual([]);
+  });
+
+  it("starts the project's next session from its previous computer, cleans it, and deletes the old one", async () => {
+    const { backend, boxes, removed } = fakeBackend();
+    const first = await startSession(auth, project, backend);
+    state.blocks = [{ session_id: first.sessionId, project_id: project.id }];
+    const second = await startSession(auth, project, backend);
+    const name = `orbis-ws-${second.sessionId}`;
+    expect(backend.create).toHaveBeenLastCalledWith(name, DEFAULT_BILLING.workspaceBlockMinutes, `orbis-ws-${first.sessionId}`);
+    const rec = boxes.get(name)!;
+    expect(rec.files.slice(0, 2)).toEqual(["/tmp/orbis-jobs/prune.mjs", "/tmp/orbis-jobs/keep.json"]);
+    expect(rec.commands[0]).toBe("node /tmp/orbis-jobs/prune.mjs /tmp/orbis-jobs/keep.json");
+    expect(removed).toEqual([`orbis-ws-${first.sessionId}`]);
+    // Another project's sessions are never used.
+    state.blocks = [{ session_id: second.sessionId, project_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" }];
+    await startSession(auth, project, backend);
+    expect(backend.create).toHaveBeenLastCalledWith(expect.any(String), DEFAULT_BILLING.workspaceBlockMinutes, null);
   });
 
   it("runs one computer per user: starting another project stops the first", async () => {

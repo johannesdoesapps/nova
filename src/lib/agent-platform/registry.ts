@@ -336,7 +336,7 @@ const BASE: Omit<AgentDef, keyof AgentRole>[] = [
     href: "/code",
     capabilities: ["Implement features", "Explain a codebase (read-only mode)", "Refactor", "Fix bugs and produce patches", "Run tests and report real results", "Import from and push to GitHub"],
     limitations: [
-      "Works on an Orbis project (imported from GitHub, a ZIP or a template), up to 300 files / 3 MB",
+      "Works on an Orbis project (imported from GitHub, a ZIP or a template), up to 1,000 files / 20 MB",
       "Progress needs the page open; a closed page pauses the task",
       "No interactive commands",
     ],

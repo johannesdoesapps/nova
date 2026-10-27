@@ -18,6 +18,7 @@ import {
   type AgentPlan,
   type EventKind,
   type Pending,
+  type RunningJob,
   type RunOptions,
   EMPTY_CHECKS,
   type RunChecks,
@@ -59,12 +60,14 @@ export interface RunRow {
   report: RunReport | null;
   /** Pair coding (two agents): its state; null for an ordinary task. */
   pair?: PairState | null;
+  /** A command still running after its step ended. */
+  job?: RunningJob | null;
   created_at: string;
   updated_at: string;
 }
 
 const COMMON_COLS =
-  "id, project_id, request, status, options, plan, pending, summary, error, steps, step_limit, locked_until, token_budget, usage, active_ms, time_limit_ms, tests, checks, recent, last_edit_at, report, pair, created_at, updated_at";
+  "id, project_id, request, status, options, plan, pending, summary, error, steps, step_limit, locked_until, token_budget, usage, active_ms, time_limit_ms, tests, checks, recent, last_edit_at, report, pair, job, created_at, updated_at";
 const RUN_COLS = `${COMMON_COLS}, transcript`;
 const LIST_COLS = COMMON_COLS;
 
@@ -270,6 +273,7 @@ export type RunPatch = Partial<
     | "last_edit_at"
     | "report"
     | "pair"
+    | "job"
   >
 >;
 

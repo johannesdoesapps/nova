@@ -27,8 +27,8 @@ How Orbis Code keeps users' projects, Orbis's infrastructure and other users saf
 - Commands run only in the project's **Vercel Sandbox** microVM (Firecracker): 1 vCPU, 2 GB memory, its own filesystem; never on the Orbis application server.
 - **No secrets inside**: the sandbox environment is a fixed allow-list (`COMMAND_ENV`); none of Orbis's environment variables are passed in.
 - **Network**: only `registry.npmjs.org`, `pypi.org` and `files.pythonhosted.org`.
-- **Limits**: 2 minutes per agent command (then killed), 4 MB of logged output per job (200 KB kept, 6 KB shown to the model), computer time in reserved blocks counted against the user's plan, a site-wide cap on concurrent computers.
-- **Cleanup**: computers stop when their reserved time ends; starting a computer for one project stops the user's others; sandboxes aren't persistent (nothing survives a stop).
+- **Limits**: 10 minutes per agent command in all (a step waits 2 minutes, then it runs on in the background until the agent waits for it again; then it's killed), 4 MB of logged output per job (200 KB kept, 6 KB shown to the model), computer time in reserved blocks counted against the user's plan, a site-wide cap on concurrent computers.
+- **Cleanup**: computers stop when their reserved time ends; starting a computer for one project stops the user's others; a stopped sandbox's disk is kept as one snapshot for 7 days so the same project's next session can start from it (only that user's own project: the previous session is looked up through their row-level-security-protected time blocks); files the project no longer has are removed from the copy, and the old sandbox is deleted.
 - **One computer per user at a time**; another user's computer is never reachable (its id comes from a server-side reservation).
 
 ## Agent permissions

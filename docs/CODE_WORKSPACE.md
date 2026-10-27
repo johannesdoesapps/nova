@@ -24,7 +24,7 @@ The **Code** page (`/code`) is where people build whole projects in the browser:
 
 Files live in `code_files`, one row per file. Only the owner can see or change them (row-level security). The database enforces the limits, so no client can get around them:
 
-- 300 files and 3 MB per project, 200 KB per file;
+- 1,000 files and 20 MB per project (administrators: 2,000 files), 1 MB per file;
 - plain relative paths only (no leading `/`, no `.` or `..` parts, no backslashes or control characters).
 
 Users may change a project's name and Run command, never its id or owner (column grants). The editor saves each file 0.8 s after the last keystroke.
@@ -35,11 +35,11 @@ Pressing **Start**, **Run** or typing a command turns on a computer for the proj
 
 - **Files:** the project's files are copied in when it starts. Saves from the editor are copied in as you make them.
 - **Commands:** each command runs in the background with its output in a log, which the page reads as it grows. **Stop** ends the command and everything it started.
-- **Copying back:** when a command ends, files it created or changed are copied back to the project. Files it deleted are removed from the project. Installed packages and build output are never copied back (`node_modules`, `.venv`, `dist`, `.next` and so on). Binary files and files over 200 KB are skipped, and the terminal says which.
+- **Copying back:** when a command ends, files it created or changed are copied back to the project. Files it deleted are removed from the project. Installed packages and build output are never copied back (`node_modules`, `.venv`, `dist`, `.next` and so on). Binary files and files over 1 MB are skipped, and the terminal says which.
   - Only files that were in the computer when the command started can be deleted from the project. A file saved from the editor in the meantime is never lost.
 - **Network:** only npm and PyPI are reachable (`registry.npmjs.org`, `pypi.org`, `files.pythonhosted.org`), so code can install packages but can't reach anything else.
 - **No secrets inside:** nothing from Orbis's environment is passed in.
-- **Not persistent:** stopping the computer discards it, so there's no snapshot storage to pay for. Packages are reinstalled next time; the Node.js template's Run command does `npm install && npm start` for that reason.
+- **Installed packages are kept between sessions:** a computer saves its disk when it stops or its time runs out (one snapshot, kept 7 days), and the project's next session starts as a copy of it (`Sandbox.fork`). The project's files are then written in again and files the project no longer has are removed, so only package and build folders (`node_modules`, `.venv`, `.next`, Git history and so on) carry over. The previous computer is deleted once it's been copied. With no saved disk (the first session, or one older than 7 days) the computer starts fresh, as before. Code: `vercelWorkspaces.create` and `pruneScript` in `src/lib/code/workspace.ts`, `startSession` in `src/lib/code/server.ts`.
 - **Preview:** an app listening on port 3000 shows in the Preview panel. The address is the sandbox's public URL while the computer is on, so the page tells people not to put secrets in projects.
 - **One computer at a time:** starting a computer for one project stops the user's other ones.
 
@@ -76,7 +76,7 @@ Prices are from https://vercel.com/docs/sandbox/pricing, checked 2026-10-20:
 - $0.0212 per GB-hour of memory;
 - $0.15 per GB of data transfer;
 - $0.60 per million sandbox creations;
-- snapshot storage is $0.08 per GB-month, but workspaces aren't persistent, so they don't use it.
+- snapshot storage is $0.08 per GB-month: each project keeps at most one snapshot of its computer's disk, for 7 days (a project with 500 MB of packages costs about $0.04 a month while it's kept).
 
 A minute is costed as if the CPU were busy the whole time, plus 2 MB of preview traffic. That comes to at most **$0.00314 a minute** (`workspaceMinuteCostUsd`).
 
@@ -133,5 +133,4 @@ Each request is reserved, charged and recorded like a chat message (purpose `cod
 
 - **Save back to GitHub:** *Push to GitHub* (a new branch per push) exists, but it needs the GitHub App configured with *Contents: Read and write* permission.
 - **Interactive programs:** commands get no keyboard input, so programs that ask questions won't work.
-- **Persistent computers that keep installed packages:** this needs snapshot storage, at $0.08 per GB-month.
 - **Several people editing one project at once.**

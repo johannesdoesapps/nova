@@ -16,7 +16,7 @@ import type { TaskSummary } from "@/lib/code/agent/history";
 import { QA_KINDS, type BugInput, type QaInput } from "@/lib/code/agent/profiles";
 import type { RunView } from "@/lib/code/agent/types";
 import { TASK_STATE_INFO } from "@/lib/code/agent/verdict";
-import type { ProjectSummary } from "@/lib/code/projects";
+import { MAX_PROJECT_BYTES, MAX_PROJECT_FILES, type ProjectSummary } from "@/lib/code/projects";
 import { ago } from "@/lib/home";
 import { cn } from "@/lib/utils";
 import { AgentIconTile } from "./marketplace";
@@ -279,7 +279,7 @@ export function ProfileWorkspace({ profile }: { profile: CodeProfile }) {
                       >
                         {busy === "zip" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Choose a .zip
                       </label>
-                      <span className="text-[12.5px] text-s-ink-3">Up to 3 MB; text files only, within the project limits (300 files, 3 MB).</span>
+                      <span className="text-[12.5px] text-s-ink-3">Up to 3 MB; text files only, within the project limits ({MAX_PROJECT_FILES.toLocaleString("en")} files, {MAX_PROJECT_BYTES / 1024 / 1024} MB).</span>
                     </div>
                   ) : (
                     <p className="text-[13.5px] text-s-ink-2">
