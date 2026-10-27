@@ -130,10 +130,10 @@ Progress is grouped into plain-English stages built only from the run's events: 
 - **Live view:** while the agent works, its words appear as it writes them ("Writing…"), and each action shows up as it happens instead of at the next check of the log.
 - **To-do list:** for tasks with three or more steps the agent keeps a to-do list (`update_todos`), shown under the task with what's done and what it's on now.
 - **Web pages:** the agent can read a public web page (`read_web_page`), such as documentation or a changelog; the text is treated as data, and Bastion checks the request.
+- **Keeps going if closed:** new tasks keep working after you close the page (switch next to the mode; on by default). Orbis continues the task as you, with your plan's limits, and stops when it needs you (a question, an approval, a limit). Come back to the project to see where it got to. See ORBIS_CODE_ARCHITECTURE.md §5a.
 - **Long tasks:** when a run's history gets long, older steps are replaced by a short record of what they did (each action and whether it worked), so the agent doesn't lose track, and the prompt cache keeps working.
 
 ## Not yet
 
-- Runs continue only while the page is open; there is no background worker (it needs a server-side database credential and a design that keeps per-user authorization; see ORBIS_CODE_ARCHITECTURE.md §8).
 - The agent doesn't deploy. Orbis has no deploy integration for user projects.
 - Interactive commands (that wait for keyboard input) don't work.

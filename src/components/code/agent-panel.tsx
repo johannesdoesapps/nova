@@ -129,6 +129,15 @@ export const WEB_EXAMPLES: { label: string; task: string; start: boolean }[] = [
 ];
 
 const MODE_KEY = "orbis.code.mode";
+const BACKGROUND_KEY = "orbis.code.background";
+/** Whether new tasks keep working after the page is closed (on unless the user turned it off). */
+const readBackground = (): boolean => {
+  try {
+    return localStorage.getItem(BACKGROUND_KEY) !== "0";
+  } catch {
+    return true;
+  }
+};
 const noSubscribe = () => () => {};
 const readMode = (): ModeId => {
   try {
@@ -389,6 +398,17 @@ export function AgentPanel({
   const savedMode = useSyncExternalStore(noSubscribe, readMode, () => "plan" as ModeId);
   const [chosenMode, setModeState] = useState<ModeId | null>(null);
   const mode = chosenMode ?? savedMode;
+  const savedBackground = useSyncExternalStore(noSubscribe, readBackground, () => true);
+  const [chosenBackground, setBackgroundState] = useState<boolean | null>(null);
+  const keepWorking = chosenBackground ?? savedBackground;
+  const setKeepWorking = (v: boolean) => {
+    setBackgroundState(v);
+    try {
+      localStorage.setItem(BACKGROUND_KEY, v ? "1" : "0");
+    } catch {
+      /* the choice just isn't remembered */
+    }
+  };
   const [modelId, setModelId] = useCodeModel(catalog);
   const box = useRef<HTMLTextAreaElement>(null);
   /** A message typed while the agent works, sent when it finishes (and the run it was typed for). */
@@ -554,7 +574,7 @@ export function AgentPanel({
       const preset = MODES.find((m) => m.id === mode)!;
       const r = await post<{ run: RunView; attachments?: AttachmentMeta[] }>(`/api/code/projects/${projectId}/agent`, {
         request,
-        options: { modelId, ...preset.options, ...(siteTemplate && { siteTemplate }) },
+        options: { modelId, ...preset.options, ...(siteTemplate && { siteTemplate }), background: keepWorking },
         ...(attachments.length ? { attachments } : {}),
         ...(continuing ? { continueFrom: continuing.id } : {}),
       });
@@ -902,13 +922,17 @@ export function AgentPanel({
 
               {working && !busy && !error && (
                 <div className="s-card rounded-2xl p-3 text-[13px]">
-                  <p className="text-s-ink-2">The agent is paused (the page was reloaded or a step didn&apos;t finish). Nothing is lost.</p>
+                  <p className="text-s-ink-2">
+                    {run.options.background
+                      ? "The agent keeps working in the background, even with this page closed. Continue here to watch it live."
+                      : "The agent is paused (the page was reloaded or a step didn't finish). Nothing is lost."}
+                  </p>
                   <button
                     type="button"
                     onClick={() => void drive(run.id)}
                     className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-full bg-s-accent px-3.5 text-[12.5px] font-medium text-s-accent-ink"
                   >
-                    <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Continue
+                    <RotateCcw className="h-3.5 w-3.5" aria-hidden /> {run.options.background ? "Continue here" : "Continue"}
                   </button>
                 </div>
               )}
@@ -1022,6 +1046,21 @@ export function AgentPanel({
             footerLeft={
               <>
                 <ModeMenu mode={mode} onChange={setMode} disabled={starting} />
+                {!inProgress && (
+                  <button
+                    type="button"
+                    aria-pressed={keepWorking}
+                    onClick={() => setKeepWorking(!keepWorking)}
+                    title={keepWorking ? "New tasks keep working after you close this page. Click to turn off." : "New tasks pause when you close this page. Click to keep them working."}
+                    className={cn(
+                      "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[12px] transition",
+                      keepWorking ? "border-s-line text-s-ink-2 hover:text-s-ink" : "border-dashed border-s-line text-s-ink-3 hover:text-s-ink-2",
+                    )}
+                  >
+                    <Power className="h-3.5 w-3.5" aria-hidden />
+                    <span className="hidden sm:inline">{keepWorking ? "Keeps going if closed" : "Pauses if closed"}</span>
+                  </button>
+                )}
                 {!inProgress && <IdeasMenu web={web} disabled={starting || !loaded} onPick={(e) => (e.start ? void send(e.task, e.mode ?? mode) : fill(e.task))} />}
               </>
             }

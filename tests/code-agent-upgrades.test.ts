@@ -211,10 +211,10 @@ describe("POST /api/code/agent/[runId]/step", () => {
   });
 
   it("answers with plain JSON by default", async () => {
-    engine.step = async () => ({ run: { id: RUN, steps: 3 } });
+    engine.step = async () => ({ run: { id: RUN, steps: 3, status: "completed", options: {}, pending: null } });
     const res = await callStep();
     expect(res.headers.get("content-type")).toMatch(/application\/json/);
-    expect(await res.json()).toEqual({ run: { id: RUN, steps: 3 } });
+    expect(await res.json()).toEqual({ run: { id: RUN, steps: 3, status: "completed", options: {}, pending: null } });
     expect(engine.calls[0]![3]).toEqual({ expectStep: 2 });
   });
 
@@ -226,14 +226,14 @@ describe("POST /api/code/agent/[runId]/step", () => {
       emitLive(RUN, { t: "model_done" });
       emitLive(RUN, { t: "events", events: [{ id: `${RUN}:7`, seq: 7, kind: "inspect", title: "Read src/auth.ts", detail: null, createdAt: "" }] });
       emitLive("someone-else", { t: "text", d: "not mine" });
-      return { run: { id: RUN, steps: 3 } };
+      return { run: { id: RUN, steps: 3, status: "completed", options: {}, pending: null } };
     };
     const res = await callStep("application/x-ndjson");
     expect(res.headers.get("content-type")).toMatch(/application\/x-ndjson/);
     const got = await lines(res);
     expect(got.map((m) => m.t)).toEqual(["step", "text", "text", "model_done", "events", "done"]);
     expect(got.filter((m) => m.t === "text").map((m) => m.d).join("")).toBe("Reading auth.ts");
-    expect(got.at(-1)).toEqual({ t: "done", result: { run: { id: RUN, steps: 3 } } });
+    expect(got.at(-1)).toEqual({ t: "done", result: { run: { id: RUN, steps: 3, status: "completed", options: {}, pending: null } } });
     expect(hasWatchers(RUN)).toBe(false);
   });
 

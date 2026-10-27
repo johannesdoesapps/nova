@@ -564,7 +564,7 @@ const FORMAT_RETRY = "FORMAT PROBLEM:";
  * is young. `expectStep` is the step count the caller last saw: when the run
  * has moved on since (a retried request), nothing runs.
  */
-export async function stepRun(req: Request, auth: Authed, runId: string, opts: { expectStep?: number; now?: () => number } = {}): Promise<StepResult> {
+export async function stepRun(req: Request, auth: Authed, runId: string, opts: { expectStep?: number; now?: () => number; keepGoingMs?: number } = {}): Promise<StepResult> {
   const clock = opts.now ?? Date.now;
   const started = clock();
   const deadline = started + STEP_BUDGET_MS;
@@ -590,7 +590,8 @@ export async function stepRun(req: Request, auth: Authed, runId: string, opts: {
       if (n === 0) throw err;
       return { run: toRunView(await getRun(auth, runId)) };
     }
-    if (!WORKING_STATUSES.includes(latest.status) || clock() - started > MULTI_STEP_MS) return { run: latest };
+    // The page asks again for more; the background worker keeps going for longer (keepGoingMs), within the deadline.
+    if (!WORKING_STATUSES.includes(latest.status) || clock() - started > (opts.keepGoingMs ?? MULTI_STEP_MS)) return { run: latest };
   }
 }
 

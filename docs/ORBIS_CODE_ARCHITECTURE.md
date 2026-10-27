@@ -103,6 +103,18 @@ Bounds (defaults, unchanged by the 2026-10-27 upgrades): 20 steps (+10 per appro
 
 **Long runs.** When the conversation no longer fits the plan's history size, the oldest steps are left out and replaced, in the first message, by a record of what they did: one line per action with whether it worked, and the start of each step's thinking (`digestSteps`, at most 4,000 characters, newest kept). The cut is moved in blocks of 12 messages, so the prompt before the newest messages stays the same for several steps and the provider's prompt cache keeps working.
 
+## 5a. Keep working after the page is closed (2026-10-27)
+
+New tasks keep working when their page is closed (the **Keeps going if closed** switch next to the mode, on by default; stored in the browser and sent as `options.background` when the task starts). Code: `src/lib/code/agent/background.ts`, `src/app/api/code/agent/worker/route.ts`.
+
+1. A step request (and starting a task, and answering it) ends by asking the **worker** (`POST /api/code/agent/worker`, which only accepts the `CRON_SECRET` bearer token, compared in constant time) to look at the run. The worker answers 202 at once and works in `after()`.
+2. It waits 8 seconds. If the page took the next step meanwhile (the run's lock is held, or it was updated in the last few seconds), it leaves the run to the page: the page's request will hand over again when it ends.
+3. Otherwise it opens a session **for the run's owner**: the admin key is used only to look the owner up, generate a magic-link token and redeem it on the server (no email is sent). Everything after that uses a client carrying the owner's own access token, so row-level security and the owner's plan limits and metering apply exactly as on the page. The worker never queries project data with the admin client; it only reads the run's state and owner from the run's id.
+4. It takes steps for up to 230 seconds (the route stops at 300), signs that session out, and, if the run made progress and is still working, hands over to a fresh worker call.
+5. It stops when the run ends or waits for the user (a question, an approval, a limit, the computer). An error is written to the run's activity log, and the worker doesn't retry in a loop.
+
+Requirements: `SUPABASE_SERVICE_ROLE_KEY` and `CRON_SECRET` (both set in production). Notes: each background stretch counts as one sign-in for the owner in Supabase Auth (it updates "last signed in"); generating a magic-link token replaces a sign-in link the owner may have requested by email in the same moment; Supabase limits token verifications per hour (each worker call uses one). Runs started before this change never resume by themselves.
+
 ## 6. Model providers
 
 `AIProvider.toolTurn` is the provider abstraction for tool calling (`src/lib/ai/types.ts`):
@@ -127,7 +139,7 @@ The **report** (`report.ts`) is built by the server when a run ends: files chang
 
 ## 8. Not built yet / known limits
 
-- **No page, no progress.** Runs advance through the page's requests (each may take several steps). A background worker needs a server credential (`SUPABASE_SERVICE_ROLE_KEY`, not configured) and a design that keeps per-user authorisation without the user's session; until then a closed page pauses the run after the current step, and **Continue** resumes it.
+- **Runs started before 2026-10-27, or with "Pauses if closed"** still advance only through the page's requests; a closed page pauses them after the current step, and **Continue** resumes them.
 - **Interactive commands** (waiting for keyboard input) and long-running servers via the agent (use Run).
 - **Installed packages don't persist** between computer sessions (snapshots cost storage).
 - **Editor**: CodeMirror 6 is kept (already integrated, smaller than Monaco, works on phones).

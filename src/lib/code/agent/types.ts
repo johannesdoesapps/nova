@@ -56,6 +56,8 @@ export interface RunOptions {
   siteTemplate?: import("../site-templates").SiteTemplateId;
   /** The agent definition's version when the task started (registry.ts), so outcomes can be compared across versions. Set by the server. */
   agentVersion?: string;
+  /** Keep working after the page is closed (background.ts); set when the run starts. */
+  background?: boolean;
 }
 
 export const DEFAULT_OPTIONS: RunOptions = { modelId: null, approvePlans: true, reviewEdits: false, commands: "safe", readOnly: false };

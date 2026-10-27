@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { kickWorker } from "@/lib/code/agent/background";
 import { z } from "zod";
 import { respondToRun } from "@/lib/code/agent/engine";
-import { DECISIONS } from "@/lib/code/agent/types";
+import { DECISIONS, WORKING_STATUSES } from "@/lib/code/agent/types";
 import { codeContext } from "@/lib/code/server";
 import { errorResponse, parseJsonBody, requireUuid } from "@/lib/http";
 
@@ -16,7 +17,10 @@ export async function POST(req: Request, ctx: RouteContext<"/api/code/agent/[run
     const runId = requireUuid((await ctx.params).runId);
     const input = await parseJsonBody(req, body, 8_000);
     const auth = await codeContext("code-agent", 30);
-    return NextResponse.json({ run: await respondToRun(auth, runId, input) });
+    const run = await respondToRun(auth, runId, input);
+    // Answered and back to work: if this page closes now, the worker carries on (runs started with "keep working").
+    if (run.options.background && WORKING_STATUSES.includes(run.status) && !run.pending) after(() => kickWorker(runId, new URL(req.url).origin));
+    return NextResponse.json({ run });
   } catch (err) {
     return errorResponse(err);
   }

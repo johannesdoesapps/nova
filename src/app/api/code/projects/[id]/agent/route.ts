@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { backgroundAvailable, kickWorker } from "@/lib/code/agent/background";
 import { MAX_ATTACHMENTS } from "@/lib/code/attachments";
 import { linkAttachments, pendingAttachments } from "@/lib/code/attachments-store";
 import { z } from "zod";
@@ -41,6 +42,8 @@ const body = z.object({
       readOnly: z.boolean().optional(),
       /** The website template the project was started from; only for a new website task. */
       siteTemplate: z.enum(SITE_TEMPLATE_IDS).optional(),
+      /** Keep working after the page is closed (only where the server can: see background.ts). */
+      background: z.boolean().optional(),
     })
     .optional(),
   stepLimit: z.number().int().min(3).max(MAX_STEP_LIMIT).optional(),
@@ -93,6 +96,7 @@ export async function POST(req: Request, ctx: Ctx) {
     const o = input.options ?? {};
     // A website task gets the website guidance and the preview tools' instructions for the whole run.
     const siteTemplate = o.siteTemplate && !o.readOnly && !pair ? { siteTemplate: o.siteTemplate } : {};
+    const background = o.background && backgroundAvailable() ? { background: true } : {};
     const web = !!o.siteTemplate || isWebTask(input.request, await getFiles(auth, id), project.template);
     // Every attachment must be the user's, on this project and unused, before anything starts.
     const pending = input.attachments?.length ? await pendingAttachments(auth, id, input.attachments) : [];
@@ -104,7 +108,7 @@ export async function POST(req: Request, ctx: Ctx) {
       // A read-only run never plans, edits or runs anything, so its other switches are fixed.
       options:
         o.readOnly && !pair
-          ? { modelId: o.modelId ?? null, approvePlans: false, reviewEdits: false, commands: "off", readOnly: true, web, attachments, ...continueFrom }
+          ? { modelId: o.modelId ?? null, approvePlans: false, reviewEdits: false, commands: "off", readOnly: true, web, attachments, ...continueFrom, ...background }
           : {
               modelId: o.modelId ?? null,
               approvePlans: o.approvePlans ?? true,
@@ -115,6 +119,7 @@ export async function POST(req: Request, ctx: Ctx) {
               attachments,
               ...continueFrom,
               ...siteTemplate,
+              ...background,
               ...(pair ? { pair, approvePlans: false } : {}),
             },
       // A pair task takes about three steps per review round (revise, test, review) plus planning and the summary.
@@ -128,6 +133,8 @@ export async function POST(req: Request, ctx: Ctx) {
           pending.map((a) => a.id),
         )
       : [];
+    // If the page is closed before it takes the first step, the worker starts the run.
+    if (row.options?.background) after(() => kickWorker(row.id, new URL(req.url).origin));
     return NextResponse.json({ run: toRunView(row), attachments: linked }, { status: 201 });
   } catch (err) {
     return errorResponse(err);
