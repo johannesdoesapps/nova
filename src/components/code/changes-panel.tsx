@@ -267,7 +267,10 @@ function PushForm({ projectId, sourceRepo, onClose }: { projectId: string; sourc
   const [message, setMessage] = useState("Changes from Orbis");
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ compareUrl: string; commitUrl: string; branch: string; withheld?: string[] } | null>(null);
+  const [result, setResult] = useState<{ compareUrl: string; commitUrl: string; branch: string; withheld?: string[]; pullRequest?: { number: number; url: string } | null; pullRequestError?: string | null } | null>(null);
+  const [openPr, setOpenPr] = useState(true);
+  const [prTitle, setPrTitle] = useState("");
+  const [prBody, setPrBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   /** GitHub changed some of the same files: the user may push anyway, replacing them on the new branch. */
   const [clash, setClash] = useState(false);
@@ -277,7 +280,16 @@ function PushForm({ projectId, sourceRepo, onClose }: { projectId: string; sourc
     setBusy(true);
     setError(null);
     try {
-      setResult(await post(`/api/code/projects/${projectId}/github-push`, { repo: repo.trim(), branch: branch.trim(), message: message.trim(), confirm: true, ...(overwrite ? { overwrite: true } : {}) }));
+      setResult(
+        await post(`/api/code/projects/${projectId}/github-push`, {
+          repo: repo.trim(),
+          branch: branch.trim(),
+          message: message.trim(),
+          confirm: true,
+          ...(overwrite ? { overwrite: true } : {}),
+          ...(openPr ? { pullRequest: { title: (prTitle.trim() || message.trim()).slice(0, 250), body: prBody } } : {}),
+        }),
+      );
     } catch (e) {
       setError((e as Error).message);
       if ((e as CodeApiError).code === "conflict") setClash(true);
@@ -307,9 +319,18 @@ function PushForm({ projectId, sourceRepo, onClose }: { projectId: string; sourc
               {result.withheld.length > 5 ? ` and ${result.withheld.length - 5} more` : ""}.
             </p>
           ) : null}
-          <a href={result.compareUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-s-ink underline">
-            Open a pull request <ExternalLink className="h-3 w-3" />
-          </a>
+          {result.pullRequest ? (
+            <a href={result.pullRequest.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-s-ink underline">
+              Opened pull request #{result.pullRequest.number} <ExternalLink className="h-3 w-3" />
+            </a>
+          ) : (
+            <>
+              {result.pullRequestError && <p className="text-[12.5px] text-s-danger">{result.pullRequestError}</p>}
+              <a href={result.compareUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-s-ink underline">
+                Open a pull request <ExternalLink className="h-3 w-3" />
+              </a>
+            </>
+          )}
         </div>
       ) : (
         <form
@@ -332,8 +353,33 @@ function PushForm({ projectId, sourceRepo, onClose }: { projectId: string; sourc
             <input value={message} onChange={(e) => setMessage(e.target.value)} maxLength={500} className={field} />
           </label>
           <label className="flex items-start gap-2 text-[12px] text-s-ink-2">
+            <input type="checkbox" checked={openPr} onChange={(e) => setOpenPr(e.target.checked)} className="mt-0.5" />
+            Also open a pull request into the default branch (nothing is merged)
+          </label>
+          {openPr && (
+            <>
+              <label className="block text-[12px] text-s-ink-2">
+                Pull request title
+                <input value={prTitle} onChange={(e) => setPrTitle(e.target.value)} placeholder={message || "Changes from Orbis"} maxLength={250} className={field} />
+              </label>
+              <label className="block text-[12px] text-s-ink-2">
+                Description
+                <textarea
+                  value={prBody}
+                  onChange={(e) => setPrBody(e.target.value)}
+                  maxLength={20_000}
+                  rows={3}
+                  placeholder="What changed and why (optional)"
+                  className="mt-1 block w-full rounded-lg border border-s-line bg-transparent px-2 py-1.5 text-[13px] outline-none focus:border-s-line-strong"
+                />
+              </label>
+            </>
+          )}
+          <label className="flex items-start gap-2 text-[12px] text-s-ink-2">
             <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-0.5" />
-            Create this branch on GitHub with the project&apos;s files as one commit. Existing branches are never changed.
+            {openPr
+              ? "Create this branch on GitHub with the project's files as one commit, and open a pull request everyone with access to the repository can see. Existing branches are never changed."
+              : "Create this branch on GitHub with the project's files as one commit. Existing branches are never changed."}
           </label>
           {error && <p className="text-[12.5px] text-s-danger">{error}</p>}
           {clash && (

@@ -74,6 +74,7 @@ Every tool call is validated against its schema (`tool-specs.ts`), checked again
 | `run_tests` | `run_tests` | Detected or given test command; parsed result |
 | `inspect_test_results` | `inspect_test_results` | Latest result with failing tests and output tail |
 | `read_web_page` | `read_web_page` | Text of one public page through the safe link reader (no private addresses, size and time limits); checked by Bastion like a web search; injection attempts flagged |
+| `delegate` | `delegate` | Up to 3 questions to read-only helper agents run in parallel (`subagent.ts`): tools `list_files`, `read_files`, `search_code`, `finish`; 6 turns each; their model calls are metered (`enforceLimits` + `recordRunLater`) and their tokens added to the run's usage. Offered to native tool-calling models only |
 | `update_todos` | `update_todos` | The agent's to-do list (whole list each time, one item in progress); logged as a `plan` event with `detail.todos` and shown as a card in the agent panel |
 | — | `lookup_docs`, `github`, `propose_plan`, `ask_user`, `finish` | Web docs (when configured), read-only GitHub, plan, question, end |
 

@@ -23,6 +23,8 @@ export interface ToolContext {
   attachments?: boolean;
   /** Public web pages can be read (read_web_page). */
   pages?: boolean;
+  /** Read-only helper agents can be asked questions (delegate; models with native tool calling). */
+  helpers?: boolean;
 }
 
 export const TODO_STATUSES = ["pending", "in_progress", "done"] as const;
@@ -144,6 +146,12 @@ export const TOOL_DEFS = {
       reason: z.string().trim().min(1).max(500).describe("Why this is worth remembering."),
     }),
     when: (c) => !!c.memory,
+  },
+  delegate: {
+    description:
+      "Hand focused questions about the project to read-only helper agents (up to 3 at once, run in parallel). Each searches and reads files and reports back in a short answer naming files and lines. Use it for broad investigation across many files (\"where is the session checked, and by what?\"), so your own context stays on the change. Helpers can't edit or run anything; read the files yourself before you change them.",
+    schema: z.object({ questions: z.array(z.string().trim().min(5).max(1_000)).min(1).max(3) }),
+    when: (c) => !!c.helpers,
   },
   update_todos: {
     description:

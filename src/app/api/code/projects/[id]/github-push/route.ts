@@ -5,7 +5,7 @@ import { enforce } from "@/lib/bastion/server";
 import { changedSinceBase, pushConflicts, type Shas } from "@/lib/code/github-sync";
 import { codeContext, dbError, getFiles } from "@/lib/code/server";
 import { gitBlobSha, REPO_RE, repoTree } from "@/lib/github/app";
-import { BRANCH_RE, pushBranch } from "@/lib/github/push";
+import { BRANCH_RE, openPullRequest, pushBranch } from "@/lib/github/push";
 import { requireRepoAccess } from "@/lib/github/server";
 import { ApiError, errorResponse, parseJsonBody, requireUuid } from "@/lib/http";
 import { reportError } from "@/lib/observability";
@@ -20,6 +20,8 @@ const body = z.object({
   confirm: z.literal(true),
   /** Push files that were also changed on GitHub anyway (the user saw the list and agreed). */
   overwrite: z.boolean().optional(),
+  /** Also open a pull request from the new branch into the default branch (confirmed in the same dialog). */
+  pullRequest: z.object({ title: z.string().trim().min(1).max(250), body: z.string().max(20_000).default(""), draft: z.boolean().optional() }).optional(),
 });
 
 /**
@@ -80,7 +82,22 @@ export async function POST(req: Request, ctx: RouteContext<"/api/code/projects/[
       const { error } = await auth.supabase.from("connector_actions").insert({ connector_id: "github", action: "push_branch", status, summary: `${input.repo} → ${input.branch}`.slice(0, 500) });
       if (error) reportError(error, { where: "code.push.log" });
     }
-    return NextResponse.json({ ok: true, ...result, withheld });
+    // The pull request is asked for in the same confirmed dialog; if GitHub refuses it, the push still stands.
+    let pullRequest: { number: number; url: string } | null = null;
+    let pullRequestError: string | null = null;
+    if (input.pullRequest && result) {
+      let prStatus: "done" | "failed" = "failed";
+      try {
+        pullRequest = await openPullRequest(token, { repo: input.repo, head: input.branch, base: result.base, ...input.pullRequest });
+        prStatus = "done";
+      } catch (err) {
+        pullRequestError = err instanceof ApiError ? err.message : "GitHub didn't open the pull request.";
+      } finally {
+        const { error } = await auth.supabase.from("connector_actions").insert({ connector_id: "github", action: "open_pull_request", status: prStatus, summary: `${input.repo}: ${input.branch} → ${result.base}`.slice(0, 500) });
+        if (error) reportError(error, { where: "code.push.pr.log" });
+      }
+    }
+    return NextResponse.json({ ok: true, ...result, withheld, pullRequest, pullRequestError });
   } catch (err) {
     return errorResponse(err);
   }

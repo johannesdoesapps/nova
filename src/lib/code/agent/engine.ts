@@ -1,6 +1,7 @@
 import "server-only";
 import { readLink } from "../../links/read";
 import { emitLive, hasWatchers } from "./live";
+import { runHelpers } from "./subagent";
 import { searchBackend, searchWeb } from "../../search/live";
 import { createHash } from "node:crypto";
 import { getProvider, resolveModelChoice, withTimeout } from "@/lib/ai";
@@ -729,8 +730,8 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
 
   const readOnly = !!opts.readOnly;
   const planApproved = !readOnly && (!opts.approvePlans || !!row.plan?.approved);
-  const ctx: ToolContext = { commands: readOnly ? "off" : opts.commands, docs, github, approvePlans: opts.approvePlans, readOnly, memory: true, attachments: attached.texts + attached.images > 0, pages: true };
   const native = usesNativeTools(model);
+  const ctx: ToolContext = { commands: readOnly ? "off" : opts.commands, docs, github, approvePlans: opts.approvePlans, readOnly, memory: true, attachments: attached.texts + attached.images > 0, pages: true, helpers: native };
   const maxOutputTokens = Math.max(limits.maxOutputTokens, AGENT_OUTPUT_TOKENS);
   const replyChars = maxOutputTokens * 3;
   const web = opts.web ?? isWebTask(row.request, [], project.template);
@@ -871,15 +872,55 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
   await updateRun(auth, row.id, { transcript: capTranscript(withAssistant), usage, recent });
 
   const env = realEnv({ auth, run: row, project, docs, github, webSearches, deadline });
+  // Helper agents (delegate): read-only, with the run's model; each call is metered and recorded like the agent's own,
+  // and its tokens count toward the run's budget.
+  const helperUsage: Usage[] = [];
+  if (native) {
+    const readOnlyEnv: AgentEnv = { ...env, emit: undefined };
+    env.delegate = (questions) =>
+      runHelpers(questions, {
+        env: readOnlyEnv,
+        deadline: Math.min(deadline - 20_000, Date.now() + 120_000),
+        turn: async (p) => {
+          const promptChars = p.system.length + JSON.stringify(p.messages).length;
+          await enforceLimits(req, auth, 1, [model], { purpose, inputTokens: Math.ceil(promptChars / 3.5) + 200, maxOutputTokens: p.maxOutputTokens });
+          const t0 = performance.now();
+          try {
+            const r = await getProvider(model.provider).toolTurn!({ ...p, model });
+            helperUsage.push(r.usage);
+            recordRunLater(auth, {
+              model,
+              prompt: `[code helper] ${row.request.slice(0, 300)}`,
+              response: r.text.slice(0, 1000),
+              latencyMs: performance.now() - t0,
+              usage: r.usage,
+              status: "success",
+              purpose,
+              category: "coding",
+              servedModel: r.servedModel,
+              requestedModel: opts.modelId ?? "auto:coding",
+              routingReason: "Helper agent for the coding agent's delegate tool.",
+              tools: r.calls.map((c) => c.name),
+            });
+            return r;
+          } catch (err) {
+            await releaseUsage(auth);
+            throw err;
+          }
+        },
+      });
+  }
   if (reply.thought) await addEvents(auth, row.id, [{ kind: "note", title: clipText(reply.thought, 380) }]);
   const outcome = await runActions(reply, { planApproved, approvePlans: opts.approvePlans, reviewEdits: opts.reviewEdits, commands: ctx.commands, lastTests: row.tests?.last ?? null, readOnly, testsOnly: opts.agent === "qa_tester" }, env);
   record(webSearches.count ? ["web_search"] : []);
+  for (const u of helperUsage) usage = addUsage(usage, model, u, 0, 0);
 
   const tests = outcome.tests.length ? addTests(row.tests, outcome.tests) : row.tests;
   const checks = Object.keys(outcome.checks).length ? addChecks(runChecks(row), outcome.checks) : null;
   const plan = outcome.plan ? outcome.plan : row.plan;
   const patch: RunPatch = {
     ...base,
+    usage,
     active_ms: Number(row.active_ms) + (Date.now() - stepStarted),
     recent,
     tests,

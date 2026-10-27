@@ -79,6 +79,8 @@ export interface AgentEnv {
     setRunCommand(command: string): Promise<void>;
   };
   lookupDocs?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]>;
+  /** Read-only helper agents (subagent.ts), one per question, run in parallel. */
+  delegate?: (questions: string[]) => Promise<{ ok: boolean; text: string; turns: number }[]>;
   /** A public web page's text (through the safe link reader: no private addresses, size and time limits). */
   readPage?: (url: string) => Promise<{ ok: true; url: string; title: string | null; text: string } | { ok: false; reason: string }>;
   /** Files the user attached to the task (text; images are shown to the model with the first message). */
@@ -793,6 +795,19 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
         }
         result(id, tool, true, untrusted(`${page.title ? `${page.title}\n` : ""}${page.url}\n\n${clipText(page.text, MAX_READ_CHARS)}`));
         await log({ kind: "inspect", title: `Read ${page.title ? `“${page.title.slice(0, 120)}”` : new URL(page.url).hostname}`, detail: { url: page.url } });
+        break;
+      }
+      case "delegate": {
+        if (!env.delegate) {
+          result(id, tool, false, "Helpers aren't available here. Search and read the files yourself.");
+          break;
+        }
+        const questions = a.questions as string[];
+        await log({ kind: "inspect", title: `Asked ${questions.length === 1 ? "a helper" : `${questions.length} helpers`}: ${questions.map((q) => q.slice(0, 90)).join(" · ")}`.slice(0, 400), detail: { helpers: questions } });
+        const answers = await env.delegate(questions);
+        const text = answers.map((h, n) => `Helper ${n + 1} (${h.ok ? "answered" : "no answer"}, ${h.turns} turn${h.turns === 1 ? "" : "s"}) — ${questions[n]}\n${h.text}`).join("\n\n");
+        result(id, tool, answers.some((h) => h.ok), untrusted(text));
+        await log({ kind: "inspect", title: `Helper${answers.length === 1 ? "" : "s"} reported back (${answers.filter((h) => h.ok).length} of ${answers.length} answered)`, detail: { helpers: questions, answers: answers.map((h) => h.text.slice(0, 2_000)) } });
         break;
       }
       case "update_todos": {

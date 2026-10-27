@@ -23,6 +23,8 @@ export interface PushFile {
 
 export interface PushResult {
   branch: string;
+  /** The repository's default branch (what the branch was made from). */
+  base: string;
   commitSha: string;
   commitUrl: string;
   compareUrl: string;
@@ -89,8 +91,33 @@ export async function pushBranch(
   if (ref.status === 422) throw new ApiError("conflict", `The branch “${branch}” couldn't be created (it may already exist). Choose another name.`);
   return {
     branch,
+    base,
     commitSha: newCommit.data.sha,
     commitUrl: newCommit.data.html_url,
     compareUrl: `${meta.data.html_url}/compare/${encodeURIComponent(base)}...${branch.split("/").map(encodeURIComponent).join("/")}?expand=1`,
   };
+}
+
+/**
+ * Open a pull request from a branch Orbis just pushed into the repository's default branch. Nothing is merged.
+ * Its own errors: the push itself has already succeeded when this runs.
+ */
+export async function openPullRequest(
+  token: string,
+  input: { repo: string; head: string; base: string; title: string; body: string; draft?: boolean },
+  f: Fetch = fetch,
+): Promise<{ number: number; url: string }> {
+  const res = await f(`${API}/repos/${input.repo}/pulls`, {
+    method: "POST",
+    headers: { accept: "application/vnd.github+json", authorization: `Bearer ${token}`, "x-github-api-version": "2022-11-28", "user-agent": "orbis-ai", "content-type": "application/json" },
+    body: JSON.stringify({ title: input.title, body: input.body, head: input.head, base: input.base, draft: input.draft ?? false }),
+    signal: AbortSignal.timeout(30_000),
+    cache: "no-store",
+  });
+  if (res.status === 401 || res.status === 403 || res.status === 404)
+    throw new ApiError("forbidden", "GitHub didn't let Orbis open the pull request. Orbis's GitHub App needs “Pull requests: Read and write” on this repository (GitHub → Settings → Applications → Orbis → Configure).");
+  if (res.status === 422) throw new ApiError("conflict", "GitHub couldn't open the pull request: one may already exist for this branch, or it has no changes.");
+  if (!res.ok) throw new ApiError("upstream_error", `GitHub didn't open the pull request (${res.status}).`);
+  const pr = (await res.json()) as { number: number; html_url: string };
+  return { number: pr.number, url: pr.html_url };
 }

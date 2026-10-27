@@ -131,6 +131,9 @@ Progress is grouped into plain-English stages built only from the run's events: 
 - **To-do list:** for tasks with three or more steps the agent keeps a to-do list (`update_todos`), shown under the task with what's done and what it's on now.
 - **Web pages:** the agent can read a public web page (`read_web_page`), such as documentation or a changelog; the text is treated as data, and Bastion checks the request.
 - **Keeps going if closed:** new tasks keep working after you close the page (switch next to the mode; on by default). Orbis continues the task as you, with your plan's limits, and stops when it needs you (a question, an approval, a limit). Come back to the project to see where it got to. See ORBIS_CODE_ARCHITECTURE.md §5a.
+- **Slash commands:** type `/` in the task box for shortcuts: `/plan`, `/auto`, `/fix`, `/test`, `/review` and `/explain` (both read only), `/docs`, `/new`, `/help`. They only pick the mode and phrase the task (`src/lib/code/slash.ts`); the mode's approvals still apply.
+- **Helpers (sub-agents):** with Claude and GPT, the agent can hand up to 3 questions at once to read-only helper agents (`delegate`, `src/lib/code/agent/subagent.ts`). Each lists, searches and reads files (secrets withheld) for at most 6 turns and reports back; they can't change anything. Every helper call is metered like the agent's own and counts toward the run's token budget.
+- **Pull requests:** the push dialog can also open a pull request from the new branch into the default branch (title and description; nothing is merged). If GitHub refuses (the Orbis GitHub App needs "Pull requests: Read and write"), the push still stands and the dialog says why.
 - **Long tasks:** when a run's history gets long, older steps are replaced by a short record of what they did (each action and whether it worked), so the agent doesn't lose track, and the prompt cache keeps working.
 
 ## Not yet

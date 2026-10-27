@@ -53,6 +53,7 @@ import { WorkingStatus } from "@/components/studio/generating";
 import { useAnimatedLogo } from "@/components/studio/prefs";
 import { useApp } from "@/components/layout/app-context";
 import { countFirstTask } from "@/lib/first-task";
+import { parseSlash, slashSuggestions } from "@/lib/code/slash";
 import type { SiteTemplateId } from "@/lib/code/site-templates";
 
 /**
@@ -770,7 +771,26 @@ export function AgentPanel({
     return ok;
   };
 
-  const submit = (t: string) => {
+  const submit = (raw: string) => {
+    // Slash commands: pick the mode and phrase the task (src/lib/code/slash.ts).
+    const slash = parseSlash(raw);
+    if (slash?.kind === "error") return setSlashNote(slash.message);
+    if (slash?.kind === "action") {
+      if (slash.action === "help") {
+        setText("/");
+        requestAnimationFrame(() => box.current?.focus());
+      } else if (inProgress) setSlashNote("Stop the current task (or let it finish) before starting a new one.");
+      else {
+        setText("");
+        setRun(null);
+        setEvents([]);
+        lastSeq.current = 0;
+        seenSeqs.current.clear();
+        onRunChange(null);
+      }
+      return;
+    }
+    const t = slash?.kind === "task" ? slash.request : raw;
     if (inProgress) {
       // While the agent works, Enter queues the message for when it finishes.
       queuedFor.current = run!.id;
@@ -780,8 +800,10 @@ export function AgentPanel({
     }
     // The box clears at once; if the task doesn't start, the text comes back.
     setText("");
-    void send(t).then((ok) => !ok && setText((cur) => (cur.trim() ? cur : t)));
+    void send(t, slash?.kind === "task" && slash.mode ? slash.mode : mode).then((ok) => !ok && setText((cur) => (cur.trim() ? cur : raw)));
   };
+  const [slashNote, setSlashNote] = useState<string | null>(null);
+  const suggestions = slashSuggestions(text);
 
   const fill = (task: string) => {
     setText(task);
@@ -1030,17 +1052,52 @@ export function AgentPanel({
               </button>
             </div>
           )}
+          {suggestions.length > 0 && (
+            <ul aria-label="Commands" className="s-card mb-2 max-h-64 overflow-y-auto rounded-2xl p-1.5 text-[13px]">
+              {suggestions.map((c) => (
+                <li key={c.name}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (c.action) submit(`/${c.name}`);
+                      else {
+                        setText(`/${c.name} `);
+                        requestAnimationFrame(() => box.current?.focus());
+                      }
+                    }}
+                    className="flex w-full items-baseline gap-2 rounded-xl px-2.5 py-1.5 text-left hover:bg-s-hover"
+                  >
+                    <span className="shrink-0 font-mono text-s-ink">/{c.name}</span>
+                    {c.arg && <span className="shrink-0 text-[12px] text-s-ink-3">{c.arg}</span>}
+                    <span className="min-w-0 truncate text-[12.5px] text-s-ink-2">{c.hint}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {slashNote && (
+            <p role="status" className="mb-2 flex items-center gap-2 px-1 text-[12.5px] text-s-ink-2">
+              <CircleHelp className="h-3.5 w-3.5 shrink-0 text-s-ink-3" aria-hidden />
+              <span className="min-w-0 flex-1">{slashNote}</span>
+              <button type="button" onClick={() => setSlashNote(null)} aria-label="Dismiss" className="shrink-0 text-s-ink-3 hover:text-s-ink">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </p>
+          )}
           <PromptBar
             id="agent-ask"
             label={run ? "Ask for a follow-up change" : "What would you like to build or fix?"}
             inputRef={box}
             value={text}
-            onChange={setText}
+            onChange={(v) => {
+              setText(v);
+              if (slashNote) setSlashNote(null);
+            }}
             onSubmit={submit}
             sending={starting}
             disabled={!loaded}
             attachments={attachments}
-            placeholder={inProgress ? "Queue a message for when it finishes" : run ? "Ask for a follow-up change" : "Describe what to build or fix"}
+            placeholder={inProgress ? "Queue a message for when it finishes" : run ? "Ask for a follow-up change, or type / for commands" : "Describe what to build or fix, or type / for commands"}
             onStop={working ? () => void stop() : undefined}
             working={busy || starting || working}
             footerLeft={
