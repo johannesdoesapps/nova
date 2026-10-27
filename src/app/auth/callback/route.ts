@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { track } from "@vercel/analytics/server";
 import { LEGAL } from "@/content/legal-meta";
 import { hasAccepted, PENDING_COOKIE, recordAcceptance } from "@/lib/legal";
+import { sendSignupWelcome } from "@/lib/email";
 import { afterSignIn, exchangeFailureCode, oauthErrorCode, safeNext, type LoginMessageCode } from "@/lib/auth-flow";
 import { isSupabaseConfigured } from "@/lib/env";
 import { SIGNED_OUT_COOKIE } from "@/lib/sign-out";
@@ -44,8 +45,11 @@ export async function GET(req: Request) {
     // The flow id names this attempt's PKCE verifier (several tabs can each
     // have one pending); passing it also lets Supabase delete that verifier.
     const flowId = url.searchParams.get("sb_flow_id");
-    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code, flowId ? { flowId } : undefined);
+    const { data: exchanged, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code, flowId ? { flowId } : undefined);
     if (!exchangeError) {
+      // A new account (confirmed email, or first Google/GitHub sign-in) gets its welcome email once, after the redirect.
+      const newUserId = via === "github-link" ? null : exchanged?.user?.id;
+      if (newUserId) after(() => sendSignupWelcome(newUserId));
       const res = NextResponse.redirect(new URL(afterSignIn(next), url.origin));
       res.cookies.set(SIGNED_OUT_COOKIE, "", { path: "/", expires: new Date(0) });
       // Signed up with Google or GitHub after ticking both boxes: record the acceptance now.

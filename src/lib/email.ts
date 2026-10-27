@@ -21,6 +21,7 @@ const site = () => (process.env.NEXT_PUBLIC_SITE_URL ?? "https://tryorbis.app").
 
 export type CustomerEmailKind =
   | "welcome"
+  | "signup_welcome"
   | "payment_failed"
   | "payment_action_required"
   | "usage_week_80"
@@ -34,17 +35,21 @@ export type CustomerEmailKind =
 export interface CustomerEmail {
   subject: string;
   text: string;
+  /** A designed version for mail apps that show HTML; the text is always sent too. */
+  html?: string;
 }
 
 /** The words of each email. Pure, so it can be tested. */
 export function customerEmail(
   kind: CustomerEmailKind,
-  data: { plan?: string; resetsAt?: number | null; graceUntil?: number | null; url?: string | null; amountUsd?: number; units?: number } = {},
+  data: { plan?: string; resetsAt?: number | null; graceUntil?: number | null; url?: string | null; amountUsd?: number; units?: number; name?: string | null } = {},
 ): CustomerEmail {
   const when = (t: number | null | undefined) => (t ? new Date(t).toUTCString().replace(/:\d\d GMT$/, " UTC") : null);
   const usage = `${site()}/usage`;
   const sign = "\n\n— Orbis";
   switch (kind) {
+    case "signup_welcome":
+      return signupWelcome(data.name);
     case "welcome":
       return {
         subject: `You're on Orbis ${data.plan ?? "Pro"}`,
@@ -100,6 +105,104 @@ export function customerEmail(
   }
 }
 
+/** What a new account can do first, and where. Shared by the text and HTML versions of the welcome email. */
+const START_HERE: { title: string; text: string; path: string }[] = [
+  { title: "Chat", text: "Ask, research and write with leading AI models in one place.", path: "/chat" },
+  { title: "Code", text: "Describe a website or app and the coding agent builds it. Publish it to a live address when it's ready.", path: "/code" },
+  { title: "Jarvis", text: "A voice-first assistant that plans and carries out tasks, and with the Desktop Agent can open apps and files on your computer.", path: "/jarvis" },
+  { title: "Agents", text: "Specialists for deep research, code review and security checks.", path: "/agents" },
+];
+
+const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
+/** The welcome email for a new account: plain text plus a simple, table-based HTML version that mail apps render reliably. */
+function signupWelcome(rawName: string | null | undefined): CustomerEmail {
+  // A name is shown only if it looks like a name (no addresses or links someone typed into the sign-up form).
+  const name = rawName?.trim().replace(/\s+/g, " ").slice(0, 40) ?? "";
+  const first = name && !/[@/:<>]|www\./i.test(name) ? name.split(" ")[0]! : "";
+  const hi = first ? `Hi ${first},` : "Hi,";
+  const home = `${site()}/home`;
+  const usage = `${site()}/usage`;
+  const text = [
+    hi,
+    "",
+    "Welcome to Orbis. Your account is ready.",
+    "",
+    "Where to start:",
+    ...START_HERE.map((x) => `- ${x.title}: ${x.text} ${site()}${x.path}`),
+    "",
+    `Your free plan includes a weekly allowance. See what's left at any time: ${usage}`,
+    "",
+    `Open Orbis: ${home}`,
+    "",
+    "— Orbis",
+    "",
+    "You're getting this one-time email because you created an Orbis account.",
+  ].join("\n");
+
+  const ink = "#141416";
+  const muted = "#56555c";
+  const faint = "#85848b";
+  const accent = "#5b54c4";
+  const font = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
+  const rows = START_HERE.map(
+    (x) => `<tr><td style="padding:14px 0;border-top:1px solid #e8e7e3;">
+      <a href="${site()}${x.path}" style="font:600 16px/1.4 ${font};color:${ink};text-decoration:none;">${x.title} <span style="color:${accent};">&rarr;</span></a>
+      <div style="font:400 14px/1.55 ${font};color:${muted};padding-top:3px;">${escapeHtml(x.text)}</div>
+    </td></tr>`,
+  ).join("");
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light dark"><title>Welcome to Orbis</title></head>
+<body style="margin:0;padding:0;background:#f2f1ee;">
+<div style="display:none;max-height:0;overflow:hidden;">Your account is ready. Here's where to start.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f1ee;"><tr><td align="center" style="padding:32px 16px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:18px;border:1px solid #e3e2de;">
+    <tr><td style="padding:32px 32px 8px;">
+      <div style="font:600 13px/1 ${font};letter-spacing:0.14em;text-transform:uppercase;color:${accent};">Orbis</div>
+      <h1 style="margin:18px 0 0;font:600 26px/1.25 ${font};color:${ink};">${first ? `Welcome to Orbis, ${escapeHtml(first)}` : "Welcome to Orbis"}</h1>
+      <p style="margin:12px 0 0;font:400 16px/1.6 ${font};color:${muted};">Your account is ready. Here's where to start.</p>
+    </td></tr>
+    <tr><td style="padding:12px 32px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table></td></tr>
+    <tr><td style="padding:18px 32px 0;">
+      <p style="margin:0;font:400 14px/1.6 ${font};color:${muted};">Your free plan includes a weekly allowance. <a href="${usage}" style="color:${accent};">See what's left</a> at any time.</p>
+    </td></tr>
+    <tr><td style="padding:24px 32px 32px;">
+      <a href="${home}" style="display:inline-block;background:${ink};color:#ffffff;font:600 15px/1 ${font};text-decoration:none;padding:14px 22px;border-radius:12px;">Open Orbis</a>
+    </td></tr>
+  </table>
+  <p style="max-width:560px;margin:16px auto 0;font:400 12px/1.5 ${font};color:${faint};">You're getting this one-time email because you created an Orbis account.</p>
+</td></tr></table>
+</body></html>`;
+  return { subject: "Welcome to Orbis", text, html };
+}
+
+/** New accounts only: one created in the last week counts as new, so older accounts signing in never get a welcome. */
+export const WELCOME_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Welcome a new account, once ever. Called when sign-up completes: after the email-confirmation or Google/GitHub
+ * callback, and from the sign-up form when no confirmation is needed. Never throws.
+ */
+export async function sendSignupWelcome(userId: string, now = Date.now()): Promise<boolean> {
+  try {
+    if (!emailConfigured()) return false;
+    const db = serviceSupabase();
+    if (!db) return false;
+    const { data: u } = await db.auth.admin.getUserById(userId);
+    const user = u?.user;
+    if (!user?.email || !user.created_at || now - Date.parse(user.created_at) > WELCOME_WINDOW_MS) return false;
+    if (!(await claimNotification(userId, "signup_welcome", "once"))) return false;
+    const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
+    const name = [meta.display_name, meta.full_name, meta.name].find((v): v is string => typeof v === "string" && v.trim().length > 0) ?? null;
+    const { subject, text, html } = customerEmail("signup_welcome", { name });
+    await sendEmailTo(user.email, subject, text, html);
+    await db.from("notifications").update({ sent: true }).eq("user_id", userId).eq("kind", "signup_welcome").eq("period_key", "once");
+    return true;
+  } catch (err) {
+    console.error("[orbis] welcome email failed", safeMessage(err));
+    return false;
+  }
+}
+
 /** Record a notification once; true only for the call that recorded it (and so should send it). */
 export async function claimNotification(userId: string | null, kind: string, periodKey: string, channel: "email" | "owner" = "email"): Promise<boolean> {
   const db = serviceSupabase();
@@ -123,8 +226,8 @@ export async function sendCustomerEmail(userId: string, kind: CustomerEmailKind,
     const { data: u } = await db.auth.admin.getUserById(userId);
     const to = u?.user?.email;
     if (!to) return false;
-    const { subject, text } = customerEmail(kind, data);
-    await sendEmailTo(to, subject, text);
+    const { subject, text, html } = customerEmail(kind, data);
+    await sendEmailTo(to, subject, text, html);
     await db.from("notifications").update({ sent: true }).eq("user_id", userId).eq("kind", kind).eq("period_key", periodKey.slice(0, 80));
     return true;
   } catch (err) {
@@ -133,12 +236,12 @@ export async function sendCustomerEmail(userId: string, kind: CustomerEmailKind,
   }
 }
 
-export async function sendEmailTo(to: string, subject: string, text: string): Promise<void> {
+export async function sendEmailTo(to: string, subject: string, text: string, html?: string): Promise<void> {
   const from = process.env.EMAIL_FROM?.trim() || process.env.ALERT_FROM?.trim() || "Orbis <onboarding@resend.dev>";
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY!.trim()}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to: [to], subject, text }),
+    body: JSON.stringify({ from, to: [to], subject, text, ...(html ? { html } : {}) }),
     signal: AbortSignal.timeout(8_000),
   });
   if (!res.ok) throw new Error(`Resend answered ${res.status}`);

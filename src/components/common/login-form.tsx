@@ -162,6 +162,8 @@ export function LoginForm({
         if (data.session) {
           // Email confirmation is off: the new account is signed in straight away.
           count("signup_completed", { method: "email", confirm: "none" });
+          // Its welcome email (sent once, by the server; failures don't affect signing in).
+          void fetch("/api/account/welcome", { method: "POST" }).catch(() => {});
           router.replace(next);
           router.refresh();
         } else if (data.user && data.user.identities?.length === 0) {
