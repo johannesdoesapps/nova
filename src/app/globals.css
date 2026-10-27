@@ -107,6 +107,84 @@ body {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+
+  /*
+   * Dropdown lists. Selects often have a transparent background and inherit the page's text colour, so the list
+   * could open as light text on the system's white menu (macOS draws native menus in the OS appearance, not the
+   * page's). Options get the theme's own colours, and browsers that support a styleable picker draw the list as
+   * an Orbis menu in both themes.
+   */
+  select option,
+  select optgroup {
+    background-color: var(--bg-elev);
+    color: var(--fg);
+  }
+  select option:disabled {
+    color: var(--fg-faint);
+  }
+}
+
+@supports (appearance: base-select) {
+  @layer base {
+    select:not([multiple]):not([size]),
+    select:not([multiple]):not([size])::picker(select) {
+      appearance: base-select;
+    }
+    select:not([multiple]):not([size]) {
+      align-items: center;
+      gap: 6px;
+    }
+    select:not([multiple]):not([size])::picker-icon {
+      color: var(--fg-muted);
+      font-size: 11px;
+      transition: rotate 0.15s ease;
+    }
+    select:not([multiple]):not([size]):open::picker-icon {
+      rotate: 180deg;
+    }
+    select::picker(select) {
+      margin-block: 6px;
+      padding: 5px;
+      min-width: anchor-size(width);
+      max-height: min(320px, 60dvh);
+      border: 1px solid var(--border-strong);
+      border-radius: 14px;
+      background: var(--bg-elev);
+      color: var(--fg);
+      box-shadow: 0 18px 48px -14px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.18);
+    }
+    select:not([multiple]):not([size]) option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 7px 10px;
+      border-radius: 9px;
+      font-size: 13.5px;
+      line-height: 1.3;
+      cursor: pointer;
+      background: transparent;
+      color: var(--fg);
+    }
+    select:not([multiple]):not([size]) option:hover,
+    select:not([multiple]):not([size]) option:focus-visible {
+      background: color-mix(in srgb, var(--fg) 10%, transparent);
+      outline: none;
+    }
+    select:not([multiple]):not([size]) option:checked {
+      background: color-mix(in srgb, var(--accent-2) 20%, transparent);
+      font-weight: 550;
+    }
+    select:not([multiple]):not([size]) option::checkmark {
+      order: 1;
+      margin-left: auto;
+      color: var(--accent-2);
+    }
+    select:not([multiple]):not([size]) option:disabled {
+      color: var(--fg-faint);
+      cursor: default;
+    }
+  }
 }
 
 /* Soft overhead light behind standalone pages (sign-in, share, 404) */
