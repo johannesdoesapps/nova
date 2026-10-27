@@ -101,7 +101,7 @@ class SharedSite implements SiteHost {
 
   private project() {
     return (this.shared ??= this.host.getProject(this.sharedName).then((p) => {
-      if (!p) throw new ApiError("not_configured", `Publishing is set to use the Vercel project "${this.sharedName}" (ORBIS_PUBLISH_VERCEL_PROJECT), but the hosting account has no such project. Create it, or correct the setting.`);
+      if (!p) throw new ApiError("not_configured", `Publishing is set to use the Vercel project "${this.sharedName}" (ORBIS_PUBLISH_VERCEL_PROJECT), but Orbis's publishing token can't see it. Either the project doesn't exist in the team, or ORBIS_PUBLISH_VERCEL_TOKEN is limited to other projects: replace it with a token scoped to the whole team.`);
       return p;
     }));
   }

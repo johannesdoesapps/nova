@@ -150,7 +150,7 @@ export class VercelHost {
         console.warn(`[publish] Vercel refused the publishing token: HTTP ${res.status}${why ? ` (${why})` : ""}`);
         throw new ApiError(
           "not_configured",
-          `The hosting account refused Orbis's publishing token${why ? ` (Vercel: ${why})` : ""}. Check that ORBIS_PUBLISH_VERCEL_TOKEN is a valid token with access to the ${this.cfg.teamId ? "team in ORBIS_PUBLISH_VERCEL_TEAM_ID" : "personal account"}, then replace it if needed.`,
+          `The hosting account refused Orbis's publishing token${why ? ` (Vercel: ${why})` : ""}. Check that ORBIS_PUBLISH_VERCEL_TOKEN is a valid token scoped to the whole ${this.cfg.teamId ? "team in ORBIS_PUBLISH_VERCEL_TEAM_ID" : "personal account"} (a token limited to certain projects can't create or see others), then replace it if needed.`,
         );
       }
       if (res.status === 409 && opts.refused) throw opts.refused([body?.error?.code, msg].filter(Boolean).join(": "));
