@@ -99,6 +99,47 @@ export function missionSummary(m: Mission): string {
   return `${head}${where}${before}`;
 }
 
+/** Kinds of result that tell Jarvis something it can use (what was found or read), not just that a step ran. */
+const INFORMATIVE: ReadonlySet<StepDetails["kind"]> = new Set(["files", "info", "text"]);
+
+/** Whether to give Jarvis the mission's results so it can answer from them or take the next step. */
+export function wantsFollowUp(m: Mission): boolean {
+  return (m.status === "completed" || m.status === "failed") && m.steps.some((s) => s.status === "completed" && !!s.result?.details && INFORMATIVE.has(s.result.details.kind));
+}
+
+const NOT_RUN: Record<StepStatus, string> = {
+  planned: "Not run.",
+  waiting_approval: "Not run.",
+  running: "Didn't finish.",
+  completed: "Done.",
+  failed: "Failed.",
+  denied: "Not allowed by the user's settings.",
+  rejected: "The user declined this step.",
+  cancelled: "Stopped before it ran.",
+};
+
+/** A step's result as Jarvis reads it in the next round: the summary, then what it found, clipped. */
+export function stepFeedback(step: Step, max = 3500): { ok: boolean; text: string } {
+  const r = step.result;
+  const ok = step.status === "completed" && (r?.outcome === "success" || r?.outcome === "partial");
+  if (!r) return { ok: false, text: step.status === "denied" && step.decision ? `Not allowed: ${step.decision.reason}` : NOT_RUN[step.status] };
+  const d = r.details;
+  const extra =
+    d?.kind === "files"
+      ? [d.folder && `Folder: ${d.folder}`, ...d.items.map((i) => `${i.kind === "folder" ? "[folder] " : ""}${i.path ?? i.name}${i.size !== undefined ? ` (${i.size} bytes)` : ""}`), d.truncated && "(list truncated)"]
+      : d?.kind === "info"
+        ? d.rows.map((x) => `${x.label}: ${x.value}`)
+        : d?.kind === "text"
+          ? [d.text]
+          : d?.kind === "moves"
+            ? [`${d.moves.length} moved${d.skipped?.length ? `, ${d.skipped.length} skipped` : ""}.`]
+            : d?.kind === "link"
+              ? [`${d.label}: ${d.href}`]
+              : [];
+  const text = [r.summary, ...extra.filter(Boolean)].join("\n");
+  return { ok, text: text.length > max ? `${text.slice(0, max)}…` : text };
+}
+
 export interface Prepared {
   preview: ApprovalPreview;
   /** How many changes the step would make (batch tools). */

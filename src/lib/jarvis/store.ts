@@ -1,9 +1,10 @@
 import { isAutonomy, type Autonomy } from "./permissions";
 import { JARVIS_MODES, type JarvisMode } from "./planner";
 import type { Mission } from "./mission";
+import { BUILTIN_SKILLS, MAX_USER_SKILLS, skillInput, type SkillInput } from "./skills";
 
 /**
- * Jarvis Mode's settings and mission history, kept in this browser only (nothing about your computer is sent to
+ * Jarvis Mode's settings, skills and mission history, kept in this browser only (nothing about your computer is sent to
  * Orbis's database). History keeps the request, the steps and their results (paths and summaries, never file
  * contents, clipboard text or screenshots) and can be cleared at any time.
  */
@@ -45,6 +46,7 @@ export const DEFAULT_SETTINGS: JarvisSettings = { autonomy: 3, mode: "jarvis", v
 const SETTINGS_KEY = "orbis:jarvis:settings";
 const HISTORY_KEY = "orbis:jarvis:missions";
 const HALT_KEY = "orbis:jarvis:halted";
+const SKILLS_KEY = "orbis:jarvis:skills";
 const MAX_HISTORY = 50;
 
 function read(key: string): unknown {
@@ -103,6 +105,22 @@ export function loadHistory(keepDays: number): Mission[] {
 }
 export const saveHistory = (list: Mission[], keepDays: number) => write(HISTORY_KEY, trimHistory(list, keepDays));
 export const clearHistory = () => write(HISTORY_KEY, null);
+
+/** The user's own skills: valid ones only, never shadowing a built-in, at most MAX_USER_SKILLS. */
+export function parseSkills(v: unknown): SkillInput[] {
+  if (!Array.isArray(v)) return [];
+  const out: SkillInput[] = [];
+  const ids = new Set(BUILTIN_SKILLS.map((s) => s.id));
+  for (const raw of v) {
+    const p = skillInput.safeParse(raw);
+    if (!p.success || ids.has(p.data.id) || out.length >= MAX_USER_SKILLS) continue;
+    ids.add(p.data.id);
+    out.push(p.data);
+  }
+  return out;
+}
+export const loadSkills = () => parseSkills(read(SKILLS_KEY));
+export const saveSkills = (list: SkillInput[]) => write(SKILLS_KEY, list.length ? list : null);
 
 /** The emergency stop survives reloads: automation stays off until the user resumes it. */
 export const loadHalted = () => read(HALT_KEY) === true;

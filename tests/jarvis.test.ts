@@ -13,7 +13,9 @@ describe("tools", () => {
   });
 
   it("offers desktop tools only while the Desktop Agent is connected", () => {
-    expect(offeredTools(false).every((n) => TOOLS[n].runner === "browser")).toBe(true);
+    expect(offeredTools(false).every((n) => TOOLS[n].runner !== "desktop")).toBe(true);
+    expect(offeredTools(false)).toContain("web_search");
+    expect(offeredTools(false, ["web_search"])).not.toContain("web_search");
     expect(offeredTools(true)).toContain("organize_folder");
     expect(toolSpecs(offeredTools(true)).every((s) => s.parameters.type === "object" && !("$schema" in s.parameters))).toBe(true);
   });

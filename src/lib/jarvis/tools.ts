@@ -9,8 +9,11 @@ import { z } from "zod";
  * There is deliberately no tool that deletes files, runs shell commands, sends messages or buys anything.
  */
 
-/** Where a tool runs: in this browser tab, or on the user's computer through the Desktop Agent. */
-export type ToolRunner = "browser" | "desktop";
+/**
+ * Where a tool runs: in this browser tab, on the user's computer through the Desktop Agent, or on the Orbis server
+ * during the turn itself (looking things up: Jarvis sees the result straight away and carries on).
+ */
+export type ToolRunner = "browser" | "desktop" | "server";
 
 /**
  * How much a tool can affect: read (looks at something already allowed), private (reads the clipboard or the
@@ -193,6 +196,56 @@ const defs = {
     args: z.object({}),
     describe: () => "Undo the last file change",
   },
+  web_search: {
+    title: "Search the web",
+    description:
+      "Search the web and get the top sources with short excerpts; you see the results straight away. Use for current facts, news, prices, opening hours and anything that may have changed. For a thorough written report with many sources, use research instead.",
+    runner: "server",
+    risk: "read",
+    args: z.object({ query: z.string().trim().min(2).max(300) }),
+    describe: (a) => `Search the web for “${str(a.query).slice(0, 120)}”`,
+  },
+  read_web_page: {
+    title: "Read a web page",
+    description: "Read the text of a public web page (an article, documentation, a product page); you see it straight away. Not for pages behind a login.",
+    runner: "server",
+    risk: "read",
+    args: z.object({ url: z.url({ protocol: /^https?$/ }).max(2000) }),
+    describe: (a) => `Read ${str(a.url).slice(0, 120)}`,
+  },
+  calculate: {
+    title: "Calculate",
+    description:
+      "Exact arithmetic; you see the result straight away. Operators + - * / ^ % (remainder) and parentheses; functions sqrt, abs, round(x, digits), floor, ceil, min, max, log, ln, exp, sin, cos, tan; constants pi, e. Use it instead of doing sums yourself.",
+    runner: "server",
+    risk: "read",
+    args: z.object({ expression: z.string().trim().min(1).max(300) }),
+    describe: (a) => `Calculate ${str(a.expression).slice(0, 120)}`,
+  },
+  get_time: {
+    title: "Check the time",
+    description: "The current date and time in the user's time zone, or in a given IANA time zone such as Asia/Tokyo or America/New_York.",
+    runner: "server",
+    risk: "read",
+    args: z.object({ time_zone: z.string().trim().max(64).regex(/^[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+){0,2}$/, "Use an IANA time zone, e.g. Europe/Paris.").optional() }),
+    describe: (a) => (a.time_zone ? `Check the time in ${str(a.time_zone)}` : "Check the time"),
+  },
+  recall_memories: {
+    title: "Recall memories",
+    description: "Look up what the user asked Orbis to remember (their Orbis memory), optionally about a topic.",
+    runner: "server",
+    risk: "read",
+    args: z.object({ topic: z.string().trim().max(200).optional() }),
+    describe: (a) => (a.topic ? `Recall what you've told Orbis about ${str(a.topic).slice(0, 80)}` : "Recall what you've told Orbis to remember"),
+  },
+  use_skill: {
+    title: "Use a skill",
+    description: "Load the step-by-step instructions of one of the skills listed in your instructions, before doing a task it covers. Pass its id.",
+    runner: "server",
+    risk: "read",
+    args: z.object({ name: z.string().trim().min(2).max(60) }),
+    describe: (a) => `Use the “${str(a.name)}” skill`,
+  },
   system_info: {
     title: "Check the computer",
     description: "Report the computer's operating system, memory, free disk space and battery (where available).",
@@ -225,10 +278,15 @@ export function checkProposal(name: unknown, args: unknown, offered: readonly Ja
   return { ok: true, tool: name, args: parsed.data };
 }
 
-/** The tools offered to the model: browser tools always, desktop tools only while the Desktop Agent is connected. */
-export function offeredTools(desktopConnected: boolean): JarvisToolName[] {
-  return TOOL_NAMES.filter((n) => TOOLS[n].runner === "browser" || desktopConnected);
+/**
+ * The tools offered to the model: browser and server tools always (minus any this deployment or user can't use),
+ * desktop tools only while the Desktop Agent is connected.
+ */
+export function offeredTools(desktopConnected: boolean, unavailable: readonly JarvisToolName[] = []): JarvisToolName[] {
+  return TOOL_NAMES.filter((n) => (TOOLS[n].runner !== "desktop" || desktopConnected) && !unavailable.includes(n));
 }
+
+export const isServerTool = (name: JarvisToolName) => TOOLS[name].runner === "server";
 
 /** JSON Schemas for providers with native tool calling. */
 export function toolSpecs(names: readonly JarvisToolName[]): { name: string; description: string; parameters: Record<string, unknown> }[] {

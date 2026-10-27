@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { Check, CircleAlert, CircleDashed, CircleSlash, CircleX, Download, ExternalLink, Hourglass, Loader2, Pause, Play, Square, Trash2, Undo2 } from "lucide-react";
+import { Check, CircleAlert, CircleDashed, CircleSlash, CircleX, Download, ExternalLink, Hourglass, Loader2, Pause, Pencil, Play, Plus, Square, Trash2, Undo2 } from "lucide-react";
 import { AUTONOMY_LEVELS, type Autonomy } from "@/lib/jarvis/permissions";
 import { JARVIS_MODES, type JarvisMode } from "@/lib/jarvis/planner";
-import { TOOLS } from "@/lib/jarvis/tools";
+import { BUILTIN_SKILLS, MAX_USER_SKILLS, skillId, skillInput, type SkillInput } from "@/lib/jarvis/skills";
+import { TOOL_NAMES, TOOLS, type RiskClass, type ToolRunner } from "@/lib/jarvis/tools";
 import type { Mission, Step, StepResult } from "@/lib/jarvis/mission";
 import type { AgentState } from "@/lib/jarvis/desktop-client";
 import { DEFAULT_SHORTCUT, shortcutConflict, shortcutLabel, VOICE_PROFILES, type JarvisSettings, type Shortcut } from "@/lib/jarvis/store";
@@ -508,6 +509,220 @@ export function HistoryPanel({ history, onClear }: { history: Mission[]; onClear
           ))}
         </ul>
       )}
+    </Panel>
+  );
+}
+
+const RUNNER_LABEL: Record<ToolRunner, { title: string; note: string }> = {
+  server: { title: "Looked up by Orbis", note: "Run during the reply; Jarvis sees the result and carries on." },
+  browser: { title: "In this browser", note: "Run after the reply, under your autonomy setting." },
+  desktop: { title: "On your computer", note: "Through the Desktop Agent, only in folders you allow." },
+};
+const RISK_LABEL: Record<RiskClass, string> = {
+  read: "looks only",
+  private: "reads private content",
+  act: "opens something",
+  write: "changes files, undoable",
+  spend: "uses your allowance",
+};
+
+function SkillEditor({ initial, taken, onSave, onDelete, onClose }: { initial: SkillInput | null; taken: string[]; onSave: (s: SkillInput) => void; onDelete?: () => void; onClose: () => void }) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [instructions, setInstructions] = useState(initial?.instructions ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const field = "mt-1 w-full rounded-xl border border-s-line bg-transparent px-2.5 py-2 text-[13px] text-s-ink placeholder:text-s-ink-3 focus:border-s-line-strong focus:outline-none";
+  return (
+    <form
+      className="mt-3 space-y-2.5 rounded-xl border border-s-line-strong p-3"
+      aria-label={initial ? `Edit ${initial.name}` : "New skill"}
+      onSubmit={(e) => {
+        e.preventDefault();
+        const p = skillInput.safeParse({ id: initial?.id ?? skillId(name, taken), name, description, instructions });
+        if (!p.success) return setError(p.error.issues[0]?.message ?? "Check the fields.");
+        onSave(p.data);
+      }}
+    >
+      <label className="block text-[13px] text-s-ink">
+        Name
+        <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} placeholder="Weekly report" className={field} autoFocus />
+      </label>
+      <label className="block text-[13px] text-s-ink">
+        When to use it
+        <input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={200} placeholder="When I ask for my weekly report." className={field} />
+      </label>
+      <label className="block text-[13px] text-s-ink">
+        Steps for Jarvis
+        <textarea
+          value={instructions}
+          onChange={(e) => setInstructions(e.target.value)}
+          maxLength={2000}
+          rows={5}
+          placeholder={"1. Search the web for this week's news about my industry.\n2. Pick the three most important items.\n3. Summarise each in one sentence, with the source."}
+          className={cn(field, "resize-y")}
+        />
+        <span className="mt-0.5 block text-[12px] text-s-ink-3">A skill only shapes how Jarvis uses its tools: it can&apos;t add tools or skip your approvals.</span>
+      </label>
+      {error && (
+        <p role="alert" className="text-[12.5px] text-s-danger">
+          {error}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button type="submit" className={cn(btn, "border-transparent bg-s-ink text-s-bg hover:text-s-bg hover:opacity-90")}>
+          Save skill
+        </button>
+        <button type="button" className={btn} onClick={onClose}>
+          Cancel
+        </button>
+        {onDelete && (
+          <button type="button" className={cn(btn, "ml-auto text-s-danger hover:text-s-danger")} onClick={onDelete}>
+            <Trash2 /> Delete
+          </button>
+        )}
+      </div>
+    </form>
+  );
+}
+
+/** Skills Jarvis can follow (built in and the user's own) and the tools it can call, grouped by where they run. */
+export function SkillsPanel({
+  skills,
+  connected,
+  picked,
+  onPick,
+  onChange,
+}: {
+  skills: SkillInput[];
+  connected: boolean;
+  picked: string | null;
+  onPick: (id: string | null) => void;
+  onChange: (skills: SkillInput[]) => void;
+}) {
+  const [editing, setEditing] = useState<SkillInput | "new" | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const row = (s: { id: string; name: string; description: string; desktop?: boolean }, mine: boolean) => {
+    const off = !!s.desktop && !connected;
+    return (
+      <li key={s.id} className="flex items-start gap-2 py-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] text-s-ink">
+            {s.name}
+            {mine && <span className="ml-1.5 text-[11.5px] text-s-ink-3">yours</span>}
+          </p>
+          <p className="text-[12px] text-s-ink-3">
+            {off ? "Needs the Desktop Agent. " : ""}
+            {s.description}
+          </p>
+        </div>
+        {mine && (
+          <button
+            type="button"
+            aria-label={`Edit ${s.name}`}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-s-ink-3 hover:bg-s-hover hover:text-s-ink"
+            onClick={() => {
+              setConfirmDelete(false);
+              setEditing(skills.find((x) => x.id === s.id) ?? null);
+            }}
+          >
+            <Pencil className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={off}
+          aria-pressed={picked === s.id}
+          title={off ? "Connect the Desktop Agent first" : `Use “${s.name}” for your next request`}
+          className={cn(btn, "shrink-0", picked === s.id && "border-transparent bg-s-ink text-s-bg hover:text-s-bg")}
+          onClick={() => onPick(picked === s.id ? null : s.id)}
+        >
+          {picked === s.id ? "Chosen" : "Use"}
+        </button>
+      </li>
+    );
+  };
+  const editingSkill = editing && editing !== "new" ? editing : null;
+  return (
+    <Panel
+      title="Skills & tools"
+      id="jarvis-skills"
+      actions={
+        <button
+          type="button"
+          className={btn}
+          disabled={skills.length >= MAX_USER_SKILLS}
+          title={skills.length >= MAX_USER_SKILLS ? `Up to ${MAX_USER_SKILLS} skills of your own` : undefined}
+          onClick={() => {
+            setConfirmDelete(false);
+            setEditing("new");
+          }}
+        >
+          <Plus /> New skill
+        </button>
+      }
+    >
+      <p className="text-[12.5px] text-s-ink-3">Jarvis picks a skill by itself when your request matches one. Choose one to use it for your next request.</p>
+      {editing && (
+        <SkillEditor
+          key={editingSkill?.id ?? "new"}
+          initial={editingSkill}
+          taken={skills.map((s) => s.id)}
+          onClose={() => {
+            setEditing(null);
+            setConfirmDelete(false);
+          }}
+          onSave={(s) => {
+            onChange(editingSkill ? skills.map((x) => (x.id === s.id ? s : x)) : [...skills, s]);
+            setEditing(null);
+          }}
+          onDelete={
+            editingSkill
+              ? () => {
+                  if (!confirmDelete) return setConfirmDelete(true);
+                  onChange(skills.filter((x) => x.id !== editingSkill.id));
+                  if (picked === editingSkill.id) onPick(null);
+                  setEditing(null);
+                  setConfirmDelete(false);
+                }
+              : undefined
+          }
+        />
+      )}
+      {confirmDelete && editingSkill && (
+        <p role="alert" className="mt-1.5 text-[12px] text-s-danger">
+          Press Delete again to remove “{editingSkill.name}”.
+        </p>
+      )}
+      {skills.length > 0 && (
+        <>
+          <h3 className="mt-3 text-[12px] font-medium text-s-ink-2">Your skills</h3>
+          <ul className="divide-y divide-s-line">{skills.map((s) => row(s, true))}</ul>
+        </>
+      )}
+      <h3 className="mt-3 text-[12px] font-medium text-s-ink-2">Built in</h3>
+      <ul className="divide-y divide-s-line">{BUILTIN_SKILLS.map((s) => row(s, false))}</ul>
+      <p className="mt-1 text-[12px] text-s-ink-3">Your skills are kept in this browser and sent with each request.</p>
+
+      <details className="mt-3 rounded-xl border border-s-line px-3 py-2">
+        <summary className="cursor-pointer text-[13px] text-s-ink">Tools Jarvis can use ({TOOL_NAMES.length})</summary>
+        {(["server", "browser", "desktop"] as const).map((runner) => (
+          <div key={runner} className="mt-2.5">
+            <p className="text-[12.5px] font-medium text-s-ink-2">
+              {RUNNER_LABEL[runner].title}
+              {runner === "desktop" && !connected && <span className="font-normal text-s-ink-3"> · not connected</span>}
+            </p>
+            <p className="text-[12px] text-s-ink-3">{RUNNER_LABEL[runner].note}</p>
+            <ul className="mt-1 space-y-0.5 text-[12.5px]">
+              {TOOL_NAMES.filter((n) => TOOLS[n].runner === runner).map((n) => (
+                <li key={n} className="flex justify-between gap-3">
+                  <span className="text-s-ink">{TOOLS[n].title}</span>
+                  <span className="shrink-0 text-s-ink-3">{RISK_LABEL[TOOLS[n].risk]}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </details>
     </Panel>
   );
 }

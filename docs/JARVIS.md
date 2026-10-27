@@ -44,10 +44,12 @@ Browser (/jarvis)                                Orbis server                   
 
 | Part | Where | What it does |
 |---|---|---|
-| Tool list | `src/lib/jarvis/tools.ts` | Every tool Jarvis can use. Each has typed arguments (zod), says where it runs (browser or desktop) and has a risk class (read, private, act, write or spend). There is no tool for deleting, running commands, sending messages or buying. |
+| Tool list | `src/lib/jarvis/tools.ts` | Every tool Jarvis can use. Each has typed arguments (zod), says where it runs (Orbis server, browser or desktop) and has a risk class (read, private, act, write or spend). There is no tool for deleting, running commands, sending messages or buying. |
 | Permission rules | `src/lib/jarvis/permissions.ts` | Four autonomy levels (Observe, Assist, Supervised, Trusted). Some rules apply at every level: emergency stop, desktop tools need the agent, and batches need approval. |
 | Missions | `src/lib/jarvis/mission.ts` | Runs steps one at a time: approvals, pause/resume, stop, timeouts, and retrying failed reads only. Results are recorded honestly (see the next table). The final report is built from the results, not from the model. |
-| Planner | `src/lib/jarvis/planner.ts`, `src/app/api/jarvis/turn` | The model proposes tool calls (native tool calling, or a JSON fallback). The server keeps only known tools that were offered and have valid arguments. Usage is metered like a chat message (`purpose: "jarvis"`). |
+| Planner and tool loop | `src/lib/jarvis/planner.ts`, `src/app/api/jarvis/turn` | The model proposes tool calls (native tool calling, or a JSON fallback). The server keeps only known tools that were offered and have valid arguments, runs the server tools itself and gives the model their results (see §3a). Usage is metered like a chat message (`purpose: "jarvis"`). |
+| Server tools | `src/lib/jarvis/server-tools.ts`, `src/lib/jarvis/calc.ts` | Web search, reading a page, the calculator, the time, Orbis memory and loading a skill. They only look things up. |
+| Skills | `src/lib/jarvis/skills.ts` | Built-in and user-written step-by-step instructions for kinds of task (§3a). |
 | Screen question | `src/app/api/jarvis/look` | Answers a question about one screenshot that you chose to share. The picture isn't stored. |
 | Executors | `src/lib/jarvis/executors.ts` | Carries out each tool in the browser, or through the agent. |
 | Desktop client | `src/lib/jarvis/desktop-client.ts` | Pairing, status checks, tool calls, halt and resume. |
@@ -84,7 +86,7 @@ A timed-out change is reported as "may or may not have finished", never as done.
 | `build_website` | browser | act | Opens Code with the request filled in; you press send there. |
 | `start_mission` | browser | act | Opens Missions with your goal filled in. |
 | `remember` | browser | spend | Adds a fact to Orbis memory, which you can see and delete. |
-| `read_clipboard` | browser | private | Reads the clipboard once. The text is then answered in a separate turn with no tools, marked as untrusted. |
+| `read_clipboard` | browser | private | Reads the clipboard once. The text goes back to the model in the next round of the tool loop, marked as untrusted. |
 | `look_at_screen` | browser | private | You pick a screen or window in the browser's own prompt. Jarvis takes one picture and stops sharing at once. |
 | `open_application` | desktop | act | macOS: `open -a`, then checks that the app is running. Windows: `Start-Process`, with no check. Linux: reported as unsupported. |
 | `open_path` | desktop | act | Opens a file or folder inside the allowed folders. |
@@ -93,6 +95,12 @@ A timed-out change is reported as "may or may not have finished", never as done.
 | `organize_folder` | desktop | write, batch | Previews the exact moves, you approve that list, then the agent applies only those moves. Files still downloading are skipped. |
 | `undo_last_change` | desktop | write | Reverses the last batch, but only if nothing has changed since. |
 | `system_info` | desktop | read | Operating system, memory, free disk space and battery (where available). |
+| `web_search` | server | read | Top sources with short excerpts. Offered only when a search backend is set up (Tavily, Brave, or Claude for signed-in users). Each search is recorded with `purpose: "jarvis_search"`. |
+| `read_web_page` | server | read | The text of one public page, through the same safe reader as chat links. |
+| `calculate` | server | read | Exact arithmetic by a small parser (nothing is evaluated as code): `+ - * / ^ %`, parentheses, `sqrt`, `round(x, digits)`, `min`, `max`, `log`, `ln`, trigonometry, `pi`, `e`. |
+| `get_time` | server | read | Now, in the browser's time zone or a named IANA zone. |
+| `recall_memories` | server | read | What you asked Orbis to remember, optionally about a topic. Signed-in users only. |
+| `use_skill` | server | read | Loads a skill's instructions (§3a). |
 
 What each autonomy level allows:
 
@@ -103,6 +111,46 @@ What each autonomy level allows:
 | private | refused | asks | asks | runs (the browser still asks) |
 | write | refused | asks | asks | runs; batches over 25 items ask |
 | spend | refused | asks | asks | asks |
+
+## 3a. Tool calling and skills (added 2026-10-27)
+
+**The tool loop.** One request can take several rounds:
+1. The browser sends the request. The model answers and/or calls tools.
+2. **Server tools** run straight away inside the same request, and their results go back to the model, which
+   continues. At most 3 model calls per request; the last one (or any after 30 seconds) gets no server tools, so
+   it has to answer.
+3. **Browser and desktop actions** are returned to the browser with a `trace` (the rounds so far, with an id on
+   every call). The browser runs them as a mission, under the permission rules, exactly as before.
+4. If an action found something (a folder listing, system details, clipboard text, a screen answer), the browser
+   sends the trace back with each step's result, and the model continues from there: it answers, or takes the next
+   step. Actions that only open something end with the mission's own report, as before. Declined, refused and
+   stopped steps are reported to the model as such.
+5. At most 6 rounds per request; after that, no tools are offered. A cancelled or stopped mission, or the
+   emergency stop, ends the loop.
+
+Each round is one model call, metered and recorded with its real usage; each request to `/api/jarvis/turn` is one
+allowance check.
+
+**The trace comes from the browser, so the server trusts none of it:** unknown tools are dropped, a call with no
+result becomes "Not run.", every result is capped at 4,000 characters, and everything read from the web, files,
+the clipboard or the screen is fenced in `<untrusted>` tags. Only the calculator's and the clock's results are
+shown unfenced. A loaded skill's text is always rebuilt from the skill itself, never taken from the trace.
+
+**Skills.** A skill is a named, step-by-step way of doing a kind of task. Built in:
+- Research brief, Compare options, Quick maths, Time zones, Explain my screen;
+- Find a file and Tidy a folder (shown only while the Desktop Agent is connected).
+
+You can write your own (Jarvis → **Skills & tools** → **New skill**: a name, when to use it, and the steps). They
+are kept in this browser (`localStorage`, at most 20), checked on the server with the same schema, and sent with
+each request. Ids never clash with built-ins.
+
+Skills use **progressive disclosure**: the model sees only one line per skill (id, name, when to use it), and loads
+the full steps with `use_skill` when a request matches. Press **Use** on a skill to choose it for your next request;
+its steps are then given up front. A skill only shapes how Jarvis uses its tools: it can't add tools or change the
+permission rules, and its text is shown as "written by the user" for your own.
+
+**In the conversation:** each tool Jarvis used on the server appears as a small line with a wrench ("Searched the
+web for …", "Calculated …"), in red when it failed. These lines are never sent back as conversation history.
 
 ## 4. The Orbis Desktop Agent
 
@@ -170,18 +218,20 @@ node orbis-desktop-agent.mjs --origin http://localhost:3000   # also accept a de
   - your request;
   - the last 12 turns of the conversation;
   - your mode and autonomy level;
-  - whether the agent is connected, plus its platform and allowed folder names.
+  - whether the agent is connected, plus its platform and allowed folder names;
+  - your own skills and the browser's time zone;
+  - while a request continues, the results of the actions it took (summaries, folder listings, system details).
 - **Sent only when you ask:**
   - clipboard text and screenshots, sent to the model for that one answer and not stored by Orbis.
-- **Kept in this browser only:** settings, the emergency-stop state, the pairing token, and mission history.
+- **Kept in this browser only:** settings, your skills, the emergency-stop state, the pairing token, and mission history.
   History keeps requests, steps and results, but never clipboard text or screenshot answers. You choose how
   long it's kept (0, 1, 7, 30 or 90 days) and can clear it at any time.
 - Nothing in this milestone writes to the database, so **no migration is needed**.
 
 ## 6. Untrusted content
 
-- The model never sees file contents or web pages.
-- Clipboard text goes back to the model in a **turn with no tools**, inside `<untrusted>` tags.
+- The model never sees file contents. It sees web pages, search excerpts, folder listings, clipboard text and screen
+  answers only inside `<untrusted>` tags, and is told that text there is material, never instructions.
 - The screen-question model can call only one tool: "ask for a better view".
 - Even if a model were manipulated, it can only propose calls. Each call is vetted by the server, checked by the
   permission rules in the browser, and checked again by the agent.
@@ -195,6 +245,8 @@ node orbis-desktop-agent.mjs --origin http://localhost:3000   # also accept a de
 | `tests/jarvis.test.ts` | 19 | Tool list, proposal checks (including `javascript:` and `file:` URLs, a shell-injected app name, a path in a rename), the permission table at each level, and the mission runner: order, approval, rejection, batch approval of the exact list, refusal, partial failure, retry only for reads, a timeout counted as unknown, stop while running, stop while waiting, pause and resume. Also settings fallbacks, history trimming with private text removed, and push-to-talk key matching and clash warnings. |
 | `tests/jarvis-conversation.test.ts` | 3 | Stop phrases (and real requests that contain the same words), and when conversation mode may listen. |
 | `tests/jarvis-api.test.ts` | 11 | System prompt contents, vetting, the JSON fallback, the `/turn` route (native, desktop, JSON, answer-only, bad requests, metering), and the `/look` route (answer, better view, vision required, image validation). |
+| `tests/jarvis-api.test.ts` (tool loop, added 2026-10-27) | +11 | Server tools answered within the turn; web results fenced; no web search without a backend; the last model call gets no server tools; browser actions returned with a trace and continued from their results (fenced, ids matched); missing results and unknown tools in a trace; the round limit; skills in the catalog, a forged skill result replaced by the real skill, a chosen skill given up front, invalid skills refused. |
+| `tests/jarvis-skills.test.ts` | 13 | The calculator (precedence, separators, functions, refusals including `constructor` and `toString`, depth and length limits, formatting); skill ids, the user's skills, lookup, the catalog; skills from browser storage; when a mission's results go back to the model and how each step is described. |
 | `tests/desktop-agent.test.ts` | 13 | Folder limits, symbolic-link escape, no overwrite, sorting from an approved list only, rejection of tampered moves, undo, halt, unknown tools, macOS launch without a shell plus the running check, and the HTTP layer: Origin, Host (DNS rebinding), pairing, token, Private Network Access preflight, JSON only. |
 
 **End to end:** a production build in Chromium, with the **real Desktop Agent on Linux** and the model's turns
@@ -236,7 +288,6 @@ reached the agent at `http://127.0.0.1:47821` in this Chromium.
 | Window management, clicking or typing in other apps, reading other apps' screens through accessibility APIs | Needs native code and operating-system permissions (macOS Accessibility and Screen Recording; Windows UI Automation). | The desktop app, with per-platform adapters behind the agent's tool interface. |
 | Testing on macOS and Windows | This environment is Linux. The macOS and Windows code (launching apps, battery) is written and unit-tested with a fake runner, but has **not** been run on those systems. | A run of the test plan on a real Mac and a real Windows PC. |
 | A real model and speech end to end | No AI provider keys or speech service here. | A check on a deployed preview with keys. |
-| A loop where Jarvis looks at results and re-plans | This milestone plans once per request; the reports come from tool results. | Feeding the results back to the model, inside `<untrusted>` tags, for follow-up steps. |
 | Approved commands, media and volume controls, calendar and email | Left out on purpose for the first milestone (higher risk). | Connectors, and an allow-list of commands with previews. |
 | Cross-device mission history, replay, custom voice commands, Agent Council view | History is per browser to avoid a database migration. | A table (migration to approve) and a replay that checks permissions again. |
 | Wake word | Optional by design, and needs an on-device detector. | The desktop app with a local keyword model. |
