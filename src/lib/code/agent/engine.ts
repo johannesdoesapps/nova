@@ -1315,13 +1315,15 @@ async function continueAfterLimit(row: RunRow, reason: LimitReason, done: (patch
 /** Run a command the user approved, and put the result in the conversation. */
 async function runApproved(auth: Authed, row: RunRow, command: string, lead: NewEvent[]): Promise<RunRow> {
   if (lead.length) await addEvents(auth, row.id, lead);
-  const out = await execCommand(auth, row.id, row.project_id, command, commandKeeps(row), { agent: codeAgentId(row), approved: true });
-  const test = !out.blocked && isTestCommand(command) ? testResult({ command, ...out }) : null;
+  // Like a command the agent runs itself: one still running after the wait keeps going (wait_for_command picks it up).
+  const tool = isTestCommand(command) ? "run_tests" : "run_command";
+  const out = await execCommand(auth, row.id, row.project_id, command, commandKeeps(row), { agent: codeAgentId(row), approved: true }, { background: { tool } });
+  const test = !out.blocked && !out.running && isTestCommand(command) ? testResult({ command, ...out }) : null;
   const transcript = appendUser(row.transcript ?? [], `The user approved \`${command}\`. Result:\n${commandResultText(command, out, test)}`);
   await addEvents(auth, row.id, [commandEvent(command, out, test)]);
   // A build that ran after the user's go-ahead (or once the computer started) counts like any other.
   const decision = classifyCommand(command);
-  const build = !test && !out.cancelled && decision.kind !== "block" && decision.purpose === "build" ? { command: command.slice(0, 300), exitCode: out.exitCode, passed: out.exitCode === 0 && !out.timedOut, ranAt: new Date().toISOString() } : null;
+  const build = !test && !out.cancelled && !out.running && decision.kind !== "block" && decision.purpose === "build" ? { command: command.slice(0, 300), exitCode: out.exitCode, passed: out.exitCode === 0 && !out.timedOut, ranAt: new Date().toISOString() } : null;
   const patch: RunPatch = {
     transcript: capTranscript(transcript),
     pending: null,

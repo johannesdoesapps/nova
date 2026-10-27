@@ -786,6 +786,21 @@ describe("recovery", () => {
       expect(run(id).transcript.some((m) => m.results?.some((r) => r.text.includes("stopped at its time limit")))).toBe(true);
     });
 
+    it("also keeps running when it was a command the user had to approve", async () => {
+      const id = newRun({ status: "awaiting_approval", plan: { summary: "x", steps: ["x"], approved: true }, pending: { kind: "command", command: "npm ci", reason: "installs" } });
+      await respondToRun(auth, id, { decision: "approve" });
+      const job = run(id).job!;
+      expect(job).toMatchObject({ command: "npm ci", tool: "run_command" });
+      expect(killed).toEqual([]);
+      expect(run(id).status).toBe("running");
+      jobs.get(job.jobId)!.running = false;
+      script.turns.push(turn("Waiting.", call("wait_for_command")), turn("Done.", call("finish", { summary: "Installed." })));
+      await stepRun(req(), auth, id, { expectStep: run(id).steps });
+      expect(commands).toEqual(["npm ci"]);
+      expect(run(id).job).toBeNull();
+      expect(run(id).transcript.some((m) => m.results?.some((r) => r.text.includes("added 812 packages")))).toBe(true);
+    });
+
     it("is ended when the user stops the run", async () => {
       const id = newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true } });
       script.turns.push(turn("Installing.", call("run_command", { command: "npm ci" })));
