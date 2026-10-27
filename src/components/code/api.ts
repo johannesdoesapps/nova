@@ -40,6 +40,55 @@ export async function api<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const post = <T>(url: string, body: unknown) => api<T>(url, { method: "POST", body: JSON.stringify(body) });
 
+type ErrorBody = { error?: { code?: string; message?: string; details?: Record<string, unknown> } };
+const toError = (status: number, body: ErrorBody) => new CodeApiError(body.error?.message ?? statusMessage(status), status, body.error?.code ?? null, body.error?.details ?? null);
+
+/**
+ * POST that asks for a stream of JSON lines (see the agent's step route): each line but the last goes to
+ * `onMessage`; the last is `done` (its `result` is returned) or `error` (thrown like api() does). A server that
+ * answers with plain JSON instead is read as the result.
+ */
+export async function postStream<T>(url: string, body: unknown, onMessage: (m: { t: string } & Record<string, unknown>) => void): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" }, body: JSON.stringify(body) });
+  } catch {
+    throw new CodeApiError("Can't reach Orbis. Check your connection and try again.", 0, null, null);
+  }
+  if (!res.ok) throw toError(res.status, await res.json().catch(() => ({})));
+  if (!res.body || !res.headers.get("content-type")?.includes("ndjson")) return (await res.json()) as T;
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    let chunk: ReadableStreamReadResult<Uint8Array>;
+    try {
+      chunk = await reader.read();
+    } catch {
+      break;
+    }
+    if (chunk.done) break;
+    buf += decoder.decode(chunk.value, { stream: true });
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      let m: { t: string } & Record<string, unknown>;
+      try {
+        m = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (m.t === "done") return m.result as T;
+      if (m.t === "error") throw toError(Number(m.status) || 500, (m.body ?? {}) as ErrorBody);
+      onMessage(m);
+    }
+  }
+  // The stream ended without a result: the step may still be running on the server.
+  throw new CodeApiError("The connection dropped before this step finished. It may still be running: the page will catch up.", 0, null, null);
+}
+
 export interface Allowance {
   used: number;
   limit: number | null;

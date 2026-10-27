@@ -125,6 +125,13 @@ Progress is grouped into plain-English stages built only from the run's events: 
   - **Contents: Read and write** permission. Read-only is enough for import. Without write permission, GitHub refuses and the user is told why.
   - At the time of writing the GitHub App isn't configured on tryorbis.app, so pushing can't work there yet. It has been tested only against a fake GitHub API.
 
+## Live view, to-do list and long tasks (2026-10-27)
+
+- **Live view:** while the agent works, its words appear as it writes them ("Writing…"), and each action shows up as it happens instead of at the next check of the log.
+- **To-do list:** for tasks with three or more steps the agent keeps a to-do list (`update_todos`), shown under the task with what's done and what it's on now.
+- **Web pages:** the agent can read a public web page (`read_web_page`), such as documentation or a changelog; the text is treated as data, and Bastion checks the request.
+- **Long tasks:** when a run's history gets long, older steps are replaced by a short record of what they did (each action and whether it worked), so the agent doesn't lose track, and the prompt cache keeps working.
+
 ## Not yet
 
 - Runs continue only while the page is open; there is no background worker (it needs a server-side database credential and a design that keeps per-user authorization; see ORBIS_CODE_ARCHITECTURE.md §8).

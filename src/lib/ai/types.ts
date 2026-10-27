@@ -180,6 +180,8 @@ export interface ToolTurnParams {
   tools: ToolSpec[];
   maxOutputTokens: number;
   signal?: AbortSignal;
+  /** Called with the reply's text as it's written (providers that stream tool turns; others ignore it). */
+  onText?: (delta: string) => void;
 }
 
 export interface ToolTurnResult {

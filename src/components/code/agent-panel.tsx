@@ -8,6 +8,8 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Circle,
+  CircleDot,
   Clock,
   CircleHelp,
   Eye,
@@ -43,7 +45,7 @@ import { cn } from "@/lib/utils";
 import { useAttachments } from "./attachments";
 import { PromptBar } from "./prompt-bar";
 import { useCodeModel } from "./use-code-model";
-import { api, CodeApiError, post } from "./api";
+import { api, CodeApiError, post, postStream } from "./api";
 import { taskTitle } from "@/lib/code/agent/history";
 import { FileDiff } from "./diff-view";
 import { InfinityMark } from "@/components/brand/infinity";
@@ -231,7 +233,8 @@ export function stageSummary(b: StageBlock): string {
       return [files.size && `read ${plural(files.size, "file")}`, searches && plural(searches, "search")].filter(Boolean).join(", ") || (b.events[0]?.title ?? "");
     }
     case "plan":
-      return b.events.find((e) => e.kind === "plan")?.title ?? "";
+      // The plan itself, else the latest to-do list update.
+      return b.events.find((e) => e.kind === "plan" && !e.detail?.todos)?.title ?? b.events.filter((e) => e.kind === "plan").at(-1)?.title ?? "";
     case "edit": {
       const edits = b.events.filter((e) => e.kind === "edit");
       return edits.length ? `${plural(new Set(edits.map((e) => (e.detail?.path as string) ?? e.title)).size, "file")} changed` : (b.events[0]?.title ?? "");
@@ -252,6 +255,51 @@ export function stageSummary(b: StageBlock): string {
     case "review":
       return n("summary") ? "Finished" : "Checked its changes";
   }
+}
+
+// ---------------------------------------------------------------- to-do list
+
+export interface TodoItem {
+  text: string;
+  status: "pending" | "in_progress" | "done";
+}
+
+/** The agent's latest to-do list (update_todos), from the activity log. */
+export function latestTodos(events: AgentEvent[]): TodoItem[] | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const t = events[i]!.kind === "plan" ? events[i]!.detail?.todos : undefined;
+    if (Array.isArray(t)) return t.filter((x): x is TodoItem => !!x && typeof (x as TodoItem).text === "string" && ["pending", "in_progress", "done"].includes((x as TodoItem).status));
+  }
+  return null;
+}
+
+function TodoCard({ todos, live }: { todos: TodoItem[]; live: boolean }) {
+  const done = todos.filter((t) => t.status === "done").length;
+  return (
+    <section aria-label="To-do list" className="s-card rounded-2xl px-4 py-3">
+      <p className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-[0.06em] text-s-ink-3">
+        <ListChecks className="h-3.5 w-3.5" aria-hidden /> To-do · {done} of {todos.length} done
+      </p>
+      <ul className="space-y-1 text-[13.5px]">
+        {todos.map((t, i) => (
+          <li key={i} className="flex items-start gap-2">
+            {t.status === "done" ? (
+              <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" aria-label="Done" />
+            ) : t.status === "in_progress" ? (
+              live ? (
+                <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-s-accent motion-reduce:animate-none" aria-label="In progress" />
+              ) : (
+                <CircleDot className="mt-0.5 h-3.5 w-3.5 shrink-0 text-s-accent" aria-label="Was in progress" />
+              )
+            ) : (
+              <Circle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-s-ink-3" aria-label="To do" />
+            )}
+            <span className={cn("min-w-0 break-words", t.status === "done" ? "text-s-ink-3 line-through" : t.status === "in_progress" ? "font-medium text-s-ink" : "text-s-ink-2")}>{t.text}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 // ---------------------------------------------------------------- the panel
@@ -349,6 +397,10 @@ export function AgentPanel({
 
   const alive = useRef(true);
   const lastSeq = useRef(0);
+  /** Every activity number already shown (streamed events can arrive before earlier ones are read). */
+  const seenSeqs = useRef(new Set<number>());
+  /** The model's words in the current step, as it writes them (cleared when its step is logged). */
+  const [liveText, setLiveText] = useState("");
   const latestView = useRef<RunView | null>(null);
   /** The run this page was stepping when the connection dropped (stepped again when it's back). */
   const interrupted = useRef<string | null>(null);
@@ -362,6 +414,23 @@ export function AgentPanel({
     runChanged.current = onRunChange;
     previewChanged.current = onPreview;
   }, [onFilesChanged, onRunChange, onPreview]);
+
+  /** Add new activity (read from the log, or streamed by a step); reload files and the preview when the agent touched them. */
+  const mergeEvents = useCallback((incoming: AgentEvent[]) => {
+    const fresh = incoming.filter((e) => !seenSeqs.current.has(e.seq));
+    if (fresh.length) {
+      for (const e of fresh) seenSeqs.current.add(e.seq);
+      // The log is read from the last number seen without a gap: events streamed out of order (another request wrote one
+      // in between) are fetched again on the next read rather than missed.
+      while (seenSeqs.current.has(lastSeq.current + 1)) lastSeq.current++;
+      setEvents((es) => [...es.filter((e) => !fresh.some((f) => f.seq === e.seq)), ...fresh].sort((a, b) => a.seq - b.seq));
+      const touched = fresh.some((e) => e.kind === "edit" || e.kind === "revert" || (e.kind === "command" && Array.isArray(e.detail?.changed) && (e.detail.changed as unknown[]).length));
+      if (touched) filesChanged.current();
+      if (fresh.some((e) => e.kind === "command" && e.detail?.preview && e.detail.state === "running")) previewChanged.current?.("started");
+      else if (fresh.some((e) => e.kind === "inspect" && e.detail?.preview)) previewChanged.current?.("checked");
+      else if (touched) previewChanged.current?.("changed");
+    }
+  }, []);
 
   /** Fetch the run and its new activity; reload files when the agent touched them. */
   const refresh = useCallback(async (runId: string): Promise<RunView> => {
@@ -388,22 +457,14 @@ export function AgentPanel({
         runChanged.current(r.run);
       }
     }
-    const fresh = r.events.filter((e) => e.seq > lastSeq.current);
-    if (fresh.length) {
-      lastSeq.current = Math.max(...fresh.map((e) => e.seq));
-      setEvents((es) => [...es.filter((e) => !fresh.some((f) => f.seq === e.seq)), ...fresh].sort((a, b) => a.seq - b.seq));
-      const touched = fresh.some((e) => e.kind === "edit" || e.kind === "revert" || (e.kind === "command" && Array.isArray(e.detail?.changed) && (e.detail.changed as unknown[]).length));
-      if (touched) filesChanged.current();
-      if (fresh.some((e) => e.kind === "command" && e.detail?.preview && e.detail.state === "running")) previewChanged.current?.("started");
-      else if (fresh.some((e) => e.kind === "inspect" && e.detail?.preview)) previewChanged.current?.("checked");
-      else if (touched) previewChanged.current?.("changed");
-    }
+    mergeEvents(r.events);
     return current;
-  }, []);
+  }, [mergeEvents]);
 
   const open = useCallback(
     async (runId: string) => {
       lastSeq.current = 0;
+      seenSeqs.current.clear();
       latestView.current = null;
       setEvents([]);
       return refresh(runId);
@@ -424,9 +485,15 @@ export function AgentPanel({
           const watch = setInterval(() => void refresh(runId).catch(() => {}), 2500);
           let res: { run: RunView; skipped?: "busy" | "not_working" | "stale" };
           try {
-            res = await post(`/api/code/agent/${runId}/step`, { expectStep });
+            res = await postStream(`/api/code/agent/${runId}/step`, { expectStep }, (m) => {
+              if (driveId.current !== me || !alive.current) return;
+              if (m.t === "text" && typeof m.d === "string") setLiveText((t) => (t + m.d).slice(-4_000));
+              else if (m.t === "step" || m.t === "model_done") setLiveText("");
+              else if (m.t === "events" && Array.isArray(m.events)) mergeEvents(m.events as AgentEvent[]);
+            });
           } finally {
             clearInterval(watch);
+            setLiveText("");
           }
           if (driveId.current !== me) return;
           const latest = await refresh(runId);
@@ -444,7 +511,7 @@ export function AgentPanel({
         if (driveId.current === me) setDriving(false);
       }
     },
-    [refresh],
+    [refresh, mergeEvents],
   );
 
   // First load: the session asked for, a new one, or the project's open session (if any).
@@ -493,6 +560,7 @@ export function AgentPanel({
       });
       setContinuing(null);
       lastSeq.current = 0;
+      seenSeqs.current.clear();
       setEvents([]);
       setRunAttachments(r.attachments ?? []);
       latestView.current = r.run;
@@ -522,6 +590,7 @@ export function AgentPanel({
         options: { modelId: m, approvePlans, reviewEdits, commands: commands === "off" ? "safe" : commands },
       });
       lastSeq.current = 0;
+      seenSeqs.current.clear();
       setEvents([]);
       setRunAttachments([]);
       latestView.current = r.run;
@@ -659,6 +728,7 @@ export function AgentPanel({
   }, [firstState]);
   const busy = driving || answering || !!run?.busy;
   const blocks = useMemo(() => groupStages(events), [events]);
+  const todos = useMemo(() => latestTodos(events), [events]);
   const readOnly = !!run && (!!run.options.readOnly || (run.options.approvePlans && !run.plan?.approved && !ended));
   const runMode = run ? modeOf(run.options) : null;
   const inProgress = !!run && !ended;
@@ -798,12 +868,25 @@ export function AgentPanel({
                 {run.usage.modelCalls > 0 && <UsageLine run={run} />}
               </header>
 
+              {todos && todos.length > 0 && <TodoCard todos={todos} live={!ended} />}
+
               <ol className="space-y-2" aria-label="Progress">
                 {blocks.map((b, i) => (
                   <StageRow key={`${b.stage}-${b.events[0]?.seq ?? i}`} block={b} current={i === blocks.length - 1 && !ended && !run.pending} />
                 ))}
               </ol>
 
+              {liveText && !ended && (
+                <div className="s-card rounded-2xl px-4 py-3" aria-live="off">
+                  <p className="mb-1 flex items-center gap-1.5 text-[12px] text-s-ink-3">
+                    <Sparkles className="h-3.5 w-3.5 text-s-accent" aria-hidden /> Writing…
+                  </p>
+                  <p className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-[13.5px] leading-relaxed text-s-ink-2">
+                    {liveText}
+                    <span className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 bg-s-accent/70 motion-safe:animate-pulse" aria-hidden />
+                  </p>
+                </div>
+              )}
               {run.busy && run.stepStartedAt && !ended && <StepClock since={run.stepStartedAt} />}
               {(driving || run.busy) &&
                 !ended &&
@@ -852,6 +935,7 @@ export function AgentPanel({
                     setRun(null);
                     setEvents([]);
                     lastSeq.current = 0;
+                    seenSeqs.current.clear();
                     onRunChange(null);
                   }}
                   className="inline-flex h-9 items-center gap-1.5 rounded-full border border-s-line px-4 text-[13px] text-s-ink-2 hover:border-s-line-strong hover:text-s-ink"

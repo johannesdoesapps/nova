@@ -137,7 +137,17 @@ export class AnthropicProvider implements AIProvider {
       ...(opts.effort ? { output_config: { effort: opts.effort } } : {}),
     } as Anthropic.Beta.Messages.MessageCreateParamsNonStreaming;
     try {
-      const msg = await this.getClient().beta.messages.create(body, { signal: params.signal });
+      let msg: Anthropic.Beta.Messages.BetaMessage;
+      if (params.onText) {
+        // Streamed so the page can show the reply as it's written; the result is the same final message.
+        const stream = this.getClient().beta.messages.stream(body, { signal: params.signal });
+        for await (const event of stream) {
+          if (event.type === "content_block_delta" && event.delta.type === "text_delta" && event.delta.text) params.onText(event.delta.text);
+        }
+        msg = await stream.finalMessage();
+      } else {
+        msg = await this.getClient().beta.messages.create(body, { signal: params.signal });
+      }
       const text = msg.content
         .map((b) => (b.type === "text" ? b.text : ""))
         .join("")

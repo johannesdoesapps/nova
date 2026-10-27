@@ -73,6 +73,8 @@ Every tool call is validated against its schema (`tool-specs.ts`), checked again
 | `run_command` | `run_command` | Shell command in the project computer, 2-minute limit, policy applies |
 | `run_tests` | `run_tests` | Detected or given test command; parsed result |
 | `inspect_test_results` | `inspect_test_results` | Latest result with failing tests and output tail |
+| `read_web_page` | `read_web_page` | Text of one public page through the safe link reader (no private addresses, size and time limits); checked by Bastion like a web search; injection attempts flagged |
+| `update_todos` | `update_todos` | The agent's to-do list (whole list each time, one item in progress); logged as a `plan` event with `detail.todos` and shown as a card in the agent panel |
 | — | `lookup_docs`, `github`, `propose_plan`, `ask_user`, `finish` | Web docs (when configured), read-only GitHub, plan, question, end |
 
 Command cancellation is the run's Stop (kills the running job). Tool output is truncated before it reaches the model (6k characters of command output, 30k per file, 40k per diff) and the activity log (20k).
@@ -95,9 +97,11 @@ A run is a row in `code_agent_runs`. A **step** is one model turn plus the actio
 3. **Pauses**: plan approval, command approval, edit review, a question, starting the computer, or a limit (steps, tokens, time, failed tests, repeated actions). `POST …/respond` answers; `continue` raises the relevant limit.
 4. **End**: `finish`, two replies in a row with no actions, a model refusal, unreadable replies, or Stop. The server then builds the **report** from records (§7).
 
-Bounds (defaults): 20 steps (+10 per approval, max 100), 600,000 tokens (+300,000, max 10 M), 30 minutes of agent working time (+15, max 4 h), 3 failed test runs in a row (+2), 3 identical steps in a row, 8 actions per step, 1 command per step, 2 minutes per command, the plan's output-token limit per reply.
+Bounds (defaults, unchanged by the 2026-10-27 upgrades): 20 steps (+10 per approval, max 100), 600,000 tokens (+300,000, max 10 M), 30 minutes of agent working time (+15, max 4 h), 3 failed test runs in a row (+2), 3 identical steps in a row, 8 actions per step, 1 command per step, 2 minutes per command, the plan's output-token limit per reply.
 
-**Streaming and reconnection.** Progress is polled: the page fetches `GET /api/code/agent/[runId]?after=<seq>` every 2.5 s while a step runs, and the activity log is append-only and numbered, so a reloaded page or another device picks up exactly where it left off. Server-sent events were not used because a step's work (model call + command) is persisted as it happens; polling the log gives the same view with simpler failure modes on serverless functions.
+**Streaming and reconnection.** The page asks the step route for a stream (`Accept: application/x-ndjson`). While the request takes its steps it sends JSON lines: `step` (a step starts), `text` (the model's words as it writes them; Claude tool turns are streamed for this), `model_done`, `events` (each activity event as it's saved), `ping` every 15 s, then `done` with the usual result or `error` with the usual error body. The live channel is in-process (`src/lib/code/agent/live.ts`: `addEvents` and the engine publish to watchers of that run), so it costs no extra database reads. The activity log stays the record: it is append-only and numbered, the page still reads `GET /api/code/agent/[runId]?after=<seq>` every 2.5 s for the run's state, and it advances its read position only through numbers it has seen without a gap, so an event written by another request in between is fetched rather than missed. A reloaded page or another device picks up from the log. Without the Accept header the route answers plain JSON as before (pair coding uses that). GPT and the JSON-format providers don't stream text yet; their activity still streams.
+
+**Long runs.** When the conversation no longer fits the plan's history size, the oldest steps are left out and replaced, in the first message, by a record of what they did: one line per action with whether it worked, and the start of each step's thinking (`digestSteps`, at most 4,000 characters, newest kept). The cut is moved in blocks of 12 messages, so the prompt before the newest messages stays the same for several steps and the provider's prompt cache keeps working.
 
 ## 6. Model providers
 

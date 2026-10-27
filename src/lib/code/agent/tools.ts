@@ -13,7 +13,7 @@ import { clipText, tailText, type ActionResult, type AgentReply } from "./protoc
 import type { NewEvent } from "./runs";
 import { describeTestResult, detectTestCommand, isTestCommand, testResult, type TestResult } from "./test-results";
 import { qaMayEdit } from "./profiles";
-import { EDIT_TOOLS, isToolName, MAX_READ_FILES, TOOL_DEFS } from "./tool-specs";
+import { EDIT_TOOLS, isToolName, MAX_READ_FILES, TODO_STATUSES, TOOL_DEFS } from "./tool-specs";
 import type { AgentPlan, BuildCheck, CommandMode, Pending, PreviewCheckRecord, RunStatus, ServerCheck } from "./types";
 
 /**
@@ -79,6 +79,8 @@ export interface AgentEnv {
     setRunCommand(command: string): Promise<void>;
   };
   lookupDocs?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]>;
+  /** A public web page's text (through the safe link reader: no private addresses, size and time limits). */
+  readPage?: (url: string) => Promise<{ ok: true; url: string; title: string | null; text: string } | { ok: false; reason: string }>;
   /** Files the user attached to the task (text; images are shown to the model with the first message). */
   attachments?: { read(name: string): Promise<{ kind: "text" | "image"; content: string } | null> };
   /** The project's memory: approved notes to search, and suggestions that wait for the user's approval. */
@@ -771,6 +773,34 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
         } catch (err) {
           result(id, tool, false, `Web search failed: ${(err as Error).message.slice(0, 200)}`);
         }
+        break;
+      }
+      case "read_web_page": {
+        if (!env.readPage) {
+          result(id, tool, false, "Reading web pages isn't available here.");
+          break;
+        }
+        const gp = await guard("web.search", a.url as string);
+        if (gp && gp.outcome !== "allow") {
+          result(id, tool, false, refusedBy(gp.reason));
+          break;
+        }
+        const page = await env.readPage(a.url as string);
+        if (!page.ok) {
+          result(id, tool, false, `Couldn't read the page: ${page.reason}.`);
+          await log({ kind: "inspect", title: `Couldn't read ${(a.url as string).slice(0, 200)}` });
+          break;
+        }
+        result(id, tool, true, untrusted(`${page.title ? `${page.title}\n` : ""}${page.url}\n\n${clipText(page.text, MAX_READ_CHARS)}`));
+        await log({ kind: "inspect", title: `Read ${page.title ? `“${page.title.slice(0, 120)}”` : new URL(page.url).hostname}`, detail: { url: page.url } });
+        break;
+      }
+      case "update_todos": {
+        const todos = a.todos as { text: string; status: (typeof TODO_STATUSES)[number] }[];
+        const done = todos.filter((t) => t.status === "done").length;
+        const now = todos.find((t) => t.status === "in_progress");
+        await log({ kind: "plan", title: `To-do list: ${done} of ${todos.length} done${now ? `; now: ${now.text.slice(0, 160)}` : ""}`, detail: { todos } });
+        result(id, tool, true, "To-do list updated.");
         break;
       }
       case "github": {

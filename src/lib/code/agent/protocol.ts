@@ -127,7 +127,7 @@ ${format}
 
 How to work:
 ${o.readOnly ? `- This run is read-only: inspect the project and answer the user's question with finish. You can't change files or run commands, so don't offer to.\n` : ""}${o.planning ? `- You are in the planning phase and have read-only access. Inspect the project (inspect_project, list_files, read_files, search_code), then call propose_plan. You can't edit files or run commands until the plan is approved. If the request is only a question, answer it with finish instead.\n` : ""}- Inspect before you edit: read every file you change first. Make the smallest change that does the job and keep the project's style.
-- After changing code, run the tests (run_tests) or the build when the project has them${o.commands === "off" ? " (here: tell the user what to run)" : ""}. When something fails, read the actual error, fix the cause and run it again. After three failed attempts at the same problem, stop and explain it.
+${o.readOnly ? "" : "- For a task with 3 or more steps, keep a to-do list with update_todos: write it once you know the steps, and send it again as each item starts and is done, so the user can follow along.\n"}- After changing code, run the tests (run_tests) or the build when the project has them${o.commands === "off" ? " (here: tell the user what to run)" : ""}. When something fails, read the actual error, fix the cause and run it again. After three failed attempts at the same problem, stop and explain it.
 ${commandRule[o.commands]}
 ${o.memory ? "- Project memory in the first message is the user's own guidance for this project: follow it unless this request says otherwise, and mention it when it shaped what you did. When the user states a lasting preference, or you learn something future tasks will need (how to run or test the project, a decision and its reason), suggest it with propose_memory; the user approves it before it's used.\n" : ""}- Before a risky change, create_checkpoint; restore_checkpoint undoes this run's changes back to it.
 - Apps that serve web pages must listen on port 3000 and host 0.0.0.0 so the preview works. ${o.commands === "off" ? "Don't start servers; tell the user to press Run." : "Start servers with start_preview, never with run_command (run_command waits for a command to finish, so a server would just be stopped)."}
@@ -360,15 +360,62 @@ export const clipText = (s: string, n: number) => (s.length > n ? `${s.slice(0, 
 /** Keep the end of long output (errors are usually there). */
 export const tailText = (s: string, n: number) => (s.length > n ? `… (${(s.length - n).toLocaleString("en-US")} earlier characters cut)\n${s.slice(-n)}` : s);
 
+/** Older messages are left out in blocks of this many, so the cut (and the cached prompt before it) stays put for several steps. */
+const TRIM_BLOCK = 12;
+/** Room for the record of what the left-out steps did. */
+const DIGEST_CHARS = 4_000;
+
+/** The main argument of a call, for the record of earlier steps. */
+function callBrief(c: TranscriptCall): string {
+  const a = c.args ?? {};
+  const pick = (k: string) => (typeof a[k] === "string" ? (a[k] as string) : Array.isArray(a[k]) ? (a[k] as unknown[]).map(String).join(", ") : "");
+  const v = pick("path") || pick("paths") || pick("command") || pick("query") || pick("url") || pick("label") || pick("checkpoint") || pick("summary") || pick("question");
+  const one = v.replace(/\s+/g, " ").trim();
+  return one ? ` ${one.length > 100 ? `${one.slice(0, 100)}…` : one}` : "";
+}
+
 /**
- * What the model sees: the first message (the request and project), then as
- * many of the latest messages as fit in the budget. The window always starts
- * with an assistant turn after the first message so turns alternate.
+ * What the left-out steps did, one line per action with whether it worked, plus the start of each step's thinking.
+ * Built only from the transcript, so the same cut always gives the same text (the prompt cache stays valid).
+ */
+export function digestSteps(t: TranscriptMessage[], maxChars = DIGEST_CHARS): string {
+  const lines: string[] = [];
+  for (let i = 0; i < t.length; i++) {
+    const m = t[i]!;
+    if (m.role !== "assistant") continue;
+    const thought = m.content.replace(/\s+/g, " ").trim();
+    if (thought) lines.push(`> ${thought.length > 160 ? `${thought.slice(0, 160)}…` : thought}`);
+    const results = t[i + 1]?.role === "user" ? (t[i + 1]!.results ?? []) : [];
+    for (const c of m.calls ?? []) {
+      const r = results.find((x) => x.id === c.id);
+      lines.push(`- ${c.tool}${callBrief(c)}: ${!r ? "no result" : r.ok ? "ok" : "failed"}`);
+    }
+  }
+  const kept: string[] = [];
+  let used = 0;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (used + lines[i]!.length + 1 > maxChars) {
+      kept.unshift(`(${i + 1} earlier lines not listed)`);
+      break;
+    }
+    used += lines[i]!.length + 1;
+    kept.unshift(lines[i]!);
+  }
+  return kept.join("\n");
+}
+
+/**
+ * What the model sees: the first message (the request and project), then as many of the latest messages as fit in
+ * the budget. The window always starts with an assistant turn after the first message so turns alternate. Messages
+ * that don't fit are replaced by a record of what they did (digestSteps), and are cut in blocks so the cut only
+ * moves every few steps: the prompt up to the newest messages stays the same, and the provider's cache keeps working.
  */
 export function trimTranscript(t: TranscriptMessage[], budgetChars: number): TranscriptMessage[] {
   if (t.length <= 1) return t;
   const [first, ...rest] = t as [TranscriptMessage, ...TranscriptMessage[]];
-  let used = messageSize(first);
+  if (t.reduce((n, m) => n + messageSize(m), 0) <= budgetChars) return t;
+  const reserve = Math.min(DIGEST_CHARS, Math.floor(budgetChars / 4));
+  let used = messageSize(first) + reserve;
   let from = rest.length;
   for (let i = rest.length - 1; i >= 0; i--) {
     const n = messageSize(rest[i]!);
@@ -376,10 +423,14 @@ export function trimTranscript(t: TranscriptMessage[], budgetChars: number): Tra
     used += n;
     from = i;
   }
+  // Round the cut up to the next block boundary while that still leaves the latest step.
+  const block = Math.ceil(from / TRIM_BLOCK) * TRIM_BLOCK;
+  if (block <= rest.length - 2) from = block;
   while (from < rest.length && rest[from]!.role !== "assistant") from++;
-  const kept = rest.slice(from);
   if (from === 0) return t;
-  const note = `(${from} earlier messages from this run were left out to save space. Re-read files rather than relying on memory.)`;
+  const kept = rest.slice(from);
+  const digest = digestSteps(rest.slice(0, from), reserve);
+  const note = `(${from} earlier messages from this run were left out to save space.${digest ? ` What they did, in order:\n${digest}\n` : " "}Re-read files rather than relying on memory.)`;
   return [{ ...first, content: `${first.content}\n\n${note}` }, ...kept];
 }
 

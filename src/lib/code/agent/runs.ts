@@ -8,6 +8,7 @@ import { agentDef } from "../../agent-platform/registry";
 import { dbError, type Authed } from "../server";
 import type { PairState } from "../pair/protocol";
 import type { TranscriptMessage } from "./protocol";
+import { emitLive, hasWatchers } from "./live";
 import type { Checkpoint } from "./tools";
 import {
   DEFAULT_OPTIONS,
@@ -373,10 +374,16 @@ export async function addEvents(auth: Authed, runId: string, events: NewEvent[])
   for (let attempt = 0; attempt < 3; attempt++) {
     const { data: last } = await auth.supabase.from("code_agent_events").select("seq").eq("run_id", runId).order("seq", { ascending: false }).limit(1).maybeSingle();
     const base = ((last as { seq: number } | null)?.seq ?? 0) + 1;
-    const { error } = await auth.supabase
-      .from("code_agent_events")
-      .insert(events.map((e, i) => ({ run_id: runId, seq: base + i, kind: e.kind, title: scrub(e.title).slice(0, 400), detail: scrubDetail(e.detail) })));
-    if (!error) return events.map((_, i) => base + i);
+    const rows = events.map((e, i) => ({ run_id: runId, seq: base + i, kind: e.kind, title: scrub(e.title).slice(0, 400), detail: scrubDetail(e.detail) }));
+    const { error } = await auth.supabase.from("code_agent_events").insert(rows);
+    if (!error) {
+      // A page streaming this step sees the events now, not at its next read of the log.
+      if (hasWatchers(runId)) {
+        const at = new Date().toISOString();
+        emitLive(runId, { t: "events", events: rows.map((r) => ({ id: `${runId}:${r.seq}`, seq: r.seq, kind: r.kind, title: r.title, detail: r.detail, createdAt: at })) });
+      }
+      return rows.map((r) => r.seq);
+    }
     if (error.code !== "23505") throw dbError(error, "code.agent.events");
   }
   throw new ApiError("conflict", "The activity log is busy. Please try again.");

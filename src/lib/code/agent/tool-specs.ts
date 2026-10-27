@@ -21,7 +21,12 @@ export interface ToolContext {
   memory?: boolean;
   /** The user attached files to the task. */
   attachments?: boolean;
+  /** Public web pages can be read (read_web_page). */
+  pages?: boolean;
 }
+
+export const TODO_STATUSES = ["pending", "in_progress", "done"] as const;
+export const MAX_TODOS = 20;
 
 export const MAX_READ_FILES = 8;
 
@@ -102,6 +107,11 @@ export const TOOL_DEFS = {
     when: commandsOn,
   },
   inspect_test_results: { description: "The latest test run in this run: the verdict, counts, failing tests and the end of its output.", schema: z.object({}) },
+  read_web_page: {
+    description: "Read the text of a public web page: documentation, a changelog, an issue or an article (not pages behind a login). Use it after lookup_docs, or for a link the user gave.",
+    schema: z.object({ url: z.url({ protocol: /^https?$/ }).max(2_000) }),
+    when: (c) => !!c.pages,
+  },
   lookup_docs: { description: "Search the web for documentation (titles, links and snippets).", schema: z.object({ query: z.string().trim().min(2).max(300) }), when: (c) => c.docs },
   github: {
     description: "Read the user's connected GitHub repositories (read only): read a file, search issues, or list repositories.",
@@ -134,6 +144,16 @@ export const TOOL_DEFS = {
       reason: z.string().trim().min(1).max(500).describe("Why this is worth remembering."),
     }),
     when: (c) => !!c.memory,
+  },
+  update_todos: {
+    description:
+      "Your to-do list for this task, shown to the user as you work. Use it for any task with 3 or more steps: write it early, then send the whole list again whenever an item starts or is done. Keep exactly one item in_progress while you work on it.",
+    schema: z.object({
+      todos: z
+        .array(z.object({ text: z.string().trim().min(1).max(200), status: z.enum(TODO_STATUSES) }))
+        .min(1)
+        .max(MAX_TODOS),
+    }),
   },
   propose_plan: {
     description: "Your plan: one sentence and short steps. When plan approval is on, the user approves it before you change anything.",

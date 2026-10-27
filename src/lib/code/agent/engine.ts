@@ -1,4 +1,6 @@
 import "server-only";
+import { readLink } from "../../links/read";
+import { emitLive, hasWatchers } from "./live";
 import { searchBackend, searchWeb } from "../../search/live";
 import { createHash } from "node:crypto";
 import { getProvider, resolveModelChoice, withTimeout } from "@/lib/ai";
@@ -438,6 +440,10 @@ function realEnv(c: EnvContext): AgentEnv {
       return r.sources.slice(0, 6).map((s) => ({ title: s.title, url: s.url, snippet: s.snippet }));
     };
   }
+  env.readPage = async (url) => {
+    const r = await readLink(url, withTimeout(20_000));
+    return r.ok ? { ok: true, url: r.finalUrl, title: r.title ?? null, text: r.text } : { ok: false, reason: r.reason };
+  };
   if (c.github) {
     env.github = async (tool, args) => {
       const r = await runTool(auth, tool, args, { actor: { kind: "agent", agent: codeAgentId(run), runId: run.id } });
@@ -722,7 +728,7 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
 
   const readOnly = !!opts.readOnly;
   const planApproved = !readOnly && (!opts.approvePlans || !!row.plan?.approved);
-  const ctx: ToolContext = { commands: readOnly ? "off" : opts.commands, docs, github, approvePlans: opts.approvePlans, readOnly, memory: true, attachments: attached.texts + attached.images > 0 };
+  const ctx: ToolContext = { commands: readOnly ? "off" : opts.commands, docs, github, approvePlans: opts.approvePlans, readOnly, memory: true, attachments: attached.texts + attached.images > 0, pages: true };
   const native = usesNativeTools(model);
   const maxOutputTokens = Math.max(limits.maxOutputTokens, AGENT_OUTPUT_TOKENS);
   const replyChars = maxOutputTokens * 3;
@@ -736,6 +742,7 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
 
   // The model call isn't tied to the browser's request: a closed tab doesn't cut a step off half way.
   const started = performance.now();
+  emitLive(row.id, { t: "step", step: row.steps + 1 });
   let reply: AgentReply;
   let raw = "";
   let callUsage: Usage;
@@ -743,7 +750,7 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
   let stop: "tool_use" | "end_turn" | "max_tokens" | "refusal" | "other" | "json" = "json";
   try {
     if (native) {
-      const r = await getProvider(model.provider).toolTurn!({ model, system, messages: toToolMessages(history, await screenshots(auth, row.id, history), await attachedImages(auth, row.id, attached.images, model)), tools: toolSchemas(ctx), maxOutputTokens, signal: withTimeout(modelTimeoutFor(deadline, clock())) });
+      const r = await getProvider(model.provider).toolTurn!({ model, system, messages: toToolMessages(history, await screenshots(auth, row.id, history), await attachedImages(auth, row.id, attached.images, model)), tools: toolSchemas(ctx), maxOutputTokens, signal: withTimeout(modelTimeoutFor(deadline, clock())), ...(hasWatchers(row.id) ? { onText: (d: string) => emitLive(row.id, { t: "text", d }) } : {}) });
       reply = { thought: clipText(r.text, 6_000), actions: r.calls.slice(0, 8).map((c) => ({ id: c.id, tool: c.name, args: c.args })) };
       raw = `${r.text}\n${JSON.stringify(r.calls)}`;
       callUsage = r.usage;
@@ -768,6 +775,7 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
       }
     }
   } catch (err) {
+    emitLive(row.id, { t: "model_done" });
     await releaseUsage(auth);
     reportError(err, { where: "code.agent.model" });
     // Provider messages from ApiError are already safe to show; anything else gets a generic one.
@@ -787,6 +795,7 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
     throw new ApiError("upstream_error", `${reason} This step wasn't counted. Press Continue to try again.`);
   }
   const latencyMs = performance.now() - started;
+  emitLive(row.id, { t: "model_done" });
   usage = { ...addUsage(usage, model, callUsage, promptChars, raw.length), modelFailuresInRow: 0 };
   const webSearches = { count: 0 };
   const record = (tools: string[]) =>
