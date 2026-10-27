@@ -341,6 +341,18 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
           </div>
         </div>
 
+        {/* Pinned above the account, outside the scrolling list, so it's always in the same place. */}
+        {entries.some((e) => e.group === "footer") && (
+          <nav aria-label="Activity" className={cn("shrink-0 border-t border-s-line px-3 pt-2", rail && "md:px-0")}>
+            <ul className={cn("flex flex-col gap-0.5", rail && "md:items-center")}>
+              {entries
+                .filter((e) => e.group === "footer")
+                .map((e) => (
+                  <NavLink key={e.id} entry={e} rail={rail} active={current === e.id} onClick={p.onCloseMobile} />
+                ))}
+            </ul>
+          </nav>
+        )}
         <ProfileMenu {...p} rail={rail} />
       </aside>
     </>

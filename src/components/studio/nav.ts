@@ -60,8 +60,8 @@ export interface NavEntry {
   label: string;
   href: string;
   icon: LucideIcon;
-  /** mode: Chat and Code, switched in the top bar (not the sidebar); bar: a button in the top bar, next to search (not the sidebar); main: everyday work; tools: more ways to use the models; admin: administrators only. */
-  group: "mode" | "bar" | "main" | "tools" | "admin";
+  /** mode: Chat and Code, switched in the top bar (not the sidebar); bar: a button in the top bar, next to search (not the sidebar); main: everyday work; tools: more ways to use the models; footer: pinned at the bottom of the sidebar, above the account; admin: administrators only. */
+  group: "mode" | "bar" | "main" | "tools" | "footer" | "admin";
   /** What it's for, in a few words (tooltips and the command palette). */
   hint: string;
   /** Reached from another entry's page rather than the sidebar (Missions from Projects); that entry is shown active. */
@@ -76,7 +76,7 @@ export const NAV_ENTRIES: NavEntry[] = [
   { id: "agents", label: "Agents", href: "/agents", icon: Bot, group: "main", hint: "Specialised assistants, including the Security Team" },
   { id: "mimic", label: "Mimic", href: "/mimic", icon: MousePointerClick, group: "main", hint: "Show Mimic a task once; it learns it and does it for you" },
   { id: "projects", label: "Projects", href: "/projects", icon: FolderKanban, group: "bar", hint: "Ongoing work: code projects, missions and their tasks" },
-  { id: "activity", label: "Activity", href: "/activity", icon: Activity, group: "main", hint: "Every agent task: what's running, waiting for you, done or failed" },
+  { id: "activity", label: "Activity", href: "/activity", icon: Activity, group: "footer", hint: "Every agent task: what's running, waiting for you, done or failed" },
   { id: "templates", label: "Templates", href: "/templates", icon: LayoutTemplate, group: "main", hint: "Ready-made workflows for common tasks" },
   { id: "discover", label: "Discover", href: "/discover", icon: Compass, group: "tools", hint: "What Orbis can do, with ways to try it" },
   { id: "missions", label: "Missions", href: "/missions", icon: Flag, group: "main", hint: "Plan projects and track tasks", parent: "projects" },
