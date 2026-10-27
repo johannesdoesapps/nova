@@ -1,8 +1,10 @@
 /**
  * A small Supabase-client stand-in over PGlite, for running server code against the real migrations with
  * row-level security: every query runs as the given user (role authenticated, auth.uid() = that user).
- * Supports what the Mimic server uses: select/insert/update/upsert/delete with eq/neq/order/limit and
- * single/maybeSingle. Dates, timestamps and numerics come back as strings, as PostgREST returns them.
+ * Supports select/insert/update/upsert/delete with eq/neq/in/is/gte/lte/order/limit, single/maybeSingle and
+ * rpc (named arguments). Dates, timestamps and numerics come back as strings, as PostgREST returns them.
+ * Queries on one database run one at a time (a session's role is set per query), so concurrent callers in a
+ * test can't see each other's role.
  */
 import type { PGlite } from "@electric-sql/pglite";
 
@@ -20,7 +22,8 @@ const cols = (s: string) =>
         .split(",")
         .map((c) => ident(c.trim()))
         .join(", ");
-const param = (v: unknown) => (v !== null && typeof v === "object" ? JSON.stringify(v) : v);
+// Arrays of plain values go to array columns as arrays (PostgREST takes JSON arrays for them); objects go as JSON.
+const param = (v: unknown) => (Array.isArray(v) && v.every((x) => x === null || typeof x !== "object") ? v : v !== null && typeof v === "object" ? JSON.stringify(v) : v);
 
 class Query implements PromiseLike<Result> {
   private op: "select" | "insert" | "update" | "upsert" | "delete" = "select";
@@ -71,6 +74,22 @@ class Query implements PromiseLike<Result> {
     this.filters.push([c, "<>", v]);
     return this;
   }
+  in(c: string, v: unknown[]) {
+    this.filters.push([c, "= any", v]);
+    return this;
+  }
+  is(c: string, v: null | boolean) {
+    this.filters.push([c, v === null ? "is null" : `is ${v}`, undefined]);
+    return this;
+  }
+  gte(c: string, v: unknown) {
+    this.filters.push([c, ">=", v]);
+    return this;
+  }
+  lte(c: string, v: unknown) {
+    this.filters.push([c, "<=", v]);
+    return this;
+  }
   order(c: string, o?: { ascending?: boolean }) {
     this.orderBy = `${ident(c)} ${o?.ascending === false ? "desc" : "asc"}`;
     return this;
@@ -90,7 +109,13 @@ class Query implements PromiseLike<Result> {
 
   private where(params: unknown[]) {
     if (!this.filters.length) return "";
-    return ` where ${this.filters.map(([c, op, v]) => (params.push(param(v)), `${ident(c)} ${op} $${params.length}`)).join(" and ")}`;
+    return ` where ${this.filters
+      .map(([c, op, v]) => {
+        if (op.startsWith("is ")) return `${ident(c)} ${op}`;
+        params.push(op === "= any" ? v : param(v));
+        return op === "= any" ? `${ident(c)} = any($${params.length})` : `${ident(c)} ${op} $${params.length}`;
+      })
+      .join(" and ")}`;
   }
 
   private sql(): [string, unknown[]] {
@@ -127,17 +152,49 @@ class Query implements PromiseLike<Result> {
   }
 }
 
-/** A client whose queries run as `userId` under the migrations' row-level security. */
-export function supabaseAs(db: PGlite, userId: string) {
-  const run = async (sql: string, params: unknown[]) => {
-    await db.exec(`reset role; select set_config('request.jwt.claim.sub', '${userId}', false); set role authenticated;`);
+const queues = new WeakMap<PGlite, Promise<unknown>>();
+/** Run `fn` after every earlier query on this database has finished. */
+function serial<T>(db: PGlite, fn: () => Promise<T>): Promise<T> {
+  const prev = queues.get(db) ?? Promise.resolve();
+  const next = prev.then(fn, fn);
+  queues.set(
+    db,
+    next.catch(() => undefined),
+  );
+  return next;
+}
+
+function client(db: PGlite, userId: string | null) {
+  const run = (sql: string, params: unknown[]) =>
+    serial(db, async () => {
+      await db.exec(userId ? `reset role; select set_config('request.jwt.claim.sub', '${userId}', false); set role authenticated;` : "reset role; select set_config('request.jwt.claim.sub', '', false);");
+      try {
+        return (await db.query<Row>(sql, params)).rows;
+      } finally {
+        await db.exec("reset role");
+      }
+    });
+  const rpc = async (fn: string, args: Record<string, unknown> = {}): Promise<Result> => {
     try {
-      return (await db.query<Row>(sql, params)).rows;
-    } finally {
-      await db.exec("reset role");
+      const keys = Object.keys(args);
+      const rows = await run(`select public.${ident(fn)}(${keys.map((k, i) => `${ident(k)} => $${i + 1}`).join(", ")}) as r`, keys.map((k) => param(args[k])));
+      return { data: rows[0]?.r ?? null, error: null };
+    } catch (err) {
+      const e = err as { code?: string; message?: string };
+      return { data: null, error: { code: e.code ?? "XX000", message: e.message ?? "error" } };
     }
   };
-  return { from: (table: string) => new Query(run, table) };
+  return { from: (table: string) => new Query(run, table), rpc };
+}
+
+/** A client whose queries run as `userId` under the migrations' row-level security. */
+export function supabaseAs(db: PGlite, userId: string) {
+  return client(db, userId);
+}
+
+/** The server's service-role client: no row-level security (the database superuser stands in for it). */
+export function serviceAs(db: PGlite) {
+  return client(db, null);
 }
 
 /** PGlite parsers that keep dates, timestamps and numerics as strings (PostgREST's JSON shapes). */

@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { alertOwner } from "@/lib/alerts";
 import { dailyFindings } from "@/lib/billing/daily-check";
 import { claimNotification } from "@/lib/email";
+import { kickOrchestrator } from "@/lib/orchestrator/background";
 import { serverEnv } from "@/lib/env";
 import { resolveBilling } from "@/lib/plans";
 import { reportError } from "@/lib/observability";
@@ -13,7 +14,8 @@ const DAY = 86_400_000;
 
 /**
  * GET /api/cron/daily — once a day (vercel.json): unusual AI spend, the site-wide cap getting close, and requests
- * reserved but never recorded. Each finding emails the owner once a day. Only Vercel Cron can call it: Vercel sends
+ * reserved but never recorded. Each finding emails the owner once a day. It also starts an orchestrator worker when
+ * orchestrator tasks are waiting (a backstop for retries that nothing else woke). Only Vercel Cron can call it: Vercel sends
  * CRON_SECRET as a bearer token, and without that secret set the route refuses everything.
  */
 export async function GET(req: Request) {
@@ -21,6 +23,12 @@ export async function GET(req: Request) {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const db = serviceSupabase();
   if (!db) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY is not set" }, { status: 503 });
+  // Only when the orchestrator's tables exist and something is queued (the query fails harmlessly otherwise).
+  const { data: queued } = await db.from("orch_tasks").select("id").eq("status", "queued").limit(1);
+  if (queued?.length) {
+    const origin = new URL(req.url).origin;
+    after(() => kickOrchestrator(origin));
+  }
   try {
     const now = new Date();
     const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
