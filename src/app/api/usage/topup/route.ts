@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { billingConfigured, stripeClient } from "@/lib/billing/stripe";
+import { billingConfigured, createCheckoutSession, stripeClient } from "@/lib/billing/stripe";
 import { topupConsentText } from "@/lib/billing/topup";
 import { entitlementFor } from "@/lib/entitlements";
 import { publicEnv } from "@/lib/env";
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
     let customer = (existing?.stripe_customer_id as string | null) ?? (sub?.stripe_customer_id as string | null) ?? null;
     if (!customer) customer = (await stripe.customers.create({ email: auth.user.email ?? undefined, metadata: { user_id: auth.user.id } })).id;
     const site = publicEnv.siteUrl.replace(/\/$/, "");
-    const session = await stripe.checkout.sessions.create({
+    const session = await createCheckoutSession(stripe, {
       mode: "setup",
       currency: "usd",
       customer,

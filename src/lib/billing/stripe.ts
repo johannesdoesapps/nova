@@ -25,6 +25,22 @@ export function stripeClient(): Stripe | null {
   return client;
 }
 
+/**
+ * Start a Stripe Checkout. Checkout normally offers the account's automatic payment methods; when none of them fit
+ * the session (Stripe: "No valid payment method types for this Checkout Session", seen in production for USD
+ * subscriptions), it tries once more with cards named explicitly, under its own idempotency key.
+ */
+export async function createCheckoutSession(stripe: Stripe, params: Stripe.Checkout.SessionCreateParams, options?: Stripe.RequestOptions): Promise<Stripe.Checkout.Session> {
+  try {
+    return await stripe.checkout.sessions.create(params, options);
+  } catch (e) {
+    const err = e as { type?: string; message?: string };
+    if (err.type !== "StripeInvalidRequestError" || !/no valid payment method types/i.test(err.message ?? "") || params.allowed_payment_method_types) throw e;
+    console.warn("[billing] Checkout had no automatic payment methods for this session; retrying with cards.");
+    return stripe.checkout.sessions.create({ ...params, allowed_payment_method_types: ["card"] }, options?.idempotencyKey ? { ...options, idempotencyKey: `${options.idempotencyKey}:card` } : options);
+  }
+}
+
 export type PaidPlan = "pro" | "max";
 
 /** Identifies an Orbis price in Stripe; includes the amount, so a price change creates a new price. */

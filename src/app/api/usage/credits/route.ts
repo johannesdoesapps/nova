@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { billingConfigured, stripeClient } from "@/lib/billing/stripe";
+import { billingConfigured, createCheckoutSession, stripeClient } from "@/lib/billing/stripe";
 import { entitlementFor } from "@/lib/entitlements";
 import { publicEnv } from "@/lib/env";
 import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     const site = publicEnv.siteUrl.replace(/\/$/, "");
     const { data: sub } = await auth.supabase.from("subscriptions").select("stripe_customer_id").eq("user_id", auth.user.id).maybeSingle();
     const customer = (sub?.stripe_customer_id as string | null) ?? undefined;
-    const session = await stripe.checkout.sessions.create({
+    const session = await createCheckoutSession(stripe, {
       mode: "payment",
       line_items: [
         { quantity: packs, price_data: { currency: "usd", unit_amount: Math.round(pack.priceUsd * 100), product_data: { name: `Orbis extra usage: ${pack.units.toLocaleString("en-US")} units` } } },

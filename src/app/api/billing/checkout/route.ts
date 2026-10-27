@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { billingConfigured, checkoutIdempotencyKey, planPriceId, stripeClient } from "@/lib/billing/stripe";
+import { billingConfigured, checkoutIdempotencyKey, createCheckoutSession, planPriceId, stripeClient } from "@/lib/billing/stripe";
 import { requireUser } from "@/lib/auth";
 import { getBilling } from "@/lib/entitlements";
 import { publicEnv } from "@/lib/env";
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     const site = publicEnv.siteUrl.replace(/\/$/, "");
     const customer = (sub?.stripe_customer_id as string | null) ?? undefined;
     const price = await planPriceId(stripe, await getBilling(), plan, interval);
-    const session = await stripe.checkout.sessions.create({
+    const session = await createCheckoutSession(stripe, {
       mode: "subscription",
       line_items: [{ price, quantity: 1 }],
       ...(customer ? { customer } : { customer_email: user.email ?? undefined }),

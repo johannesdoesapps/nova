@@ -200,6 +200,21 @@ describe("CSRF guard for API changes", () => {
   });
 });
 
+describe("addresses with a backslash", () => {
+  it("redirect to the clean address instead of failing (seen in production as /pricing%5C → 500)", async () => {
+    const { backslashRedirect } = await import("@/proxy");
+    const { NextRequest } = await import("next/server");
+    const at = (url: string) => backslashRedirect(new NextRequest(url));
+    expect(at("https://tryorbis.app/pricing%5C")?.headers.get("location")).toBe("https://tryorbis.app/pricing");
+    expect(at("https://tryorbis.app/pricing%5C")?.status).toBe(308);
+    expect(at("https://tryorbis.app/login%5c?next=%2Fchat")?.headers.get("location")).toBe("https://tryorbis.app/login?next=%2Fchat");
+    expect(at("https://tryorbis.app/docs%5Cguide")?.headers.get("location")).toBe("https://tryorbis.app/docs/guide");
+    // Never leaves the site, however many backslashes lead the path.
+    expect(new URL(at("https://tryorbis.app/%5C%5Cevil.example")!.headers.get("location")!).host).toBe("tryorbis.app");
+    expect(at("https://tryorbis.app/pricing")).toBeNull();
+  });
+});
+
 describe("canonical domain redirect", () => {
   it("sends production page visits on *.vercel.app to the site's own domain, and leaves everything else alone", async () => {
     const { canonicalRedirect } = await import("@/proxy");

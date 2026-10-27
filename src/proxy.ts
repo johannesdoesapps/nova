@@ -16,6 +16,8 @@ const PROTECTED_PREFIXES = ["/projects"];
  */
 export async function proxy(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith("/api/")) return guardApi(request);
+  const cleaned = backslashRedirect(request);
+  if (cleaned) return cleaned;
   const canonical = canonicalRedirect(request);
   if (canonical) return canonical;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
@@ -74,6 +76,19 @@ export async function proxy(request: NextRequest) {
  * domain (NEXT_PUBLIC_SITE_URL): sign-in returns there, so a session started on
  * another host would not survive the round trip. API calls are left alone.
  */
+/**
+ * Page addresses with a backslash (`/pricing\`, often `/pricing%5C`) made the server look for a page file named
+ * after it and fail with a 500. Treat a backslash as the slash the visitor meant and redirect to the clean address.
+ */
+export function backslashRedirect(request: NextRequest): NextResponse | null {
+  const raw = request.nextUrl.pathname;
+  if (!/\\|%5c/i.test(raw)) return null;
+  const clean = raw.replace(/%5c/gi, "/").replace(/\\/g, "/").replace(/\/{2,}/g, "/").replace(/(.)\/$/, "$1");
+  const to = request.nextUrl.clone();
+  to.pathname = clean || "/";
+  return NextResponse.redirect(to, 308);
+}
+
 export function canonicalRedirect(request: NextRequest, env: Record<string, string | undefined> = process.env): NextResponse | null {
   if (env.VERCEL_ENV !== "production") return null;
   if (request.method !== "GET" && request.method !== "HEAD") return null;

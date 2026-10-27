@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { billingConfigured, planPriceId, stripeClient, checkoutIdempotencyKey } from "@/lib/billing/stripe";
+import { billingConfigured, checkoutIdempotencyKey, createCheckoutSession, planPriceId, stripeClient } from "@/lib/billing/stripe";
 import { getBilling } from "@/lib/entitlements";
 import { publicEnv } from "@/lib/env";
 import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     const site = publicEnv.siteUrl.replace(/\/$/, "");
     const meta = { kind: "team", team_id: teamId as string, owner_id: user.id, orbis_plan: plan };
     const price = await planPriceId(stripe, await getBilling(), plan, interval);
-    const session = await stripe.checkout.sessions.create({
+    const session = await createCheckoutSession(stripe, {
       mode: "subscription",
       line_items: [{ price, quantity: seats }],
       ...(existing?.stripe_customer_id ? { customer: existing.stripe_customer_id } : { customer_email: user.email ?? undefined }),

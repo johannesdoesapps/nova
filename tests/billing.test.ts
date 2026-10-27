@@ -3,6 +3,7 @@
  * Max (monthly and yearly), plan changes, cancellation, renewals, failed
  * payments, webhook signature checks, and how subscriptions are stored.
  */
+import type Stripe from "stripe";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const upserts: Record<string, unknown>[] = [];
@@ -303,5 +304,52 @@ describe("POST /api/billing/change", () => {
   it("needs an existing subscription", async () => {
     const { POST } = await setup({ status: "canceled" });
     expect((await POST(post({ plan: "max" }))).status).toBe(404);
+  });
+});
+
+describe("starting a checkout", () => {
+  const createCheckoutSession = async (...a: Parameters<typeof import("@/lib/billing/stripe").createCheckoutSession>) => (await import("@/lib/billing/stripe")).createCheckoutSession(...a);
+  const params: Stripe.Checkout.SessionCreateParams = { mode: "subscription", line_items: [{ price: "price_1", quantity: 1 }], success_url: "https://x/ok", cancel_url: "https://x/no" };
+  function fakeStripe(fail: (p: Record<string, unknown>) => Error | null) {
+    const calls: { params: Record<string, unknown>; options: unknown }[] = [];
+    const stripe = {
+      checkout: {
+        sessions: {
+          create: async (p: Record<string, unknown>, options: unknown) => {
+            calls.push({ params: p, options });
+            const err = fail(p);
+            if (err) throw err;
+            return { id: `cs_${calls.length}`, url: "https://checkout.stripe.com/c/pay/cs" };
+          },
+        },
+      },
+    } as unknown as Stripe;
+    return { stripe, calls };
+  }
+  const noMethods = () => Object.assign(new Error("No valid payment method types for this Checkout Session. Please ensure that you have activated payment methods compatible with your chosen currency in your dashboard or specify `payment_method_types`."), { type: "StripeInvalidRequestError" });
+
+  it("uses the account's automatic payment methods when they work", async () => {
+    const { stripe, calls } = fakeStripe(() => null);
+    const s = await createCheckoutSession(stripe, { ...params }, { idempotencyKey: "k1" });
+    expect(s.id).toBe("cs_1");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].params.allowed_payment_method_types).toBeUndefined();
+  });
+
+  it("retries once with cards when Stripe finds no payment methods for the session, under its own idempotency key", async () => {
+    const { stripe, calls } = fakeStripe((p) => (p.allowed_payment_method_types ? null : noMethods()));
+    const s = await createCheckoutSession(stripe, { ...params }, { idempotencyKey: "k1" });
+    expect(s.id).toBe("cs_2");
+    expect(calls[1].params.allowed_payment_method_types).toEqual(["card"]);
+    expect(calls[1].options).toEqual({ idempotencyKey: "k1:card" });
+  });
+
+  it("doesn't retry other errors, and doesn't loop if cards fail too", async () => {
+    const other = fakeStripe(() => Object.assign(new Error("No such price: 'price_1'"), { type: "StripeInvalidRequestError" }));
+    await expect(createCheckoutSession(other.stripe, { ...params })).rejects.toThrow(/No such price/);
+    expect(other.calls).toHaveLength(1);
+    const both = fakeStripe(() => noMethods());
+    await expect(createCheckoutSession(both.stripe, { ...params })).rejects.toThrow(/No valid payment method types/);
+    expect(both.calls).toHaveLength(2);
   });
 });
