@@ -12,6 +12,7 @@ import type { ReviewView } from "@/lib/review/server";
 import { cn } from "@/lib/utils";
 import { SeverityCounts, StatusPill } from "./bits";
 import { LoadFailed } from "@/components/common/load-failed";
+import { UsageEstimateLine } from "@/components/studio/usage";
 
 type Kind = "paste" | "diff" | "zip" | "github" | "project";
 const TABS: { id: Kind; label: string; icon: typeof FileCode2 }[] = [
@@ -345,6 +346,7 @@ export function ReviewHome() {
               </button>
               <span className="text-[12px] text-s-ink-3">Each part of the review is charged like a message of its size; larger projects take a few parts (up to about 180 KB of code).</span>
             </div>
+            <UsageEstimateLine feature="code_review" signedIn={!!user} className="mt-2" />
           </section>
 
           <section aria-labelledby="rv-history" className="mt-8">

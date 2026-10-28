@@ -87,7 +87,7 @@ export interface CodeRunRow {
 
 const num = (v: unknown): number | null => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
 
-const WAITING: Record<string, string> = {
+export const WAITING: Record<string, string> = {
   plan: "Approve the plan",
   command: "Approve a command",
   edits: "Review the edits",

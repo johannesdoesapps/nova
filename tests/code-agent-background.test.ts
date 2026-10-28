@@ -69,10 +69,24 @@ vi.mock("@supabase/supabase-js", () => ({
 vi.mock("@/lib/code/agent/engine", () => ({
   stepRun: (...a: unknown[]) => {
     env.stepCalls.push(a);
+    if (inbox.inside) inbox.stepsInside++;
     return env.step(...a);
   },
 }));
 vi.mock("@/lib/code/agent/runs", () => ({ addEvents: async (_a: unknown, _id: string, evs: unknown[]) => env.events.push(...evs) }));
+const inbox = vi.hoisted(() => ({ notices: [] as unknown[], background: 0, inside: false, stepsInside: 0 }));
+vi.mock("@/lib/inbox", () => ({
+  inBackground: async <T>(fn: () => Promise<T>) => {
+    inbox.background++;
+    inbox.inside = true;
+    try {
+      return await fn();
+    } finally {
+      inbox.inside = false;
+    }
+  },
+  notifyUser: async (_a: unknown, n: unknown) => void inbox.notices.push(n),
+}));
 
 const RUN = "3f6c1b8e-2a4d-4c6e-9f1a-0b2c3d4e5f60";
 const quiet = (over: Record<string, unknown> = {}) => ({
@@ -91,6 +105,7 @@ beforeEach(() => {
   vi.stubEnv("CRON_SECRET", "s3cret");
   Object.assign(env, { run: null, afterRun: null, reads: 0, otpUser: "user-1" });
   env.calls.length = env.clients.length = env.stepCalls.length = env.events.length = env.kicks.length = 0;
+  Object.assign(inbox, { notices: [], background: 0, inside: false, stepsInside: 0 });
   env.step = async () => ({ run: { steps: 6, status: "running" } });
   vi.stubGlobal("fetch", async (url: URL, init: RequestInit) => {
     env.kicks.push({ url: String(url), auth: new Headers(init.headers).get("authorization"), body: String(init.body) });
@@ -226,6 +241,26 @@ describe("taking steps in the background", () => {
     env.kicks.length = 0;
     expect(await driveInBackground(RUN, "https://tryorbis.app", { wait: 0 })).toBe("error");
     expect(env.kicks).toHaveLength(0);
+  });
+
+  it("takes its steps as background work (updates then reach the inbox and email)", async () => {
+    const { driveInBackground } = await import("@/lib/code/agent/background");
+    env.run = quiet();
+    env.afterRun = quiet({ steps: 6 });
+    await driveInBackground(RUN, "https://tryorbis.app", { wait: 0 });
+    expect(inbox.stepsInside).toBe(1);
+  });
+
+  it("tells the user when it had to stop, so the task doesn't sit there unnoticed", async () => {
+    const { driveInBackground } = await import("@/lib/code/agent/background");
+    env.run = quiet({ request: "Add a contact form", project_id: "p1" });
+    env.step = async () => {
+      throw new Error("You've used this week's allowance.");
+    };
+    expect(await driveInBackground(RUN, "https://tryorbis.app", { wait: 0 })).toBe("error");
+    expect(inbox.notices).toEqual([
+      { kind: "task_waiting", key: `code_run:${RUN}:stopped:4`, title: "Add a contact form", body: "Stopped working in the background: You've used this week's allowance.", href: `/code/p1?run=${RUN}` },
+    ]);
   });
 
   it("does nothing if the session doesn't belong to the run's owner", async () => {

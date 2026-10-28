@@ -17,6 +17,7 @@ import { trackEvent } from "./analytics/server";
 import { alertOwner } from "./alerts";
 import { emailConfigured, sendCustomerEmail, type CustomerEmailKind } from "./email";
 import { maybeTopUp } from "./billing/topup";
+import { upgradeLine, type LimitScope } from "./usage-upgrade";
 
 /**
  * Usage accounting. Policy (see docs/USAGE.md):
@@ -239,7 +240,8 @@ async function enforceLimitsInner(
       return { requestId, units: 0, entitlement: entitlement.label, estCostUsd: 0 };
     }
     const upgrade = nextPlan(entitlement.plan);
-    const upgradeHint = upgrade ? ` ${billing.plans[upgrade].label} gives you more.` : "";
+    // What the next plan gives for the limit that was reached, in numbers (usage-glance.ts).
+    const upgradeHint = (scope: LimitScope) => upgradeLine(billing, entitlement.plan, scope);
     const renews = nextRenewal(period.end);
     const name = models?.length === 1 ? models[0]!.displayName : null;
     // What the user can do instead: lower-cost models of the same provider first. Never switched for them.
@@ -269,10 +271,10 @@ async function enforceLimitsInner(
         throw new ApiError("quota_exceeded", "Orbis has reached its AI usage limit for this month. Please try again later.", { ...details, scope: "site" });
       }
       if (r.scope === "daily") {
-        throw new ApiError("quota_exceeded", `You've used today's share of your ${plan.label} plan's AI allowance. It resets at midnight UTC.${upgradeHint}`, { ...details, scope: "daily", resetsAt: r.resets_at ? new Date(r.resets_at).toISOString() : null });
+        throw new ApiError("quota_exceeded", `You've used today's share of your ${plan.label} plan's AI allowance. It resets at midnight UTC.${upgradeHint("daily")}`, { ...details, scope: "daily", resetsAt: r.resets_at ? new Date(r.resets_at).toISOString() : null });
       }
       if (r.scope === "exhausted") emailLater(auth, "budget_100", `budget:${period.start}`, { resetsAt: period.end });
-      if (r.scope === "exhausted") throw new ApiError("quota_exceeded", `You've used this month's AI allowance on your ${plan.label} plan. It renews on ${renews}.${upgradeHint}${extra}`, { ...details, scope: "budget", state: "exhausted" });
+      if (r.scope === "exhausted") throw new ApiError("quota_exceeded", `You've used this month's AI allowance on your ${plan.label} plan. It renews on ${renews}.${upgradeHint("budget")}${extra}`, { ...details, scope: "budget", state: "exhausted" });
       if (r.scope === "premium") {
         throw new ApiError(
           "quota_exceeded",
@@ -280,14 +282,14 @@ async function enforceLimitsInner(
           { ...details, scope: "budget", state: "economy" },
         );
       }
-      throw new ApiError("quota_exceeded", `This request could cost more than what's left of this month's AI allowance. Try ${optionNames || "Auto"} or a shorter request.${upgradeHint}${extra}`, { ...details, scope: "budget", state: "insufficient" });
+      throw new ApiError("quota_exceeded", `This request could cost more than what's left of this month's AI allowance. Try ${optionNames || "Auto"} or a shorter request.${upgradeHint("budget")}${extra}`, { ...details, scope: "budget", state: "insufficient" });
     }
     if (r.reason === "tokens") {
-      throw new ApiError("quota_exceeded", `You've used this month's ${Number(r.limit).toLocaleString("en-US")}-token allowance on your ${plan.label} plan. It renews on ${renews}.${upgradeHint}${extra}`, { ...details, scope: "tokens" });
+      throw new ApiError("quota_exceeded", `You've used this month's ${Number(r.limit).toLocaleString("en-US")}-token allowance on your ${plan.label} plan. It renews on ${renews}.${upgradeHint("tokens")}${extra}`, { ...details, scope: "tokens" });
     }
     const resetsAt = r.resets_at ? new Date(r.resets_at).toISOString() : null;
     if (r.scope === "day") {
-      throw new ApiError("quota_exceeded", `You've sent today's ${r.limit} messages on the ${plan.label} plan. More are available tomorrow (UTC).${upgradeHint}`, { ...details, scope: "day", resetsAt });
+      throw new ApiError("quota_exceeded", `You've sent today's ${r.limit} messages on the ${plan.label} plan. More are available tomorrow (UTC).${upgradeHint("day")}`, { ...details, scope: "day", resetsAt });
     }
     const left = Math.max(0, Math.round((Number(r.limit ?? 0) - Number(r.used ?? 0)) * 100) / 100);
     const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
@@ -304,8 +306,8 @@ async function enforceLimitsInner(
     if (r.scope === "week" && !(left > 0 && units > left)) emailLater(auth, "usage_week_100", `week:${resetsAt ?? "?"}`, { resetsAt: resetsAt ? Date.parse(resetsAt) : null });
     const message =
       left > 0 && units > left
-        ? `${name ?? "This request"} uses about ${fmt(units)} units for a typical message, but only ${fmt(left)} of your ${plan.label} plan's ${scope} allowance ${left === 1 ? "is" : "are"} left. Auto or a lighter model uses less.${upgradeHint}${extra}`
-        : `You've reached your ${plan.label} plan's ${scope} limit.${upgradeHint}${extra}`;
+        ? `${name ?? "This request"} uses about ${fmt(units)} units for a typical message, but only ${fmt(left)} of your ${plan.label} plan's ${scope} allowance ${left === 1 ? "is" : "are"} left. Auto or a lighter model uses less.${upgradeHint(r.scope === "week" ? "week" : "window")}${extra}`
+        : `You've reached your ${plan.label} plan's ${scope} limit.${upgradeHint(r.scope === "week" ? "week" : "window")}${extra}`;
     throw new ApiError("quota_exceeded", message, {
       scope: r.scope,
       resetsAt,

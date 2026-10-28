@@ -31,6 +31,8 @@ export async function GET(req: Request) {
     const origin = new URL(req.url).origin;
     after(() => kickOrchestrator(origin));
   }
+  // Inbox updates are kept 90 days once read (unread ones stay until seen).
+  await db.from("user_notifications").delete().lt("created_at", new Date(Date.now() - 90 * DAY).toISOString()).not("read_at", "is", null);
   try {
     const now = new Date();
     const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());

@@ -7,6 +7,8 @@ import type { AppUser } from "@/components/layout/app-context";
 import { cn } from "@/lib/utils";
 import { groupByDate, type ConvSummary } from "./history";
 import { activeEntryFor, sidebarFor, type NavEntry, type Section } from "./nav";
+import { SidebarUsage, useUsageGlance } from "./usage";
+import { useInbox } from "./inbox";
 import type { ThemePref } from "./prefs";
 import { IconButton, iconButtonClass, Kbd, Menu, MenuItem, MenuSeparator, Segmented } from "./ui";
 import { InfinityMark } from "@/components/brand/infinity";
@@ -111,6 +113,8 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
   }, [drawer]);
 
   const rail = p.collapsed;
+  const usage = useUsageGlance(!!p.user);
+  const inbox = useInbox(!!p.user);
   // In Code, the sidebar is about projects; everywhere else, about chats.
   const inCode = p.section === "code";
   // Chat and Code are switched in the top bar, not here.
@@ -341,6 +345,8 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
           </div>
         </div>
 
+        {/* The week's usage at a glance, for signed-in accounts with an allowance. */}
+        {usage && <SidebarUsage usage={usage} rail={rail} onNavigate={p.onCloseMobile} />}
         {/* Pinned above the account, outside the scrolling list, so it's always in the same place. */}
         {entries.some((e) => e.group === "footer") && (
           <nav aria-label="Activity" className={cn("shrink-0 border-t border-s-line px-3 pt-2", rail && "md:px-0")}>
@@ -348,7 +354,7 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
               {entries
                 .filter((e) => e.group === "footer")
                 .map((e) => (
-                  <NavLink key={e.id} entry={e} rail={rail} active={current === e.id} onClick={p.onCloseMobile} />
+                  <NavLink key={e.id} entry={e} rail={rail} active={current === e.id} onClick={p.onCloseMobile} badge={e.id === "activity" && inbox ? inbox.waiting + inbox.unread : 0} />
                 ))}
             </ul>
           </nav>
@@ -397,9 +403,9 @@ function readMore(): boolean {
   }
 }
 
-function NavLink({ entry, rail, active, onClick }: { entry: NavEntry; rail: boolean; active: boolean; onClick: () => void }) {
+function NavLink({ entry, rail, active, onClick, badge = 0 }: { entry: NavEntry; rail: boolean; active: boolean; onClick: () => void; badge?: number }) {
   const Icon = entry.icon;
-  return <NavItem rail={rail} icon={<Icon />} label={entry.label} href={entry.href} active={active} onClick={onClick} hint={entry.hint} />;
+  return <NavItem rail={rail} icon={<Icon />} label={entry.label} href={entry.href} active={active} onClick={onClick} hint={entry.hint} badge={badge} />;
 }
 
 /** In Code, the sidebar lists the user's projects (most recently edited first) instead of chats. */
@@ -455,16 +461,27 @@ function RecentProjects({ signedIn, onNavigate }: { signedIn: boolean; onNavigat
   );
 }
 
-function NavItem({ rail, icon, label, href, onClick, active, hint }: { rail: boolean; icon: ReactNode; label: string; href?: string; onClick?: () => void; active?: boolean; hint?: string }) {
+function NavItem({ rail, icon, label, href, onClick, active, hint, badge = 0 }: { rail: boolean; icon: ReactNode; label: string; href?: string; onClick?: () => void; active?: boolean; hint?: string; badge?: number }) {
   const cls = cn(
     "flex h-9 items-center gap-3 rounded-xl px-3 text-[13.5px] text-s-ink-2 transition duration-200 hover:bg-s-hover hover:text-s-ink active:scale-[0.98] [&_svg]:h-[17px] [&_svg]:w-[17px] [&_svg]:shrink-0",
     active && "bg-s-hover font-medium text-s-ink",
     rail && "md:w-9 md:justify-center md:px-0",
   );
+  // A count of things for the user (Activity: tasks waiting for them and new updates).
+  const count = badge > 99 ? "99+" : String(badge);
   const body = (
     <>
-      {icon}
+      <span className="relative inline-flex">
+        {icon}
+        {badge > 0 && rail && <span aria-hidden className="absolute -right-1 -top-1 hidden h-2 w-2 rounded-full bg-s-accent md:block" />}
+      </span>
       <span className={cn(rail && "md:sr-only")}>{label}</span>
+      {badge > 0 && (
+        <span className={cn("ml-auto rounded-full bg-s-accent px-1.5 text-[11px] font-semibold leading-[18px] text-s-accent-ink", rail && "md:sr-only")}>
+          {count}
+          <span className="sr-only"> need{badge === 1 ? "s" : ""} your attention</span>
+        </span>
+      )}
     </>
   );
   return (

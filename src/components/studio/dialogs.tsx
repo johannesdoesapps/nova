@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import type { ConvSummary, Msg } from "./history";
 import type { PromptPatch, SavedPrompt, StudioSettings, ThemePref } from "./prefs";
 import { Dialog, IconButton, Kbd, Segmented, Switch } from "./ui";
+import { NotificationSettings } from "./inbox";
 import { UsageMeters, useUsage } from "./usage";
 import { useApp } from "@/components/layout/app-context";
 import { useAnalyticsChoice } from "@/components/common/analytics-choice";
@@ -133,6 +134,13 @@ function SettingsBody({
         >
           <Switch label="Backup model" checked={!!settings.allowFallback} onChange={(v) => onSettings({ allowFallback: v })} />
         </Row>
+        {historyKind === "server" && (
+          <div className="py-4">
+            <div className="text-[13.5px] font-medium">Notifications</div>
+            <div className="mt-0.5 mb-2 text-[12.5px] text-s-ink-3">For tasks that keep working after you close their page: when one finishes, stops or needs you. They also show under Activity.</div>
+            <NotificationSettings />
+          </div>
+        )}
         <Row title="Chat history" hint={historyKind === "server" ? "Saved to your account." : "As a guest, chats are stored in this browser only."}>
           {historyKind === "local" ? (
             confirmClear ? (

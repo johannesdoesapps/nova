@@ -9,6 +9,8 @@ import { dbError, type Authed } from "../server";
 import type { PairState } from "../pair/protocol";
 import type { TranscriptMessage } from "./protocol";
 import { emitLive, hasWatchers } from "./live";
+import { notifyUser, runningInBackground } from "@/lib/inbox";
+import { runNotice } from "./notify";
 import type { Checkpoint } from "./tools";
 import {
   DEFAULT_OPTIONS,
@@ -285,7 +287,19 @@ export async function updateRun(auth: Authed, runId: string, patch: RunPatch): P
     .select(RUN_COLS)
     .single();
   if (error) throw dbError(error, "code.agent.update");
+  await noticeIfAway(auth, patch, data as RunRow);
   return data as RunRow;
+}
+
+/**
+ * Nobody has the task's page open (the background worker is driving it): a change to finished, stopped or waiting
+ * goes to the user's inbox, and by email. With the page open, the page shows it. Awaited (it never throws): the
+ * worker's session ends when its call does.
+ */
+async function noticeIfAway(auth: Authed, patch: RunPatch, row: RunRow): Promise<void> {
+  if (!patch.status || !runningInBackground()) return;
+  const n = runNotice(row);
+  if (n) await notifyUser(auth, n);
 }
 
 /**
@@ -302,6 +316,7 @@ export async function updateRunIfNotCancelled(auth: Authed, runId: string, patch
     .select(RUN_COLS)
     .maybeSingle();
   if (error) throw dbError(error, "code.agent.update");
+  if (data) await noticeIfAway(auth, patch, data as RunRow);
   return (data as RunRow | null) ?? null;
 }
 

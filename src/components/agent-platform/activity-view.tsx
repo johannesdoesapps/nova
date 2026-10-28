@@ -5,6 +5,7 @@ import { CircleAlert, RefreshCw, Search, Square } from "lucide-react";
 import { api, post } from "@/components/code/api";
 import { useApp } from "@/components/layout/app-context";
 import { StudioHeader } from "@/components/studio/frame";
+import { InboxUpdates } from "@/components/studio/inbox";
 import { ACTIVITY_STATUS_LABEL, OPEN_STATUSES, type ActivityItem, type ActivityStatus } from "@/lib/agent-platform/activity";
 import { OUTCOME_INFO, type Outcome } from "@/lib/agent-platform/outcomes";
 import { agentDef, AGENTS } from "@/lib/agent-platform/registry";
@@ -87,6 +88,14 @@ export function ActivityView() {
     return (items ?? []).filter((i) => keep(filter, i.status) && (agent === "all" || i.agent === agent) && (!q || `${i.title} ${i.projectName ?? ""} ${i.detail ?? ""}`.toLowerCase().includes(q)));
   }, [items, filter, agent, query]);
   const openCount = (items ?? []).filter((i) => OPEN_STATUSES.includes(i.status)).length;
+  const waitingCount = (items ?? []).filter((i) => i.status === "awaiting_approval").length;
+
+  // While tasks are in progress, the list keeps itself current (every 20 s, only while the tab is visible).
+  useEffect(() => {
+    if (!user || openCount === 0) return;
+    const t = setInterval(() => document.visibilityState === "visible" && setAttempt((n) => n + 1), 20_000);
+    return () => clearInterval(t);
+  }, [user, openCount]);
   const agentsUsed = useMemo(() => AGENTS.filter((a) => (items ?? []).some((i) => i.agent === a.id)), [items]);
 
   return (
@@ -108,6 +117,7 @@ export function ActivityView() {
             )}
           </div>
 
+          <InboxUpdates signedIn={!!user} markSeen />
           {!user ? (
             <p className="mt-8 text-[14px]">
               <Link href="/login?next=/activity" className="text-s-accent underline-offset-4 hover:underline">
@@ -143,6 +153,7 @@ export function ActivityView() {
                       )}
                     >
                       {f.label}
+                      {f.id === "awaiting_approval" && waitingCount > 0 && <span className="ml-1.5 rounded-full bg-amber-500/20 px-1.5 text-[11.5px] font-medium">{waitingCount}</span>}
                       {f.id === "open" && openCount ? ` · ${openCount}` : ""}
                     </button>
                   ))}

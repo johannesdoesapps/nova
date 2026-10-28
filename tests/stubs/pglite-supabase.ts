@@ -1,15 +1,15 @@
 /**
  * A small Supabase-client stand-in over PGlite, for running server code against the real migrations with
  * row-level security: every query runs as the given user (role authenticated, auth.uid() = that user).
- * Supports select/insert/update/upsert/delete with eq/neq/in/is/gte/lte/order/limit, single/maybeSingle and
- * rpc (named arguments). Dates, timestamps and numerics come back as strings, as PostgREST returns them.
+ * Supports select/insert/update/upsert/delete with eq/neq/in/is/gte/lte/order/limit, single/maybeSingle, counts
+ * (select with { count: "exact", head: true }), upserts that ignore duplicates, and rpc (named arguments). Dates, timestamps and numerics come back as strings, as PostgREST returns them.
  * Queries on one database run one at a time (a session's role is set per query), so concurrent callers in a
  * test can't see each other's role.
  */
 import type { PGlite } from "@electric-sql/pglite";
 
 type Row = Record<string, unknown>;
-type Result = { data: unknown; error: { code: string; message: string } | null };
+type Result = { data: unknown; error: { code: string; message: string } | null; count?: number | null };
 
 const ident = (s: string) => {
   if (!/^[a-z_][a-z0-9_]*$/.test(s)) throw new Error(`bad identifier ${s}`);
@@ -35,13 +35,16 @@ class Query implements PromiseLike<Result> {
   private mode: "many" | "single" | "maybe" = "many";
   private payload: Row[] = [];
   private conflict: string | null = null;
+  private ignoreDuplicates = false;
+  private countOnly = false;
 
   constructor(
     private run: (sql: string, params: unknown[]) => Promise<Row[]>,
     private table: string,
   ) {}
 
-  select(c = "*") {
+  select(c = "*", o?: { count?: "exact"; head?: boolean }) {
+    if (o?.count && o.head) this.countOnly = true;
     if (this.op === "select") this.columns = c;
     else this.returning = c;
     return this;
@@ -51,10 +54,11 @@ class Query implements PromiseLike<Result> {
     this.payload = Array.isArray(p) ? p : [p];
     return this;
   }
-  upsert(p: Row | Row[], o?: { onConflict?: string }) {
+  upsert(p: Row | Row[], o?: { onConflict?: string; ignoreDuplicates?: boolean }) {
     this.op = "upsert";
     this.payload = Array.isArray(p) ? p : [p];
     this.conflict = o?.onConflict ?? "id";
+    this.ignoreDuplicates = !!o?.ignoreDuplicates;
     return this;
   }
   update(p: Row) {
@@ -122,6 +126,7 @@ class Query implements PromiseLike<Result> {
     const t = `public.${ident(this.table)}`;
     const params: unknown[] = [];
     const ret = this.returning ? ` returning ${cols(this.returning)}` : "";
+    if (this.op === "select" && this.countOnly) return [`select count(*)::int as n from ${t}${this.where(params)}`, params];
     if (this.op === "select") return [`select ${cols(this.columns)} from ${t}${this.where(params)}${this.orderBy ? ` order by ${this.orderBy}` : ""}${this.lim ? ` limit ${this.lim}` : ""}`, params];
     if (this.op === "delete") return [`delete from ${t}${this.where(params)}${ret}`, params];
     if (this.op === "update") {
@@ -130,7 +135,8 @@ class Query implements PromiseLike<Result> {
     }
     const keys = Object.keys(this.payload[0]!);
     const values = this.payload.map((r) => `(${keys.map((k) => (params.push(param(r[k])), `$${params.length}`)).join(", ")})`);
-    const conflict = this.op === "upsert" ? ` on conflict (${this.conflict!.split(",").map((c) => ident(c.trim())).join(", ")}) do update set ${keys.map((k) => `${ident(k)} = excluded.${ident(k)}`).join(", ")}` : "";
+    const target = this.op === "upsert" ? ` on conflict (${this.conflict!.split(",").map((c) => ident(c.trim())).join(", ")})` : "";
+    const conflict = !target ? "" : this.ignoreDuplicates ? `${target} do nothing` : `${target} do update set ${keys.map((k) => `${ident(k)} = excluded.${ident(k)}`).join(", ")}`;
     return [`insert into ${t} (${keys.map(ident).join(", ")}) values ${values.join(", ")}${conflict}${ret}`, params];
   }
 
@@ -138,6 +144,7 @@ class Query implements PromiseLike<Result> {
     try {
       const [sql, params] = this.sql();
       const rows = await this.run(sql, params);
+      if (this.countOnly) return { data: null, error: null, count: Number(rows[0]?.n ?? 0) };
       if (this.mode === "single") return rows.length === 1 ? { data: rows[0], error: null } : { data: null, error: { code: "PGRST116", message: `expected one row, got ${rows.length}` } };
       if (this.mode === "maybe") return rows.length > 1 ? { data: null, error: { code: "PGRST116", message: "more than one row" } } : { data: rows[0] ?? null, error: null };
       return { data: rows, error: null };

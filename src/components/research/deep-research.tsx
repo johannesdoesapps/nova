@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, BookOpenCheck, ChevronDown, ChevronRight, Download, ExternalLink, FileText, Loader2, Printer, RotateCcw, Square, Telescope, Trash2 } from "lucide-react";
 import { useApp } from "@/components/layout/app-context";
 import { StudioHeader } from "@/components/studio/frame";
+import { UsageEstimateLine } from "@/components/studio/usage";
 import { api, CodeApiError, post } from "@/components/code/api";
 import { Markdown } from "@/components/common/markdown";
 import { StatusPill } from "@/components/review/bits";
@@ -206,6 +207,7 @@ export function ResearchHome() {
                 Uses Claude with web search. Each step is charged like a message of its size, and each question uses one of your plan&apos;s monthly web searches. A standard run takes a few minutes.
               </span>
             </div>
+            <UsageEstimateLine feature="deep_research" signedIn={!!user} className="mt-2" />
           </section>
 
           <section aria-labelledby="rs-history" className="mt-8">

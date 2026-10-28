@@ -1,4 +1,5 @@
 import "server-only";
+import { inBackground, notifyUser } from "@/lib/inbox";
 import { createClient } from "@supabase/supabase-js";
 import { timingSafeEqual } from "node:crypto";
 import { displayNameFrom } from "../../auth-flow";
@@ -112,6 +113,8 @@ type RunGlance = {
   pending: unknown;
   checks: { verify?: { queue?: unknown[]; attempts?: number } | null } | null;
   usage: { modelFailuresInRow?: number } | null;
+  request?: string;
+  project_id?: string;
 };
 
 /** How far the run's verification has got (checks left, tries of the current one): it moves without taking steps. */
@@ -120,7 +123,7 @@ const verifyMark = (r: RunGlance | null) => JSON.stringify([r?.checks?.verify?.q
 async function glance(runId: string): Promise<RunGlance | null> {
   const admin = serviceSupabase();
   if (!admin) return null;
-  const { data } = await admin.from("code_agent_runs").select("id, user_id, status, options, locked_until, updated_at, steps, pending, checks, usage").eq("id", runId).maybeSingle();
+  const { data } = await admin.from("code_agent_runs").select("id, user_id, status, options, locked_until, updated_at, steps, pending, checks, usage, request, project_id").eq("id", runId).maybeSingle();
   return (data as RunGlance | null) ?? null;
 }
 
@@ -147,7 +150,8 @@ export async function driveInBackground(runId: string, origin: string, opts: { w
   let progressed = false;
   try {
     const req = new Request(new URL(`/api/code/agent/${runId}/step`, origin), { method: "POST", headers: { "x-orbis-background": "1" } });
-    const r = await stepRun(req, owner.auth, runId, { expectStep: before.steps, keepGoingMs: WORKER_STEP_MS });
+    // Updates while nobody's watching also go to the user's inbox and email (lib/inbox.ts).
+    const r = await inBackground(() => stepRun(req, owner.auth, runId, { expectStep: before.steps, keepGoingMs: WORKER_STEP_MS }));
     progressed = !r.skipped && r.run.steps > before.steps;
   } catch (err) {
     // The model failed (busy or unreachable provider): the engine counted it and logged it. Try again from a fresh
@@ -162,6 +166,8 @@ export async function driveInBackground(runId: string, origin: string, opts: { w
     reportError(err, { where: "code.agent.background.step" });
     const message = err instanceof Error ? err.message : "a step failed";
     await addEvents(owner.auth, runId, [{ kind: "status", title: `Stopped working in the background: ${message}`.slice(0, 380) }]).catch(() => {});
+    // It won't go on until the user looks at it: tell them.
+    if (now?.request && now.project_id) await inBackground(() => notifyUser(owner.auth, { kind: "task_waiting", key: `code_run:${runId}:stopped:${before.steps}`, title: now.request!.slice(0, 100), body: `Stopped working in the background: ${message}`, href: `/code/${now.project_id}?run=${runId}` }));
     return "error";
   } finally {
     await owner.end();

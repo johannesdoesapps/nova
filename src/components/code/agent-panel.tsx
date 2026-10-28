@@ -44,6 +44,7 @@ import { formatBytes, type AttachmentMeta } from "@/lib/code/attachments";
 import { cn } from "@/lib/utils";
 import { useAttachments } from "./attachments";
 import { PromptBar } from "./prompt-bar";
+import { UsageEstimateLine } from "@/components/studio/usage";
 import { useCodeModel } from "./use-code-model";
 import { api, CodeApiError, post, postStream } from "./api";
 import { taskTitle } from "@/lib/code/agent/history";
@@ -1124,6 +1125,7 @@ export function AgentPanel({
             footerRight={<ModelSelector models={catalog?.models ?? null} value={modelId} onChange={setModelId} auto={catalog?.auto ?? null} className="min-w-0 !shrink" />}
           />
           {!inProgress && <StepEstimate models={catalog?.models ?? null} modelId={modelId} readOnly={mode === "read"} />}
+          {!inProgress && <UsageEstimateLine feature="code_agent" signedIn={!!user} className="mt-0.5 px-2 !text-[11.5px]" />}
         </div>
       </div>
     </div>

@@ -30,7 +30,10 @@ export type CustomerEmailKind =
   | "budget_100"
   | "topup_charged"
   | "topup_failed"
-  | "topup_cap_reached";
+  | "topup_cap_reached"
+  | "task_done"
+  | "task_failed"
+  | "task_waiting";
 
 export interface CustomerEmail {
   subject: string;
@@ -42,7 +45,7 @@ export interface CustomerEmail {
 /** The words of each email. Pure, so it can be tested. */
 export function customerEmail(
   kind: CustomerEmailKind,
-  data: { plan?: string; resetsAt?: number | null; graceUntil?: number | null; url?: string | null; amountUsd?: number; units?: number; name?: string | null } = {},
+  data: { plan?: string; resetsAt?: number | null; graceUntil?: number | null; url?: string | null; amountUsd?: number; units?: number; name?: string | null; task?: string; detail?: string | null; path?: string } = {},
 ): CustomerEmail {
   const when = (t: number | null | undefined) => (t ? new Date(t).toUTCString().replace(/:\d\d GMT$/, " UTC") : null);
   const usage = `${site()}/usage`;
@@ -97,6 +100,18 @@ export function customerEmail(
         subject: "Your monthly top-up limit is reached",
         text: `Automatic top-ups have reached the $${(data.amountUsd ?? 0).toFixed(2)} monthly limit you set, so no more will be charged this month. You can raise the limit at ${usage}.${sign}`,
       };
+    case "task_done":
+    case "task_failed":
+    case "task_waiting": {
+      // Work that kept going after its page was closed. The task's own words are the user's; kept short and on one line.
+      const task = (data.task ?? "Your task").replace(/\s+/g, " ").trim().slice(0, 120);
+      const link = `${site()}${data.path?.startsWith("/") && !data.path.startsWith("//") ? data.path : "/activity"}`;
+      const settings = `\n\nYou get these emails for tasks that keep working after you close the page. Turn them off in Settings → Notifications.`;
+      const detail = data.detail ? `\n\n${data.detail.replace(/\s+/g, " ").trim().slice(0, 400)}` : "";
+      const subject = kind === "task_done" ? `Done: ${task}` : kind === "task_failed" ? `Stopped: ${task}` : `Needs you: ${task}`;
+      const lead = kind === "task_done" ? "Your task finished." : kind === "task_failed" ? "Your task stopped before it finished." : "Your task is waiting for you to answer or approve something before it carries on.";
+      return { subject: subject.slice(0, 140), text: `${lead}\n\n“${task}”${detail}\n\nOpen it: ${link}${settings}${sign}` };
+    }
     case "budget_100":
       return {
         subject: "You've reached this month's Orbis AI allowance",
