@@ -133,7 +133,6 @@ export interface PlanScenario {
 export function planScenario(billing: BillingSettings, plan: PlanId, model: Priced, perDay: number, interval: BillingInterval = "month"): PlanScenario | null {
   const c = messageCostUsd(model, billing.scenario);
   if (c === null) return null;
-  const p = planOf(billing, plan);
   const e = planEconomics(billing, plan, interval);
   const tier = modelTier(model);
   const wanted = perDay * DAYS_PER_MONTH;

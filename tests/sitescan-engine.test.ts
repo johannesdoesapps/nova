@@ -45,6 +45,19 @@ describe.skipIf(!hasOpenssl())("website scan engine against controlled sites", (
     await Promise.all(Object.values(s).map((x) => x.close()));
   });
 
+  it("never returns a graded report when the scan is cancelled part-way (bug-hunt regression)", async () => {
+    const ac = new AbortController();
+    const run = runSiteScan("good.test", "active", net("good", "goodHttp"), dnsFor({}), {
+      delayMs: 0,
+      signal: ac.signal,
+      // Cancel as the home page starts loading: the old engine then graded the half-done scan A.
+      step: (id, status) => {
+        if (id === "http" && status === "running") ac.abort(new Error("Cancelled"));
+      },
+    });
+    await expect(run).rejects.toThrow(/Cancelled/);
+  }, 120_000);
+
   it("grades a well-configured site A+ with every check accounted for", async () => {
     const steps: string[] = [];
     const r = await runSiteScan(

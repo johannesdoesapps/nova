@@ -5,7 +5,10 @@ import { autoIdFor, isAutoId } from "@/lib/ai/platform";
 import { withTimeContext } from "@/lib/ai/turn-context";
 import type { ChatMessage, Usage } from "@/lib/ai/types";
 import { requireUserIfConfigured } from "@/lib/auth";
+import { guard } from "@/lib/bastion/server";
 import { ApiError, errorResponse, parseJsonBody } from "@/lib/http";
+import { extractLinks } from "@/lib/links/parse";
+import { limiter } from "@/lib/rate-limit";
 import {
   callId,
   cleanSpeech,
@@ -16,6 +19,7 @@ import {
   systemPrompt,
   toolConversation,
   turnRequest,
+  turnTainted,
   vetCalls,
   type PlannedCall,
   type TraceRound,
@@ -51,11 +55,15 @@ export async function POST(req: Request) {
     const skills = allSkills(body.skills);
     const picked = body.skill ? findSkill(body.skill, skills) : null;
     const search = searchBackend();
+    // Web search counts against the plan's searches (none left: not offered); pages are opened for signed-in users
+    // only, as in chat.
+    let searchesLeft = limits.webSearchesLeft;
     const unavailable: JarvisToolName[] = [
-      ...(!search || (search === "claude" && auth.mode !== "authenticated") ? (["web_search"] as const) : []),
-      ...(auth.mode !== "authenticated" ? (["recall_memories", "remember"] as const) : []),
+      ...(!search || (search === "claude" && auth.mode !== "authenticated") || searchesLeft === 0 ? (["web_search"] as const) : []),
+      ...(auth.mode !== "authenticated" ? (["recall_memories", "remember", "read_web_page"] as const) : []),
     ];
-    const allOffered = body.answerOnly || body.trace.length >= MAX_ROUNDS ? [] : offeredTools(body.desktop.connected, unavailable);
+    // Emergency stop: words only, nothing runs.
+    const allOffered = body.answerOnly || body.halted || body.trace.length >= MAX_ROUNDS ? [] : offeredTools(body.desktop.connected, unavailable);
     const requested = body.modelId ?? autoIdFor(JARVIS_MODES.find((m) => m.id === body.mode)!.router);
     const { model, routing } = await resolveModelChoice(requested, {
       prompt: body.message.slice(0, 4000),
@@ -69,7 +77,14 @@ export async function POST(req: Request) {
     const maxOutputTokens = Math.min(MAX_OUTPUT, limits.maxOutputTokens);
     const traceChars = body.trace.reduce((n, r) => n + r.say.length + r.results.reduce((m, x) => m + x.text.length, 0), 0);
     const inputChars = 6000 + body.message.length + body.history.reduce((n, h) => n + h.text.length, 0) + traceChars;
-    await enforceLimits(req, auth, 1, [model], { requestId: body.requestId, purpose: "jarvis", inputTokens: Math.ceil(inputChars / 4) + 1500, maxOutputTokens });
+    // The allowance check covers the whole request: up to MAX_MODEL_CALLS calls, the later ones carrying tool results.
+    const calls = allOffered.some((n) => isServerTool(n)) ? MAX_MODEL_CALLS : 1;
+    await enforceLimits(req, auth, 1, Array.from({ length: calls }, () => model), {
+      requestId: body.requestId,
+      purpose: "jarvis",
+      inputTokens: Math.ceil(inputChars / 4) + 1500 + (calls - 1) * 2500,
+      maxOutputTokens,
+    });
 
     const timeZone = validTimeZone(body.timeZone ?? null);
     const signal = withTimeout(55_000, req.signal);
@@ -81,6 +96,10 @@ export async function POST(req: Request) {
     let clientCalls: PlannedCall[] = [];
     let pending: TraceRound | null = null;
     let total: Usage = { inputTokens: 0, outputTokens: 0, estimated: false };
+    // Pages Jarvis may open once outside material is in the turn: only addresses the user gave or a result showed,
+    // so a page can't make Jarvis send data to an address of its choosing.
+    const known = new Set([body.message, ...body.history.map((h) => h.text)].flatMap((t) => extractLinks(t)));
+    for (const r of rounds) for (const x of r.results) for (const u of extractLinks(x.text)) known.add(u);
     let cost = 0;
 
     for (let i = 0; i < MAX_MODEL_CALLS; i++) {
@@ -133,8 +152,12 @@ export async function POST(req: Request) {
           status: "error",
           error: req.signal.aborted ? "cancelled" : err instanceof Error ? err.message : "failed",
         });
-        // A later round that fails still has the earlier rounds' work to report.
-        if (i > 0 && !req.signal.aborted) break;
+        // A later round that fails still has the earlier rounds' work to report, but not as an answer: the last
+        // thing said was only "let me look that up".
+        if (i > 0 && !req.signal.aborted) {
+          say = "";
+          break;
+        }
         throw err;
       }
       usage ??= { inputTokens: Math.ceil(inputChars / 4), outputTokens: estimateTokens([{ role: "assistant", content: text }]), estimated: true };
@@ -143,15 +166,22 @@ export async function POST(req: Request) {
 
       const vetted = vetCalls(raw, offered);
       rejected.push(...vetted.rejected);
-      recordRunLater(auth, { ...run, tools: vetted.calls.map((c) => c.tool), response: JSON.stringify({ say: text.slice(0, 500), calls: vetted.calls.map((c) => c.tool) }), latencyMs: performance.now() - started, usage, status: "success" });
+      // One web search per model call, and none beyond the plan's searches: the call's record then counts exactly
+      // the searches that ran (the plan's count is of records with web_search).
+      const searchCall = searchesLeft === 0 ? undefined : vetted.calls.find((c) => c.tool === "web_search");
+      const recorded = vetted.calls.filter((c) => c.tool !== "web_search" || c === searchCall).map((c) => c.tool);
+      recordRunLater(auth, { ...run, tools: recorded, response: JSON.stringify({ say: text.slice(0, 500), calls: recorded }), latencyMs: performance.now() - started, usage, status: "success" });
       say = text;
       if (!vetted.calls.length) break;
 
       // This round's calls, with results for the server tools; the browser fills in its own actions' results.
       const round: TraceRound = { say: text.slice(0, 2000), calls: vetted.calls.map((c) => ({ id: c.id!, tool: c.tool, args: c.args })), results: [] };
       for (const c of vetted.calls.filter((x) => isServerTool(x.tool))) {
-        const r = await runServerTool(c.tool, c.args, { auth, skills, timeZone, signal });
+        const refused = await refuseServerTool(c, { searchCall, searchesLeft, tainted: turnTainted(rounds), known, auth });
+        const r = refused ? { ok: false, text: refused, summary: refused } : await runServerTool(c.tool, c.args, { auth, skills, timeZone, signal });
+        if (c === searchCall && searchesLeft !== null) searchesLeft--;
         round.results.push({ id: c.id!, ok: r.ok, text: r.text.slice(0, 4000) });
+        for (const u of extractLinks(r.text)) known.add(u);
         activity.push({ tool: c.tool, summary: r.summary, ok: r.ok });
       }
       const forBrowser = vetted.calls.filter((c) => !isServerTool(c.tool));
@@ -176,6 +206,8 @@ export async function POST(req: Request) {
       activity,
       /** Present when actions are waiting in the browser: send it back, with their results, to continue. */
       trace: pending ? [...rounds, pending] : null,
+      /** Outside material was read in this request: the browser asks before acting on these proposals. */
+      tainted: turnTainted(pending ? [...rounds, pending] : rounds),
       model: { id: model.id, displayName: model.displayName },
       usage: total,
       estimatedCost: cost,
@@ -183,4 +215,34 @@ export async function POST(req: Request) {
   } catch (err) {
     return errorResponse(err);
   }
+}
+
+/**
+ * Why a server tool the model asked for must not run, or null. Web search: one per model call, within the plan's
+ * searches. Opening a page: Bastion's network switch and lockdown apply, opened links are rate-limited as in chat,
+ * and once outside material is in the turn, only addresses the user gave or a result showed can be opened.
+ */
+async function refuseServerTool(
+  c: PlannedCall,
+  ctx: { searchCall: PlannedCall | undefined; searchesLeft: number | null; tainted: boolean; known: Set<string>; auth: Awaited<ReturnType<typeof requireUserIfConfigured>> },
+): Promise<string | null> {
+  if (c.tool === "web_search") {
+    if (ctx.searchesLeft === 0) return "Not searched: the plan's web searches for this month are used up. Answer from what you know and say so.";
+    if (c !== ctx.searchCall) return "Not searched: one web search per step. Use the results you have, or search again in the next step.";
+    return null;
+  }
+  if (c.tool !== "read_web_page") return null;
+  if (ctx.auth.mode !== "authenticated") return "Not opened: pages are opened for signed-in users only.";
+  let url: URL;
+  try {
+    url = new URL(String(c.args.url));
+  } catch {
+    return "Not opened: that isn't a web address.";
+  }
+  url.hash = "";
+  if (ctx.tainted && !ctx.known.has(url.href))
+    return "Not opened: after reading outside content, Jarvis only opens addresses the user gave or a result showed.";
+  if (!limiter("chat-links", 30, 10 * 60_000).check(`u:${ctx.auth.user.id}`, 1).ok) return "Not opened: many pages were opened in the last few minutes. Try again shortly.";
+  const allowed = await guard({ db: ctx.auth.supabase, userId: ctx.auth.user.id, kind: "user", agent: "jarvis" }, "web.search", url.host);
+  return allowed.outcome === "allow" ? null : `Not opened: ${allowed.reason}`;
 }

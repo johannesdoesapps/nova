@@ -243,6 +243,8 @@ export async function runSiteScan(host: string, scope: "passive" | "active", net
     step("dns", "skipped", "No resolver");
   }
 
+  // Cancelled part-way: no grade from a partial scan.
+  abortIf();
   step("grade", "running");
   checks.sort((a, b) => CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category));
   const { grade, note } = gradeChecks(checks);

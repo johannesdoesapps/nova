@@ -38,6 +38,11 @@ describe("calculator", () => {
     expect(value("1.5e3 + 1")).toBe(1501);
     expect(value("max(1,2,3)")).toBe(3);
     expect(value("max(1, 234)")).toBe(234);
+    // Without a space, a three-digit argument is still an argument, not a thousands group.
+    expect(value("max(120,450)")).toBe(450);
+    expect(value("min(100,200,300)")).toBe(100);
+    expect(value("round(2.567,2)")).toBe(2.57);
+    expect(value("1,234,567.5 / 2")).toBe(617283.75);
   });
 
   it("has the documented functions and constants", () => {

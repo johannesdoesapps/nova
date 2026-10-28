@@ -116,8 +116,8 @@ export async function GET(req: Request, ctx: RouteContext<"/api/code/projects/[i
 export async function POST(req: Request, ctx: RouteContext<"/api/code/projects/[id]/publish">) {
   try {
     const id = requireUuid((await ctx.params).id);
-    await parseJsonBody(req, confirmBody, 1_000);
     const auth = await codeContext("code-publish", 6);
+    await parseJsonBody(req, confirmBody, 1_000);
     const project = await getProjectRow(auth, id);
     const { cfg, host } = hostFor();
 
@@ -144,8 +144,8 @@ export async function POST(req: Request, ctx: RouteContext<"/api/code/projects/[
 export async function DELETE(req: Request, ctx: RouteContext<"/api/code/projects/[id]/publish">) {
   try {
     const id = requireUuid((await ctx.params).id);
-    await parseJsonBody(req, confirmBody, 1_000);
     const auth = await codeContext("code-publish", 6);
+    await parseJsonBody(req, confirmBody, 1_000);
     await getProjectRow(auth, id);
     const { cfg, host } = hostFor();
     const removed = await siteHost(host, cfg, id).remove();

@@ -197,13 +197,25 @@ describe("the hosting client", () => {
     expect(await checkReachable("https://x.vercel.app/", down)).toMatchObject({ ok: false, status: 500 });
   });
 
+  it("never follows the site's redirects (they could point inside a network); a redirect counts as answering", async () => {
+    const seen: RequestInit[] = [];
+    const f = (async (_u: string, init: RequestInit) => {
+      seen.push(init);
+      return new Response(null, { status: 307, headers: { location: "http://10.0.0.5:8080/admin" } });
+    }) as unknown as typeof fetch;
+    expect(await checkReachable("https://x.vercel.app/", f)).toMatchObject({ ok: true, status: 307 });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.redirect).toBe("manual");
+  });
+
   describe("shared mode (every site is a deployment in one existing project)", () => {
     type D = { id: string; projectId: string; readyState: string; createdAt: number; meta: Record<string, string>; url: string };
-    function sharedApi() {
+    function sharedApi(envs = 0) {
       const st = { deployments: [] as D[], aliases: new Map<string, string>(), patched: [] as unknown[], deleted: [] as string[], n: 0 };
       const api = fake((c) => {
         const p = c.url.pathname;
         if (p === "/v9/projects/orbis-sites" && c.method === "GET") return { json: { id: "prj_s", name: "orbis-sites" } };
+        if (p === "/v9/projects/prj_s/env" && c.method === "GET") return { json: { envs: Array.from({ length: envs }, (_, i) => ({ key: `K${i}` })) } };
         if (p.startsWith("/v9/projects/") && c.method === "GET") return { status: 404 };
         if (p === "/v9/projects/prj_s" && c.method === "PATCH") return st.patched.push(c.body), { json: {} };
         if (p === "/v13/deployments" && c.method === "POST") {
@@ -237,6 +249,14 @@ describe("the hosting client", () => {
     }
     const plan = planSite([{ path: "index.html", content: "<h1>Hi</h1>" }]);
     const up = [{ file: "index.html", sha: "a".repeat(40), size: 11 }];
+
+    it("refuses a shared project that has environment variables (every site's build could read them)", async () => {
+      const { st, api, site } = sharedApi(2);
+      await expect(site().publish("Shop", plan, up, "fp1")).rejects.toMatchObject({ code: "not_configured" });
+      expect(st.deployments).toHaveLength(0);
+      expect(st.patched).toEqual([]);
+      expect(api.calls.some((c) => c.method === "POST")).toBe(false);
+    });
 
     it("never creates a project: deploys into the shared one with every build setting given, and asks for it to stay public", async () => {
       const { st, api, site } = sharedApi();

@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { connectorMeta } from "../catalog";
 import { callJson, clip, ConnectorError, htmlToText } from "../http";
-import type { ActionDef, Connector, ToolDef } from "../types";
+import type { Connector, ToolDef } from "../types";
 
 /** HubSpot CRM, Figma and Wikipedia. */
 

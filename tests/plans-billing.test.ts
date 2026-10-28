@@ -119,8 +119,14 @@ describe("plan economics (60% contribution margin)", () => {
     expect(planEconomics(rich, "pro").aiBudgetUsd).toBeGreaterThan(5);
   });
 
-  it("keeps the minimum when a stored configuration predates it", () => {
-    expect(planEconomics(resolveBilling({ plans: { pro: { priceUsd: 28 } } }), "pro").aiBudgetUsd).toBe(5);
+  it("doesn't add the new minimum to plans saved before it existed (their saved price and margin stand)", () => {
+    const saved = resolveBilling({ targetMargin: 0.6, plans: { pro: { ...B.plans.pro, priceUsd: 20, minAiBudgetUsd: undefined } } });
+    expect(saved.plans.pro.minAiBudgetUsd).toBe(0);
+    expect(planEconomics(saved, "pro").aiBudgetUsd).toBeCloseTo(3.59, 2);
+    // No saved settings: the defaults, minimum included.
+    expect(planEconomics(resolveBilling(null), "pro").aiBudgetUsd).toBe(5);
+    // A saved minimum is kept.
+    expect(resolveBilling({ plans: { max: { ...B.plans.max, minAiBudgetUsd: 40 } } }).plans.max.minAiBudgetUsd).toBe(40);
   });
 
   it("derives each paid plan's AI budget so 60% of revenue remains after every variable cost", () => {

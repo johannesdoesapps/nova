@@ -284,6 +284,19 @@ describe("dependencies and lifecycle", () => {
     await asUser(db, ALICE).rpc("orch_cancel", { p_task: parent });
     expect(await status(child)).toBe("cancelled");
   });
+
+  it("cancelling a planning task that already finished still cancels the work it planned", async () => {
+    await agent(ALICE, { role: "lead_developer", task_types: ["plan"] });
+    await agent(ALICE);
+    const parent = await task(ALICE, { kind: "plan", task_type: "plan" });
+    const c = await claim();
+    const child = await task(ALICE, { parent_id: parent, depends_on: [parent] });
+    expect(await finish(c!, "succeeded")).toBe("completed");
+    expect(await status(child)).toBe("queued");
+    const { data } = await asUser(db, ALICE).rpc("orch_cancel", { p_task: parent });
+    expect(data).toBe("completed"); // the plan itself stays completed
+    expect(await status(child)).toBe("cancelled");
+  });
 });
 
 describe("agents", () => {

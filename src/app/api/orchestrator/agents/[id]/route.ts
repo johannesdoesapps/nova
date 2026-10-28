@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { kickOrchestrator } from "@/lib/orchestrator/background";
 import { deleteAgent, getAgent, requireOrchestrator, updateAgent } from "@/lib/orchestrator/server";
 import { agentUpdateSchema } from "@/lib/orchestrator/types";
 import { errorResponse, parseJsonBody, requireUuid } from "@/lib/http";
@@ -25,7 +26,13 @@ export async function PATCH(req: Request, ctx: Ctx) {
     const id = requireUuid((await ctx.params).id);
     const auth = await requireOrchestrator(30);
     const patch = await parseJsonBody(req, agentUpdateSchema, 40_000);
-    return NextResponse.json(await updateAgent(auth, id, patch));
+    const updated = await updateAgent(auth, id, patch);
+    // Enabling an agent (or changing what it takes) queues the tasks that were waiting for it: start a worker.
+    if (updated.agent.enabled) {
+      const origin = new URL(req.url).origin;
+      after(() => kickOrchestrator(origin));
+    }
+    return NextResponse.json(updated);
   } catch (err) {
     return errorResponse(err);
   }

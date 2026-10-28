@@ -52,6 +52,8 @@ interface TurnReply {
   /** Set when the browser's actions are waiting: send it back with their results to continue. */
   trace: TraceRound[] | null;
   model: { id: string } | null;
+  /** Outside material (a page, a file, copied text) was read in this request: ask before acting on the proposals. */
+  tainted: boolean;
 }
 
 const QUICK: { label: string; request: string; desktop?: boolean }[] = [
@@ -225,22 +227,23 @@ export function JarvisView() {
           ...(opts.modelId ? { modelId: opts.modelId } : {}),
           style: VOICE_PROFILES.find((p) => p.id === s.voice)?.style,
           desktop: a.status === "connected" ? { connected: true, platform: a.info.platform, folders: a.info.folders } : { connected: false, folders: [] },
+          halted: haltedRef.current,
           requestId: uid(),
         }),
       });
       const j = (await res.json().catch(() => null)) as (Partial<TurnReply> & { error?: { message?: string } }) | null;
       if (!res.ok) throw new Error(j?.error?.message ?? `Jarvis couldn't answer (${res.status}).`);
-      return { say: j?.say ?? "", calls: j?.calls ?? [], activity: j?.activity ?? [], trace: j?.trace ?? null, model: j?.model ?? null };
+      return { say: j?.say ?? "", calls: j?.calls ?? [], activity: j?.activity ?? [], trace: j?.trace ?? null, model: j?.model ?? null, tainted: j?.tainted === true };
     },
     [],
   );
 
   const runMission = useCallback(
-    async (request: string, calls: PlannedCall[]) => {
+    async (request: string, calls: PlannedCall[], tainted = false) => {
       const m = newMission(request, request.length > 90 ? `${request.slice(0, 88)}…` : request, calls);
       const r = new MissionRunner(m, {
         decide: (step, batchSize) =>
-          decide(step.tool, { autonomy: settingsRef.current.autonomy, desktopConnected: agentRef.current.status === "connected", halted: haltedRef.current, batchSize }),
+          decide(step.tool, { autonomy: settingsRef.current.autonomy, desktopConnected: agentRef.current.status === "connected", halted: haltedRef.current, batchSize, tainted }),
         prepare: prepareStep,
         execute: executeStep,
         approve: () => new Promise<boolean>((resolve) => (approval.current = resolve)),
@@ -315,7 +318,7 @@ export function JarvisView() {
             speak(r.say);
           }
           if (!r.calls.length) return;
-          const done = await runMission(text, r.calls);
+          const done = await runMission(text, r.calls, r.tainted);
           if (stale()) return;
           const pending = r.trace?.at(-1);
           // Jarvis continues from what its actions found (files, details, copied text), within the round limit;

@@ -101,12 +101,26 @@ export async function ownerSession(userId: string): Promise<{ auth: Authed; end:
   };
 }
 
-type RunGlance = { id: string; user_id: string; status: RunStatus; options: { background?: boolean } | null; locked_until: string | null; updated_at: string; steps: number; pending: unknown };
+type RunGlance = {
+  id: string;
+  user_id: string;
+  status: RunStatus;
+  options: { background?: boolean } | null;
+  locked_until: string | null;
+  updated_at: string;
+  steps: number;
+  pending: unknown;
+  checks: { verify?: { queue?: unknown[]; attempts?: number } | null } | null;
+  usage: { modelFailuresInRow?: number } | null;
+};
+
+/** How far the run's verification has got (checks left, tries of the current one): it moves without taking steps. */
+const verifyMark = (r: RunGlance | null) => JSON.stringify([r?.checks?.verify?.queue?.length ?? null, r?.checks?.verify?.attempts ?? null]);
 
 async function glance(runId: string): Promise<RunGlance | null> {
   const admin = serviceSupabase();
   if (!admin) return null;
-  const { data } = await admin.from("code_agent_runs").select("id, user_id, status, options, locked_until, updated_at, steps, pending").eq("id", runId).maybeSingle();
+  const { data } = await admin.from("code_agent_runs").select("id, user_id, status, options, locked_until, updated_at, steps, pending, checks, usage").eq("id", runId).maybeSingle();
   return (data as RunGlance | null) ?? null;
 }
 
@@ -116,6 +130,11 @@ export function needsWorker(r: RunGlance | null, now = Date.now()): r is RunGlan
   // Someone (the page, or another worker) is taking a step, or did very recently: they hand over when they finish.
   if (r.locked_until && Date.parse(r.locked_until) > now) return false;
   return now - Date.parse(r.updated_at) >= QUIET_MS - 1_000;
+}
+
+/** Still a background run that's working with nothing to wait for (a worker may pick it up after the pause). */
+function needsWorkerSoon(r: RunGlance | null): boolean {
+  return !!r && !!r.options?.background && WORKING_STATUSES.includes(r.status) && !r.pending;
 }
 
 /** The worker's job for one call: wait for the page, then take steps as the owner, then hand over if work is left. */
@@ -131,8 +150,15 @@ export async function driveInBackground(runId: string, origin: string, opts: { w
     const r = await stepRun(req, owner.auth, runId, { expectStep: before.steps, keepGoingMs: WORKER_STEP_MS });
     progressed = !r.skipped && r.run.steps > before.steps;
   } catch (err) {
-    // A failed step is already in the activity log when the model failed; anything else (a plan limit, say) is
-    // added there, and the run waits for the user rather than retrying in a loop.
+    // The model failed (busy or unreachable provider): the engine counted it and logged it. Try again from a fresh
+    // worker after the usual pause; after MAX_MODEL_FAILURES in a row the engine fails the run, so this ends.
+    const now = await glance(runId).catch(() => null);
+    if ((now?.usage?.modelFailuresInRow ?? 0) > (before.usage?.modelFailuresInRow ?? 0) && needsWorkerSoon(now)) {
+      await kickWorker(runId, origin);
+      return "handed_over";
+    }
+    // Anything else (a plan limit, say) is added to the activity log, and the run waits for the user rather than
+    // retrying in a loop.
     reportError(err, { where: "code.agent.background.step" });
     const message = err instanceof Error ? err.message : "a step failed";
     await addEvents(owner.auth, runId, [{ kind: "status", title: `Stopped working in the background: ${message}`.slice(0, 380) }]).catch(() => {});
@@ -141,6 +167,9 @@ export async function driveInBackground(runId: string, origin: string, opts: { w
     await owner.end();
   }
   const after = await glance(runId);
+  // Verification checks don't count as steps; a call that moved verification on also made progress (bounded: each
+  // check is tried a few times at most).
+  if (!progressed && after && after.steps === before.steps && verifyMark(after) !== verifyMark(before)) progressed = true;
   if (progressed && after?.options?.background && WORKING_STATUSES.includes(after.status) && !after.pending) {
     await kickWorker(runId, origin);
     return "handed_over";

@@ -35,8 +35,9 @@ const body = z.object({
 export async function POST(req: Request, ctx: RouteContext<"/api/code/projects/[id]/github-push">) {
   try {
     const id = requireUuid((await ctx.params).id);
-    const input = await parseJsonBody(req, body, 4_000);
     const auth = await codeContext("code-push", 5);
+    // Room for a pull request description of up to 20,000 characters (up to 4 bytes each, JSON-escaped).
+    const input = await parseJsonBody(req, body, 90_000);
     const { data: row, error: rowError } = await auth.supabase.from("code_projects").select("source_repo, source_base").eq("id", id).maybeSingle();
     if (rowError) throw dbError(rowError, "code.push.project");
     if (!row) throw new ApiError("not_found", "Project not found.");

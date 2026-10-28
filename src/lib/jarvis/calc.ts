@@ -9,8 +9,8 @@
  *   call   = name "(" args ")" | name | number | "(" expr ")"
  *
  * Functions: sqrt, abs, round(x, digits?), floor, ceil, min, max, log (base 10), ln, exp, sin, cos, tan (radians).
- * Constants: pi, e. Numbers may use a decimal point, an exponent (1.5e3) and thousands separators (1,234.5)
- * only when unambiguous, so commas otherwise separate function arguments.
+ * Constants: pi, e. Numbers may use a decimal point, an exponent (1.5e3) and thousands separators (1,234.5), but only
+ * outside parentheses: inside them a comma always separates function arguments (max(120,450) is 450).
  */
 
 export type CalcResult = { ok: true; value: number; text: string } | { ok: false; error: string };
@@ -37,6 +37,8 @@ type Tok = { t: "num"; v: number } | { t: "name"; v: string } | { t: "op"; v: st
 function tokenize(src: string): Tok[] {
   const out: Tok[] = [];
   let i = 0;
+  // Inside parentheses a comma separates arguments (max(120,450)), so thousands separators are only read outside them.
+  let depth = 0;
   while (i < src.length) {
     const c = src[i]!;
     if (/\s/.test(c)) {
@@ -44,8 +46,8 @@ function tokenize(src: string): Tok[] {
       continue;
     }
     if (/[0-9.]/.test(c)) {
-      // Thousands separators only in the form 1,234,567(.89): a comma followed by exactly three digits.
-      const m = /^(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d*\.?\d+(?:[eE][+-]?\d+)?)/.exec(src.slice(i));
+      // Thousands separators only in the form 1,234,567(.89): a comma followed by exactly three digits, outside parentheses.
+      const m = (depth === 0 ? /^(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d*\.?\d+(?:[eE][+-]?\d+)?)/ : /^\d*\.?\d+(?:[eE][+-]?\d+)?/).exec(src.slice(i));
       if (!m) throw new Error(`Unexpected "${c}".`);
       out.push({ t: "num", v: Number(m[0].replace(/,/g, "")) });
       i += m[0].length;
@@ -58,6 +60,8 @@ function tokenize(src: string): Tok[] {
       continue;
     }
     if ("+-*/^%(),".includes(c)) {
+      if (c === "(") depth++;
+      else if (c === ")") depth = Math.max(0, depth - 1);
       out.push({ t: "op", v: c });
       i++;
       continue;

@@ -54,6 +54,8 @@ export const turnRequest = z.object({
     .default({ connected: false, folders: [] }),
   /** Answer in words only, with no tools (e.g. about clipboard text the user shared). */
   answerOnly: z.boolean().default(false),
+  /** The user's emergency stop is on: answer in words only; nothing runs, on the server or in the browser. */
+  halted: z.boolean().default(false),
   /** How Jarvis should sound: its voice profile's speaking style. */
   style: z.string().trim().max(200).optional(),
   modelId: z.string().min(1).max(120).optional(),
@@ -185,9 +187,25 @@ export function replayRound(round: TraceRound, skills: readonly Skill[]): { say:
     const tool = TOOLS[c.name as JarvisToolName];
     // Pure computations are safe to show as they are; anything read from the web, files, the screen or the clipboard is material, not instructions.
     const plain = c.name === "calculate" || c.name === "get_time" || (!r.ok && tool.runner !== "server");
-    return { id: c.id, ok: r.ok, text: plain ? r.text.slice(0, 4000) : `<untrusted>\n${r.text.slice(0, 4000)}\n</untrusted>` };
+    return { id: c.id, ok: r.ok, text: plain ? r.text.slice(0, 4000) : fenceUntrusted(r.text.slice(0, 4000)) };
   });
   return { say: round.say, calls, results };
+}
+
+/** Material for the model, fenced as untrusted. The material can't close the fence or open a new one itself. */
+export function fenceUntrusted(text: string): string {
+  return `<untrusted>\n${text.replace(/<\s*\/?\s*untrusted\b[^>]*>/gi, "[tag removed]")}\n</untrusted>`;
+}
+
+/** Tools whose results are the user's own trusted data or pure computations (everything else is untrusted material). */
+const TRUSTED_RESULT_TOOLS: readonly string[] = ["calculate", "get_time", "use_skill", "remember"];
+
+/**
+ * Whether untrusted material (web pages, search results, files, the screen, the clipboard) has entered this turn.
+ * After that, the model's next requests may have been steered by it, so outbound actions need the user's approval.
+ */
+export function turnTainted(rounds: readonly TraceRound[]): boolean {
+  return rounds.some((r) => r.calls.some((c) => !TRUSTED_RESULT_TOOLS.includes(c.tool) && r.results.some((x) => x.id === c.id && x.ok)));
 }
 
 /** The conversation for a native tool-calling turn: history, the request, then each earlier round with its results. */

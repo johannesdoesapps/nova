@@ -230,6 +230,9 @@ describe("agent profiles", () => {
 describe("tasks", () => {
   it("queues a task (not running it) and asks for a worker", async () => {
     await makeAgent();
+    // Creating an enabled agent also asks for a worker (tasks waiting for one are queued again).
+    expect(state.after).toHaveLength(1);
+    state.after.length = 0;
     const r = await call(tasks.POST(req("/tasks", "POST", { projectId: ALICE_PROJECT, title: "Add input validation", input: "In src/app.ts", taskType: "backend" })));
     expect(r.status).toBe(201);
     expect(r.body.task).toMatchObject({ status: "queued", title: "Add input validation", taskType: "backend", attempts: 0 });

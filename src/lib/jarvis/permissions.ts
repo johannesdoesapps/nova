@@ -36,6 +36,11 @@ export interface DecisionContext {
   halted: boolean;
   /** How many changes a batch tool would make, once known. */
   batchSize?: number;
+  /**
+   * Untrusted material (a web page, the clipboard, the screen, files) was read earlier in this request, so the
+   * proposal may have been steered by it: anything beyond looking needs the user's approval.
+   */
+  tainted?: boolean;
 }
 
 const ALLOWED_AT: Record<RiskClass, Autonomy | null> = { read: 1, act: 3, private: 4, write: 4, spend: null };
@@ -53,6 +58,7 @@ export function decide(name: JarvisToolName, ctx: DecisionContext): Decision {
   if (tool.runner === "desktop" && !ctx.desktopConnected) return { kind: "deny", reason: "The Orbis Desktop Agent isn't connected, so Jarvis can't reach your computer." };
   if (ctx.autonomy === 1 && tool.risk !== "read") return { kind: "deny", reason: "Autonomy is set to Observe: Jarvis only looks and makes no changes." };
 
+  if (ctx.tainted && tool.risk !== "read") return { kind: "confirm", reason: `${NEEDS_APPROVAL[tool.risk]} Jarvis read outside content in this request (a page, a file or copied text), so it asks before acting.` };
   const auto = ALLOWED_AT[tool.risk];
   if (tool.batch && (ctx.batchSize === undefined || ctx.batchSize > TRUSTED_BATCH_LIMIT || ctx.autonomy < 4))
     return { kind: "confirm", reason: `${NEEDS_APPROVAL[tool.risk]} Review the full list first.` };

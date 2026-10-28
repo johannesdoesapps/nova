@@ -87,7 +87,7 @@ export async function scanTls(t: TlsTarget, o: TlsScanOptions = {}): Promise<Tls
   const versionResults = await boundedAll(VERSIONS, o.concurrency ?? 3, (v) => go({ minVersion: v, maxVersion: v, legacy: true }));
   const protocols = Object.fromEntries(VERSIONS.map((v, i) => [v, versionResults[i] ? protocolState(versionResults[i]!) : "untested"])) as TlsEvidence["protocols"];
   // OpenSSL 3 refuses TLS ≤ 1.2 servers that don't support RFC 5746; it says so explicitly.
-  const unsafeReneg = versionResults.some((r) => r && !r.ok && /unsafe legacy renegotiation/i.test(r.error?.message ?? ""));
+  const unsafeReneg = /unsafe legacy renegotiation/i.test(modernError ?? "") || versionResults.some((r) => r && !r.ok && /unsafe legacy renegotiation/i.test(r.error?.message ?? ""));
   const legacyOk = versionResults.some((r, i) => r?.ok && VERSIONS[i] !== "TLSv1.3");
 
   // The cheap, important probes first (renegotiation, TLS 1.3 suites), then cipher listing with what's left of the budget.

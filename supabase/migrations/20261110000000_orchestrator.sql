@@ -172,6 +172,9 @@ begin
   end if;
   if new.agent_locked and new.agent_id is null then raise exception 'A task locked to an agent needs that agent.'; end if;
   if (select count(distinct d) from unnest(new.depends_on) d) <> cardinality(new.depends_on) then raise exception 'Duplicate dependency.'; end if;
+  -- Lock the dependencies, so a dependency finishing at this moment either sees this task (and unblocks or fails it)
+  -- or has committed before the status check below: the task can't stay blocked on a finished dependency.
+  perform 1 from public.orch_tasks where id = any (new.depends_on) for share;
   for dep in select t.id, t.status, t.title, t.owner_id from unnest(new.depends_on) d left join public.orch_tasks t on t.id = d loop
     if dep.id is null or dep.owner_id <> new.owner_id then raise exception 'Dependency not found.' using errcode = '42501'; end if;
     if dep.status in ('failed', 'cancelled') then raise exception 'Dependency "%" has %.', left(dep.title, 80), dep.status using errcode = '23514'; end if;
@@ -543,7 +546,8 @@ begin
   perform pg_advisory_xact_lock(727100);
   select * into t from public.orch_tasks where id = p_task and owner_id = (select auth.uid()) for update;
   if t.id is null then raise exception 'Task not found.' using errcode = 'P0002'; end if;
-  if t.status in ('completed', 'failed', 'cancelled') then return t.status; end if;
+  -- The task and its unfinished sub-tasks: a planning task is completed as soon as it has created its sub-tasks,
+  -- and cancelling it then still cancels the work it planned.
   with recursive tree as (
     select id from public.orch_tasks where id = p_task
     union all
@@ -554,7 +558,7 @@ begin
     completed_at = case when status = 'running' then completed_at else now() end
   where id = any (ids) and status in ('queued', 'blocked', 'running');
   perform public.orch_resolve_dependents(ids);
-  return 'cancelled';
+  return case when t.status in ('completed', 'failed', 'cancelled') then t.status else 'cancelled' end;
 end;
 $$;
 

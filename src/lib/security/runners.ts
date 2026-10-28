@@ -279,6 +279,10 @@ export function scanOverview(r: ScanReport) {
  * well-known exposed files) of a verified target. Ownership is re-proved by the server first; every request is
  * read-only and bounded (see sitescan/engine.ts).
  */
+/** A website scan's total time, kept inside the route's 120 s with room to save the result. */
+const SITE_SCAN_DEADLINE_MS = 100_000;
+const SITE_SCAN_TOO_SLOW = "The scan took longer than Orbis allows (about 100 seconds), usually because the site answered very slowly or not at all on some requests. Nothing was saved. Try again, or run a passive scan.";
+
 export async function runWebsiteScan(ctx: RunContext, input: { targetId: string; scope: SentinelScope; force?: boolean }) {
   const { supabase: db, user } = ctx.auth;
   const target = await store.getTarget(db, user.id, input.targetId);
@@ -297,9 +301,14 @@ export async function runWebsiteScan(ctx: RunContext, input: { targetId: string;
   ctx.send({ type: "run", agent: "sentinel", runId });
   const steps = new Steps(ctx.send, "sentinel");
   return guarded(ctx, runId, "sentinel", steps, async () => {
-    const io = scanNetFor(host, ctx.signal);
+    // One deadline for the whole scan, inside the route's time: a slow site ends the scan with an error instead of the
+    // function being killed (which would leave the run "running" and block new scans of the host for minutes).
+    const deadline = AbortSignal.timeout(SITE_SCAN_DEADLINE_MS);
+    const signal = AbortSignal.any([ctx.signal, deadline]);
+    const timedOut = () => deadline.aborted && !ctx.signal.aborted;
+    const io = scanNetFor(host, signal);
     const t = steps.start("authorize", "Ownership check");
-    const proof = await proveOwnership(target, ctx.auth, ctx.signal, io.lab ? { request: io.request, txt: io.txt } : {});
+    const proof = await proveOwnership(target, ctx.auth, signal, io.lab ? { request: io.request, txt: io.txt } : {});
     if (!proof.ok) {
       steps.finish("authorize", "Ownership check", "failed", proof.reason, t);
       await store.setTargetVerified(db, target.id, null);
@@ -314,7 +323,7 @@ export async function runWebsiteScan(ctx: RunContext, input: { targetId: string;
     let report: ScanReport;
     try {
       report = await runSiteScan(host, input.scope, io.net, io.dns, {
-        signal: ctx.signal,
+        signal,
         progress: (text) => ctx.send({ type: "progress", agent: "sentinel", text }),
         step: (id, status, detail) => {
           if (status === "running") started[id] = steps.start(id, STEP_LABEL[id]);
@@ -323,8 +332,12 @@ export async function runWebsiteScan(ctx: RunContext, input: { targetId: string;
       });
     } catch (err) {
       if (err instanceof ScanAbort) throw new ApiError("bad_request", err.message);
+      if (timedOut()) throw new ApiError("timeout", SITE_SCAN_TOO_SLOW);
       throw err;
     }
+    // A scan that was stopped part-way is never saved as a result (its skipped checks would grade too well).
+    if (timedOut()) throw new ApiError("timeout", SITE_SCAN_TOO_SLOW);
+    if (signal.aborted) throw signal.reason ?? new Error("Cancelled");
     report.runId = runId;
     for (const n of report.notes) ctx.send({ type: "notice", agent: "sentinel", text: n });
 

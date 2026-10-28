@@ -1,4 +1,5 @@
 import "server-only";
+import { constants } from "node:crypto";
 import { checkServerIdentity, connect, type PeerCertificate, type TLSSocket } from "node:tls";
 import type { LookupFunction } from "node:net";
 
@@ -144,6 +145,10 @@ export function handshake(t: TlsTarget, o: HandshakeOptions = {}): Promise<Hands
         minVersion: o.minVersion ?? (o.legacy ? "TLSv1" : undefined),
         maxVersion: o.maxVersion,
         ciphers: o.ciphers ?? (o.legacy ? LEGACY_CIPHERS : undefined),
+        // Legacy probes also accept servers without secure renegotiation (RFC 5746): OpenSSL 3 refuses them by default,
+        // which would make a server that does speak TLS 1.2 look as if it didn't. The modern handshake keeps the default,
+        // and its refusal is how the missing RFC 5746 support is reported.
+        ...(o.legacy ? { secureOptions: constants.SSL_OP_LEGACY_SERVER_CONNECT } : {}),
         ...(o.ciphersuites ? { ciphersuites: o.ciphersuites } : {}),
         ALPNProtocols: o.alpn,
         // Node supports requestOCSP on tls.connect; @types/node only lists it for TLSSocket.

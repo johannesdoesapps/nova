@@ -67,14 +67,21 @@ export async function runWorker(deps: WorkerDeps, opts: { workerId: string; budg
         // Nothing to start now. Wait for a retry that's due very soon if there's time; otherwise stop.
         const due = await nextDue(deps.db);
         const wait = due === null ? null : due - now();
+        // Work is due but this worker may have had too little time left for its agent: hand over to a fresh worker
+        // (one with the full time doesn't, so this can't chain).
+        if (wait !== null && wait <= 0 && seconds < 270) {
+          await deps.kick?.().catch(() => undefined);
+          return report;
+        }
         if (wait !== null && wait > 0 && wait <= WAIT_FOR_DUE_MS && left() - wait > 60_000) {
           await sleep(wait + 250);
           continue;
         }
         return report;
       }
-      // Work was available: one more worker may be able to use another free slot.
-      await deps.kick?.().catch(() => undefined);
+      // Work was available: one more worker may be able to use another free slot. Not awaited: the attempt's
+      // time runs from the claim.
+      void deps.kick?.().catch(() => undefined);
       const r = await runOne(deps, claim, owners);
       report.ran.push({ taskId: claim.taskId, attemptNo: claim.attemptNo, outcome: r.result.outcome, taskStatus: r.status });
     }
@@ -88,7 +95,11 @@ export async function runWorker(deps: WorkerDeps, opts: { workerId: string; budg
 
 async function runOne(deps: WorkerDeps, claim: Claim, owners: Map<string, { auth: Authed; end: () => Promise<void> } | null>): Promise<{ result: AttemptResult; status: string }> {
   let result: AttemptResult;
-  if (!owners.has(claim.ownerId)) owners.set(claim.ownerId, await deps.openOwner(claim.ownerId).catch(() => null));
+  // Only a session that opened is kept: a failure is retried for the owner's next task, not repeated for all of them.
+  if (!owners.get(claim.ownerId)) {
+    const opened = await deps.openOwner(claim.ownerId).catch(() => null);
+    if (opened) owners.set(claim.ownerId, opened);
+  }
   const owner = owners.get(claim.ownerId);
   if (!owner) {
     result = { outcome: "failed", output: null, error: "Couldn't open a session for the task's owner, so nothing ran.", errorKind: "auth", retryable: true, usage: { modelCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 } };

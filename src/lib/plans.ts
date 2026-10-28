@@ -223,6 +223,15 @@ export const DEFAULT_BILLING: BillingSettings = {
   creditPackPriceUsd: 0,
 };
 
+/**
+ * A paid plan from the saved settings over the defaults. Settings saved before minimum AI budgets existed keep
+ * their saved price and margin without a minimum: the default minimum belongs with the default price.
+ */
+function savedPlan(id: "pro" | "max", saved: Partial<Plan> | undefined) {
+  if (!saved) return DEFAULT_BILLING.plans[id];
+  return { ...DEFAULT_BILLING.plans[id], minAiBudgetUsd: 0, ...saved };
+}
+
 function mergeBilling(stored: unknown) {
   const s = (stored ?? {}) as Partial<BillingSettings> & { plans?: Partial<Record<PlanId, Partial<Plan>>> };
   return {
@@ -233,8 +242,8 @@ function mergeBilling(stored: unknown) {
     modelTiers: { ...(s.modelTiers ?? {}) },
     plans: {
       free: { ...DEFAULT_BILLING.plans.free, ...(s.plans?.free ?? {}) },
-      pro: { ...DEFAULT_BILLING.plans.pro, ...(s.plans?.pro ?? {}) },
-      max: { ...DEFAULT_BILLING.plans.max, ...(s.plans?.max ?? {}) },
+      pro: savedPlan("pro", s.plans?.pro),
+      max: savedPlan("max", s.plans?.max),
     },
   };
 }

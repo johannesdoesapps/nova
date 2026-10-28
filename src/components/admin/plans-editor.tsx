@@ -73,6 +73,9 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
           const lo = cheap[0];
           const hi = cheap.at(-1);
           const warn = id !== "free" && month.aiBudgetUsd <= 0;
+          // The minimum AI budget wins over the margin target: say what that does to the margin (monthly and yearly).
+          const marginOf = (e: typeof month) => e.contributionUsd / Math.max(e.revenueUsd, 0.01);
+          const belowTarget = id !== "free" && p.minAiBudgetUsd > 0 && Math.min(marginOf(month), marginOf(year)) < b.targetMargin - 0.0005;
           const hiBudget = hi && tierOf(hi.m) !== "standard" ? Math.min(month.aiBudgetUsd, month.premiumBudgetUsd) : month.aiBudgetUsd;
           return (
             <div key={id} className="s-card rounded-2xl p-4">
@@ -170,6 +173,12 @@ export function PlansEditor({ stored, models, onChange }: { stored: Record<strin
                   </div>
                 )}
               </dl>
+              {belowTarget && (
+                <p className={cn("mt-2 text-[12px]", Math.min(month.contributionUsd, year.contributionUsd) < 0 ? "text-s-danger" : "text-amber-700 dark:text-amber-300")}>
+                  The minimum AI budget ({usd(p.minAiBudgetUsd)}) is more than the {Math.round(b.targetMargin * 100)}% margin allows at this price, so the margin is lower: {Math.round(marginOf(month) * 100)}% monthly, {Math.round(marginOf(year) * 100)}% yearly
+                  {Math.min(month.contributionUsd, year.contributionUsd) < 0 ? " — a loss on every subscriber who uses it all" : ""}, and the safety buffer is used up. {usd(priceForBudget(b, p.minAiBudgetUsd, p) ?? 0)} a month would keep the target with the full buffer.
+                </p>
+              )}
               {warn && (
                 <p className="mt-2 text-[12px] text-s-danger">
                   This price leaves no AI budget at a {Math.round(b.targetMargin * 100)}% margin. Raise it to at least {usd(priceForBudget(b, 1, p) ?? 0)} for a $1 budget.

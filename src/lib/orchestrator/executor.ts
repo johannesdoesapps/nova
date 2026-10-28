@@ -59,6 +59,8 @@ export interface ExecDeps {
 }
 
 const DEP_OUTPUT_CHARS = 4000;
+/** orch_settings.lease_grace_seconds' default: a lease outlasts the attempt's time limit by this much. */
+const LEASE_GRACE_MS = 30_000;
 const OUTPUT_CHARS = 100_000;
 
 export function systemPrompt(agent: Pick<AgentRow, "name" | "role" | "system_instructions">, toolsAvailable: boolean): string {
@@ -108,7 +110,11 @@ function addUsage(u: AttemptUsage, r: ModelReply): void {
 export async function executeAttempt(claim: Claim, deps: ExecDeps): Promise<AttemptResult> {
   const usage = blankUsage();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new DOMException("time limit", "TimeoutError")), claim.timeoutSeconds * 1000);
+  // The agent's time limit, but never past the lease (less its grace): setup before this point counts, so the slot
+  // can't be reclaimed while a model call is still running.
+  const leaseLeft = Date.parse(claim.expiresAt) - LEASE_GRACE_MS - Date.now();
+  const limitMs = Math.max(1000, Math.min(claim.timeoutSeconds * 1000, Number.isFinite(leaseLeft) ? leaseLeft : Infinity));
+  const timer = setTimeout(() => controller.abort(new DOMException("time limit", "TimeoutError")), limitMs);
   let timedOut = false;
   controller.signal.addEventListener("abort", () => (timedOut = true));
   const state = async () => {

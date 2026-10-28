@@ -157,6 +157,13 @@ class SharedSite implements SiteHost {
 
   async publish(projectName: string, plan: SitePlan, uploaded: { file: string; sha: string; size: number }[], fingerprint: string) {
     const shared = await this.project();
+    // Every user's site builds and runs in this one project, so anything in its environment would be readable by all
+    // of them: refuse a project that has environment variables (it must be an empty project used only for this).
+    if ((await this.host.envCount(shared.id)) > 0)
+      throw new ApiError(
+        "not_configured",
+        `Publishing is set to use the Vercel project "${this.sharedName}" (ORBIS_PUBLISH_VERCEL_PROJECT), but it has environment variables. Every published site builds and runs in that project and could read them, so Orbis won't publish there. Use an empty project dedicated to published sites.`,
+      );
     // Sites must open without a Vercel login; if the account won't allow the change, the check after publishing says so.
     await this.host.keepPublic(shared.id);
     const alias = (await this.knownAlias()) ?? `${siteProjectName(projectName, this.projectId)}.vercel.app`;

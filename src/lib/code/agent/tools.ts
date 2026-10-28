@@ -947,6 +947,11 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
           result(id, tool, false, "Not yet: the user hasn't reviewed your edits.");
           break;
         }
+        // Checking the work would run alongside the command (a false failure), and it would be left running.
+        if (running) {
+          result(id, tool, false, `Not yet: \`${running.slice(0, 200)}\` is still running in the background. Call wait_for_command, then finish.`);
+          break;
+        }
         await log({ kind: "summary", title: "Finished", detail: { summary: a.summary, unresolved: a.unresolved ?? [] } });
         result(id, tool, true, "Finished.");
         skipRest(i + 1, "the run has finished.");

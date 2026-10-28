@@ -41,6 +41,37 @@ export function dohQuery(opts: { timeoutMs?: number; fetchImpl?: typeof fetch; s
 }
 
 /** The name and its parents, stopping above the registrable part (two labels; good enough to find a CAA/DMARC record). */
+/**
+ * Public suffixes of more than one label that sites commonly use: under these, the domain an organisation owns (where
+ * its SPF and DMARC records live) is three labels long, not two. Platform domains where every subdomain is a separate
+ * site are included. Not the full Public Suffix List; other multi-label suffixes are treated like .com.
+ */
+const MULTI_LABEL_SUFFIXES = new Set(
+  (
+    "co.uk org.uk me.uk ltd.uk plc.uk net.uk ac.uk gov.uk sch.uk nhs.uk com.au net.au org.au edu.au gov.au asn.au id.au co.nz net.nz org.nz govt.nz ac.nz " +
+    "co.jp ne.jp or.jp ac.jp go.jp co.kr or.kr com.br net.br org.br com.cn net.cn org.cn com.hk com.sg com.my com.tw com.tr com.mx com.ar com.co com.pe " +
+    "co.in net.in org.in co.za co.il co.id com.ph com.pk com.ng com.eg com.sa com.ua co.th com.vn " +
+    "github.io gitlab.io vercel.app netlify.app pages.dev workers.dev herokuapp.com web.app firebaseapp.com azurewebsites.net cloudfront.net onrender.com fly.dev"
+  ).split(" "),
+);
+
+/** The domain a host's owner registered (where SPF and DMARC are published): example.com, example.co.uk. */
+export function registrableDomain(host: string): string {
+  const labels = host.split(".");
+  const n = labels.length >= 3 && MULTI_LABEL_SUFFIXES.has(labels.slice(-2).join(".")) ? 3 : 2;
+  return labels.slice(-n).join(".");
+}
+
+/** SPF's catch-all qualifier: "-", "~", "?" or "+" (a bare "all" is "+"); "redirect" when it delegates; null when absent. */
+export function spfAll(record: string): string | null {
+  const terms = record.trim().split(/\s+/);
+  for (const t of terms) {
+    const m = /^([~?+-]?)all$/i.exec(t);
+    if (m) return m[1] || "+";
+  }
+  return terms.some((t) => /^redirect=/i.test(t)) ? "redirect" : null;
+}
+
 export function ancestors(host: string): string[] {
   const labels = host.split(".");
   const out: string[] = [];
@@ -100,18 +131,20 @@ export async function analyseDns(host: string, q: DnsQuery): Promise<{ checks: C
   if (!(aaaa instanceof Error)) out.push(check({ id: "dns.ipv6", category: "dns", title: "IPv6", status: "info", severity: "info", summary: aaaa.answers.length ? `Reachable over IPv6 (${aaaa.answers.length} AAAA record${aaaa.answers.length === 1 ? "" : "s"}). Orbis's TLS checks used the first address returned.` : "No IPv6 (AAAA) address." }));
 
   // Email spoofing protection for the domain (anyone can send mail "from" a domain without these).
-  const apex = ancestors(host).at(-1)!;
+  const apex = registrableDomain(host);
   const txt = await safe(() => ask(apex, "TXT"));
   if (txt instanceof Error) out.push(check({ id: "dns.spf", category: "dns", title: "SPF (email)", status: "inconclusive", severity: "low", summary: `The TXT lookup failed (${txt.message}).` }));
   else {
     const spf = txt.answers.map((x) => unquote(x.data)).filter((v) => /^v=spf1\b/i.test(v));
-    const all = spf[0]?.match(/([~?+-])?all\b/i)?.[1] ?? null;
+    const all = spf[0] ? spfAll(spf[0]) : null;
     out.push(
       !spf.length
         ? check({ id: "dns.spf", category: "dns", title: "SPF (email)", status: "warning", severity: "low", summary: `${apex} has no SPF record, so receivers can't tell which servers may send its email.`, remediation: `If ${apex} sends no email, publish "v=spf1 -all"; otherwise list your mail providers.`, references: ["https://www.rfc-editor.org/rfc/rfc7208"] })
         : spf.length > 1
           ? check({ id: "dns.spf", category: "dns", title: "SPF (email)", status: "failed", severity: "low", summary: `${apex} has ${spf.length} SPF records; that's a permanent error and receivers ignore them all.`, evidence: spf.map((v) => ({ label: "TXT", value: v })), remediation: "Merge them into one v=spf1 record." })
-          : check({ id: "dns.spf", category: "dns", title: "SPF (email)", status: all === "+" || all === "?" || all === null ? "warning" : "passed", severity: "low", summary: all === "+" || all === "?" || all === null ? "SPF exists but doesn't reject other senders (no -all or ~all)." : `SPF ends with ${all}all.`, evidence: [{ label: `TXT ${apex}`, value: spf[0]! }] }),
+          : all === "redirect"
+            ? check({ id: "dns.spf", category: "dns", title: "SPF (email)", status: "info", severity: "low", summary: "SPF is delegated to another domain's record (redirect=), which decides what happens to other senders.", evidence: [{ label: `TXT ${apex}`, value: spf[0]! }] })
+            : check({ id: "dns.spf", category: "dns", title: "SPF (email)", status: all === "+" || all === "?" || all === null ? "warning" : "passed", severity: "low", summary: all === "+" || all === "?" || all === null ? "SPF exists but doesn't reject other senders (no -all or ~all)." : `SPF ends with ${all}all.`, evidence: [{ label: `TXT ${apex}`, value: spf[0]! }] }),
     );
   }
   const dmarc = await safe(async () => {

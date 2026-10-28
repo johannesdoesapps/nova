@@ -148,21 +148,28 @@ export function analyseHeaders(res: HttpResponse, opts: { metaCsp?: string | nul
   if (!cspSource)
     out.push(check({ id: "headers.csp", category: "headers", title: "Content Security Policy", status: reportOnly ? "warning" : "failed", severity: reportOnly ? "low" : "medium", summary: reportOnly ? "A CSP is set in report-only mode, so it doesn't block anything yet." : "No Content-Security-Policy: if an attacker can inject HTML, nothing limits which scripts run.", evidence: reportOnly ? [{ label: "Content-Security-Policy-Report-Only", value: clip(reportOnly) }] : [at], remediation: "Add a Content-Security-Policy. Start with default-src 'self'; script-src 'self' (plus the hosts you need); object-src 'none'; base-uri 'self'; frame-ancestors 'self'. Test in report-only mode first.", references: [REF.csp] }));
   else {
+    // Every policy applies (a script must be allowed by all of them), so a weakness only counts when each policy that
+    // restricts scripts has it, and objects are open only when no policy restricts them.
     const policies = parseCsp(cspSource);
     const issues: string[] = [];
-    for (const p of policies) {
-      const scripts = p.get("script-src") ?? p.get("default-src");
-      if (!scripts) issues.push("no script-src or default-src, so scripts from anywhere are allowed");
-      else {
+    const scriptLists = policies.map((p) => p.get("script-src") ?? p.get("default-src")).filter((x): x is string[] => !!x);
+    if (!scriptLists.length) issues.push("no script-src or default-src, so scripts from anywhere are allowed");
+    else {
+      const weak = scriptLists.map((scripts) => {
         const nonceOrHash = scripts.some((t) => /^'(nonce-|sha(256|384|512)-)/i.test(t));
         const strictDynamic = scripts.includes("'strict-dynamic'");
-        if (scripts.includes("'unsafe-inline'") && !nonceOrHash && !strictDynamic) issues.push("'unsafe-inline' scripts are allowed, which defeats most of CSP's protection against injected scripts");
-        if (scripts.includes("'unsafe-eval'")) issues.push("'unsafe-eval' is allowed");
         const wild = scripts.filter((t) => t === "*" || /^(https?|data):$/i.test(t));
-        if (wild.length && !strictDynamic) issues.push(`script sources include ${wild.join(" ")}, which allows scripts from any host`);
-      }
-      if (!p.has("object-src") && !(p.get("default-src") ?? []).includes("'none'")) issues.push("no object-src (plugins fall back to default-src)");
+        return {
+          inline: scripts.includes("'unsafe-inline'") && !nonceOrHash && !strictDynamic,
+          evalOk: scripts.includes("'unsafe-eval'"),
+          wild: wild.length && !strictDynamic ? wild : null,
+        };
+      });
+      if (weak.every((w) => w.inline)) issues.push("'unsafe-inline' scripts are allowed, which defeats most of CSP's protection against injected scripts");
+      if (weak.every((w) => w.evalOk)) issues.push("'unsafe-eval' is allowed");
+      if (weak.every((w) => w.wild)) issues.push(`script sources include ${weak[0]!.wild!.join(" ")}, which allows scripts from any host`);
     }
+    if (!policies.some((p) => p.has("object-src") || (p.get("default-src") ?? []).includes("'none'"))) issues.push("no object-src (plugins fall back to default-src)");
     const ev = [{ label: cspRaw ? "Content-Security-Policy" : "CSP (meta tag)", value: clip(cspSource, 600) }];
     out.push(
       issues.length

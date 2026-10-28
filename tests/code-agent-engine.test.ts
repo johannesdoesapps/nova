@@ -786,6 +786,60 @@ describe("recovery", () => {
       expect(run(id).transcript.some((m) => m.results?.some((r) => r.text.includes("stopped at its time limit")))).toBe(true);
     });
 
+    it("isn't stopped as too slow when it finished while nobody was waiting, even past 10 minutes", async () => {
+      const id = newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true } });
+      script.turns.push(turn("Installing.", call("run_command", { command: "npm ci" })));
+      await stepRun(req(), auth, id, { expectStep: 0 });
+      const job = run(id).job!;
+      jobs.get(job.jobId)!.running = false;
+      clock.skew += 10 * 60_000;
+      script.turns.push(turn("Waiting.", call("wait_for_command")));
+      await stepRun(req(), auth, id, { expectStep: run(id).steps });
+      expect(killed).toEqual([]);
+      expect(run(id).job).toBeNull();
+      const results = run(id).transcript.flatMap((m) => m.results ?? []).map((r) => r.text);
+      expect(results.some((t) => t.includes("added 812 packages"))).toBe(true);
+      expect(results.some((t) => t.includes("stopped at its time limit"))).toBe(false);
+    });
+
+    it("refuses to finish while the command is still running", async () => {
+      const id = newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true } });
+      script.turns.push(turn("Installing.", call("run_command", { command: "npm ci" })));
+      await stepRun(req(), auth, id, { expectStep: 0 });
+      script.turns.push(turn("Done.", call("finish", { summary: "Installed." })));
+      await stepRun(req(), auth, id, { expectStep: run(id).steps });
+      expect(run(id).status).not.toBe("completed");
+      expect(run(id).job).toBeTruthy();
+      expect(run(id).transcript.some((m) => m.results?.some((r) => r.text.includes("is still running in the background. Call wait_for_command, then finish")))).toBe(true);
+    });
+
+    it("forgets the command, and says it was lost, when the computer stopped meanwhile", async () => {
+      const id = newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true } });
+      script.turns.push(turn("Installing.", call("run_command", { command: "npm ci" })));
+      await stepRun(req(), auth, id, { expectStep: 0 });
+      computerOn = false;
+      try {
+        script.turns.push(turn("Waiting.", call("wait_for_command")));
+        await stepRun(req(), auth, id, { expectStep: run(id).steps });
+      } finally {
+        computerOn = true;
+      }
+      expect(run(id).job).toBeNull();
+      expect(run(id).pending).toBeNull();
+      expect(run(id).transcript.some((m) => m.results?.some((r) => r.text.includes("so it was lost")))).toBe(true);
+    });
+
+    it("doesn't leave the run waiting on a command that couldn't be started", async () => {
+      const id = newRun({ status: "running", plan: { summary: "x", steps: ["x"], approved: true } });
+      commandOutput = () => {
+        throw new Error("sandbox refused the command");
+      };
+      script.turns.push(turn("Installing.", call("run_command", { command: "npm ci" })));
+      await stepRun(req(), auth, id, { expectStep: 0 }).catch(() => {});
+      expect(run(id).pending?.kind).not.toBe("job");
+      expect(run(id).job ?? null).toBeNull();
+    });
+
     it("also keeps running when it was a command the user had to approve", async () => {
       const id = newRun({ status: "awaiting_approval", plan: { summary: "x", steps: ["x"], approved: true }, pending: { kind: "command", command: "npm ci", reason: "installs" } });
       await respondToRun(auth, id, { decision: "approve" });

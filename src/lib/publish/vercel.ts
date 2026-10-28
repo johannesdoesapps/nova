@@ -114,7 +114,17 @@ export class VercelHost {
   private async call<T>(
     method: string,
     path: string,
-    opts: { params?: Record<string, string | number | undefined>; json?: unknown; body?: BodyInit; headers?: Record<string, string>; allow404?: boolean; timeoutMs?: number; refused?: (why: string) => ApiError } = {},
+    opts: {
+      params?: Record<string, string | number | undefined>;
+      json?: unknown;
+      body?: BodyInit;
+      headers?: Record<string, string>;
+      allow404?: boolean;
+      timeoutMs?: number;
+      refused?: (why: string) => ApiError;
+      /** A call that creates something: not repeated after a network error or timeout, which may have created it. */
+      once?: boolean;
+    } = {},
   ): Promise<T | null> {
     let last: unknown = null;
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -129,6 +139,7 @@ export class VercelHost {
         });
       } catch (e) {
         last = e;
+        if (opts.once) break;
         await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
         continue;
       }
@@ -136,7 +147,7 @@ export class VercelHost {
       if (res.ok) return res.status === 204 ? null : ((await res.json().catch(() => null)) as T | null);
       const body = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
       const msg = (body?.error?.message ?? "").replace(/\s+/g, " ").slice(0, 300);
-      if (res.status >= 500 && attempt < 2) {
+      if (res.status >= 500 && attempt < 2 && !opts.once) {
         last = new Error(msg || `HTTP ${res.status}`);
         await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
         continue;
@@ -210,6 +221,8 @@ export class VercelHost {
       params: { skipAutoDetectionConfirmation: 1, forceNew: 1 },
       json: { name: project.name, project: project.id, ...(opts.shared ? {} : { target: "production" }), files, meta, projectSettings },
       timeoutMs: 30_000,
+      // Repeating a deployment that may have started would publish twice.
+      once: true,
     });
     if (!d) throw new ApiError("upstream_error", "The hosting provider didn't start the deployment.");
     return toDeployment(d);
@@ -234,6 +247,12 @@ export class VercelHost {
   }
 
   /** Ask for the project to stay public (no Vercel login). Best effort: the account may not allow changing it. */
+  /** How many environment variables a project has (a shared publishing project must have none). */
+  async envCount(id: string): Promise<number> {
+    const r = await this.call<{ envs?: unknown[] }>("GET", `/v9/projects/${encodeURIComponent(id)}/env`, { allow404: true });
+    return r?.envs?.length ?? 0;
+  }
+
   async keepPublic(id: string): Promise<boolean> {
     try {
       await this.call("PATCH", `/v9/projects/${encodeURIComponent(id)}`, { json: { ssoProtection: null }, refused: (why) => new ApiError("forbidden", why) });
@@ -276,14 +295,19 @@ export class VercelHost {
   }
 }
 
-/** Whether the live address answers like a website, from outside (no Orbis cookies or credentials). */
+/**
+ * Whether the live address answers like a website, from outside (no Orbis cookies or credentials). Redirects aren't
+ * followed: the published site chooses where they point (its vercel.json can send them anywhere, including
+ * addresses inside a network), so a redirect itself counts as the site answering.
+ */
 export async function checkReachable(url: string, f: Fetch = fetch): Promise<{ ok: boolean; status: number | null; detail: string }> {
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const res = await f(url, { redirect: "follow", signal: AbortSignal.timeout(12_000), cache: "no-store", headers: { "User-Agent": "OrbisPublishCheck/1.0" } });
+      const res = await f(url, { redirect: "manual", signal: AbortSignal.timeout(12_000), cache: "no-store", headers: { "User-Agent": "OrbisPublishCheck/1.0" } });
       const type = res.headers.get("content-type") ?? "";
       await res.body?.cancel().catch(() => {});
       if (res.ok) return { ok: true, status: res.status, detail: type };
+      if (res.status >= 300 && res.status < 400) return { ok: true, status: res.status, detail: "redirects visitors" };
       // A brand-new domain can answer 404 for a moment while the alias settles.
       if (res.status !== 404 || attempt === 3) return { ok: false, status: res.status, detail: `answered HTTP ${res.status}` };
     } catch (e) {

@@ -23,7 +23,9 @@ export async function GET(req: Request) {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const db = serviceSupabase();
   if (!db) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY is not set" }, { status: 503 });
-  // Only when the orchestrator's tables exist and something is queued (the query fails harmlessly otherwise).
+  // Only when the orchestrator's tables exist and something is queued (the queries fail harmlessly otherwise). First
+  // recover attempts whose worker died (expired leases), so their tasks are queued again or failed.
+  await db.rpc("orch_reconcile");
   const { data: queued } = await db.from("orch_tasks").select("id").eq("status", "queued").limit(1);
   if (queued?.length) {
     const origin = new URL(req.url).origin;

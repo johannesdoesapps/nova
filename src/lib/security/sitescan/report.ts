@@ -43,9 +43,24 @@ export function findingsFrom(r: ScanReport): FindingDraft[] {
     }));
 }
 
-/** Rule ids the scan checked and found fine: earlier findings for them are marked "not detected". */
+/**
+ * Rule prefixes the scan re-checked: earlier findings under them that this run didn't find again are marked "not
+ * detected". A group of checks (cert., cookies., exposure., …) that was fully evaluated clears as a whole, because
+ * some checks only ever report a problem (an exposed .env, a cookie that's no longer set) and never "passed". A group
+ * with any skipped, untested or inconclusive check clears only the checks that passed.
+ */
 export function clearedRules(r: ScanReport): string[] {
-  return r.checks.filter((c) => c.status === "passed" || c.status === "info").map((c) => `${RULE_PREFIX}${c.id}`);
+  const groups = new Map<string, CheckResult[]>();
+  for (const c of r.checks) {
+    const g = c.id.split(".")[0]!;
+    groups.set(g, [...(groups.get(g) ?? []), c]);
+  }
+  const out: string[] = [];
+  for (const [g, checks] of groups) {
+    if (checks.every((c) => c.status === "passed" || c.status === "info" || c.status === "failed" || c.status === "warning")) out.push(`${RULE_PREFIX}${g}.`);
+    else out.push(...checks.filter((c) => c.status === "passed" || c.status === "info").map((c) => `${RULE_PREFIX}${c.id}`));
+  }
+  return out;
 }
 
 export function counts(checks: CheckResult[]) {

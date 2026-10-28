@@ -294,7 +294,12 @@ export interface ExecOptions {
   background?: { tool: RunningJob["tool"] };
   /** Wait for a command this run left running (no new command is started). */
   resume?: RunningJob;
+  /** When the request must be done: a command that can keep going in the background isn't waited for past it. */
+  deadline?: number;
 }
+
+/** Time kept after waiting for a command, to copy its files back and record the step. */
+const AFTER_COMMAND_MS = 20_000;
 
 /**
  * Run a command in the project's computer, wait for it (up to COMMAND_LIMIT_MS this step), and copy back the files it
@@ -314,10 +319,22 @@ export async function execCommand(auth: Authed, runId: string, projectId: string
   const before = await getFiles(auth, projectId);
   const jobId = resume?.jobId ?? `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   const started = resume?.startedAt ?? Date.now();
-  const waitUntil = Date.now() + COMMAND_LIMIT_MS;
-  const limit = opts.background || resume ? LONG_COMMAND_MS : COMMAND_LIMIT_MS;
+  const canContinue = !!(opts.background || resume);
+  // A command that can keep going in the background is waited for only while the request has time left (the rest of
+  // the step still has to be recorded); otherwise up to COMMAND_LIMIT_MS.
+  const waitUntil = Math.min(Date.now() + COMMAND_LIMIT_MS, canContinue && opts.deadline ? opts.deadline - AFTER_COMMAND_MS : Infinity);
+  const limit = canContinue ? LONG_COMMAND_MS : COMMAND_LIMIT_MS;
+  // What the run was waiting for before (an approval, say), put back if the command can't be started.
+  const prevPending = resume ? null : (await getRun(auth, runId)).pending;
   await updateRun(auth, runId, { pending: { kind: "job", jobId, command } });
-  if (!resume) await startJob(box, jobId, command);
+  if (!resume) {
+    try {
+      await startJob(box, jobId, command);
+    } catch (err) {
+      await updateRun(auth, runId, { pending: prevPending ?? null }).catch(() => {});
+      throw err;
+    }
+  }
 
   let output = "";
   let offset = resume?.offset ?? 0;
@@ -346,7 +363,18 @@ export async function execCommand(auth: Authed, runId: string, projectId: string
       break;
     }
   }
-  if (!done && !cancelled && Date.now() - started < limit - 5_000) {
+  // A command that finished while nobody was waiting (e.g. resumed after its time) is read once before deciding.
+  if (!done && !cancelled) {
+    const r = await readJob(box, jobId, offset).catch(() => null);
+    if (r?.done) {
+      output += r.output;
+      if (output.length > MAX_OUTPUT_KEPT) output = output.slice(-MAX_OUTPUT_KEPT);
+      offset = r.offset;
+      exitCode = r.exitCode;
+      done = true;
+    }
+  }
+  if (!done && !cancelled && canContinue && Date.now() - started < limit - 5_000) {
     // Still running: leave it going, and remember it so a later step can wait for it (and Stop can end it).
     const tool = resume?.tool ?? opts.background?.tool ?? "run_command";
     await updateRun(auth, runId, { job: { jobId, command, tool, startedAt: started, offset } });
@@ -421,11 +449,17 @@ function realEnv(c: EnvContext): AgentEnv {
     files: () => getFiles(auth, project.id),
     save: (changes) => saveChanges(auth, run.id, project.id, changes, { agent }),
     computer: async () => Boolean(await optionalBox(auth, project.id)),
-    exec: (command, approved, tool) => execCommand(auth, run.id, project.id, command, commandKeeps(run), { agent, approved }, tool ? { background: { tool } } : {}),
+    exec: (command, approved, tool) => execCommand(auth, run.id, project.id, command, commandKeeps(run), { agent, approved }, tool ? { background: { tool }, deadline: c.deadline } : {}),
     waitCommand: async () => {
       const job = run.job;
       if (!job) return null;
-      return { command: job.command, tool: job.tool, out: await execCommand(auth, run.id, project.id, job.command, commandKeeps(run), { agent, approved: true }, { resume: job }) };
+      // The computer stopped (time ran out, or Stop computer): the command went with it. Forget it, so it doesn't block
+      // new commands, and say so.
+      if (!(await optionalBox(auth, project.id))) {
+        await updateRun(auth, run.id, { job: null, pending: null });
+        return { command: job.command, tool: job.tool, out: { exitCode: null, output: "The project's computer stopped before this command finished, so it was lost. Start the computer again and rerun it if it's still needed.", durationMs: Date.now() - job.startedAt, timedOut: false, cancelled: true, changed: [], skipped: [] } };
+      }
+      return { command: job.command, tool: job.tool, out: await execCommand(auth, run.id, project.id, job.command, commandKeeps(run), { agent, approved: true }, { resume: job, deadline: c.deadline }) };
     },
     guard: (op, resource, approved) => bastionGuard(gateCtx(auth, run.id, agent), op, resource, { approved }),
     changes: async () => (await listChanges(auth, run.id)).map((ch) => ({ path: ch.path, before: ch.before, after: ch.after })),

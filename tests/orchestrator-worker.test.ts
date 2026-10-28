@@ -308,6 +308,49 @@ describe("failures, retries, timeouts and cancellation (mock gateway)", () => {
   });
 });
 
+describe("recovery (bug-hunt regressions, mock gateway)", () => {
+  it("opens the owner's session again after a failure, instead of failing all their tasks", async () => {
+    await agent({ max_attempts: 1 });
+    const a = await task();
+    const b = await task();
+    let opens = 0;
+    const gw = new MockGateway(() => ({ text: "ok" }));
+    // The first attempt to open a session fails (a transient Auth error); the next one works.
+    await work(deps(gw, { openOwner: async () => (++opens === 1 ? null : { auth: owner(), end: async () => undefined }) }));
+    expect([await statusOf(a), await statusOf(b)].sort()).toEqual(["completed", "failed"]);
+    expect(opens).toBe(2);
+  });
+
+  it("hands over to a fresh worker when it skips due work for lack of time", async () => {
+    await agent({ timeout_seconds: 200 });
+    const id = await task();
+    let kicks = 0;
+    const gw = new MockGateway();
+    // 150 s budget: this worker can't fit the agent's 200 s attempt.
+    const r = await runWorker(deps(gw, { kick: async () => void kicks++ }), { workerId: "w-short", budgetMs: 150_000 });
+    expect(r.ran).toHaveLength(0);
+    expect(kicks).toBe(1);
+    expect(await statusOf(id)).toBe("queued");
+    // A worker with the full time (285 s, as in production) runs it.
+    await runWorker(deps(gw), { workerId: "w-full", budgetMs: 285_000 });
+    expect(await statusOf(id)).toBe("completed");
+  });
+
+  it("never lets a model call outlive its lease, even when setup was slow", async () => {
+    await agent({ timeout_seconds: 120 });
+    await task();
+    const { data } = await asService(db).rpc("orch_claim", { p_worker: "w1", p_max_seconds: 270 });
+    // Setup used up all but ~31 s of the lease (expires = claim + 120 s + 30 s grace).
+    const claim = { ...(data as Claim), expiresAt: new Date(Date.now() + 30_600).toISOString() };
+    const gw = new MockGateway((req) => new Promise((_, reject) => req.signal.addEventListener("abort", () => reject(req.signal.reason))));
+    const t0 = Date.now();
+    const r = await executeAttempt(claim, { db: asService(db) as unknown as WorkerDeps["db"], gateway: gw, owner: owner(), projectFiles });
+    expect(r.outcome).toBe("timed_out");
+    expect(Date.now() - t0).toBeLessThan(5_000);
+    await asService(db).rpc("orch_finish", { p_attempt: claim.attemptId, p_lease: claim.leaseId, p_outcome: r.outcome, p_output: null, p_error: r.error, p_error_kind: r.errorKind, p_retryable: false, p_usage: r.usage });
+  });
+});
+
 describe("planning tasks (mock gateway)", () => {
   const plan = JSON.stringify({
     summary: "Fix the add function, then test it.",

@@ -201,6 +201,33 @@ describe("taking steps in the background", () => {
     expect(env.kicks).toHaveLength(0);
   });
 
+  it("counts verification moving on as progress, though it takes no steps", async () => {
+    const { driveInBackground } = await import("@/lib/code/agent/background");
+    env.run = quiet({ checks: { verify: { queue: ["build", "test"], attempts: 0 } } });
+    env.afterRun = quiet({ checks: { verify: { queue: ["test"], attempts: 0 } } });
+    env.step = async () => ({ run: { steps: 4, status: "running" } });
+    expect(await driveInBackground(RUN, "https://tryorbis.app", { wait: 0 })).toBe("handed_over");
+    expect(env.kicks).toHaveLength(1);
+  });
+
+  it("tries again from a fresh worker when the model failed (the engine counts those and gives up after a few)", async () => {
+    const { driveInBackground } = await import("@/lib/code/agent/background");
+    env.run = quiet({ usage: { modelFailuresInRow: 0 } });
+    env.afterRun = quiet({ usage: { modelFailuresInRow: 1 } });
+    env.step = async () => {
+      throw new Error("The model provider is busy.");
+    };
+    expect(await driveInBackground(RUN, "https://tryorbis.app", { wait: 0 })).toBe("handed_over");
+    expect(env.kicks).toHaveLength(1);
+    expect(env.events).toEqual([]);
+    expect(env.calls.at(-1)).toBe("signOut:owner-access-token:local");
+    // Once the engine has failed the run, nothing is retried.
+    Object.assign(env, { run: quiet({ usage: { modelFailuresInRow: 2 } }), afterRun: quiet({ status: "failed", usage: { modelFailuresInRow: 3 } }), reads: 0 });
+    env.kicks.length = 0;
+    expect(await driveInBackground(RUN, "https://tryorbis.app", { wait: 0 })).toBe("error");
+    expect(env.kicks).toHaveLength(0);
+  });
+
   it("does nothing if the session doesn't belong to the run's owner", async () => {
     const { driveInBackground } = await import("@/lib/code/agent/background");
     env.run = quiet();
