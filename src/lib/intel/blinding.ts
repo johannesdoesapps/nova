@@ -7,7 +7,7 @@
 
 const IDENTITY_PATTERNS: RegExp[] = [
   /\b(?:chat\s?gpt|gpt[-\s]?\d+(?:\.\d+)?(?:[-\s]?(?:mini|nano|turbo|o|pro))?|gpt-oss(?:-\d+b)?|o[134](?:-mini)?)\b/gi,
-  /\b(?:openai|anthropic|claude(?:\s+(?:opus|sonnet|haiku|fable))?|google\s+deepmind|deepmind|gemini|bard|meta\s+ai|llama(?:\s?\d+(?:\.\d+)?)?|mistral(?:\s+ai)?|mixtral|qwen\d*|deepseek|grok|xai|cohere|command\s?r\+?|hugging\s?face|phi-\d)\b/gi,
+  /\b(?:openai|anthropic|claude(?:\s+(?:opus|sonnet|haiku|fable))?|google\s+deepmind|deepmind|gemini|bard|meta\s+ai|llama(?:\s?\d+(?:\.\d+)?)?|mistral(?:\s+ai)?|mixtral|qwen\d*|deepseek|(?:chat)?glm(?:-?\d+(?:\.\d+)?)?|zhipu|grok|xai|cohere|command\s?r\+?|hugging\s?face|phi-\d)\b/gi,
 ];
 
 export const REDACTION = "[model identity hidden]";

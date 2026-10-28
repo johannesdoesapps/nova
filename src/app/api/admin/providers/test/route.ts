@@ -6,7 +6,7 @@ import { getAuth } from "@/lib/auth";
 import { serverEnv } from "@/lib/env";
 import { errorResponse, parseJsonBody } from "@/lib/http";
 
-const body = z.object({ provider: z.enum(["anthropic", "openai", "google", "xai", "deepseek", "huggingface"]) });
+const body = z.object({ provider: z.enum(["anthropic", "openai", "google", "xai", "deepseek", "zai", "huggingface"]) });
 
 /**
  * POST /api/admin/providers/test — check a provider's server-side credentials
@@ -30,6 +30,7 @@ export async function POST(req: Request) {
           google: { key: env.geminiKey, url: `${env.geminiBaseUrl.replace(/\/$/, "")}/models`, envVar: "GEMINI_API_KEY" },
           xai: { key: env.xaiKey, url: `${env.xaiBaseUrl.replace(/\/$/, "")}/models`, envVar: "XAI_API_KEY" },
           deepseek: { key: env.deepseekKey, url: `${env.deepseekBaseUrl.replace(/\/$/, "")}/models`, envVar: "DEEPSEEK_API_KEY" },
+          zai: { key: env.zaiKey, url: `${env.zaiBaseUrl.replace(/\/$/, "")}/models`, envVar: "ZAI_API_KEY" },
           huggingface: { key: env.huggingfaceKey, url: "https://router.huggingface.co/v1/models", envVar: "HUGGINGFACE_API_KEY" },
         }[provider];
         if (!target.key) return NextResponse.json({ ok: false, error: `${target.envVar} is not set.` });

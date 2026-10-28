@@ -64,6 +64,7 @@ Total time is about 30–45 minutes the first time.
    | `GEMINI_API_KEY` | your Google Gemini key (optional) |
    | `XAI_API_KEY` | your xAI key for Grok (optional) |
    | `DEEPSEEK_API_KEY` | your DeepSeek key (optional) |
+   | `ZAI_API_KEY` | your Z.ai key for GLM models (optional) |
    | `ORBIS_DAILY_REQUEST_LIMIT` | `30` (guest requests per day; signed-in users follow the plan limits in `src/lib/plans.ts`) |
    | `ORBIS_RATE_LIMIT_PER_MINUTE` | `10` |
    | `ORBIS_TRIAL_SECRET` | output of `openssl rand -base64 32` |

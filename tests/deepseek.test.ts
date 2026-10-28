@@ -19,9 +19,9 @@ afterEach(() => vi.unstubAllGlobals());
 describe("DeepSeek provider", () => {
   it("is registered with configurable models and only offered when its key is set", () => {
     expect(DEFAULT_MODELS.filter((m) => m.provider === "deepseek").map((m) => m.providerModelId)).toEqual(["deepseek-flash", "deepseek-v4-pro"]);
-    const off = withStatus(DEFAULT_MODELS, { anthropic: false, openai: true, google: false, xai: false, deepseek: false, huggingface: false, demo: true });
+    const off = withStatus(DEFAULT_MODELS, { anthropic: false, openai: true, google: false, xai: false, deepseek: false, zai: false, huggingface: false, demo: true });
     expect(off.find((m) => m.id === flash.id)).toMatchObject({ available: false, unavailableReason: "Set DEEPSEEK_API_KEY to enable" });
-    const on = withStatus(DEFAULT_MODELS, { anthropic: false, openai: false, google: false, xai: false, deepseek: true, huggingface: false, demo: true });
+    const on = withStatus(DEFAULT_MODELS, { anthropic: false, openai: false, google: false, xai: false, deepseek: true, zai: false, huggingface: false, demo: true });
     expect(on.find((m) => m.id === flash.id)!.available).toBe(true);
     expect(on.some((m) => m.provider === "demo")).toBe(false);
   });

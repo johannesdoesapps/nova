@@ -14,7 +14,7 @@ import { OrchError } from "./errors";
  * against the task owner's plan (the usage ledger's atomic reservation), calls the provider through its adapter,
  * and records the run. Credentials stay in server environment variables and are never returned or logged.
  *
- * Adapters: Orbis's existing providers (Anthropic, OpenAI, Google Gemini, xAI, DeepSeek, Hugging Face) are wrapped
+ * Adapters: Orbis's existing providers (Anthropic, OpenAI, Google Gemini, xAI, DeepSeek, Z.ai, Hugging Face) are wrapped
  * by orbisAdapter(); another provider is added by registering a ProviderAdapter (and its models in the model
  * registry), without touching the scheduler or the executor.
  */
@@ -99,7 +99,7 @@ export function orbisAdapter(id: Exclude<ProviderId, "demo">): ProviderAdapter {
   };
 }
 
-const adapters = new Map<string, ProviderAdapter>((["anthropic", "openai", "google", "xai", "deepseek", "huggingface"] as const).map((id) => [id, orbisAdapter(id)]));
+const adapters = new Map<string, ProviderAdapter>((["anthropic", "openai", "google", "xai", "deepseek", "zai", "huggingface"] as const).map((id) => [id, orbisAdapter(id)]));
 
 /** Add (or replace) a provider adapter. Its models must also be in the model registry. */
 export function registerProviderAdapter(a: ProviderAdapter): void {

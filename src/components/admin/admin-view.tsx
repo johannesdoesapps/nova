@@ -443,6 +443,7 @@ function AddModel({ initial, existing, onCancel, onAdd }: { initial: Partial<Mod
             <option value="google">Google</option>
             <option value="xai">xAI</option>
             <option value="deepseek">DeepSeek</option>
+            <option value="zai">Z.ai (GLM)</option>
             <option value="huggingface">Hugging Face</option>
           </select>
         </label>

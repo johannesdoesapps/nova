@@ -87,3 +87,11 @@ OpenAI shuts down `gpt-5` and `gpt-5-mini` on 11 Dec 2026. `RETIRED_MODELS` in `
 - Default registry entries: `deepseek-flash` (fast, low-cost) and `deepseek-v4-pro` (reasoning). DeepSeek renames models between releases, so check Admin → DeepSeek → Test connection and add, disable or set the default model there; no code change is needed.
 - Prices are left unset until verified on DeepSeek's pricing page (it varies by time of day).
 - Every assistant replies in the language the user writes in, e.g. Chinese or English.
+
+## Z.ai (GLM)
+
+- Set `ZAI_API_KEY` (and optionally `ZAI_BASE_URL`, default `https://api.z.ai/api/paas/v4`; set it to the mainland-China endpoint if your key is from there). Requests go server-side to the OpenAI-compatible `/chat/completions` endpoint with streaming.
+- Default registry entries: `glm-5.3` (Z.ai's flagship, released August 2026; Pro and Max) and `glm-5.3-flash` (fast, low-cost; every plan). Check Admin → Z.ai → Test connection for the IDs your key supports, and add, disable or set the default model there.
+- Prices, context window and the base URL weren't checked against Z.ai's own documentation when this was added (docs.z.ai couldn't be reached), so prices are unset: budgets hold the highest known price for these models until they're filled in from Z.ai's pricing page. Third-party listings in October 2026 gave $1.40 / $4.40 per million input / output tokens for GLM-5.3 and $0.15 / $0.50 for Flash.
+- Tool calling isn't wired for Z.ai (as for DeepSeek), so the coding agent uses its JSON fallback with these models.
+- Messages sent to these models go to Z.ai; the privacy policy and the security page list it among the optional providers.

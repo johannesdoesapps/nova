@@ -11,7 +11,7 @@ import type { ModelWithStatus, ProviderId } from "@/lib/ai/types";
 import { cn } from "@/lib/utils";
 import { popoverLayer } from "./ui";
 
-const PROVIDER_ORDER: ProviderId[] = ["anthropic", "openai", "google", "xai", "deepseek", "huggingface", "demo"];
+const PROVIDER_ORDER: ProviderId[] = ["anthropic", "openai", "google", "xai", "deepseek", "zai", "huggingface", "demo"];
 
 /** A neutral monogram per provider (not a brand logo). */
 export function ProviderMark({ provider, className }: { provider: ProviderId | "auto"; className?: string }) {

@@ -44,6 +44,8 @@ export function serverEnv() {
     xaiBaseUrl: clean(process.env.XAI_BASE_URL) ?? "https://api.x.ai/v1",
     deepseekKey: clean(process.env.DEEPSEEK_API_KEY),
     deepseekBaseUrl: clean(process.env.DEEPSEEK_BASE_URL) ?? "https://api.deepseek.com/v1",
+    zaiKey: clean(process.env.ZAI_API_KEY),
+    zaiBaseUrl: clean(process.env.ZAI_BASE_URL) ?? "https://api.z.ai/api/paas/v4",
     huggingfaceKey: clean(process.env.HUGGINGFACE_API_KEY),
     searchProvider: (clean(process.env.SEARCH_PROVIDER) ?? "tavily").toLowerCase() as
       | "tavily"
@@ -81,7 +83,7 @@ export function serverEnv() {
 }
 
 export type IntegrationStatus = {
-  id: "supabase" | "anthropic" | "openai" | "google" | "xai" | "deepseek" | "huggingface" | "search" | "billing" | "sentry" | "engine";
+  id: "supabase" | "anthropic" | "openai" | "google" | "xai" | "deepseek" | "zai" | "huggingface" | "search" | "billing" | "sentry" | "engine";
   label: string;
   configured: boolean;
   envVars: string[];
@@ -133,6 +135,13 @@ export function integrationStatus(): IntegrationStatus[] {
       configured: Boolean(env.deepseekKey),
       envVars: ["DEEPSEEK_API_KEY"],
       purpose: "DeepSeek models for chat and agents (Chinese and English)",
+    },
+    {
+      id: "zai",
+      label: "Z.ai (GLM)",
+      configured: Boolean(env.zaiKey),
+      envVars: ["ZAI_API_KEY"],
+      purpose: "Z.ai's GLM models for chat and agents (Chinese and English)",
     },
     {
       id: "huggingface",

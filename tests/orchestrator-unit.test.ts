@@ -15,7 +15,7 @@ import { agentCreateSchema, agentUpdateSchema, canTransition, settingsSchema, ta
 vi.mock("server-only", () => ({}));
 
 beforeEach(() => {
-  for (const v of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "XAI_API_KEY", "DEEPSEEK_API_KEY", "HUGGINGFACE_API_KEY"]) vi.stubEnv(v, "");
+  for (const v of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "XAI_API_KEY", "DEEPSEEK_API_KEY", "ZAI_API_KEY", "HUGGINGFACE_API_KEY"]) vi.stubEnv(v, "");
 });
 
 describe("error classification", () => {
@@ -46,8 +46,8 @@ describe("error classification", () => {
 });
 
 describe("providers and models", () => {
-  it("knows Orbis's six providers, each with its credential variable name", () => {
-    expect(providerIds().sort()).toEqual(["anthropic", "deepseek", "google", "huggingface", "openai", "xai"]);
+  it("knows Orbis's seven providers, each with its credential variable name", () => {
+    expect(providerIds().sort()).toEqual(["anthropic", "deepseek", "google", "huggingface", "openai", "xai", "zai"]);
     expect(providerAdapter("anthropic")!.envVar).toBe("ANTHROPIC_API_KEY");
     expect(providerAdapter("openai")!.configured()).toBe(false);
   });

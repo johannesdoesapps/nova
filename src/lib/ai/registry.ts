@@ -217,6 +217,38 @@ export const DEFAULT_MODELS: ModelInfo[] = [
     lastVerifiedAt: null,
   },
   {
+    // Z.ai's OpenAI-compatible API (api.z.ai). GLM-5.3 is Z.ai's flagship (Aug 2026), Flash its low-cost model.
+    // Prices stay unset until checked on Z.ai's own pricing page (docs.z.ai/guides/overview/pricing): until then
+    // budgets hold the highest known price for them, so they can't overspend. Admin → Test connection lists the
+    // model IDs a key supports.
+    id: "zai:glm-5.3",
+    provider: "zai",
+    providerModelId: "glm-5.3",
+    displayName: "GLM-5.3",
+    description: "Z.ai's most capable GLM model for reasoning, analysis, coding and long documents, in Chinese and English.",
+    capabilities: ["chat", "reasoning", "coding", "writing", "long-context"],
+    tier: "advanced",
+    contextWindow: null,
+    inputPrice: null,
+    outputPrice: null,
+    isEnabled: true,
+    lastVerifiedAt: null,
+  },
+  {
+    id: "zai:glm-5.3-flash",
+    provider: "zai",
+    providerModelId: "glm-5.3-flash",
+    displayName: "GLM-5.3 Flash",
+    description: "Z.ai's fast, economical GLM model for everyday chat, writing and code.",
+    capabilities: ["chat", "fast", "low-cost", "coding", "writing"],
+    tier: "standard",
+    contextWindow: null,
+    inputPrice: null,
+    outputPrice: null,
+    isEnabled: true,
+    lastVerifiedAt: null,
+  },
+  {
     id: "hf:gpt-oss-120b",
     provider: "huggingface",
     providerModelId: "openai/gpt-oss-120b",
@@ -285,7 +317,7 @@ const capability = z.enum(CAPABILITIES);
 
 export const modelInfoSchema = z.object({
   id: z.string().min(1).max(120),
-  provider: z.enum(["anthropic", "openai", "google", "xai", "deepseek", "huggingface", "demo"]),
+  provider: z.enum(["anthropic", "openai", "google", "xai", "deepseek", "zai", "huggingface", "demo"]),
   providerModelId: z.string().min(1).max(200),
   displayName: z.string().min(1).max(120),
   description: z.string().max(500).default(""),
@@ -335,6 +367,7 @@ export const KEY_VARS: Record<ProviderId, string> = {
   google: "GEMINI_API_KEY",
   xai: "XAI_API_KEY",
   deepseek: "DEEPSEEK_API_KEY",
+  zai: "ZAI_API_KEY",
   huggingface: "HUGGINGFACE_API_KEY",
   demo: "",
 };
@@ -343,7 +376,7 @@ export function withStatus(
   models: ModelInfo[],
   configured: Record<ProviderId, boolean>,
 ): ModelWithStatus[] {
-  const anyReal = configured.anthropic || configured.openai || configured.google || configured.xai || configured.deepseek || configured.huggingface;
+  const anyReal = configured.anthropic || configured.openai || configured.google || configured.xai || configured.deepseek || configured.zai || configured.huggingface;
   return models
     .filter((m) => m.isEnabled)
     // Demo models are only offered when no real provider is configured.

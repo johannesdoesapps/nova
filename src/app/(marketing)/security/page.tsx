@@ -33,7 +33,7 @@ const SECTIONS: { id: string; title: string; points: React.ReactNode[] }[] = [
     id: "providers",
     title: "Where your messages go",
     points: [
-      "To answer you, your message and the conversation so far are sent to the provider of the model that replies: Anthropic for Claude and OpenAI for GPT on tryorbis.app (and Google, xAI or DeepSeek if those models are switched on). Their own terms and data policies apply to that processing.",
+      "To answer you, your message and the conversation so far are sent to the provider of the model that replies: Anthropic for Claude and OpenAI for GPT on tryorbis.app (and Google, xAI, DeepSeek or Z.ai if those models are switched on). Their own terms and data policies apply to that processing.",
       "Every reply names the model that wrote it, so you always know which provider received your message. The coding agent's steps are sent to the model it uses in the same way, including the parts of your project it reads.",
       "When you connect an app and chat searches it, your search goes to that app, and what it returns is sent to the model that answers.",
       "Live web search isn't enabled on this site yet. When it is, search queries will be sent to the search provider.",

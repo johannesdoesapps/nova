@@ -34,6 +34,12 @@ const providers: Record<ProviderId, AIProvider> = {
     apiKey: () => serverEnv().deepseekKey,
     envVar: "DEEPSEEK_API_KEY",
   }),
+  // Z.ai's OpenAI-compatible API (GLM models). ZAI_BASE_URL overrides it (e.g. the mainland China endpoint).
+  zai: new OpenAICompatibleProvider("zai", {
+    baseUrl: serverEnv().zaiBaseUrl,
+    apiKey: () => serverEnv().zaiKey,
+    envVar: "ZAI_API_KEY",
+  }),
   huggingface: new OpenAICompatibleProvider("huggingface", {
     baseUrl: "https://router.huggingface.co/v1",
     apiKey: () => serverEnv().huggingfaceKey,
@@ -53,6 +59,7 @@ export function providerConfiguredMap(): Record<ProviderId, boolean> {
     google: providers.google.isConfigured(),
     xai: providers.xai.isConfigured(),
     deepseek: providers.deepseek.isConfigured(),
+    zai: providers.zai.isConfigured(),
     huggingface: providers.huggingface.isConfigured(),
     demo: true,
   };

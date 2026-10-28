@@ -28,6 +28,7 @@ export interface IntegrationFlags {
   google: boolean;
   xai: boolean;
   deepseek: boolean;
+  zai: boolean;
   huggingface: boolean;
   search: boolean;
   /** Stripe payments are set up (Pro can be bought). */

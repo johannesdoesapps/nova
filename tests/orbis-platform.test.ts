@@ -19,6 +19,7 @@ beforeAll(() => {
     "ANTHROPIC_API_KEY",
     "GEMINI_API_KEY",
     "DEEPSEEK_API_KEY",
+    "ZAI_API_KEY",
     "HUGGINGFACE_API_KEY",
     "SEARCH_API_KEY",
     "ORBIS_MODELS",

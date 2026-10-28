@@ -133,7 +133,7 @@ export const PRIVACY: LegalSection[] = [
           "**Resend** — sends Orbis's service emails (your email address and the message). United States.",
         ],
       },
-      "Only Anthropic and OpenAI models are enabled on tryorbis.app today. Orbis can also use Google (Gemini), xAI (Grok), DeepSeek and a web search provider (Tavily or Brave); we'll add any of them to this list before they receive your data.",
+      "Only Anthropic and OpenAI models are enabled on tryorbis.app today. Orbis can also use Google (Gemini), xAI (Grok), DeepSeek, Z.ai (GLM) and a web search provider (Tavily or Brave); we'll add any of them to this list before they receive your data.",
       "**Apps you connect** (such as Google Drive, Gmail, Slack, Notion, GitHub or Wikipedia) receive the searches Orbis makes for you and the actions you confirm. Their own privacy policies apply.",
       "**People you share a chat with:** anyone who has a link you created can read that chat as it was when you shared it.",
       "**Package registries** (npm and PyPI) see the download requests your project's computer makes when it installs packages.",

@@ -245,7 +245,7 @@ export function Studio({ home = false }: { home?: boolean }) {
   useEffect(() => {
     if (!empty && !welcomed) setWelcomed("1");
   }, [empty, welcomed, setWelcomed]);
-  const demo = !integrations.anthropic && !integrations.openai && !integrations.google && !integrations.xai && !integrations.deepseek && !integrations.huggingface;
+  const demo = !integrations.anthropic && !integrations.openai && !integrations.google && !integrations.xai && !integrations.deepseek && !integrations.zai && !integrations.huggingface;
 
   const composer = (variant: "hero" | "dock") => (
     <Composer

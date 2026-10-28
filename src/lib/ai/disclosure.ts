@@ -7,6 +7,7 @@ export const PROVIDER_NAMES: Record<string, string> = {
   google: "Google (Gemini)",
   xai: "xAI (Grok)",
   deepseek: "DeepSeek",
+  zai: "Z.ai (GLM)",
   huggingface: "Hugging Face",
 };
 

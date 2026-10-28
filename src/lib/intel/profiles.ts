@@ -23,6 +23,7 @@ export const POLICY_PAGES: Record<string, string> = {
   google: "https://ai.google.dev/gemini-api/terms",
   xai: "https://x.ai/legal",
   deepseek: "https://platform.deepseek.com/downloads/DeepSeek%20Open%20Platform%20Terms%20of%20Service.html",
+  zai: "https://z.ai",
   huggingface: "https://huggingface.co/docs/inference-providers",
   demo: "",
 };

@@ -7,7 +7,7 @@ import { DEFAULT_MODELS, withStatus } from "@/lib/ai/registry";
 import { autoRoute, blendedPrice, cheapestModel, classifyTask, recommendModel } from "@/lib/ai/router";
 import type { ModelWithStatus } from "@/lib/ai/types";
 
-const configured = { anthropic: true, openai: true, google: false, xai: false, deepseek: false, huggingface: false, demo: true };
+const configured = { anthropic: true, openai: true, google: false, xai: false, deepseek: false, zai: false, huggingface: false, demo: true };
 const models = withStatus(DEFAULT_MODELS, configured) as ModelWithStatus[];
 const lowCost = (m: ModelWithStatus | null | undefined) => !!m?.capabilities.includes("low-cost");
 

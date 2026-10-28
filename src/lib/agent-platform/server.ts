@@ -14,7 +14,7 @@ import { AGENTS, agentDef, type AgentDef, type AgentId } from "./registry";
 export function platformFlags(): PlatformFlags {
   const env = serverEnv();
   return {
-    ai: Boolean(env.anthropicKey || env.openaiKey || env.geminiKey || env.xaiKey || env.deepseekKey || env.huggingfaceKey),
+    ai: Boolean(env.anthropicKey || env.openaiKey || env.geminiKey || env.xaiKey || env.deepseekKey || env.zaiKey || env.huggingfaceKey),
     anthropic: Boolean(env.anthropicKey),
     sandbox: workspacesAvailable(),
     accounts: isSupabaseConfigured(),

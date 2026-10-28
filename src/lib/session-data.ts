@@ -44,6 +44,7 @@ export const loadShellData = cache(async function loadShellData() {
       google: flag("google"),
       xai: flag("xai"),
       deepseek: flag("deepseek"),
+      zai: flag("zai"),
       huggingface: flag("huggingface"),
       search: flag("search"),
       billing: flag("billing"),
