@@ -1,0 +1,73 @@
+{
+  "name": "orbis-vscode",
+  "displayName": "Orbis",
+  "description": "Run the Orbis coding agent in VS Code's terminal, ask about a selection, and review what it changed.",
+  "version": "0.1.0",
+  "publisher": "orbis",
+  "private": true,
+  "license": "SEE LICENSE IN README.md",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "orbis.openInTerminal",
+        "title": "Open in terminal",
+        "category": "Orbis"
+      },
+      {
+        "command": "orbis.askAboutSelection",
+        "title": "Ask about selection",
+        "category": "Orbis"
+      },
+      {
+        "command": "orbis.reviewLastChanges",
+        "title": "Review last changes",
+        "category": "Orbis"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "orbis.askAboutSelection",
+          "when": "editorHasSelection",
+          "group": "orbis@1"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "orbis.openInTerminal",
+        "key": "ctrl+alt+o",
+        "mac": "cmd+alt+o"
+      }
+    ],
+    "configuration": {
+      "title": "Orbis",
+      "properties": {
+        "orbis.cliPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to `orbis-cli.mjs` (run with Node) or to an `orbis` executable. Empty: the `orbis` command on your PATH."
+        },
+        "orbis.url": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Your Orbis site, e.g. `https://orbis.example.com` (passed as `ORBIS_URL`). Empty: the site you signed in to with `orbis login`."
+        },
+        "orbis.nodePath": {
+          "type": "string",
+          "default": "node",
+          "description": "The Node.js (20 or newer) program used to run orbis-cli.mjs."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,174 @@
+name: Orbis
+description: Run the Orbis coding agent on this repository (non-interactively) and optionally post its answer as a comment.
+author: Orbis
+
+inputs:
+  prompt:
+    description: What Orbis should do.
+    required: true
+  orbis-url:
+    description: Your Orbis site, e.g. https://orbis.example.com (the terminal app is downloaded from it and uses it for the model).
+    required: true
+  refresh-token:
+    description: An Orbis refresh token (from `orbis token`), passed from a secret. Never paste it here directly.
+    required: true
+  permission-mode:
+    description: "default (only reads and safe commands), acceptEdits (also edits files), plan (read-only), or bypass (everything except hard-blocked commands; avoid on untrusted input)."
+    required: false
+    default: acceptEdits
+  allowed-tools:
+    description: Extra allow rules, comma-separated, e.g. "bash(npm ci),bash(npm run lint*)".
+    required: false
+    default: ""
+  disallowed-tools:
+    description: Extra deny rules, comma-separated, e.g. "bash(git push*),web_fetch".
+    required: false
+    default: "bash(git push*)"
+  max-turns:
+    description: Stop after this many model turns.
+    required: false
+    default: "40"
+  model:
+    description: A model id from your Orbis site (default Auto).
+    required: false
+    default: ""
+  working-directory:
+    description: The folder Orbis works in.
+    required: false
+    default: "."
+  trust-project:
+    description: "Use the repository's .orbis hooks, MCP servers and allow rules. Only for code you trust: never for pull requests from forks."
+    required: false
+    default: "false"
+  comment:
+    description: Post Orbis's answer as a comment on the pull request or issue.
+    required: false
+    default: "true"
+  issue-number:
+    description: The pull request or issue to comment on (default the one that triggered the workflow).
+    required: false
+    default: ""
+  github-token:
+    description: Token used to post the comment.
+    required: false
+    default: ${{ github.token }}
+  secret-update-token:
+    description: "Optional token that may write repository secrets (a fine-grained token with Secrets: read and write). Supabase rotates refresh tokens when they're used, so without it the stored token works once. See README."
+    required: false
+    default: ""
+  secret-name:
+    description: The secret that holds the refresh token (updated with secret-update-token).
+    required: false
+    default: ORBIS_REFRESH_TOKEN
+  cli-sha256:
+    description: Optional SHA-256 of orbis-cli.mjs; the run stops if the download doesn't match.
+    required: false
+    default: ""
+
+outputs:
+  result:
+    description: Orbis's final answer.
+    value: ${{ steps.run.outputs.result }}
+  session-id:
+    description: The session id (the session file stays on the runner).
+    value: ${{ steps.run.outputs.session-id }}
+  exit-code:
+    description: 0 when Orbis finished; non-zero on an error or when it hit max-turns.
+    value: ${{ steps.run.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+
+    - name: Download the Orbis terminal app
+      shell: bash
+      env:
+        ORBIS_URL: ${{ inputs.orbis-url }}
+        CLI_SHA256: ${{ inputs.cli-sha256 }}
+      run: |
+        set -euo pipefail
+        curl -fsSL "${ORBIS_URL%/}/downloads/orbis-cli.mjs" -o "$RUNNER_TEMP/orbis-cli.mjs"
+        if [ -n "$CLI_SHA256" ]; then
+          echo "$CLI_SHA256  $RUNNER_TEMP/orbis-cli.mjs" | sha256sum -c -
+        fi
+        node "$RUNNER_TEMP/orbis-cli.mjs" --version
+
+    - name: Run Orbis
+      id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        ORBIS_URL: ${{ inputs.orbis-url }}
+        ORBIS_REFRESH_TOKEN: ${{ inputs.refresh-token }}
+        ORBIS_REFRESH_TOKEN_OUT: ${{ runner.temp }}/orbis-refresh-token
+        ORBIS_HOME: ${{ runner.temp }}/orbis-home
+        PROMPT: ${{ inputs.prompt }}
+        MODE: ${{ inputs.permission-mode }}
+        ALLOWED: ${{ inputs.allowed-tools }}
+        DISALLOWED: ${{ inputs.disallowed-tools }}
+        MAX_TURNS: ${{ inputs.max-turns }}
+        MODEL: ${{ inputs.model }}
+        TRUST: ${{ inputs.trust-project }}
+      run: |
+        set -uo pipefail
+        args=(-p "$PROMPT" --permission-mode "$MODE" --output-format json --max-turns "$MAX_TURNS")
+        [ -n "$ALLOWED" ] && args+=(--allowedTools "$ALLOWED")
+        [ -n "$DISALLOWED" ] && args+=(--disallowedTools "$DISALLOWED")
+        [ -n "$MODEL" ] && args+=(--model "$MODEL")
+        [ "$TRUST" = "true" ] && args+=(--trust-project)
+        node "$RUNNER_TEMP/orbis-cli.mjs" "${args[@]}" > "$RUNNER_TEMP/orbis-result.json"
+        code=$?
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        node -e '
+          const fs = require("fs");
+          let r = {};
+          try { r = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch {}
+          const text = r.result || (r.error ? "Orbis stopped: " + r.error : "Orbis gave no answer.");
+          const d = "ORBIS_" + require("crypto").randomBytes(8).toString("hex");
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `result<<${d}\n${text}\n${d}\nsession-id=${r.session_id || ""}\n`);
+          fs.writeFileSync(process.argv[2], text);
+        ' "$RUNNER_TEMP/orbis-result.json" "$RUNNER_TEMP/orbis-answer.md"
+        exit 0
+
+    - name: Store the rotated refresh token
+      if: inputs.secret-update-token != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.secret-update-token }}
+        SECRET_NAME: ${{ inputs.secret-name }}
+      run: |
+        set -euo pipefail
+        if [ -s "$RUNNER_TEMP/orbis-refresh-token" ]; then
+          gh secret set "$SECRET_NAME" --repo "$GITHUB_REPOSITORY" < "$RUNNER_TEMP/orbis-refresh-token"
+        fi
+        rm -f "$RUNNER_TEMP/orbis-refresh-token"
+
+    - name: Post the answer
+      if: inputs.comment == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        NUMBER: ${{ inputs.issue-number || github.event.issue.number || github.event.pull_request.number }}
+        CODE: ${{ steps.run.outputs.exit-code }}
+      run: |
+        set -euo pipefail
+        if [ -z "$NUMBER" ]; then echo "No pull request or issue to comment on."; exit 0; fi
+        node -e '
+          const fs = require("fs");
+          const text = fs.readFileSync(process.argv[1], "utf8").slice(0, 60000);
+          const note = process.env.CODE === "0" ? "" : "\n\n_Orbis didn'\''t finish (exit code " + process.env.CODE + "); see the workflow log._";
+          fs.writeFileSync(process.argv[2], JSON.stringify({ body: text + note + "\n\n<sub>Orbis · " + process.env.GITHUB_SERVER_URL + "/" + process.env.GITHUB_REPOSITORY + "/actions/runs/" + process.env.GITHUB_RUN_ID + "</sub>" }));
+        ' "$RUNNER_TEMP/orbis-answer.md" "$RUNNER_TEMP/orbis-comment.json"
+        gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" --input "$RUNNER_TEMP/orbis-comment.json" > /dev/null
+
+    - name: Fail if Orbis didn't finish
+      if: steps.run.outputs.exit-code != '0'
+      shell: bash
+      env:
+        CODE: ${{ steps.run.outputs.exit-code }}
+      run: |
+        echo "::error::Orbis exited with code $CODE"
+        exit 1

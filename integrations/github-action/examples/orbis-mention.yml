@@ -1,0 +1,96 @@
+# Runs Orbis when someone with write access comments "@orbis …" on a pull request or an issue.
+# Copy to .github/workflows/orbis.yml. Needs:
+#   - a repository variable ORBIS_URL (your Orbis site)
+#   - a repository secret ORBIS_REFRESH_TOKEN (from `orbis token`)
+#   - optionally a secret ORBIS_SECRETS_TOKEN: a fine-grained token with "Secrets: read and write" on this
+#     repository, so the action can store the rotated refresh token (see integrations/github-action/README.md)
+name: Orbis
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+# One run at a time: each run rotates the stored refresh token.
+concurrency:
+  group: orbis
+  cancel-in-progress: false
+
+jobs:
+  orbis:
+    # Only comments that mention @orbis, from people who can already push to the repository.
+    if: >-
+      contains(github.event.comment.body, '@orbis') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Check the commenter can write to the repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LOGIN: ${{ github.event.comment.user.login }}
+        run: |
+          perm=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$LOGIN/permission" --jq .permission)
+          case "$perm" in admin|maintain|write) ;; *) echo "::error::$LOGIN has $perm access; Orbis needs write."; exit 1;; esac
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check out the pull request
+        id: pr
+        if: github.event.issue.pull_request || github.event.pull_request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+        run: |
+          # Pull requests from forks are answered, but nothing is pushed back to them.
+          fork=$(gh pr view "$NUMBER" --json isCrossRepository --jq .isCrossRepository)
+          echo "fork=$fork" >> "$GITHUB_OUTPUT"
+          gh pr checkout "$NUMBER"
+
+      - name: Orbis
+        id: orbis
+        # In your own repository: uses: ./integrations/github-action, or your-org/orbis/integrations/github-action@<tag>
+        uses: ./integrations/github-action
+        with:
+          orbis-url: ${{ vars.ORBIS_URL }}
+          refresh-token: ${{ secrets.ORBIS_REFRESH_TOKEN }}
+          secret-update-token: ${{ secrets.ORBIS_SECRETS_TOKEN }}
+          prompt: |
+            You were mentioned in a GitHub comment on ${{ github.repository }} #${{ github.event.issue.number || github.event.pull_request.number }}.
+            Do what the comment asks in this repository (it's checked out in the current folder). Make the changes, run
+            the relevant tests, and finish with a short summary for the comment thread. Don't commit or push: the
+            workflow does that.
+
+            The comment:
+            ${{ github.event.comment.body }}
+          permission-mode: acceptEdits
+          allowed-tools: "bash(npm ci),bash(npm install),bash(git diff*),bash(git status*)"
+          disallowed-tools: "bash(git push*),bash(git commit*)"
+          max-turns: "40"
+
+      - name: Push Orbis's changes
+        if: steps.pr.outputs.fork != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          IS_PR: ${{ github.event.issue.pull_request != null || github.event.pull_request != null }}
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then echo "No changes."; exit 0; fi
+          git config user.name "orbis[bot]"
+          git config user.email "orbis-bot@users.noreply.github.com"
+          if [ "$IS_PR" = "true" ]; then
+            git add -A && git commit -m "Orbis: changes requested in #$NUMBER" && git push
+          else
+            branch="orbis/issue-$NUMBER-$GITHUB_RUN_ID"
+            git switch -c "$branch"
+            git add -A && git commit -m "Orbis: work on #$NUMBER"
+            git push -u origin "$branch"
+            gh pr create --title "Orbis: #$NUMBER" --body "Changes by Orbis for #$NUMBER." --head "$branch"
+          fi
