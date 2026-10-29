@@ -158,6 +158,9 @@ export function safePostJson(url: string, body: unknown, opts: { headers?: Recor
       },
     );
     req.on("timeout", () => req.destroy(new Error("The server took too long to respond.")));
+    // An overall limit too: a server that trickles bytes never trips the idle timeout above.
+    const total = setTimeout(() => req.destroy(new Error("The server took too long to respond.")), (opts.timeoutMs ?? 30_000) + 5_000);
+    req.on("close", () => clearTimeout(total));
     req.on("error", reject);
     req.end(payload);
   });

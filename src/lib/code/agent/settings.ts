@@ -149,7 +149,13 @@ function ruleMatches(rule: string, kind: RuleKind, subject: string): boolean {
   const r = parseRule(rule);
   if (!r || r.kind !== kind) return false;
   if (!r.pattern || r.pattern === "*") return true;
-  if (kind === "bash") return globMatch(r.pattern, subject.trim().replace(/\s+/g, " "), true);
+  if (kind === "bash") {
+    // Commands match literally: a trailing * means "starting with". No other wildcards, so an approved command
+    // containing *, ? or {} can't come to cover others.
+    const c = subject.trim().replace(/\s+/g, " ");
+    const p = r.pattern.replace(/\s+/g, " ");
+    return p.endsWith("*") ? c.startsWith(p.slice(0, -1)) : c === p;
+  }
   if (kind === "web") {
     const host = subject.toLowerCase();
     const p = r.pattern.toLowerCase().replace(/^\*\./, "");
@@ -169,8 +175,13 @@ export function ruleDecision(sets: PermissionRules[], kind: RuleKind, subject: s
   return null;
 }
 
-/** For a chained command (a && b), every part must be allowed; any denied part denies it. */
-export function commandRuleDecision(sets: PermissionRules[], parts: string[]): "allow" | "deny" | null {
+/**
+ * For a chained command (a && b), every part must be allowed; any denied part denies it. `parts` is null when the
+ * line can't be split safely (command substitution, background jobs, unbalanced quotes): then only a deny rule
+ * applies (matched against the whole line), never an allow.
+ */
+export function commandRuleDecision(sets: PermissionRules[], parts: string[] | null, line = ""): "allow" | "deny" | null {
+  if (!parts) return ruleDecision(sets, "bash", line) === "deny" ? "deny" : null;
   const ds = parts.map((p) => ruleDecision(sets, "bash", p));
   if (ds.includes("deny")) return "deny";
   return ds.length > 0 && ds.every((d) => d === "allow") ? "allow" : null;
@@ -207,11 +218,14 @@ export function hooksFor(hooks: HookDef[], tool: string): HookDef[] {
 
 const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
-/** The shell line that runs a hook with what it's about in environment variables. */
+/** How long one hook may run before it's stopped. */
+export const HOOK_SECONDS = 60;
+
+/** The shell line that runs a hook with what it's about in environment variables (stopped after HOOK_SECONDS). */
 export function hookCommand(h: HookDef, tool: string, args: Record<string, unknown>): string {
   const file = typeof args.path === "string" ? args.path : "";
   const input = JSON.stringify(args).slice(0, 4_000);
-  return `ORBIS_TOOL=${shq(tool)} ORBIS_FILE=${shq(file)} ORBIS_INPUT=${shq(input)} sh -c ${shq(h.command)}`;
+  return `ORBIS_TOOL=${shq(tool)} ORBIS_FILE=${shq(file)} ORBIS_INPUT=${shq(input)} timeout ${HOOK_SECONDS} sh -c ${shq(h.command)}`;
 }
 
 // ---------------------------------------------------------------- commands, skills, agents

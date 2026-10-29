@@ -8,7 +8,7 @@ import { diffStats, unifiedDiff } from "../diff";
 import { MEMORY_KIND_LABELS, type MemoryEntry, type MemoryKind } from "../memory";
 import type { FileChange, ProjectFile } from "../projects";
 import type { PreviewCheck } from "../preview-check";
-import { classifyCommand, classifyServerCommand, isServerCommand, splitCommands } from "./policy";
+import { classifyCommand, classifyServerCommand, isServerCommand, ruleMayAllow, splitCommands } from "./policy";
 import { globPaths } from "../glob";
 import { commandRuleDecision, HOOKED_TOOLS, projectSkills, ruleDecision, SETTINGS_PATH, type PermissionRules } from "./settings";
 import { clipText, tailText, type ActionResult, type AgentReply } from "./protocol";
@@ -56,8 +56,9 @@ export interface Checkpoint {
   createdAt: string;
   /** "turn": the rewind point taken before one of the user's messages. */
   kind?: "manual" | "turn";
-  /** Turn points: how many messages the conversation had then. */
+  /** Turn points: how many messages the conversation had then, and how long the last one was. */
   transcriptLen?: number;
+  tailChars?: number;
   /** Turn points: the start of the user's message. */
   message?: string;
 }
@@ -446,7 +447,8 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
       return null;
     }
     // The user's permission rules: a deny rule refuses it; an allow rule runs it without asking (Bastion still decides).
-    const rule = rules.length ? commandRuleDecision(rules, splitCommands(cmd) ?? [cmd]) : null;
+    const ruled = rules.length ? commandRuleDecision(rules, splitCommands(cmd), cmd) : null;
+    const rule = ruled === "allow" && !ruleMayAllow(cmd) ? null : ruled;
     if (rule === "deny") {
       result(id, tool, false, ruleRefusal(`\`${cmd.slice(0, 200)}\``));
       await log({ kind: "command", title: `Not run (a permission rule denies it): ${cmd.slice(0, 200)}`, detail: { command: cmd, blocked: "permission rule" } });
@@ -541,6 +543,10 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
         result(id, tool, false, ruleRefusal(`the MCP tool ${subject}`));
         continue;
       }
+      if (!d.readOnly && env.cancelled && (await env.cancelled())) {
+        skipRest(i, "the run was stopped.");
+        return done({ status: "cancelled", pending: null });
+      }
       const approved = state.approvedMcp === mcpCallKey(tool, args);
       const g = await guard(d.readOnly ? "connector.read" : "connector.write", `mcp ${subject}`, approved);
       if (g?.outcome === "deny") {
@@ -589,6 +595,7 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
     const hooked = env.hooks && HOOKED_TOOLS.has(tool) && state.planApproved && !state.readOnly;
     if (hooked) {
       const pre = await env.hooks!.pre(tool, a);
+      files = null; // a hook may have changed files
       if (pre?.block) {
         result(id, tool, false, `Blocked by a project hook (.orbis/settings.json): ${pre.block}`);
         await log({ kind: "note", title: `A project hook blocked ${tool}${typeof a.path === "string" ? ` on ${a.path.slice(0, 200)}` : ""}`, detail: { hook: "PreToolUse", output: pre.block.slice(0, 4_000) } });
@@ -728,7 +735,7 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
           .map((c) => ({ path: c.path, before: c.before, after: now.get(c.path) ?? null }))
           .filter((c) => c.before !== c.after);
         const text = diffs.length
-          ? clipText(diffs.map((c) => (isSecretPath(c.path) ? `--- ${c.path}\n${WITHHELD}` : unifiedDiff(c.path, c.before, c.after))).join("\n"), MAX_DIFF_CHARS)
+          ? clipText(diffs.map((c) => (isSecretPath(c.path) || readDenied(c.path) ? `--- ${c.path}\n${WITHHELD}` : unifiedDiff(c.path, c.before, c.after))).join("\n"), MAX_DIFF_CHARS)
           : want
             ? `This run hasn't changed ${want}.`
             : "This run hasn't changed any files.";
@@ -794,7 +801,10 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
           target = cp.files;
           label = `checkpoint “${cp.label}”`;
         }
-        const plan = planRestore(await env.changes(), target, await current());
+        const restorePlan = planRestore(await env.changes(), target, await current());
+        // Files a deny rule protects aren't changed by a restore either.
+        const ruled = restorePlan.changes.filter((c) => editRule(c.path) === "deny").map((c) => c.path);
+        const plan = { ...restorePlan, changes: restorePlan.changes.filter((c) => !ruled.includes(c.path)), conflicts: [...restorePlan.conflicts, ...ruled] };
         const gr = await guard("checkpoint.restore", ref);
         if (gr && gr.outcome !== "allow") {
           result(id, tool, false, gr.outcome === "deny" ? refusedBy(gr.reason) : `Not restored: ${gr.reason}`);
@@ -1046,6 +1056,10 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
           result(id, tool, false, "Reading web pages isn't available here.");
           break;
         }
+        if (rules.length && ruleDecision(rules, "web", new URL(a.url as string).hostname) === "deny") {
+          result(id, tool, false, ruleRefusal(`reading ${new URL(a.url as string).hostname}`));
+          break;
+        }
         const gp = await guard("web.search", a.url as string);
         if (gp && gp.outcome !== "allow") {
           result(id, tool, false, refusedBy(gp.reason));
@@ -1178,6 +1192,7 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
     const ran = EDIT_TOOLS.has(tool) ? editedAt !== before.editedAt : commandRan && !before.commandRan;
     if (hooked && ran && results.length > before.results) {
       const out = await env.hooks!.post(tool, a);
+      files = null;
       if (out) {
         const last = results[results.length - 1]!;
         last.text = `${last.text}\n\nProject hook output:\n${untrusted(redactAll(tailText(out, 4_000)))}`;

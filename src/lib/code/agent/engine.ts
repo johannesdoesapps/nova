@@ -41,7 +41,7 @@ import {
 } from "./protocol";
 import { classifyCommand } from "./policy";
 import { applyCompaction, COMPACT_SYSTEM, compactionInput, shouldAutoCompact } from "./compact";
-import { commandRule, EMPTY_RULES, hookCommand, hooksFor, projectAgents, projectContextBlock, projectSkills, settingsState, type HookDef } from "./settings";
+import { commandRule, EMPTY_RULES, HOOK_SECONDS, hookCommand, hooksFor, projectAgents, projectContextBlock, projectSkills, settingsState, type HookDef } from "./settings";
 import { addRule, getAgentSettings, getOrbisFiles, mcpServersFor } from "../agent-settings";
 import { canPush, pushProject } from "../github-push";
 import { collectTools } from "@/lib/mcp/client";
@@ -92,6 +92,7 @@ import {
   MAX_STEP_LIMIT,
   MAX_TIME_LIMIT_MS,
   MAX_TOKEN_BUDGET,
+  SESSION_STEP_LIMIT,
   STEP_LIMIT_INCREMENT,
   WORKING_STATUSES,
   type Decision,
@@ -438,7 +439,7 @@ async function syncJobChanges(auth: Authed, runId: string, projectId: string, bo
 /** Commands the agent starts with background: true (up to MAX_BG_JOBS at once), kept on the run so later steps can read them. */
 export function bgEnv(auth: Authed, run: Pick<RunRow, "id" | "bg_jobs" | "options">, projectId: string, agent: string): NonNullable<AgentEnv["bg"]> {
   let jobs: BgJob[] = [...(run.bg_jobs ?? [])];
-  const save = () => updateRun(auth, run.id, { bg_jobs: jobs.slice(-10) });
+  const save = () => updateRun(auth, run.id, { bg_jobs: jobs.slice(-8) });
   const lost = (j: BgJob) => {
     j.done = { exitCode: null, at: Date.now() };
     return { command: j.command, output: "The project's computer stopped, so this command was lost.", done: true, exitCode: null, changed: [], skipped: [] };
@@ -450,11 +451,19 @@ export function bgEnv(auth: Authed, run: Pick<RunRow, "id" | "bg_jobs" | "option
       if (d.outcome !== "allow") return { blocked: d.reason };
       const box = await optionalBox(auth, projectId);
       if (!box) throw new ApiError("conflict", "The project's computer isn't running.", { scope: "workspace_stopped" });
-      const id = `bg${jobs.length + 1}`;
+      // Numbered after every one kept, so an id never comes back for a new command.
+      const id = `bg${Math.max(0, ...jobs.map((j) => Number(j.id.slice(2)) || 0)) + 1}`;
       const jobId = `b${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
       await startJob(box, jobId, command);
-      jobs = [...jobs, { id, jobId, command, startedAt: Date.now(), offset: 0 }];
-      await save();
+      // Finished ones beyond the last few are forgotten; the command is kept short (the row has a size limit).
+      jobs = [...jobs.filter((j) => !j.done).concat(jobs.filter((j) => j.done).slice(-4)), { id, jobId, command: command.slice(0, 300), startedAt: Date.now(), offset: 0 }];
+      try {
+        await save();
+      } catch (err) {
+        // Not remembered means it couldn't be read or stopped later: end it now.
+        await killJob(box, jobId).catch(() => {});
+        throw err;
+      }
       return { id };
     },
     read: async (id) => {
@@ -498,11 +507,16 @@ export function bgEnv(auth: Authed, run: Pick<RunRow, "id" | "bg_jobs" | "option
 }
 
 /** The project's trusted hooks, run in its computer (skipped while it's off). */
-export function hooksEnv(auth: Authed, run: Pick<RunRow, "id" | "options">, projectId: string, agent: string, hooks: { pre: HookDef[]; post: HookDef[] }): AgentEnv["hooks"] {
+export function hooksEnv(auth: Authed, run: Pick<RunRow, "id" | "options">, projectId: string, agent: string, hooks: { pre: HookDef[]; post: HookDef[] }, deadline = Date.now() + STEP_BUDGET_MS): AgentEnv["hooks"] {
   if (!hooks.pre.length && !hooks.post.length) return undefined;
   const runAll = async (list: HookDef[], tool: string, args: Record<string, unknown>) => {
     const outs: { code: number | null; text: string }[] = [];
-    for (const h of hooksFor(list, tool)) {
+    // At most a few hooks per action, each stopped after HOOK_SECONDS, and none once the step is short of time.
+    for (const h of hooksFor(list, tool).slice(0, MAX_HOOKS_PER_ACTION)) {
+      if (deadline - Date.now() < (HOOK_SECONDS + 30) * 1000) {
+        outs.push({ code: null, text: "(hook skipped: the step was out of time)" });
+        break;
+      }
       if (!(await optionalBox(auth, projectId))) break;
       const d = classifyCommand(h.command);
       if (d.kind === "block") {
@@ -530,6 +544,8 @@ export function hooksEnv(auth: Authed, run: Pick<RunRow, "id" | "options">, proj
     },
   };
 }
+
+const MAX_HOOKS_PER_ACTION = 3;
 
 /** Whether the user can push to GitHub, remembered for a few minutes (it asks GitHub). */
 const pushable = new Map<string, { ok: boolean; at: number }>();
@@ -741,6 +757,9 @@ export interface StepResult {
 
 /** Finish a step: save the run unless the user stopped it meanwhile, and write the report when it ended. */
 export async function finishStep(auth: Authed, runId: string, patch: RunPatch, unresolved: string[] = [], skipped: SkippedCheck[] = [], failure?: FailureKind): Promise<RunRow> {
+  // About to finish while the user's messages wait (sent during the last turn or the checks): the agent reads them
+  // and carries on instead of ending without them.
+  if (patch.status === "completed") patch = await withWaitingMessages(auth, runId, patch);
   let row = await updateRunIfNotCancelled(auth, runId, { ...patch, locked_until: null });
   if (!row) {
     // The user's stop stands: the step's records are kept, its status, waiting state and summary aren't.
@@ -751,6 +770,15 @@ export async function finishStep(auth: Authed, runId: string, patch: RunPatch, u
   }
   if (ENDED_STATUSES.includes(row.status)) return (await finalize(auth, runId, unresolved, skipped, row.status === "failed" ? (failure ?? "internal") : undefined)) ?? row;
   return row;
+}
+
+async function withWaitingMessages(auth: Authed, runId: string, patch: RunPatch): Promise<RunPatch> {
+  const notes = await takeMessages(auth, runId).catch(() => [] as { text: string; at: string }[]);
+  if (!notes.length) return patch;
+  const base = patch.transcript ?? (await getRun(auth, runId)).transcript ?? [];
+  await turnPoint(auth, runId, base, notes[0]!.text);
+  await addEvents(auth, runId, notes.map((n) => ({ kind: "answer" as const, title: `You said: ${clipText(n.text, 360)}`, detail: { steer: true, text: n.text.slice(0, 4_000) } })));
+  return { ...patch, status: "running", summary: null, transcript: capTranscript(appendUser(base, steeringMessage(notes.map((n) => n.text)))) };
 }
 
 export const pauseFor = (reason: LimitReason, steps: number, detail: string): RunPatch => ({ status: "needs_input", pending: { kind: "limit", steps, reason, detail } });
@@ -938,7 +966,7 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
     return [] as { text: string; at: string }[];
   });
   if (notes.length) {
-    await turnPoint(auth, row.id, transcript.length, notes[0]!.text);
+    await turnPoint(auth, row.id, transcript, notes[0]!.text);
     transcript = appendUser(transcript, steeringMessage(notes.map((n) => n.text)));
     await addEvents(auth, row.id, notes.map((n) => ({ kind: "answer" as const, title: `You said: ${clipText(n.text, 360)}`, detail: { steer: true, text: n.text.slice(0, 4_000) } })));
     await updateRun(auth, row.id, { transcript });
@@ -1132,6 +1160,7 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
     env.delegate = (questions, agentName) =>
       runHelpers(questions, {
         env: readOnlyEnv,
+        rules,
         ...(agentName && helperAgents.some((h) => h.name === agentName.toLowerCase()) ? { agent: helperAgents.find((h) => h.name === agentName.toLowerCase())! } : {}),
         deadline: Math.min(deadline - 20_000, Date.now() + 120_000),
         turn: async (p) => {
@@ -1165,7 +1194,7 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
   }
   if (!readOnly) {
     env.bg = bgEnv(auth, row, project.id, codeAgentId(row));
-    env.hooks = hooksEnv(auth, row, project.id, codeAgentId(row), projectSettings.settings.hooks);
+    env.hooks = hooksEnv(auth, row, project.id, codeAgentId(row), projectSettings.settings.hooks, deadline);
   }
   if (mcp?.tools.size) {
     env.mcp = {
@@ -1261,11 +1290,13 @@ export function steeringMessage(texts: string[]): string {
 }
 
 /** A rewind point before one of the user's messages: the conversation's length then, and what the run's files were. */
-export async function turnPoint(auth: Authed, runId: string, transcriptLen: number, message: string): Promise<void> {
+export async function turnPoint(auth: Authed, runId: string, transcript: TranscriptMessage[], message: string): Promise<void> {
   try {
     const changes = await listChanges(auth, runId);
     const files = Object.fromEntries(changes.map((c) => [c.path, c.revertedAt ? c.before : c.after]));
-    await createCheckpoint(auth, runId, `Before: ${message.replace(/\s+/g, " ").slice(0, 160)}`, files, { transcriptLen, message });
+    const last = transcript[transcript.length - 1];
+    // The message is usually added to the end of the last (user) message, so its length then is kept too.
+    await createCheckpoint(auth, runId, `Before: ${message.replace(/\s+/g, " ").slice(0, 160)}`, files, { transcriptLen: transcript.length, tailChars: last?.role === "user" ? last.content.length : null, message });
   } catch (err) {
     reportError(err, { where: "code.agent.turn_point" });
   }
@@ -1623,8 +1654,9 @@ async function respond(auth: Authed, row: RunRow, input: RespondInput): Promise<
 async function continueAfterLimit(row: RunRow, reason: LimitReason, done: (patch: RunPatch, events: NewEvent[]) => Promise<RunRow>, working: RunStatus): Promise<RunRow> {
   switch (reason) {
     case "steps": {
-      const stepLimit = Math.min(MAX_STEP_LIMIT, row.step_limit + STEP_LIMIT_INCREMENT);
-      if (stepLimit <= row.steps) throw new ApiError("bad_request", `A run can take at most ${MAX_STEP_LIMIT} steps. Start a new run to keep going.`);
+      const cap = runOptions(row).resumed ? SESSION_STEP_LIMIT : MAX_STEP_LIMIT;
+      const stepLimit = Math.min(cap, row.step_limit + STEP_LIMIT_INCREMENT);
+      if (stepLimit <= row.steps) throw new ApiError("bad_request", `A run can take at most ${cap} steps. Start a new run to keep going.`);
       return done({ status: working, step_limit: stepLimit }, [{ kind: "status", title: `You allowed ${stepLimit - row.steps} more steps` }]);
     }
     case "tokens": {

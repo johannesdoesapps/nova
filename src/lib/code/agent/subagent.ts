@@ -36,6 +36,8 @@ export interface HelperDeps {
   now?: () => number;
   /** One of the project's own helper agents (.orbis/agents/<name>.md): its instructions shape the answer. */
   agent?: { name: string; prompt: string };
+  /** The user's permission rules (read(...) denies keep files from helpers too). */
+  rules?: import("./settings").PermissionRules[];
 }
 
 const SYSTEM = `You are a helper to Orbis's coding agent. You get one question about the user's project. Investigate it with the read-only tools (list_files, glob, search_code, read_files), then call finish with your answer.
@@ -75,7 +77,7 @@ export async function runHelper(question: string, deps: HelperDeps): Promise<Hel
     const allowed = r.calls.filter((c) => (HELPER_TOOLS as readonly string[]).includes(c.name));
     const outcome = await runActions(
       { thought: "", actions: allowed.map((c) => ({ id: c.id, tool: c.name, args: c.args })) },
-      { planApproved: false, approvePlans: false, reviewEdits: false, commands: "off", readOnly: true },
+      { planApproved: false, approvePlans: false, reviewEdits: false, commands: "off", readOnly: true, rules: deps.rules },
       deps.env,
     );
     const results: ActionResult[] = r.calls.map((c) =>

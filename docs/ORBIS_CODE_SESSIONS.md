@@ -40,7 +40,9 @@ and Orbis Bastion apply in every mode.
 
 **Rules** sit in the gear under the box (Agent settings), or come from *Always allow* on an approval card:
 
-- `bash(npm test*)` covers commands. For a chained command, every part must be allowed.
+- `bash(npm test*)` covers commands. They match literally: a trailing `*` means "starting with", and there are no
+  other wildcards. For a chained command, every part must be allowed. A rule never lets through a command that hides
+  another one (command substitution, background `&`, unbalanced quotes) or that writes outside the project.
 - `edit(src/**)` covers files the agent changes. An allowed path skips review in *Review every change*.
 - `read(secrets/**)` keeps those files from the AI.
 - `mcp(server/tool)` or `mcp(server/*)` covers MCP tools.
@@ -80,6 +82,7 @@ Example:
 - They run in the project's computer, and only while it's on.
 - They get the environment variables `ORBIS_TOOL`, `ORBIS_FILE` and `ORBIS_INPUT` (JSON).
 - They apply only to edits and commands, never to reading.
+- Each hook is stopped after 60 seconds. At most 3 run per action, and none once the step is short of time.
 - A PreToolUse hook that exits with code **2** blocks the action, and its output is the reason the agent sees.
 - What PostToolUse hooks print is added to the action's result.
 - Hook commands still pass the never-run list and Bastion.
@@ -88,10 +91,11 @@ Example:
 
 Add remote MCP servers (HTTPS, Streamable HTTP) in Agent settings, with an optional token. The token is sealed with
 `ORBIS_CONNECTOR_KEY` and never sent back to the page. Their tools appear to the agent as `mcp__<server>__<tool>`
-(models with native tool calling).
+(models with native tool calling). Sessions with a server are kept separate for each user and project.
 
-- **When it asks.** The agent asks before each call, unless the server marks the tool read-only (`readOnlyHint`), a
-  rule allows it, or the mode is Full auto. Read-only tools also work while it plans. Bastion checks every call as a
+- **When it asks.** The agent asks before each call, unless a rule allows it, the mode is Full auto, or the tool is
+  read-only. A tool counts as read-only only when a server *you added yourself* says so (`readOnlyHint`). Servers
+  named in a project's settings file are never taken at their word. Read-only tools also work while it plans. Bastion checks every call as a
   connector read or write.
 - **How Orbis connects.** Connections go only to public addresses on port 443, checked at connect time, with no
   redirects followed and size and time limits (`safePostJson`).

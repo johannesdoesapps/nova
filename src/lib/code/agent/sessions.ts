@@ -75,6 +75,14 @@ function closeOpenCalls(t: TranscriptMessage[], why: string): TranscriptMessage[
   );
 }
 
+/** The conversation as it was at a rewind point: its messages then, and the last one as long as it was. */
+export function cutTranscript(t: TranscriptMessage[], point: { transcriptLen?: number; tailChars?: number }): TranscriptMessage[] {
+  const out = t.slice(0, point.transcriptLen ?? 0);
+  const last = out[out.length - 1];
+  if (last?.role === "user" && typeof point.tailChars === "number" && last.content.length > point.tailChars) out[out.length - 1] = { ...last, content: last.content.slice(0, point.tailChars) };
+  return out;
+}
+
 /** Room for the next message: more steps, tokens and time on top of what the session has used. */
 function roomFor(row: RunRow): RunPatch {
   const used = runUsage(row);
@@ -105,16 +113,19 @@ export async function sendMessage(auth: Authed, runId: string, text: string, opt
 
 /** Carry on a finished session with a new message. */
 export async function reopenRun(auth: Authed, row: RunRow, text: string, options?: SessionOptions): Promise<RunView> {
-  if (!(row.transcript ?? []).length) throw new ApiError("conflict", "This session never got started, so there's nothing to carry on. Start a new one.");
   const open = await openRun(auth, row.project_id);
   if (open && open.id !== row.id) throw new ApiError("conflict", "Another session is working on this project. Stop it or let it finish first.", { runId: open.id });
   const locked = await lockRun(auth, row.id, ENDED_STATUSES);
   if (!locked) throw new ApiError("conflict", "This session is busy (its checks may be running). Try again in a moment.");
   try {
-    const next = mergeOptions(locked, options);
+    const next: RunOptions = { ...mergeOptions(locked, options), resumed: true };
     let transcript = closeOpenCalls(locked.transcript ?? [], "Not run: the session ended before this action's result was recorded.");
-    await turnPoint(auth, row.id, transcript.length, text);
-    transcript = appendUser(transcript, `New message from the user (the session continues; the files are as they are now, so re-read any you change):\n${text}`);
+    // A session rewound to before its first message starts again: the next step builds its first message from this one.
+    const fresh = transcript.length === 0;
+    if (!fresh) {
+      await turnPoint(auth, row.id, transcript, text);
+      transcript = appendUser(transcript, `New message from the user (the session continues; the files are as they are now, so re-read any you change):\n${text}`);
+    }
     const plan = next.approvePlans && !next.readOnly ? null : locked.plan;
     const status: RunStatus = workingStatus({ options: next, plan });
     await addEvents(auth, row.id, [{ kind: "answer", title: `You said: ${text.replace(/\s+/g, " ").slice(0, 360)}`, detail: { resume: true, text: text.slice(0, 4_000) } }]);
@@ -131,6 +142,7 @@ export async function reopenRun(auth: Authed, row: RunRow, text: string, options
       checks: { ...(locked.checks ?? {}), verify: null },
       tests: locked.tests ? { ...locked.tests, failuresInRow: 0, attemptLimit: Math.max(locked.tests.attemptLimit, 3) } : null,
       locked_until: null,
+      ...(fresh ? { request: text.slice(0, 8_000) } : {}),
     });
     return toRunView(updated);
   } catch (err) {
@@ -183,8 +195,18 @@ export interface RewindResult {
 
 /** Go back to before one of the user's messages: the conversation is cut there, and the session's files restored. */
 export async function rewindRun(auth: Authed, runId: string, pointId: string, opts: { force?: boolean; filesOnly?: boolean } = {}): Promise<RewindResult> {
-  const row = await getRun(auth, runId);
-  if (WORKING_STATUSES.includes(row.status) || (row.locked_until && Date.parse(row.locked_until) > Date.now())) throw new ApiError("conflict", "Stop the agent (or wait for it to finish) before rewinding.");
+  // Held for the whole rewind, so no approval or reopen can write the run meanwhile.
+  const row = await lockRun(auth, runId, ["awaiting_approval", "needs_input", ...ENDED_STATUSES]);
+  if (!row) throw new ApiError("conflict", "Stop the agent (or wait for it to finish) before rewinding.");
+  try {
+    return await rewindLocked(auth, row, pointId, opts);
+  } finally {
+    await updateRun(auth, runId, { locked_until: null }).catch(() => {});
+  }
+}
+
+async function rewindLocked(auth: Authed, row: RunRow, pointId: string, opts: { force?: boolean; filesOnly?: boolean }): Promise<RewindResult> {
+  const runId = row.id;
   const point = (await listCheckpoints(auth, runId, "turn")).find((c) => c.id === pointId);
   if (!point) throw new ApiError("not_found", "That point to rewind to wasn't found.");
   const changes = (await listChanges(auth, runId)).map((c) => ({ path: c.path, before: c.before, after: c.revertedAt ? c.before : c.after }));
@@ -203,12 +225,10 @@ export async function rewindRun(auth: Authed, runId: string, pointId: string, op
     ];
   }
   if (restore.length) await saveChanges(auth, runId, row.project_id, restore);
-  const patch: RunPatch = { pending: null, last_edit_at: new Date().toISOString() };
+  // A session waiting for an answer is stopped by a rewind (what it waited for belongs to the conversation after it).
+  const patch: RunPatch = { pending: null, last_edit_at: new Date().toISOString(), ...(ENDED_STATUSES.includes(row.status) ? {} : { status: "cancelled" as RunStatus }) };
   const canCut = !opts.filesOnly && (point.transcriptLen ?? 0) <= (row.transcript ?? []).length && !compactedSince(row, point.createdAt);
-  if (canCut) {
-    patch.transcript = capTranscript((row.transcript ?? []).slice(0, point.transcriptLen ?? 0));
-    if (!ENDED_STATUSES.includes(row.status)) patch.status = "cancelled";
-  }
+  if (canCut) patch.transcript = capTranscript(cutTranscript(row.transcript ?? [], point));
   await addEvents(auth, runId, [
     {
       kind: "revert",
@@ -231,13 +251,13 @@ export async function forkRun(auth: Authed, runId: string, text: string, opts: {
   if (opts.pointId) {
     const point = (await listCheckpoints(auth, runId, "turn")).find((c) => c.id === opts.pointId);
     if (!point) throw new ApiError("not_found", "That point to fork from wasn't found.");
-    transcript = transcript.slice(0, point.transcriptLen ?? 0);
+    transcript = cutTranscript(transcript, point);
   }
   const options = mergeOptions(row, opts.options);
   const fork = await createRun(auth, { projectId: row.project_id, request: text.slice(0, 8_000), options: { ...options, continueFrom: undefined }, stepLimit: DEFAULT_STEP_LIMIT, forkedFrom: row.id });
   if (!transcript.length) return toRunView(fork);
   transcript = closeOpenCalls(transcript, "Not run: the session this one was forked from had stopped before this action's result was recorded.");
-  await turnPoint(auth, fork.id, transcript.length, text);
+  await turnPoint(auth, fork.id, transcript, text);
   transcript = appendUser(transcript, `(This is a fork of an earlier session: everything above happened there. The project's files are as they are now, which may differ; re-read any file before changing it.)\nNew message from the user:\n${text}`);
   await addEvents(auth, fork.id, [{ kind: "status", title: `Forked from an earlier session`, detail: { forkedFrom: row.id } }]);
   const plan = options.approvePlans && !options.readOnly ? null : row.plan;

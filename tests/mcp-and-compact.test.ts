@@ -95,7 +95,7 @@ describe("the MCP client", () => {
     const post: Post = (url, body, headers) => (url.includes("bad") ? bad.post(url, body, headers) : good.post(url, body, headers));
     const r = await collectTools(
       [
-        { name: "good", url: "https://mcp.example.com/good" },
+        { name: "good", url: "https://mcp.example.com/good", own: true },
         { name: "bad", url: "https://mcp.example.com/bad" },
       ],
       post,
@@ -103,6 +103,18 @@ describe("the MCP client", () => {
     expect([...r.tools.keys()]).toEqual(["mcp__good__echo", "mcp__good__read"]);
     expect(r.tools.get("mcp__good__read")).toMatchObject({ server: "good", tool: "read", readOnly: true });
     expect(r.errors).toEqual([{ server: "bad", reason: "the server refused Orbis's credentials (check the token in Settings)" }]);
+  });
+
+  it("believes a server's read-only claim only for servers the user added themselves", async () => {
+    const r = await collectTools([{ name: "proj", url: "https://mcp.example.com/proj" }], fakeServer().post);
+    expect(r.tools.get("mcp__proj__read")).toMatchObject({ readOnly: false });
+  });
+
+  it("keeps sessions apart for different users and projects", async () => {
+    const { post, calls } = fakeServer();
+    await new McpClient({ name: "s", url: "https://mcp.example.com/shared", scope: "u1:p1" }, post).listTools();
+    await new McpClient({ name: "s", url: "https://mcp.example.com/shared", scope: "u2:p9" }, post).listTools();
+    expect(calls.filter((c) => c.method === "initialize")).toHaveLength(2);
   });
 });
 

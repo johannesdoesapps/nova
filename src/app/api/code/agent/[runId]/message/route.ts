@@ -5,6 +5,7 @@ import { sessionOptions } from "@/lib/code/agent/session-schema";
 import { sendMessage } from "@/lib/code/agent/sessions";
 import { WORKING_STATUSES } from "@/lib/code/agent/types";
 import { codeContext } from "@/lib/code/server";
+import { assertAgentAccess } from "@/lib/agent-platform/server";
 import { errorResponse, parseJsonBody, requireUuid } from "@/lib/http";
 
 const body = z.object({ text: z.string().trim().min(1).max(4_000), options: sessionOptions.optional() });
@@ -18,6 +19,8 @@ export async function POST(req: Request, ctx: RouteContext<"/api/code/agent/[run
     const runId = requireUuid((await ctx.params).runId);
     const { text, options } = await parseJsonBody(req, body, 12_000);
     const auth = await codeContext("code-agent", 30);
+    // Like starting a session: the engineer agent must be available on this plan and not paused.
+    await assertAgentAccess(auth, "engineer");
     const out = await sendMessage(auth, runId, text, options);
     if (out.delivered === "reopened" && out.run.options.background && WORKING_STATUSES.includes(out.run.status)) after(() => kickWorker(runId, new URL(req.url).origin));
     return NextResponse.json(out);

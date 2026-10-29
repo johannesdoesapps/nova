@@ -288,6 +288,7 @@ export type RunPatch = Partial<
     | "job"
     | "options"
     | "bg_jobs"
+    | "request"
   >
 >;
 
@@ -490,8 +491,8 @@ export async function markReverted(auth: Authed, changeIds: string[]): Promise<v
 
 // ---------------------------------------------------------------- checkpoints
 
-type CheckpointRow = { id: string; label: string; files: Record<string, string | null>; created_at: string; kind?: "manual" | "turn"; transcript_len?: number | null; message?: string | null };
-const CHECKPOINT_COLS = "id, label, files, created_at, kind, transcript_len, message";
+type CheckpointRow = { id: string; label: string; files: Record<string, string | null>; created_at: string; kind?: "manual" | "turn"; transcript_len?: number | null; tail_chars?: number | null; message?: string | null };
+const CHECKPOINT_COLS = "id, label, files, created_at, kind, transcript_len, tail_chars, message";
 
 const toCheckpoint = (c: CheckpointRow): Checkpoint => ({
   id: c.id,
@@ -500,6 +501,7 @@ const toCheckpoint = (c: CheckpointRow): Checkpoint => ({
   createdAt: c.created_at,
   kind: c.kind ?? "manual",
   ...(typeof c.transcript_len === "number" ? { transcriptLen: c.transcript_len } : {}),
+  ...(typeof c.tail_chars === "number" ? { tailChars: c.tail_chars } : {}),
   ...(c.message ? { message: c.message } : {}),
 });
 
@@ -515,11 +517,11 @@ export async function createCheckpoint(
   runId: string,
   label: string,
   files: Record<string, string | null>,
-  turn?: { transcriptLen: number; message: string },
+  turn?: { transcriptLen: number; tailChars?: number | null; message: string },
 ): Promise<Checkpoint> {
   const { data, error } = await auth.supabase
     .from("code_agent_checkpoints")
-    .insert({ run_id: runId, label: label.slice(0, 200), files, ...(turn ? { kind: "turn", transcript_len: turn.transcriptLen, message: turn.message.slice(0, 400) } : {}) })
+    .insert({ run_id: runId, label: label.slice(0, 200), files, ...(turn ? { kind: "turn", transcript_len: turn.transcriptLen, tail_chars: turn.tailChars ?? null, message: turn.message.slice(0, 400) } : {}) })
     .select(CHECKPOINT_COLS)
     .single();
   if (error) throw dbError(error, "code.agent.checkpoints.create");

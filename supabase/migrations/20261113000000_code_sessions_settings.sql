@@ -29,8 +29,9 @@ alter table public.code_agent_runs drop constraint if exists code_agent_runs_ste
 alter table public.code_agent_runs add constraint code_agent_runs_step_limit_check check (step_limit between 1 and 2000);
 
 grant insert (forked_from) on public.code_agent_runs to authenticated;
--- options: the permission mode and model can change between messages of a session.
-grant update (inbox, bg_jobs, options) on public.code_agent_runs to authenticated;
+-- options: the permission mode and model can change between messages of a session. request: a session rewound to
+-- before its first message starts again from the message sent next.
+grant update (inbox, bg_jobs, options, request) on public.code_agent_runs to authenticated;
 
 -- Add a message to a working session's inbox (at most 20 waiting). Returns how many wait, or nothing when the
 -- session isn't the caller's or has ended. Row-level security applies (security invoker).
@@ -70,12 +71,14 @@ revoke all on function public.code_agent_take_messages(uuid) from public, anon;
 grant execute on function public.code_agent_push_message(uuid, text) to authenticated;
 grant execute on function public.code_agent_take_messages(uuid) to authenticated;
 
--- Rewind points: a checkpoint taken before each message the user sends records how long the conversation was then.
+-- Rewind points: a checkpoint taken before each message the user sends records how long the conversation was then
+-- (messages, and the length of the last one: a new message is often added to the end of the last one).
 alter table public.code_agent_checkpoints
   add column if not exists kind text not null default 'manual' check (kind in ('manual', 'turn')),
   add column if not exists transcript_len int check (transcript_len is null or transcript_len >= 0),
+  add column if not exists tail_chars int check (tail_chars is null or tail_chars >= 0),
   add column if not exists message text check (message is null or char_length(message) <= 400);
-grant insert (kind, transcript_len, message) on public.code_agent_checkpoints to authenticated;
+grant insert (kind, transcript_len, tail_chars, message) on public.code_agent_checkpoints to authenticated;
 
 -- ---------------------------------------------------------------- projects
 

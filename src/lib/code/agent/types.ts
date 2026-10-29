@@ -62,6 +62,8 @@ export interface RunOptions {
   agentVersion?: string;
   /** Keep working after the page is closed (background.ts); set when the run starts. */
   background?: boolean;
+  /** The session was carried on with a later message (its step limit may then grow past a single task's). */
+  resumed?: boolean;
 }
 
 export const DEFAULT_OPTIONS: RunOptions = { modelId: null, approvePlans: true, reviewEdits: false, commands: "safe", readOnly: false };

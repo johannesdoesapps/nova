@@ -86,6 +86,9 @@ export function splitCommands(line: string): string[] | null {
 /** Redirecting output into files outside the project, or overwriting with >, needs a look. */
 const RISKY_REDIRECT = />\s*\/(?!dev\/null)/;
 
+/** Whether a permission rule may let this command run without asking: never one that writes outside the project. */
+export const ruleMayAllow = (command: string) => !RISKY_REDIRECT.test(command);
+
 export function classifyCommand(command: string): CommandDecision {
   const c = command.trim();
   if (!c) return { kind: "block", reason: "is empty" };

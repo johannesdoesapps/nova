@@ -88,9 +88,9 @@ export function mcpServersFor(auth: Authed, projectId: string, stored: StoredMcp
         continue;
       }
     }
-    out.push({ name: m.name, url: m.url, authorization });
+    out.push({ name: m.name, url: m.url, authorization, scope: `${auth.user.id}:${projectId}`, own: true });
   }
-  for (const m of project.mcpServers) if (!out.some((o) => o.name === m.name)) out.push({ name: m.name, url: m.url });
+  for (const m of project.mcpServers) if (!out.some((o) => o.name === m.name)) out.push({ name: m.name, url: m.url, scope: `${auth.user.id}:${projectId}` });
   return out.slice(0, MAX_MCP_SERVERS + 4);
 }
 

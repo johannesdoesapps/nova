@@ -13,6 +13,8 @@ export type Post = (url: string, body: unknown, headers: Record<string, string>)
 const defaultPost: Post = (url, body, headers) => safePostJson(url, body, { headers, timeoutMs: 30_000 });
 
 const SESSION_TTL_MS = 5 * 60_000;
+/** Listing a server's tools happens every step: a slow server is left out rather than holding the step. */
+const LIST_DEADLINE_MS = 15_000;
 
 interface Session {
   id: string | null;
@@ -29,6 +31,10 @@ export interface McpServer {
   url: string;
   /** "Bearer …" for servers that need a token. */
   authorization?: string | null;
+  /** Who uses the session (user and project): sessions are never shared between them. */
+  scope?: string;
+  /** The user added this server themselves (not a project's settings file): only then is its read-only claim believed. */
+  own?: boolean;
 }
 
 export class McpClient {
@@ -39,7 +45,7 @@ export class McpClient {
   ) {}
 
   private key() {
-    return `${this.server.url}\n${this.server.authorization ?? ""}`;
+    return `${this.server.scope ?? ""}\n${this.server.url}\n${this.server.authorization ?? ""}`;
   }
 
   private headers(sessionId: string | null): Record<string, string> {
@@ -109,6 +115,7 @@ export class McpClient {
 export interface McpToolEntry {
   server: string;
   tool: string;
+  /** Read-only, as claimed by a server the user added themselves (a project file's server is never taken at its word). */
   readOnly: boolean;
   schema: { name: string; description: string; parameters: Record<string, unknown> };
 }
@@ -125,13 +132,17 @@ export async function collectTools(servers: McpServer[], post?: Post): Promise<{
     servers.map(async (srv) => {
       const c = new McpClient(srv, post);
       try {
-        for (const t of await c.listTools()) {
+        const listed = await Promise.race([
+          c.listTools(),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new McpError("the server took too long to answer")), LIST_DEADLINE_MS)),
+        ]);
+        for (const t of listed) {
           const name = modelToolName(srv.name, t.name);
           if (tools.has(name)) continue;
           tools.set(name, {
             server: srv.name,
             tool: t.name,
-            readOnly: t.readOnly,
+            readOnly: t.readOnly && !!srv.own,
             schema: { name, description: `[MCP server ${srv.name}${t.readOnly ? ", read only" : ""}] ${t.description}`.slice(0, 1_100), parameters: t.inputSchema },
           });
         }

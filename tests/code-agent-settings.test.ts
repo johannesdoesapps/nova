@@ -77,6 +77,17 @@ describe("permission rules", () => {
     expect(commandRuleDecision([rules], ["npm run lint", "npm test -- --update"])).toBe("deny");
   });
 
+  it("match commands literally (a trailing * means 'starting with'), so an approval can't be stretched", () => {
+    const exact = [{ allow: ["bash(rm -rf build/*)"], deny: [] }];
+    expect(ruleDecision(exact, "bash", "rm -rf build/output")).toBe("allow"); // trailing * is a prefix
+    expect(ruleDecision([{ allow: ["bash(cp a?b c)"], deny: [] }], "bash", "cp axb c")).toBeNull(); // ? is literal
+    expect(ruleDecision([{ allow: ["bash(npm run lint)"], deny: [] }], "bash", "npm run lint -- --fix")).toBeNull();
+    // A line that can't be split safely is never allowed by a rule, only denied.
+    const prefix = [{ allow: ["bash(npm test*)"], deny: [] }];
+    expect(commandRuleDecision(prefix, null, "npm test & rm -rf src")).toBeNull();
+    expect(commandRuleDecision([{ allow: [], deny: ["bash(npm test*)"] }], null, "npm test $(whoami)")).toBe("deny");
+  });
+
   it("are saved from Always allow as the command or its first words", () => {
     expect(commandRule("npm run lint -- --fix")).toBe("bash(npm run lint -- --fix)");
     expect(commandRule("npm run lint -- --fix", true)).toBe("bash(npm run lint*)");
@@ -185,5 +196,23 @@ describe("the project's commands, skills, helpers and instructions", () => {
     expect(parseSlash("/mode full")).toEqual({ kind: "action", command: "mode", action: "mode", arg: "full" });
     expect(parseSlash("/init")).toMatchObject({ kind: "task", command: "init" });
     expect(parseSlash("/pr Fix login")).toMatchObject({ kind: "task", request: expect.stringContaining("github_push with pull_request") });
+  });
+});
+
+describe("rewinding a session's conversation", async () => {
+  const { cutTranscript } = await import("@/lib/code/agent/sessions");
+  it("cuts back to the messages and the last message's length at the point, dropping a message added to its end", () => {
+    const t = [
+      { role: "user" as const, content: "Request: A" },
+      { role: "assistant" as const, content: "ok", calls: [{ id: "c1", tool: "list_files", args: {} }] },
+      { role: "user" as const, content: "\n\nNew message: B", results: [{ id: "c1", tool: "list_files", ok: true, text: "x" }] },
+      { role: "assistant" as const, content: "working on B" },
+    ];
+    // The point before B: 3 messages, the last one empty (B was appended to it).
+    const cut = cutTranscript(t, { transcriptLen: 3, tailChars: 0 });
+    expect(cut).toHaveLength(3);
+    expect(cut[2]!.content).toBe("");
+    expect(cut[2]!.results).toHaveLength(1); // the results the call needs are kept
+    expect(cutTranscript(t, { transcriptLen: 0 })).toEqual([]);
   });
 });
