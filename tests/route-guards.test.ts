@@ -20,6 +20,7 @@ const ROUTES = [
   "src/app/api/intel/benchmarks/route.ts",
   "src/app/api/missions/plan/route.ts",
   "src/app/api/missions/tasks/[taskId]/run/route.ts",
+  "src/app/api/cli/turn/route.ts",
   "src/lib/council/run.ts",
   "src/lib/security/runners.ts",
 ];
