@@ -55,7 +55,7 @@ describe("the MCP client", () => {
     const calls: { method: string; session: string | undefined; auth: string | undefined }[] = [];
     let expired = !o.expireOnce;
     let sessions = 0;
-    const post: Post = async (_url, body, headers) => {
+    const post: Post = async (_url, body, headers): Promise<{ status: number; body: string; headers: Record<string, string> }> => {
       const msg = body as { id?: number; method: string; params?: { name?: string; arguments?: Record<string, unknown> } };
       calls.push({ method: msg.method, session: headers["mcp-session-id"], auth: headers.authorization });
       if (o.status) return { status: o.status, body: "", headers: {} };
