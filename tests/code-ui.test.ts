@@ -73,7 +73,9 @@ describe("progress stages", () => {
 
 describe("permission modes", () => {
   it("are presets of the run's real options, recognised back from a run", () => {
-    expect(MODES.map((m) => m.id)).toEqual(["plan", "review", "auto", "read"]);
+    expect(MODES.map((m) => m.id)).toEqual(["plan", "review", "edits", "auto", "full", "read"]);
+    expect(MODES.find((m) => m.id === "full")!.options).toMatchObject({ commands: "all", approvePlans: false, reviewEdits: false });
+    expect(MODES.find((m) => m.id === "edits")!.options).toMatchObject({ commands: "ask", reviewEdits: false });
     for (const m of MODES) expect(modeOf(m.options)?.id).toBe(m.id);
     expect(MODES.find((m) => m.id === "read")!.options).toMatchObject({ readOnly: true, commands: "off" });
     expect(modeOf({ approvePlans: true, reviewEdits: false, commands: "off", readOnly: false })).toBeNull();

@@ -25,12 +25,19 @@ export interface ToolContext {
   pages?: boolean;
   /** Read-only helper agents can be asked questions (delegate; models with native tool calling). */
   helpers?: boolean;
+  /** The project has skills (.orbis/skills/<name>/SKILL.md) to load with use_skill. */
+  skills?: boolean;
+  /** The project can be pushed to GitHub (the user connected repository access). */
+  push?: boolean;
+  /** Tools from the MCP servers the user connected, as the model sees them (mcp__server__tool). */
+  mcpTools?: { name: string; description: string; parameters: Record<string, unknown> }[];
 }
 
 export const TODO_STATUSES = ["pending", "in_progress", "done"] as const;
 export const MAX_TODOS = 20;
 
 export const MAX_READ_FILES = 8;
+export const MAX_MULTI_EDITS = 20;
 
 interface ToolDef {
   description: string;
@@ -65,6 +72,20 @@ export const TOOL_DEFS = {
     description: 'Change one place in a file: "search" must appear exactly once in it; copy it exactly, with a few surrounding lines.',
     schema: z.object({ path: projectPath, search: z.string().min(1).max(40_000), replace: z.string().max(80_000) }),
   },
+  multi_edit: {
+    description: `Several changes to one file at once (up to ${MAX_MULTI_EDITS}), applied in order; each "search" must appear exactly once at that point. All or nothing: if one doesn't apply, none is saved.`,
+    schema: z.object({
+      path: projectPath,
+      edits: z
+        .array(z.object({ search: z.string().min(1).max(40_000), replace: z.string().max(80_000) }))
+        .min(1)
+        .max(MAX_MULTI_EDITS),
+    }),
+  },
+  glob: {
+    description: 'Find files by path pattern: "**/*.test.ts", "src/**/index.{js,ts}", "*.md" (a pattern without "/" matches file names anywhere). Returns the matching paths (up to 200).',
+    schema: z.object({ pattern: z.string().trim().min(1).max(200) }),
+  },
   delete_file: { description: "Delete a file.", schema: z.object({ path: projectPath }) },
   inspect_diff: { description: "Unified diff of what this run has changed so far (all files, or one).", schema: z.object({ path: z.string().max(300).optional() }) },
   git_status: { description: "Files this run has created, changed or deleted, files changed by someone else since, the latest test result, and the run's checkpoints.", schema: z.object({}) },
@@ -78,8 +99,18 @@ export const TOOL_DEFS = {
   },
   run_command: {
     description:
-      "Run a shell command in the project's folder on its own computer (Linux, Node.js and Python, internet limited to npm and PyPI). One command per step. Returns the exit code and the end of the output. A command still running after 2 minutes keeps running in the background (up to 10 minutes in all): wait for it with wait_for_command.",
-    schema: z.object({ command: z.string().trim().min(1).max(2_000) }),
+      "Run a shell command in the project's folder on its own computer (Linux, Node.js and Python, internet limited to npm and PyPI). One command per step. Returns the exit code and the end of the output. A command still running after 2 minutes keeps running in the background (up to 10 minutes in all): wait for it with wait_for_command. With background: true it starts and returns at once with an id (a watcher, a long build); read it with command_output and end it with stop_command (up to 3 at a time).",
+    schema: z.object({ command: z.string().trim().min(1).max(2_000), background: z.boolean().optional() }),
+    when: commandsOn,
+  },
+  command_output: {
+    description: "New output from a command started with background: true, and whether it has finished (its exit code). Doesn't wait.",
+    schema: z.object({ id: z.string().trim().min(1).max(20) }),
+    when: commandsOn,
+  },
+  stop_command: {
+    description: "Stop a command started with background: true.",
+    schema: z.object({ id: z.string().trim().min(1).max(20) }),
     when: commandsOn,
   },
   wait_for_command: {
@@ -120,7 +151,13 @@ export const TOOL_DEFS = {
     schema: z.object({ url: z.url({ protocol: /^https?$/ }).max(2_000) }),
     when: (c) => !!c.pages,
   },
-  lookup_docs: { description: "Search the web for documentation (titles, links and snippets).", schema: z.object({ query: z.string().trim().min(2).max(300) }), when: (c) => c.docs },
+  web_search: {
+    description: "Search the web: documentation, error messages, changelogs, libraries (titles, links and snippets). Read a result with read_web_page.",
+    schema: z.object({ query: z.string().trim().min(2).max(300) }),
+    when: (c) => c.docs,
+  },
+  // Older sessions called web search lookup_docs; it's still carried out, no longer offered.
+  lookup_docs: { description: "Search the web for documentation (titles, links and snippets).", schema: z.object({ query: z.string().trim().min(2).max(300) }), when: () => false },
   github: {
     description: "Read the user's connected GitHub repositories (read only): read a file, search issues, or list repositories.",
     schema: z.object({
@@ -156,8 +193,27 @@ export const TOOL_DEFS = {
   delegate: {
     description:
       "Hand focused questions about the project to read-only helper agents (up to 3 at once, run in parallel). Each searches and reads files and reports back in a short answer naming files and lines. Use it for broad investigation across many files (\"where is the session checked, and by what?\"), so your own context stays on the change. Helpers can't edit or run anything; read the files yourself before you change them.",
-    schema: z.object({ questions: z.array(z.string().trim().min(5).max(1_000)).min(1).max(3) }),
+    schema: z.object({
+      questions: z.array(z.string().trim().min(5).max(1_000)).min(1).max(3),
+      agent: z.string().trim().max(40).optional().describe("One of the project's helper agents (listed in the first message) to answer with its own instructions."),
+    }),
     when: (c) => !!c.helpers,
+  },
+  use_skill: {
+    description: "Load one of the project's skills (listed in the first message): its instructions and the other files in its folder. Follow them for the part of the task they cover.",
+    schema: z.object({ name: z.string().trim().min(1).max(40) }),
+    when: (c) => !!c.skills,
+  },
+  github_push: {
+    description:
+      "Push the project to a new branch of one of the user's GitHub repositories as one commit, and optionally open a pull request. Always waits for the user's approval; never the default branch. Use it when the user asks to push, commit to GitHub or open a pull request.",
+    schema: z.object({
+      repo: z.string().trim().max(140).optional().describe("owner/name; default: the repository the project was imported from"),
+      branch: z.string().trim().min(1).max(120).describe("A new branch, e.g. orbis/fix-login"),
+      message: z.string().trim().min(1).max(500).describe("The commit message"),
+      pull_request: z.object({ title: z.string().trim().min(1).max(250), body: z.string().max(20_000).optional(), draft: z.boolean().optional() }).optional(),
+    }),
+    when: (c) => !!c.push,
   },
   update_todos: {
     description:
@@ -188,7 +244,7 @@ export const TOOL_DEFS = {
 
 export type ToolName = keyof typeof TOOL_DEFS;
 export const TOOL_NAMES = Object.keys(TOOL_DEFS) as ToolName[];
-export const EDIT_TOOLS = new Set<string>(["write_file", "edit_file", "delete_file", "restore_checkpoint"]);
+export const EDIT_TOOLS = new Set<string>(["write_file", "edit_file", "multi_edit", "delete_file", "restore_checkpoint"]);
 
 export function isToolName(name: string): name is ToolName {
   return Object.hasOwn(TOOL_DEFS, name);
@@ -197,6 +253,10 @@ export function isToolName(name: string): name is ToolName {
 const READ_ONLY_HIDDEN = new Set<string>([
   "write_file",
   "edit_file",
+  "multi_edit",
+  "github_push",
+  "stop_command",
+  "command_output",
   "delete_file",
   "restore_checkpoint",
   "create_checkpoint",
@@ -216,11 +276,12 @@ export function toolsFor(c: ToolContext): ToolName[] {
   });
 }
 
-/** JSON Schemas for providers with native tool calling. */
+/** JSON Schemas for providers with native tool calling (Orbis's tools, then the MCP servers' tools). */
 export function toolSchemas(c: ToolContext): { name: string; description: string; parameters: Record<string, unknown> }[] {
-  return toolsFor(c).map((name) => {
+  const own = toolsFor(c).map((name) => {
     const parameters = { ...(z.toJSONSchema(TOOL_DEFS[name].schema, { io: "input", unrepresentable: "any" }) as Record<string, unknown>) };
     delete parameters.$schema;
     return { name, description: TOOL_DEFS[name].description, parameters };
   });
+  return c.readOnly ? own : [...own, ...(c.mcpTools ?? [])];
 }

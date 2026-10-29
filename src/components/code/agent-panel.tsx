@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { agentDef, PROFILE_SLUG } from "@/lib/agent-platform/registry";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
@@ -15,6 +16,7 @@ import {
   Eye,
   FileCode2,
   FileText,
+  GitBranch,
   History,
   ImageIcon,
   Lightbulb,
@@ -22,6 +24,8 @@ import {
   Loader2,
   MessageSquare,
   MonitorSmartphone,
+  Plug,
+  Settings2,
   Plus,
   Power,
   RotateCcw,
@@ -46,7 +50,7 @@ import { useAttachments } from "./attachments";
 import { PromptBar } from "./prompt-bar";
 import { UsageEstimateLine } from "@/components/studio/usage";
 import { useCodeModel } from "./use-code-model";
-import { api, CodeApiError, post, postStream } from "./api";
+import { api, CodeApiError, post, postStream, putBuildRequest } from "./api";
 import { taskTitle } from "@/lib/code/agent/history";
 import { FileDiff } from "./diff-view";
 import { InfinityMark } from "@/components/brand/infinity";
@@ -54,7 +58,8 @@ import { WorkingStatus } from "@/components/studio/generating";
 import { useAnimatedLogo } from "@/components/studio/prefs";
 import { useApp } from "@/components/layout/app-context";
 import { countFirstTask } from "@/lib/first-task";
-import { parseSlash, slashSuggestions } from "@/lib/code/slash";
+import { customSlash, expandCommand, parseSlash, slashSuggestions, type SlashMode } from "@/lib/code/slash";
+import { AgentSettingsDialog, RewindDialog, useAgentConfig } from "./agent-session-tools";
 import type { SiteTemplateId } from "@/lib/code/site-templates";
 
 /**
@@ -72,7 +77,7 @@ type RevertResult = { ok: boolean; reverted: string[]; conflicts: string[] };
 
 // ---------------------------------------------------------------- permission modes
 
-export type ModeId = "read" | "plan" | "review" | "auto";
+export type ModeId = SlashMode;
 
 /** What the agent may do, as presets of the run's real options; the server enforces every one. */
 export const MODES: { id: ModeId; label: string; short: string; detail: string; options: Omit<RunOptions, "modelId"> }[] = [
@@ -91,12 +96,27 @@ export const MODES: { id: ModeId; label: string; short: string; detail: string; 
     options: { approvePlans: true, reviewEdits: true, commands: "ask", readOnly: false },
   },
   {
+    id: "edits",
+    label: "Accept edits",
+    short: "Asks for commands",
+    detail: "Edits files without stopping to ask, but asks before every command — tests and builds included.",
+    options: { approvePlans: false, reviewEdits: false, commands: "ask", readOnly: false },
+  },
+  {
     id: "auto",
     label: "Work on its own",
     short: "Fastest",
     detail:
       "Edits files and runs tests, builds and installs without stopping to ask. It still asks before other commands, never runs blocked ones (like deleting the project or pushing to GitHub), and every change can be undone.",
     options: { approvePlans: false, reviewEdits: false, commands: "safe", readOnly: false },
+  },
+  {
+    id: "full",
+    label: "Full auto",
+    short: "No prompts",
+    detail:
+      "Edits files and runs any command without asking, except the ones Orbis never runs (deleting the project, sudo, publishing, deploying, git push) and anything Orbis Bastion holds back. Use it only where that's fine; every change can still be undone.",
+    options: { approvePlans: false, reviewEdits: false, commands: "all", readOnly: false },
   },
   {
     id: "read",
@@ -371,6 +391,7 @@ export function AgentPanel({
   continueFrom: continueFromId,
 }: AgentPanelProps) {
   const animated = useAnimatedLogo();
+  const router = useRouter();
   const { user } = useApp();
   const [run, setRun] = useState<RunView | null>(null);
   const [runAttachments, setRunAttachments] = useState<AttachmentMeta[]>([]);
@@ -413,9 +434,12 @@ export function AgentPanel({
   };
   const [modelId, setModelId] = useCodeModel(catalog);
   const box = useRef<HTMLTextAreaElement>(null);
-  /** A message typed while the agent works, sent when it finishes (and the run it was typed for). */
-  const [queued, setQueued] = useState<string | null>(null);
-  const queuedFor = useRef<string | null>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  // The project's agent configuration: its own slash commands, skills, rules and MCP servers.
+  const { config: agentConfig, reload: reloadConfig } = useAgentConfig(projectId);
+  const customCommands = useMemo(() => (agentConfig?.commands ?? []).map((c) => customSlash(c, expandCommand)), [agentConfig]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [rewindOpen, setRewindOpen] = useState(false);
 
   const alive = useRef(true);
   const lastSeq = useRef(0);
@@ -628,13 +652,13 @@ export function AgentPanel({
     }
   };
 
-  const respond = async (decision: Decision, text?: string) => {
+  const respond = async (decision: Decision, text?: string, remember?: "exact" | "prefix") => {
     if (!run) return;
     setAnswering(true);
     setError(null);
     const watch = setInterval(() => void refresh(run.id).catch(() => {}), 2500);
     try {
-      const r = await post<{ run: RunView }>(`/api/code/agent/${run.id}/respond`, { decision, text });
+      const r = await post<{ run: RunView }>(`/api/code/agent/${run.id}/respond`, { decision, text, ...(remember ? { remember } : {}) });
       const latest = await refresh(r.run.id);
       if (WORKING_STATUSES.includes(latest.status)) void drive(latest.id);
     } catch (e) {
@@ -762,6 +786,124 @@ export function AgentPanel({
     } catch {
       /* the choice just isn't remembered */
     }
+    // A session in progress switches from its next step on (the server enforces the new mode).
+    if (run && !ENDED_STATUSES.includes(run.status) && !run.pair && !run.options.agent) {
+      const preset = MODES.find((x) => x.id === m)!;
+      void post<{ run: RunView }>(`/api/code/agent/${run.id}/mode`, { options: preset.options })
+        .then(() => refresh(run.id))
+        .catch((e: CodeApiError) => setError(e));
+    }
+  };
+
+  /** Continue this session with a message: queued while it works, or reopening it when it has finished. */
+  const sendToSession = async (text: string, m: ModeId = mode): Promise<boolean> => {
+    if (!run) return false;
+    setError(null);
+    try {
+      const preset = MODES.find((x) => x.id === m)!;
+      const r = await post<{ run: RunView; delivered: "queued" | "reopened" }>(`/api/code/agent/${run.id}/message`, { text, options: { modelId, ...preset.options } });
+      if (r.delivered === "reopened") {
+        latestView.current = r.run;
+        setRun(r.run);
+        runChanged.current(r.run);
+        void drive(r.run.id);
+      } else await refresh(run.id);
+      return true;
+    } catch (e) {
+      setError(e as CodeApiError);
+      return false;
+    }
+  };
+
+  /** Show another session (a fork) in this panel and step it. */
+  const showRun = (r: RunView) => {
+    lastSeq.current = 0;
+    seenSeqs.current.clear();
+    setEvents([]);
+    setRunAttachments([]);
+    latestView.current = r;
+    setRun(r);
+    runChanged.current(r);
+    if (WORKING_STATUSES.includes(r.status)) void drive(r.id);
+  };
+
+  /** Slash commands the page carries out itself. */
+  const slashAction = async (action: import("@/lib/code/slash").SlashAction, arg: string) => {
+    const needsRun = (what: string) => {
+      if (run) return false;
+      setSlashNote(`${what} works on a session: start one first.`);
+      return true;
+    };
+    switch (action) {
+      case "settings":
+        setSettingsOpen(true);
+        return;
+      case "rewind":
+        if (!needsRun("Rewind")) setRewindOpen(true);
+        return;
+      case "context": {
+        if (needsRun("/context")) return;
+        const c = run!.usage.context;
+        setSlashNote(
+          c
+            ? `Context: about ${Math.min(100, Math.round((c.used / c.limit) * 100))}% full at the last step (${c.used.toLocaleString()} of ${c.limit.toLocaleString()} characters).${run!.usage.compactions ? ` Summarised ${run!.usage.compactions} time${run!.usage.compactions === 1 ? "" : "s"} so far.` : ""} It's summarised automatically at 90%; /compact does it now.`
+            : "The context is measured at the agent's next step.",
+        );
+        return;
+      }
+      case "cost": {
+        if (needsRun("/cost")) return;
+        const u = run!.usage;
+        setSlashNote(`This session: ${(u.inputTokens + u.outputTokens).toLocaleString()} tokens over ${u.modelCalls} model call${u.modelCalls === 1 ? "" : "s"}, ${u.costUsd === null ? "cost not known for a model used" : `about ${usd(u.costUsd)}`}, ${run!.steps} steps, worked ${minutes(run!.activeMs)}.`);
+        return;
+      }
+      case "compact": {
+        if (needsRun("/compact")) return;
+        setSlashNote("Summarising the conversation…");
+        try {
+          await post(`/api/code/agent/${run!.id}/compact`, arg ? { focus: arg } : {});
+          await refresh(run!.id);
+          setSlashNote("Summarised the conversation. The agent carries on from the summary.");
+        } catch (e) {
+          setSlashNote((e as CodeApiError).message);
+        }
+        return;
+      }
+      case "fork": {
+        if (needsRun("/fork")) return;
+        if (!arg) {
+          setRewindOpen(true);
+          return;
+        }
+        try {
+          const preset = MODES.find((x) => x.id === mode)!;
+          const r = await post<{ run: RunView }>(`/api/code/agent/${run!.id}/fork`, { text: arg, options: { modelId, ...preset.options } });
+          showRun(r.run);
+        } catch (e) {
+          setSlashNote((e as CodeApiError).message);
+        }
+        return;
+      }
+      case "mode": {
+        const m = MODES.find((x) => x.id === arg.toLowerCase() || x.label.toLowerCase() === arg.toLowerCase());
+        if (!m) return setSlashNote(`There's no "${arg}" mode. Use one of: ${MODES.map((x) => x.id).join(", ")}.`);
+        setMode(m.id);
+        setSlashNote(`Mode: ${m.label}. ${m.detail}`);
+        return;
+      }
+      case "parallel": {
+        try {
+          const r = await post<{ project: { id: string } }>(`/api/code/projects/${projectId}/copies`, { task: arg });
+          putBuildRequest(r.project.id, arg, [], modelId);
+          router.push(`/code/${r.project.id}?build=1`);
+        } catch (e) {
+          setSlashNote((e as CodeApiError).message);
+        }
+        return;
+      }
+      default:
+        return;
+    }
   };
 
   /** Start a task (a new one, or a follow-up: the agent already knows the project and what was just done). */
@@ -773,9 +915,14 @@ export function AgentPanel({
   };
 
   const submit = (raw: string) => {
-    // Slash commands: pick the mode and phrase the task (src/lib/code/slash.ts).
-    const slash = parseSlash(raw);
+    // Slash commands: pick the mode and phrase the task, or act on the session (src/lib/code/slash.ts).
+    const slash = parseSlash(raw, customCommands);
     if (slash?.kind === "error") return setSlashNote(slash.message);
+    if (slash?.kind === "action" && slash.action !== "help" && slash.action !== "new") {
+      setText("");
+      void slashAction(slash.action, slash.arg);
+      return;
+    }
     if (slash?.kind === "action") {
       if (slash.action === "help") {
         setText("/");
@@ -792,19 +939,25 @@ export function AgentPanel({
       return;
     }
     const t = slash?.kind === "task" ? slash.request : raw;
+    const m = slash?.kind === "task" && slash.mode ? slash.mode : mode;
+    const restore = (ok: boolean) => !ok && setText((cur) => (cur.trim() ? cur : raw));
+    setText("");
+    // While the agent works, the message goes to it at its next step. After it finishes, the same session carries on
+    // with the conversation intact (a new session only for attachments, pair sessions and agents' own tasks).
+    if (run && !run.pair && !run.options.agent && !attachments.ids.length && (inProgress || ENDED_STATUSES.includes(run.status))) {
+      void sendToSession(t, m).then(restore);
+      return;
+    }
     if (inProgress) {
-      // While the agent works, Enter queues the message for when it finishes.
-      queuedFor.current = run!.id;
-      setQueued((q) => (q ? `${q}\n\n${t}` : t));
-      setText("");
+      setSlashNote("This session takes messages through its own controls. Stop it (or let it finish) to start another.");
+      restore(false);
       return;
     }
     // The box clears at once; if the task doesn't start, the text comes back.
-    setText("");
-    void send(t, slash?.kind === "task" && slash.mode ? slash.mode : mode).then((ok) => !ok && setText((cur) => (cur.trim() ? cur : raw)));
+    void send(t, m).then(restore);
   };
   const [slashNote, setSlashNote] = useState<string | null>(null);
-  const suggestions = slashSuggestions(text);
+  const suggestions = slashSuggestions(text, customCommands);
 
   const fill = (task: string) => {
     setText(task);
@@ -814,24 +967,23 @@ export function AgentPanel({
     });
   };
 
-  // Send the queued message once the run it was typed for finishes; if it stopped or failed, or another
-  // session was opened, put it back in the box instead. (Deferred a tick: state changes after this render.)
+  // Esc stops the agent while it works (as long as nothing else on the page wants Escape: a menu or a dialog).
   useEffect(() => {
-    if (!queued) return;
-    const other = !run || run.id !== queuedFor.current;
-    if (!other && (!ended || busy || starting)) return;
-    const restore = () => setText((t) => (t.trim() ? t : queued));
-    const timer = setTimeout(() => {
-      setQueued(null);
-      if (other || run.status !== "completed") return restore();
-      void send(queued).then((ok) => !ok && restore());
-    }, 0);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reacts to the run finishing
-  }, [queued, run?.id, run?.status, ended, busy, starting]);
+    if (!working) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || e.isComposing) return;
+      if (!panel.current?.contains(document.activeElement)) return;
+      if (document.querySelector('[role="menu"], dialog[open]')) return;
+      e.preventDefault();
+      void stop();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stop() reads the current run
+  }, [working, run?.id]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div ref={panel} className="flex h-full min-h-0 flex-col">
       {/* Not a live region: it gains every log line and test output. Screen readers hear the task's state below instead. */}
       <div className="s-scroll min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex min-h-full w-full max-w-[780px] flex-col px-4 pb-6 pt-4 sm:px-6">
@@ -942,6 +1094,11 @@ export function AgentPanel({
                 ))}
 
               {run.pending && !busy && <PendingCard run={run} computerOn={computerOn} onRespond={respond} onStartComputer={startAndContinue} />}
+              {run.forkedFrom && events.length > 0 && events[0]?.detail?.forkedFrom ? (
+                <p className="flex items-center gap-1.5 px-1 text-[12px] text-s-ink-3">
+                  <GitBranch className="h-3.5 w-3.5" aria-hidden /> Forked from an earlier session; it carries that conversation.
+                </p>
+              ) : null}
 
               {working && !busy && !error && (
                 <div className="s-card rounded-2xl p-3 text-[13px]">
@@ -1032,25 +1189,18 @@ export function AgentPanel({
               </button>
             </div>
           )}
-          {queued && (
-            <div className="mb-2 flex items-start gap-2 rounded-xl border border-dashed border-s-line px-3 py-2 text-[12.5px] text-s-ink-2" role="status">
-              <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-s-ink-3" aria-hidden />
-              <p className="min-w-0 flex-1">
-                <span className="text-s-ink-3">Queued — sends when the agent finishes:</span> <span className="line-clamp-2 whitespace-pre-wrap text-s-ink">{queued}</span>
+          {run && run.inbox.length > 0 && !ended && (
+            <div className="mb-2 rounded-xl border border-dashed border-s-line px-3 py-2 text-[12.5px] text-s-ink-2" role="status">
+              <p className="flex items-center gap-1.5 text-s-ink-3">
+                <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden /> Sent — the agent reads {run.inbox.length === 1 ? "it" : "them"} at its next step:
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setText((t) => (t.trim() ? `${t}\n\n${queued}` : queued));
-                  setQueued(null);
-                }}
-                className="shrink-0 rounded-full px-2 py-0.5 text-s-ink-3 hover:bg-s-hover hover:text-s-ink"
-              >
-                Edit
-              </button>
-              <button type="button" onClick={() => setQueued(null)} aria-label="Remove the queued message" className="shrink-0 text-s-ink-3 hover:text-s-ink">
-                <X className="h-3.5 w-3.5" />
-              </button>
+              <ul className="mt-1 space-y-0.5">
+                {run.inbox.map((m, i) => (
+                  <li key={`${m.at}-${i}`} className="line-clamp-2 whitespace-pre-wrap text-s-ink">
+                    {m.text}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
           {suggestions.length > 0 && (
@@ -1087,7 +1237,7 @@ export function AgentPanel({
           )}
           <PromptBar
             id="agent-ask"
-            label={run ? "Ask for a follow-up change" : "What would you like to build or fix?"}
+            label={run ? "Message this session" : "What would you like to build or fix?"}
             inputRef={box}
             value={text}
             onChange={(v) => {
@@ -1098,7 +1248,13 @@ export function AgentPanel({
             sending={starting}
             disabled={!loaded}
             attachments={attachments}
-            placeholder={inProgress ? "Queue a message for when it finishes" : run ? "Ask for a follow-up change, or type / for commands" : "Describe what to build or fix, or type / for commands"}
+            placeholder={
+              inProgress
+                ? "Message the agent while it works (Esc to stop)"
+                : run
+                  ? "Carry on this session, or type / for commands"
+                  : "Describe what to build or fix, or type / for commands"
+            }
             onStop={working ? () => void stop() : undefined}
             working={busy || starting || working}
             footerLeft={
@@ -1120,6 +1276,16 @@ export function AgentPanel({
                   </button>
                 )}
                 {!inProgress && <IdeasMenu web={web} disabled={starting || !loaded} onPick={(e) => (e.start ? void send(e.task, e.mode ?? mode) : fill(e.task))} />}
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(true)}
+                  title="Agent settings: rules, MCP servers, project instructions, parallel copies"
+                  aria-label="Agent settings"
+                  className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-s-ink-3 transition hover:bg-s-hover hover:text-s-ink"
+                >
+                  {agentConfig?.settings.mcp.length ? <Plug className="h-3.5 w-3.5" aria-hidden /> : <Settings2 className="h-3.5 w-3.5" aria-hidden />}
+                  {agentConfig?.projectSettings.status === "untrusted" && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />}
+                </button>
               </>
             }
             footerRight={<ModelSelector models={catalog?.models ?? null} value={modelId} onChange={setModelId} auto={catalog?.auto ?? null} className="min-w-0 !shrink" />}
@@ -1128,6 +1294,19 @@ export function AgentPanel({
           {!inProgress && <UsageEstimateLine feature="code_agent" signedIn={!!user} className="mt-0.5 px-2 !text-[11.5px]" />}
         </div>
       </div>
+      <AgentSettingsDialog projectId={projectId} open={settingsOpen} onClose={() => setSettingsOpen(false)} config={agentConfig} onChanged={reloadConfig} />
+      <RewindDialog
+        run={run}
+        open={rewindOpen}
+        onClose={() => setRewindOpen(false)}
+        onRewound={(message) => {
+          if (run) void open(run.id);
+          onFilesChanged();
+          setText(message);
+          requestAnimationFrame(() => box.current?.focus());
+        }}
+        onForked={showRun}
+      />
     </div>
   );
 }
@@ -1203,7 +1382,7 @@ function FirstTip() {
     <p className="mb-2 flex items-start gap-2 px-2 text-[12.5px] leading-snug text-s-ink-3" role="note">
       <Lightbulb className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
       <span className="min-w-0 flex-1">
-        Tip: press <span className="text-s-ink-2">+</span> to attach files or a screenshot of what you want. While the agent works you can keep typing — Enter queues your next message.
+        Tip: press <span className="text-s-ink-2">+</span> to attach files or a screenshot of what you want. While the agent works you can keep typing — Enter sends your message to it at its next step, and Esc stops it. Type / for commands.
       </span>
       <button type="button" onClick={dismiss} aria-label="Dismiss tip" className="-my-1 grid h-6 w-6 shrink-0 place-items-center rounded-md hover:bg-s-hover hover:text-s-ink">
         <X className="h-3.5 w-3.5" />
@@ -1408,12 +1587,24 @@ function UsageLine({ run }: { run: RunView }) {
     <p className="mt-1.5 text-[11.5px] text-s-ink-3">
       {used.toLocaleString()} of {run.tokenBudget.toLocaleString()} tokens
       {run.usage.estimated ? " (some estimated)" : ""} · {run.usage.costUsd === null ? "cost not known for this model" : `about ${usd(run.usage.costUsd)}`} · worked {minutes(run.activeMs)}
+      {run.usage.context && (
+        <span title="How full the agent's context was at its last step. At 90% the conversation is summarised automatically; /compact does it now.">
+          {" "}
+          · context {Math.min(100, Math.round((run.usage.context.used / run.usage.context.limit) * 100))}%
+        </span>
+      )}
     </p>
   );
 }
 
 /** Ask for a change to what was just built: a new session on the same project, in the same mode and model, with the earlier work as context. */
 // ---------------------------------------------------------------- waiting for you
+
+/** The first words of a command, as "Always allow" offers them (the same split the server saves as a rule). */
+export function commandPrefix(command: string): string {
+  const words = command.trim().replace(/\s+/g, " ").split(" ");
+  return words.slice(0, Math.min(words.length, ["npm", "pnpm", "yarn"].includes(words[0]!) ? 3 : 2)).join(" ");
+}
 
 const LIMIT_TEXT: Record<LimitReason, { title: (p: { steps: number }) => string; body: string; go: string }> = {
   steps: { title: (p) => `The agent has taken ${p.steps} steps`, body: "Let it keep going? Each step counts like a chat message.", go: "Allow 10 more steps" },
@@ -1431,7 +1622,7 @@ export function PendingCard({
 }: {
   run: RunView;
   computerOn: boolean;
-  onRespond: (d: Decision, text?: string) => Promise<void>;
+  onRespond: (d: Decision, text?: string, remember?: "exact" | "prefix") => Promise<void>;
   onStartComputer: () => Promise<void>;
 }) {
   const [text, setText] = useState("");
@@ -1497,10 +1688,76 @@ export function PendingCard({
         {feedback("Optional: why not, or what to do instead", "Feedback")}
         <div className="mt-2.5 flex flex-wrap gap-2">
           <button type="button" className={primary} onClick={() => void onRespond("approve")}>
-            <Check className="h-3.5 w-3.5" aria-hidden /> Run it
+            <Check className="h-3.5 w-3.5" aria-hidden /> {p.background ? "Run it in the background" : "Run it"}
           </button>
+          {!p.preview && (
+            <>
+              <button type="button" className={secondary} onClick={() => void onRespond("approve", undefined, "exact")} title="Run it, and run exactly this command without asking from now on in this project">
+                Always allow this command
+              </button>
+              {p.command.trim().includes(" ") && (
+                <button type="button" className={secondary} onClick={() => void onRespond("approve", undefined, "prefix")} title={`Run it, and allow commands starting the same way from now on (${commandPrefix(p.command)}…)`}>
+                  Always allow “{commandPrefix(p.command)}…”
+                </button>
+              )}
+            </>
+          )}
           <button type="button" className={secondary} onClick={() => void onRespond("reject", text || undefined)}>
             Don&apos;t run
+          </button>
+        </div>
+        {!p.preview && <p className="mt-1.5 text-[11.5px] text-s-ink-3">Saved rules are in Agent settings (the gear under the box), where you can remove them.</p>}
+      </div>
+    );
+  }
+  if (p.kind === "mcp") {
+    return (
+      <div className={card}>
+        <div className="font-medium text-s-ink">
+          Allow the MCP tool <span className="font-mono text-[12.5px]">{p.server}/{p.tool.split("__").slice(2).join("__")}</span>?
+        </div>
+        <p className="mt-1 text-[12px] text-s-ink-3">{p.reason} With these arguments:</p>
+        <pre className="s-scroll mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md bg-[var(--s-code,transparent)] p-2 font-mono text-[12px] text-s-ink">{JSON.stringify(p.args, null, 2)}</pre>
+        {feedback("Optional: why not, or what to do instead", "Feedback")}
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          <button type="button" className={primary} onClick={() => void onRespond("approve")}>
+            <Check className="h-3.5 w-3.5" aria-hidden /> Allow
+          </button>
+          <button type="button" className={secondary} onClick={() => void onRespond("approve", undefined, "exact")}>
+            Always allow {p.server}
+          </button>
+          <button type="button" className={secondary} onClick={() => void onRespond("reject", text || undefined)}>
+            Don&apos;t allow
+          </button>
+        </div>
+      </div>
+    );
+  }
+  if (p.kind === "push") {
+    return (
+      <div className={card}>
+        <div className="font-medium text-s-ink">Push to GitHub?</div>
+        <p className="mt-1 text-s-ink-2">
+          The agent wants to push this project to <span className="font-mono text-[12.5px]">{p.repo}</span> on a new branch <span className="font-mono text-[12.5px]">{p.branch}</span>
+          {p.pullRequest ? " and open a pull request" : ""}. Everyone with access to the repository will see it; nothing is merged and the default branch isn&apos;t touched.
+        </p>
+        <p className="mt-1.5 text-[12.5px] text-s-ink-2">
+          Commit message: <span className="text-s-ink">{p.message}</span>
+        </p>
+        {p.pullRequest && (
+          <div className="mt-1.5 rounded-lg border border-s-line p-2 text-[12.5px]">
+            <div className="font-medium text-s-ink">{p.pullRequest.title}</div>
+            {p.pullRequest.body && <p className="mt-0.5 line-clamp-6 whitespace-pre-wrap text-s-ink-2">{p.pullRequest.body}</p>}
+          </div>
+        )}
+        <p className="mt-1.5 text-[11.5px] text-s-ink-3">Files that hold credentials are never pushed.</p>
+        {feedback("Optional: why not, or what to change", "Feedback")}
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          <button type="button" className={primary} onClick={() => void onRespond("approve")}>
+            <GitBranch className="h-3.5 w-3.5" aria-hidden /> Push{p.pullRequest ? " and open the pull request" : ""}
+          </button>
+          <button type="button" className={secondary} onClick={() => void onRespond("reject", text || undefined)}>
+            Don&apos;t push
           </button>
         </div>
       </div>

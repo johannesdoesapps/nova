@@ -21,6 +21,7 @@ import { pairRespond, pairStep } from "../pair/engine";
 import { describeStart, PREVIEW_START_MS, runPreviewCheck, startPreview } from "../preview";
 import { applyFileChanges, getFiles, getProjectRow, optionalBox, setRunCommand, syncBack, type Authed } from "../server";
 import { claimSync, killJob, readJob, removeFromWorkspace, startJob, writeToWorkspace, type WorkspaceBox } from "../workspace";
+import { fence } from "./protocol";
 import {
   appendStep,
   appendUser,
@@ -39,6 +40,11 @@ import {
   type TranscriptMessage,
 } from "./protocol";
 import { classifyCommand } from "./policy";
+import { applyCompaction, COMPACT_SYSTEM, compactionInput, shouldAutoCompact } from "./compact";
+import { commandRule, EMPTY_RULES, hookCommand, hooksFor, projectAgents, projectContextBlock, projectSkills, settingsState, type HookDef } from "./settings";
+import { addRule, getAgentSettings, getOrbisFiles, mcpServersFor } from "../agent-settings";
+import { canPush, pushProject } from "../github-push";
+import { collectTools } from "@/lib/mcp/client";
 import { BULK_DELETE, commandOp, fileWriteOp } from "../../bastion/guards";
 import { shouldContain } from "../../bastion/policy";
 import { notifyOwner } from "../../bastion/customer/notify";
@@ -69,6 +75,7 @@ import {
   type RunPatch,
   type RunRow,
   updateRunIfNotCancelled,
+  takeMessages,
 } from "./runs";
 import { detectTestCommand, isTestCommand, testResult, type TestResult } from "./test-results";
 import { planVerification } from "./verify";
@@ -77,7 +84,8 @@ import { toolSchemas, type ToolContext } from "./tool-specs";
 import { memoryBlock, searchMemory, selectMemory, type MemoryEntry } from "../memory";
 import { addMemory, listMemory } from "../memory-store";
 import { runAttachments } from "../attachments-store";
-import { commandEvent, commandResultText, describeChange, planRestore, runActions, type AgentEnv, type CommandOutcome } from "./tools";
+import { commandEvent, commandResultText, describeChange, planRestore, runActions, untrusted, type AgentEnv, type CommandOutcome } from "./tools";
+import { redactAll } from "../../secrets";
 import {
   DEFAULT_TEST_ATTEMPTS,
   ENDED_STATUSES,
@@ -100,6 +108,7 @@ import {
   type SkippedCheck,
   type VerifyState,
   type VerifyStep,
+  type BgJob,
 } from "./types";
 
 /**
@@ -392,28 +401,145 @@ export async function execCommand(auth: Authed, runId: string, projectId: string
     }
   }
 
+  const { changed, skipped } = await syncJobChanges(auth, runId, projectId, box, startedAt, jobId, before, keep);
+  return { exitCode, output, durationMs: Date.now() - started, timedOut, cancelled, changed, skipped };
+}
+
+/**
+ * Copy back the files a finished command changed in the computer (once per command: claimSync), record them for the
+ * run, and put back any the agent may not change. `before`: the project's files before the command's changes.
+ */
+async function syncJobChanges(auth: Authed, runId: string, projectId: string, box: WorkspaceBox, startedAt: number, jobId: string, before: ProjectFile[], keep: ((path: string) => boolean) | undefined): Promise<{ changed: FileChange[]; skipped: string[] }> {
   let changed: FileChange[] = [];
   let skipped: string[] = [];
-  if (await claimSync(box, jobId).catch(() => false)) {
-    try {
-      const sync = await syncBack(auth, projectId, box, startedAt, jobId);
-      skipped = sync.skipped;
-      const after = new Map((await getFiles(auth, projectId)).map((f) => [f.path, f.content]));
-      const prior = new Map(before.map((f) => [f.path, f.content]));
-      changed = [...sync.changed, ...sync.deleted].map((path) => ({ path, before: prior.get(path) ?? null, after: after.get(path) ?? null })).filter((c) => c.before !== c.after);
-      await recordChanges(auth, runId, changed);
-      const refused = keep ? changed.filter((c) => !keep(c.path)) : [];
-      if (refused.length) {
-        await saveChanges(auth, runId, projectId, refused.map((c) => ({ path: c.path, before: c.after, after: c.before })));
-        changed = changed.filter((c) => keep!(c.path));
-        skipped = [...skipped, ...refused.map((c) => `${c.path} (put back: this agent may only change test files)`)];
-      }
-    } catch (err) {
-      reportError(err, { where: "code.agent.sync" });
-      skipped = ["(files changed by this command couldn't be copied back)"];
+  if (!(await claimSync(box, jobId).catch(() => false))) return { changed, skipped };
+  try {
+    const sync = await syncBack(auth, projectId, box, startedAt, jobId);
+    skipped = sync.skipped;
+    const after = new Map((await getFiles(auth, projectId)).map((f) => [f.path, f.content]));
+    const prior = new Map(before.map((f) => [f.path, f.content]));
+    changed = [...sync.changed, ...sync.deleted].map((path) => ({ path, before: prior.get(path) ?? null, after: after.get(path) ?? null })).filter((c) => c.before !== c.after);
+    await recordChanges(auth, runId, changed);
+    const refused = keep ? changed.filter((c) => !keep(c.path)) : [];
+    if (refused.length) {
+      await saveChanges(auth, runId, projectId, refused.map((c) => ({ path: c.path, before: c.after, after: c.before })));
+      changed = changed.filter((c) => keep!(c.path));
+      skipped = [...skipped, ...refused.map((c) => `${c.path} (put back: this agent may only change test files)`)];
     }
+  } catch (err) {
+    reportError(err, { where: "code.agent.sync" });
+    skipped = ["(files changed by this command couldn't be copied back)"];
   }
-  return { exitCode, output, durationMs: Date.now() - started, timedOut, cancelled, changed, skipped };
+  return { changed, skipped };
+}
+
+// ---------------------------------------------------------------- background commands, hooks, MCP
+
+/** Commands the agent starts with background: true (up to MAX_BG_JOBS at once), kept on the run so later steps can read them. */
+export function bgEnv(auth: Authed, run: Pick<RunRow, "id" | "bg_jobs" | "options">, projectId: string, agent: string): NonNullable<AgentEnv["bg"]> {
+  let jobs: BgJob[] = [...(run.bg_jobs ?? [])];
+  const save = () => updateRun(auth, run.id, { bg_jobs: jobs.slice(-10) });
+  const lost = (j: BgJob) => {
+    j.done = { exitCode: null, at: Date.now() };
+    return { command: j.command, output: "The project's computer stopped, so this command was lost.", done: true, exitCode: null, changed: [], skipped: [] };
+  };
+  return {
+    running: () => jobs.filter((j) => !j.done).length,
+    start: async (command, approved) => {
+      const d = await bastionGuard(gateCtx(auth, run.id, agent), commandOp(command), command, { approved });
+      if (d.outcome !== "allow") return { blocked: d.reason };
+      const box = await optionalBox(auth, projectId);
+      if (!box) throw new ApiError("conflict", "The project's computer isn't running.", { scope: "workspace_stopped" });
+      const id = `bg${jobs.length + 1}`;
+      const jobId = `b${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+      await startJob(box, jobId, command);
+      jobs = [...jobs, { id, jobId, command, startedAt: Date.now(), offset: 0 }];
+      await save();
+      return { id };
+    },
+    read: async (id) => {
+      const j = jobs.find((x) => x.id === id);
+      if (!j) return null;
+      if (j.done) return { command: j.command, output: "", done: true, exitCode: j.done.exitCode, changed: [], skipped: [] };
+      const box = await optionalBox(auth, projectId);
+      if (!box) {
+        const out = lost(j);
+        await save();
+        return out;
+      }
+      let r = await readJob(box, j.jobId, j.offset);
+      let output = r.output;
+      j.offset = r.offset;
+      // A finished command's remaining output is read at once.
+      while (r.done && r.output) {
+        r = await readJob(box, j.jobId, j.offset);
+        output += r.output;
+        j.offset = r.offset;
+      }
+      let changed: FileChange[] = [];
+      let skipped: string[] = [];
+      if (r.done) {
+        j.done = { exitCode: r.exitCode, at: Date.now() };
+        ({ changed, skipped } = await syncJobChanges(auth, run.id, projectId, box, r.startedAt ?? j.startedAt, j.jobId, await getFiles(auth, projectId), commandKeeps(run)));
+      }
+      await save();
+      return { command: j.command, output: output.slice(-MAX_OUTPUT_KEPT), done: !!j.done, exitCode: j.done?.exitCode ?? null, changed, skipped };
+    },
+    stop: async (id) => {
+      const j = jobs.find((x) => x.id === id && !x.done);
+      if (!j) return false;
+      const box = await optionalBox(auth, projectId);
+      if (box) await killJob(box, j.jobId).catch((err) => reportError(err, { where: "code.agent.bg.kill" }));
+      j.done = { exitCode: null, at: Date.now() };
+      await save();
+      return true;
+    },
+  };
+}
+
+/** The project's trusted hooks, run in its computer (skipped while it's off). */
+export function hooksEnv(auth: Authed, run: Pick<RunRow, "id" | "options">, projectId: string, agent: string, hooks: { pre: HookDef[]; post: HookDef[] }): AgentEnv["hooks"] {
+  if (!hooks.pre.length && !hooks.post.length) return undefined;
+  const runAll = async (list: HookDef[], tool: string, args: Record<string, unknown>) => {
+    const outs: { code: number | null; text: string }[] = [];
+    for (const h of hooksFor(list, tool)) {
+      if (!(await optionalBox(auth, projectId))) break;
+      const d = classifyCommand(h.command);
+      if (d.kind === "block") {
+        outs.push({ code: null, text: `(hook not run: ${d.reason})` });
+        continue;
+      }
+      const out = await execCommand(auth, run.id, projectId, hookCommand(h, tool, args), commandKeeps(run), { agent, approved: true });
+      outs.push({ code: out.blocked ? null : out.exitCode, text: out.blocked ? `(hook blocked by Orbis Bastion: ${out.blocked})` : out.output });
+    }
+    return outs;
+  };
+  return {
+    pre: async (tool, args) => {
+      const outs = await runAll(hooks.pre, tool, args);
+      const block = outs.find((o) => o.code === 2);
+      return block ? { block: block.text.trim().slice(-2_000) || "(the hook gave no reason)" } : null;
+    },
+    post: async (tool, args) => {
+      const outs = await runAll(hooks.post, tool, args);
+      const text = outs
+        .filter((o) => o.text.trim() || o.code !== 0)
+        .map((o) => `${o.code === 0 ? "" : `(exit ${o.code ?? "none"}) `}${o.text.trim()}`)
+        .join("\n");
+      return text || null;
+    },
+  };
+}
+
+/** Whether the user can push to GitHub, remembered for a few minutes (it asks GitHub). */
+const pushable = new Map<string, { ok: boolean; at: number }>();
+async function pushAvailable(auth: Authed): Promise<boolean> {
+  const hit = pushable.get(auth.user.id);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.ok;
+  const ok = await canPush();
+  pushable.set(auth.user.id, { ok, at: Date.now() });
+  if (pushable.size > 1000) pushable.delete(pushable.keys().next().value!);
+  return ok;
 }
 
 /** Whether the model is shown attached images: it must take images and be called with native tools (the JSON format is text only). */
@@ -536,11 +662,13 @@ async function githubUsable(auth: Authed): Promise<boolean> {
 // ---------------------------------------------------------------- the report
 
 /** Build and store the run's final report from its records (best effort: a failure is logged, not shown). */
-async function finalize(auth: Authed, runId: string, unresolved: string[] = [], skipped: SkippedCheck[] = [], failure?: FailureKind): Promise<RunRow | null> {
+export async function finalize(auth: Authed, runId: string, unresolved: string[] = [], skipped: SkippedCheck[] = [], failure?: FailureKind): Promise<RunRow | null> {
   try {
     const row = await getRun(auth, runId);
-    // The run is over: a command it left running in the background is ended.
+    // The run is over: a command it left running in the background is ended, and so is every background command.
     if (row.job) await endRunningJob(auth, row);
+    const bg = bgEnv(auth, row, row.project_id, codeAgentId(row));
+    for (const j of (row.bg_jobs ?? []).filter((x) => !x.done)) await bg.stop(j.id);
     const [changes, files, events, checkpoints] = await Promise.all([listChanges(auth, runId), getFiles(auth, row.project_id), listEvents(auth, runId), listCheckpoints(auth, runId)]);
     const report = buildReport({
       status: row.status,
@@ -719,6 +847,10 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
 
   const docs = searchBackend() !== null && limits.webSearchesLeft !== 0;
   const github = await githubUsable(auth);
+  // The project's own agent files (.orbis/, ORBIS.md) and the user's settings for it: rules, MCP servers, trust.
+  const [orbisFiles, agentSettings] = await Promise.all([getOrbisFiles(auth, project.id).catch(() => []), getAgentSettings(auth, project.id).catch(() => ({}) as Awaited<ReturnType<typeof getAgentSettings>>)]);
+  const projectSettings = settingsState(orbisFiles, agentSettings.trustedSettings);
+  const rules = [agentSettings.rules ?? EMPTY_RULES, projectSettings.settings.permissions];
   let transcript: TranscriptMessage[] = row.transcript ?? [];
   if (!transcript.length) {
     const files = await getFiles(auth, project.id);
@@ -757,6 +889,7 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
           computer,
           earlier,
           memory: memoryBlock(used, active.length),
+          projectContext: projectContextBlock(files, fence),
           attachments: attachmentsBlock(atts, canSee),
           ...(opts.continueFrom ? { continuing: continueFrom ? record(continueFrom) : null } : {}),
         }),
@@ -778,6 +911,8 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
     ]);
     // Kept now, so a retry after a failed first model call doesn't start (and log) the run again.
     await updateRun(auth, row.id, { transcript });
+    // The first rewind point: the session before the first message (nothing changed yet).
+    await createCheckpoint(auth, row.id, "Before your first message", {}, { transcriptLen: 0, message: row.request }).catch((err) => reportError(err, { where: "code.agent.turn_point" }));
   }
 
   // A step that was cut off after the model asked for actions (a crash or timeout) left its calls without
@@ -797,18 +932,66 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
     await addEvents(auth, row.id, [{ kind: "status", title: "Recovered from an interrupted step; the agent will check what already happened" }]);
   }
 
+  // Messages the user sent while the agent worked: given to it now, before its next turn (and a rewind point first).
+  const notes = await takeMessages(auth, row.id).catch((err) => {
+    reportError(err, { where: "code.agent.inbox" });
+    return [] as { text: string; at: string }[];
+  });
+  if (notes.length) {
+    await turnPoint(auth, row.id, transcript.length, notes[0]!.text);
+    transcript = appendUser(transcript, steeringMessage(notes.map((n) => n.text)));
+    await addEvents(auth, row.id, notes.map((n) => ({ kind: "answer" as const, title: `You said: ${clipText(n.text, 360)}`, detail: { steer: true, text: n.text.slice(0, 4_000) } })));
+    await updateRun(auth, row.id, { transcript });
+  }
+
   const readOnly = !!opts.readOnly;
   const planApproved = !readOnly && (!opts.approvePlans || !!row.plan?.approved);
   const native = usesNativeTools(model);
-  const ctx: ToolContext = { commands: readOnly ? "off" : opts.commands, docs, github, approvePlans: opts.approvePlans, readOnly, memory: true, attachments: attached.texts + attached.images > 0, pages: true, helpers: native };
+  const skills = projectSkills(orbisFiles);
+  const helperAgents = projectAgents(orbisFiles);
+  const push = !readOnly && (await pushAvailable(auth));
+  // MCP servers (the user's, and the trusted project settings' own): their tools for models with native tool calling.
+  const mcpServers = readOnly || !native ? [] : mcpServersFor(auth, project.id, agentSettings.mcp ?? [], projectSettings.settings);
+  const mcp = mcpServers.length ? await collectTools(mcpServers) : null;
+  if (mcp?.errors.length && row.steps === 0) {
+    await addEvents(auth, row.id, mcp.errors.map((e) => ({ kind: "note" as const, title: `MCP server ${e.server} isn't available this time: ${e.reason}`.slice(0, 380) })));
+  }
+  const ctx: ToolContext = {
+    commands: readOnly ? "off" : opts.commands,
+    docs,
+    github,
+    approvePlans: opts.approvePlans,
+    readOnly,
+    memory: true,
+    attachments: attached.texts + attached.images > 0,
+    pages: true,
+    helpers: native,
+    skills: skills.length > 0,
+    push,
+    ...(mcp?.tools.size ? { mcpTools: [...mcp.tools.values()].map((t) => t.schema) } : {}),
+  };
   const maxOutputTokens = Math.max(limits.maxOutputTokens, AGENT_OUTPUT_TOKENS);
   const replyChars = maxOutputTokens * 3;
   const web = opts.web ?? isWebTask(row.request, [], project.template);
   const system = `${systemPrompt({ ...ctx, planning: !readOnly && !planApproved, reviewEdits: opts.reviewEdits, native, web, replyChars })}
 - Keep each reply under about ${replyChars.toLocaleString("en-US")} characters. A file that wouldn't fit: split it into several files, or write the first part and add the rest with edit_file in the next step.${opts.agent ? `\n\n${profileGuidance(opts.agent, ctx)}` : ""}${web && !readOnly && isSiteTemplateId(opts.siteTemplate) ? `\n\n${siteTemplateGuidance(opts.siteTemplate)}` : ""}`;
-  const history = trimTranscript(transcript, Math.max(24_000, limits.historyChars));
-  const promptChars = system.length + history.reduce((n, m) => n + messageSize(m), 0);
   const purpose = agentPurpose(opts.agent);
+  const room = Math.max(24_000, limits.historyChars);
+  // A conversation that fills most of its room is summarised first (one extra model call), so nothing is just dropped.
+  if (shouldAutoCompact(transcript, room)) {
+    const c = await compactTranscript(req, auth, row, transcript, model, purpose, usage, null).catch((err) => {
+      reportError(err, { where: "code.agent.autocompact" });
+      return null;
+    });
+    if (c) {
+      transcript = c.transcript;
+      usage = c.usage;
+      await addEvents(auth, row.id, [{ kind: "status", title: "Summarised the conversation to make room (auto-compact)", detail: { compact: "auto" } }]);
+    }
+  }
+  const history = trimTranscript(transcript, room);
+  const promptChars = system.length + history.reduce((n, m) => n + messageSize(m), 0);
+  usage = { ...usage, context: { used: promptChars, limit: room + system.length } };
   await enforceLimits(req, auth, 1, [model], { purpose, inputTokens: Math.ceil(promptChars / 3.5) + 200, maxOutputTokens });
 
   // The model call isn't tied to the browser's request: a closed tab doesn't cut a step off half way.
@@ -946,9 +1129,10 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
   const helperUsage: Usage[] = [];
   if (native) {
     const readOnlyEnv: AgentEnv = { ...env, emit: undefined };
-    env.delegate = (questions) =>
+    env.delegate = (questions, agentName) =>
       runHelpers(questions, {
         env: readOnlyEnv,
+        ...(agentName && helperAgents.some((h) => h.name === agentName.toLowerCase()) ? { agent: helperAgents.find((h) => h.name === agentName.toLowerCase())! } : {}),
         deadline: Math.min(deadline - 20_000, Date.now() + 120_000),
         turn: async (p) => {
           const promptChars = p.system.length + JSON.stringify(p.messages).length;
@@ -979,10 +1163,43 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
         },
       });
   }
+  if (!readOnly) {
+    env.bg = bgEnv(auth, row, project.id, codeAgentId(row));
+    env.hooks = hooksEnv(auth, row, project.id, codeAgentId(row), projectSettings.settings.hooks);
+  }
+  if (mcp?.tools.size) {
+    env.mcp = {
+      has: (name) => mcp.tools.has(name),
+      describe: (name) => {
+        const t = mcp.tools.get(name);
+        return t ? { server: t.server, tool: t.tool, readOnly: t.readOnly } : null;
+      },
+      call: async (name, args) => {
+        const t = mcp.tools.get(name)!;
+        try {
+          return await mcp.clients.get(t.server)!.callTool(t.tool, args);
+        } catch (err) {
+          return { ok: false, text: `The MCP server ${t.server} couldn't run ${t.tool}: ${(err as Error).message.slice(0, 300)}` };
+        }
+      },
+    };
+  }
   if (reply.thought) await addEvents(auth, row.id, [{ kind: "note", title: clipText(reply.thought, 380) }]);
   const outcome = await runActions(
     reply,
-    { planApproved, approvePlans: opts.approvePlans, reviewEdits: opts.reviewEdits, commands: ctx.commands, lastTests: row.tests?.last ?? null, readOnly, testsOnly: opts.agent === "qa_tester", runningCommand: row.job?.command ?? null },
+    {
+      planApproved,
+      approvePlans: opts.approvePlans,
+      reviewEdits: opts.reviewEdits,
+      commands: ctx.commands,
+      lastTests: row.tests?.last ?? null,
+      readOnly,
+      testsOnly: opts.agent === "qa_tester",
+      runningCommand: row.job?.command ?? null,
+      rules,
+      push,
+      defaultRepo: project.sourceRepo,
+    },
     env,
   );
   record(webSearches.count ? ["web_search"] : []);
@@ -1034,6 +1251,61 @@ async function step(req: Request, auth: Authed, row: RunRow, deadline = Date.now
   }
   if (patch.status === "completed") return beginVerification(auth, row, patch, env, outcome.unresolved);
   return finishStep(auth, row.id, patch, outcome.unresolved);
+}
+
+/** What the agent is told about messages the user sent while it worked. */
+export function steeringMessage(texts: string[]): string {
+  return texts.length === 1
+    ? `The user sent a message while you were working. It may change what you should do; follow it:\n${texts[0]}`
+    : `The user sent ${texts.length} messages while you were working. They may change what you should do; follow them:\n${texts.map((t, i) => `${i + 1}. ${t}`).join("\n")}`;
+}
+
+/** A rewind point before one of the user's messages: the conversation's length then, and what the run's files were. */
+export async function turnPoint(auth: Authed, runId: string, transcriptLen: number, message: string): Promise<void> {
+  try {
+    const changes = await listChanges(auth, runId);
+    const files = Object.fromEntries(changes.map((c) => [c.path, c.revertedAt ? c.before : c.after]));
+    await createCheckpoint(auth, runId, `Before: ${message.replace(/\s+/g, " ").slice(0, 160)}`, files, { transcriptLen, message });
+  } catch (err) {
+    reportError(err, { where: "code.agent.turn_point" });
+  }
+}
+
+/**
+ * Summarise the conversation with the session's model (metered like any other call) and keep the first message plus
+ * the summary. Returns the new conversation and usage, saved on the run.
+ */
+export async function compactTranscript(req: Request, auth: Authed, row: RunRow, transcript: TranscriptMessage[], model: ModelInfo, purpose: ReturnType<typeof agentPurpose>, usage: RunUsage, focus: string | null): Promise<{ transcript: TranscriptMessage[]; usage: RunUsage }> {
+  const input = compactionInput(transcript, focus);
+  const maxOutputTokens = 2_500;
+  await enforceLimits(req, auth, 1, [model], { purpose, inputTokens: Math.ceil((input.length + COMPACT_SYSTEM.length) / 3.5) + 200, maxOutputTokens });
+  const t0 = performance.now();
+  let r;
+  try {
+    r = await getProvider(model.provider).generate({ model, messages: [{ role: "system", content: COMPACT_SYSTEM }, { role: "user", content: input }], maxOutputTokens, temperature: 0.2, signal: withTimeout(120_000) });
+  } catch (err) {
+    await releaseUsage(auth);
+    throw err;
+  }
+  if (!r.text.trim()) throw new ApiError("upstream_error", `${model.displayName} didn't write a summary.`);
+  recordRunLater(auth, {
+    model,
+    prompt: `[code agent compact] ${row.request.slice(0, 300)}`,
+    response: r.text.slice(0, 1_000),
+    latencyMs: performance.now() - t0,
+    usage: r.usage,
+    status: "success",
+    purpose,
+    category: "coding",
+    servedModel: r.servedModel ?? null,
+    requestedModel: runOptions(row).modelId ?? "auto:coding",
+    routingReason: "Summarising the coding session to make room.",
+    tools: [],
+  });
+  const next = applyCompaction(transcript, r.text);
+  const used = { ...addUsage(usage, model, r.usage, input.length, r.text.length), compactions: (usage.compactions ?? 0) + 1, compactedAt: new Date().toISOString() };
+  await updateRun(auth, row.id, { transcript: capTranscript(next), usage: used });
+  return { transcript: next, usage: used };
 }
 
 // ---------------------------------------------------------------- verification
@@ -1182,6 +1454,8 @@ async function formatProblem(auth: Authed, row: RunRow, transcript: TranscriptMe
 export interface RespondInput {
   decision: Decision;
   text?: string;
+  /** With an approval: also allow this from now on in this project (the command itself, or its first words and anything after). */
+  remember?: "exact" | "prefix";
 }
 
 /** Answer what the run is waiting for (approve a plan, a command or edits; answer a question; carry on). */
@@ -1233,6 +1507,15 @@ async function respond(auth: Authed, row: RunRow, input: RespondInput): Promise<
           return done({ status: "needs_input", pending: { kind: "computer", command: pending.command, preview: true } }, [lead, { kind: "status", title: "Needs the project's computer to start the preview" }]);
         }
         return startApprovedPreview(auth, row, pending.command, [lead]);
+      }
+      if (input.decision === "approve" && input.remember) {
+        const rule = commandRule(pending.command, input.remember === "prefix");
+        await addRule(auth, row.project_id, "allow", rule);
+        await addEvents(auth, row.id, [{ kind: "approval", title: `Saved a rule: always allow ${rule}`, detail: { rule } }]);
+      }
+      if (input.decision === "approve" && pending.background) {
+        if (!(await optionalBox(auth, row.project_id))) throw new ApiError("conflict", "The project's computer isn't running yet. Press Start first.", { scope: "workspace_stopped" });
+        return startApprovedBackground(auth, row, pending.command);
       }
       if (input.decision === "approve") {
         if (!(await optionalBox(auth, row.project_id))) {
@@ -1313,6 +1596,26 @@ async function respond(auth: Authed, row: RunRow, input: RespondInput): Promise<
     }
     case "job":
       throw new ApiError("conflict", "A command is running. Wait for it or press Stop.");
+    case "mcp": {
+      const subject = `${pending.server}/${pending.tool.split("__").slice(2).join("__")}`;
+      if (input.decision === "approve") {
+        if (input.remember) await addRule(auth, row.project_id, "allow", `mcp(${pending.server}/*)`);
+        return runApprovedMcp(auth, row, pending, [{ kind: "approval", title: `You approved ${subject}${input.remember ? " (and allowed this server from now on)" : ""}` }]);
+      }
+      if (input.decision === "reject") {
+        transcript = appendUser(transcript, `The user didn't allow the call to ${subject}${text ? `: ${text}` : "."} Don't call it again for this; find another way or tell the user what to do.`);
+        return done({ status: working, transcript }, [{ kind: "approval", title: `You declined ${subject}` }]);
+      }
+      break;
+    }
+    case "push": {
+      if (input.decision === "approve") return runApprovedPush(auth, row, pending);
+      if (input.decision === "reject") {
+        transcript = appendUser(transcript, `The user didn't approve pushing to ${pending.repo} → ${pending.branch}${text ? `: ${text}` : "."} Nothing was pushed.`);
+        return done({ status: working, transcript }, [{ kind: "approval", title: `You declined the push to ${pending.repo}` }]);
+      }
+      break;
+    }
   }
   throw new ApiError("bad_request", "That answer doesn't fit what the run is waiting for.");
 }
@@ -1367,6 +1670,62 @@ async function runApproved(auth: Authed, row: RunRow, command: string, lead: New
   };
   if (out.cancelled) return updateRun(auth, row.id, { ...patch, locked_until: null });
   return finishStep(auth, row.id, { ...patch, status: workingStatus(row) });
+}
+
+/** Start the background command the user approved, and tell the agent its id. */
+async function startApprovedBackground(auth: Authed, row: RunRow, command: string): Promise<RunRow> {
+  await addEvents(auth, row.id, [{ kind: "approval", title: `You approved: ${command.slice(0, 200)} (in the background)` }]);
+  const started = await bgEnv(auth, row, row.project_id, codeAgentId(row)).start(command, true);
+  const text =
+    "blocked" in started
+      ? `\`${command}\` was blocked by Orbis Bastion: ${started.blocked}`
+      : `The user approved \`${command}\`. It's running in the background as ${started.id}: read it with command_output {"id": "${started.id}"}, stop it with stop_command.`;
+  if (!("blocked" in started)) await addEvents(auth, row.id, [{ kind: "command", title: `Started in the background (${started.id}): ${command.slice(0, 200)}`, detail: { command, background: started.id } }]);
+  return finishStep(auth, row.id, { transcript: capTranscript(appendUser(row.transcript ?? [], text)), pending: null, status: workingStatus(row) });
+}
+
+/** Run the MCP tool call the user approved, and put its result in the conversation. */
+async function runApprovedMcp(auth: Authed, row: RunRow, pending: Extract<NonNullable<RunRow["pending"]>, { kind: "mcp" }>, lead: NewEvent[]): Promise<RunRow> {
+  await addEvents(auth, row.id, lead);
+  const settings = await getAgentSettings(auth, row.project_id);
+  const projectSettings = settingsState(await getOrbisFiles(auth, row.project_id), settings.trustedSettings);
+  const servers = mcpServersFor(auth, row.project_id, settings.mcp ?? [], projectSettings.settings).filter((s) => s.name === pending.server);
+  let out: { ok: boolean; text: string };
+  if (!servers.length) out = { ok: false, text: `The MCP server ${pending.server} is no longer connected, so the call didn't run.` };
+  else {
+    const { tools, clients, errors } = await collectTools(servers);
+    const t = tools.get(pending.tool);
+    if (!t) out = { ok: false, text: errors[0] ? `The MCP server ${pending.server} isn't available: ${errors[0].reason}.` : `The MCP server ${pending.server} no longer has that tool.` };
+    else {
+      const d = await bastionGuard(gateCtx(auth, row.id, codeAgentId(row)), t.readOnly ? "connector.read" : "connector.write", `mcp ${t.server}/${t.tool}`, { approved: true });
+      if (d.outcome !== "allow") out = { ok: false, text: `Blocked by Orbis Bastion: ${d.reason}` };
+      else {
+        try {
+          out = await clients.get(t.server)!.callTool(t.tool, pending.args);
+        } catch (err) {
+          out = { ok: false, text: `The MCP server ${t.server} couldn't run ${t.tool}: ${(err as Error).message.slice(0, 300)}` };
+        }
+      }
+    }
+  }
+  await addEvents(auth, row.id, [{ kind: "command", title: `${out.ok ? "Used" : "Tried"} ${pending.server}: ${pending.tool.split("__").pop()}`, detail: { mcp: { server: pending.server, tool: pending.tool }, ok: out.ok, output: redactAll(clipText(out.text, 20_000)) } }]);
+  const transcript = appendUser(row.transcript ?? [], `The user approved the call to ${pending.tool}. Result (${out.ok ? "ok" : "failed"}):\n${untrusted(redactAll(clipText(out.text, 30_000)))}`);
+  return finishStep(auth, row.id, { transcript: capTranscript(transcript), pending: null, status: workingStatus(row) });
+}
+
+/** Push the project as the user approved, and tell the agent what happened. */
+async function runApprovedPush(auth: Authed, row: RunRow, pending: Extract<NonNullable<RunRow["pending"]>, { kind: "push" }>): Promise<RunRow> {
+  await addEvents(auth, row.id, [{ kind: "approval", title: `You approved pushing to ${pending.repo} → ${pending.branch}${pending.pullRequest ? " with a pull request" : ""}` }]);
+  let text: string;
+  try {
+    const r = await pushProject(auth, row.project_id, { repo: pending.repo, branch: pending.branch, message: pending.message, ...(pending.pullRequest ? { pullRequest: pending.pullRequest } : {}) }, { kind: "agent", agent: codeAgentId(row), runId: row.id });
+    text = `Pushed to ${pending.repo} on the new branch ${r.branch} (from ${r.base}): ${r.compareUrl}.${r.withheld.length ? ` Not pushed (they hold credentials): ${r.withheld.join(", ")}.` : ""}${r.pullRequest ? ` Opened pull request #${r.pullRequest.number}: ${r.pullRequest.url}` : r.pullRequestError ? ` The pull request wasn't opened: ${r.pullRequestError}` : ""}`;
+    await addEvents(auth, row.id, [{ kind: "git", title: `Pushed to ${pending.repo} → ${r.branch}${r.pullRequest ? ` and opened PR #${r.pullRequest.number}` : ""}`, detail: { push: { repo: pending.repo, branch: r.branch, url: r.compareUrl, pullRequest: r.pullRequest } } }]);
+  } catch (err) {
+    text = `The push didn't happen: ${err instanceof ApiError ? err.message : "GitHub couldn't be reached."}`;
+    await addEvents(auth, row.id, [{ kind: "error", title: text.slice(0, 380) }]);
+  }
+  return finishStep(auth, row.id, { transcript: capTranscript(appendUser(row.transcript ?? [], text)), pending: null, status: workingStatus(row) });
 }
 
 /** Start the preview server the user approved (or the computer for it), and put the result in the conversation. */

@@ -353,8 +353,9 @@ describe("tool calls are validated before anything runs", () => {
 
 describe("tool schemas for providers", () => {
   it("are plain JSON Schema objects with valid names, offered per the run's settings", () => {
-    const all = toolSchemas({ commands: "safe", docs: true, github: true, approvePlans: true, memory: true, attachments: true, pages: true, helpers: true });
-    expect(all.map((t) => t.name)).toEqual(TOOL_NAMES);
+    const all = toolSchemas({ commands: "safe", docs: true, github: true, approvePlans: true, memory: true, attachments: true, pages: true, helpers: true, skills: true, push: true });
+    // Every tool is offered when everything is on, except lookup_docs (older sessions' name for web_search).
+    expect(all.map((t) => t.name)).toEqual(TOOL_NAMES.filter((n) => n !== "lookup_docs"));
     for (const t of all) {
       expect(t.name).toMatch(/^[a-zA-Z0-9_-]{1,64}$/);
       expect(t.parameters.type).toBe("object");
@@ -365,7 +366,9 @@ describe("tool schemas for providers", () => {
     expect(edit.required).toEqual(["path", "search", "replace"]);
     const off = toolSchemas({ commands: "off", docs: false, github: false, approvePlans: true }).map((t) => t.name);
     expect(off).not.toContain("run_command");
-    expect(off).not.toContain("lookup_docs");
+    expect(off).not.toContain("web_search");
+    expect(off).not.toContain("github_push");
+    expect(off).not.toContain("use_skill");
     expect(off).not.toContain("github");
     expect(off).not.toContain("search_memory");
     expect(off).not.toContain("propose_memory");

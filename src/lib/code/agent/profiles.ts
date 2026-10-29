@@ -65,7 +65,7 @@ export function qaMayEdit(path: string): boolean {
   return isTestPath(path) || TEST_CONFIG.test(path) || TEST_SUPPORT.test(path);
 }
 
-export function profileGuidance(profile: CodeProfile, o: { commands: "safe" | "ask" | "off" }): string {
+export function profileGuidance(profile: CodeProfile, o: { commands: import("./types").CommandMode }): string {
   if (profile === "bug_fixer")
     return `You are working as Orbis's Bug Fixing agent.
 - First reproduce: before changing any file, run the failing test, the test suite (run_tests) or a short command that shows the bug${o.commands === "off" ? " (commands are off here: say the bug wasn't reproduced and why)" : ""}. If you can't reproduce it, say so plainly and explain what you checked; don't pretend.

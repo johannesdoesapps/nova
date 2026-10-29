@@ -29,9 +29,11 @@ const SENSITIVE: [string, string | RegExp, string[]][] = [
     ["src/app/api/code/projects/[id]/exec/route.ts", "src/lib/code/agent/engine.ts", "src/lib/code/preview.ts", "src/lib/code/workspace.ts", "src/lib/workforce/sandbox-vercel.ts"],
   ],
   ["run an agent command", "execCommand(", ["src/lib/code/agent/engine.ts", "src/lib/code/pair/engine.ts"]],
-  ["save an agent's file changes", "saveChanges(", ["src/lib/code/agent/engine.ts", "src/lib/code/pair/engine.ts"]],
+  // Rewinding a session (sessions.ts) is the user putting files back, like revert; the agent's own changes pass Bastion in saveChanges.
+  ["save an agent's file changes", "saveChanges(", ["src/lib/code/agent/engine.ts", "src/lib/code/agent/sessions.ts", "src/lib/code/pair/engine.ts"]],
   ["start a preview server", "startPreview(", ["src/lib/code/agent/engine.ts", "src/lib/code/preview.ts"]],
-  ["push to GitHub", "pushBranch(", ["src/app/api/code/projects/[id]/github-push/route.ts", "src/lib/github/push.ts"]],
+  // The Push dialog and the agent's approved github_push both go through pushProject, which calls Bastion first.
+  ["push to GitHub", "pushBranch(", ["src/lib/code/github-push.ts", "src/lib/github/push.ts"]],
   ["act in a connected service", "runAction(", ["src/app/api/connectors/actions/route.ts", "src/lib/connectors/runtime.ts"]],
   ["run a code block", "runCode(", ["src/app/api/code/run/route.ts", "src/lib/code/run.ts"]],
   ["disconnect a connected service", "forgetConnection(", ["src/app/api/bastion/workspace/route.ts", "src/app/api/connectors/[id]/route.ts", "src/lib/connectors/runtime.ts"]],
@@ -48,7 +50,7 @@ describe("no execution path around Bastion", () => {
   it("every route that runs, pushes, acts or exports checks Bastion before it does", () => {
     for (const p of [
       "src/app/api/code/projects/[id]/exec/route.ts",
-      "src/app/api/code/projects/[id]/github-push/route.ts",
+      "src/lib/code/github-push.ts",
       "src/app/api/code/run/route.ts",
       "src/app/api/code/projects/[id]/download/route.ts",
       "src/app/api/workforce/tasks/[id]/advance/route.ts",

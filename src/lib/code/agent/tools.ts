@@ -8,13 +8,15 @@ import { diffStats, unifiedDiff } from "../diff";
 import { MEMORY_KIND_LABELS, type MemoryEntry, type MemoryKind } from "../memory";
 import type { FileChange, ProjectFile } from "../projects";
 import type { PreviewCheck } from "../preview-check";
-import { classifyCommand, classifyServerCommand, isServerCommand } from "./policy";
+import { classifyCommand, classifyServerCommand, isServerCommand, splitCommands } from "./policy";
+import { globPaths } from "../glob";
+import { commandRuleDecision, HOOKED_TOOLS, projectSkills, ruleDecision, SETTINGS_PATH, type PermissionRules } from "./settings";
 import { clipText, tailText, type ActionResult, type AgentReply } from "./protocol";
 import type { NewEvent } from "./runs";
 import { describeTestResult, detectTestCommand, isTestCommand, testResult, type TestResult } from "./test-results";
 import { qaMayEdit } from "./profiles";
 import { EDIT_TOOLS, isToolName, MAX_READ_FILES, TODO_STATUSES, TOOL_DEFS } from "./tool-specs";
-import type { AgentPlan, BuildCheck, CommandMode, Pending, PreviewCheckRecord, RunStatus, ServerCheck } from "./types";
+import { MAX_BG_JOBS, type AgentPlan, type BuildCheck, type CommandMode, type Pending, type PreviewCheckRecord, type RunStatus, type ServerCheck } from "./types";
 
 /**
  * The agent's tools. Every call is validated against its schema, checked
@@ -52,6 +54,12 @@ export interface Checkpoint {
   label: string;
   files: Record<string, string | null>;
   createdAt: string;
+  /** "turn": the rewind point taken before one of the user's messages. */
+  kind?: "manual" | "turn";
+  /** Turn points: how many messages the conversation had then. */
+  transcriptLen?: number;
+  /** Turn points: the start of the user's message. */
+  message?: string;
 }
 
 export interface AgentEnv {
@@ -86,8 +94,29 @@ export interface AgentEnv {
     setRunCommand(command: string): Promise<void>;
   };
   lookupDocs?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]>;
-  /** Read-only helper agents (subagent.ts), one per question, run in parallel. */
-  delegate?: (questions: string[]) => Promise<{ ok: boolean; text: string; turns: number }[]>;
+  /** Read-only helper agents (subagent.ts), one per question, run in parallel; with `agent`, one of the project's own helpers. */
+  delegate?: (questions: string[], agent?: string) => Promise<{ ok: boolean; text: string; turns: number }[]>;
+  /** Commands the agent runs in the background (run_command with background: true). */
+  bg?: {
+    running(): number;
+    start(command: string, approved: boolean): Promise<{ id: string } | { blocked: string }>;
+    read(id: string): Promise<{ command: string; output: string; done: boolean; exitCode: number | null; changed: FileChange[]; skipped: string[] } | null>;
+    stop(id: string): Promise<boolean>;
+  };
+  /** Hooks from the project's trusted .orbis/settings.json, run in its computer around edits and commands. */
+  hooks?: {
+    /** A hook that exits with code 2 blocks the action (its output says why). */
+    pre(tool: string, args: Record<string, unknown>): Promise<{ block?: string; note?: string } | null>;
+    /** What hooks printed after the action, for the agent. */
+    post(tool: string, args: Record<string, unknown>): Promise<string | null>;
+  };
+  /** Tools from the user's MCP servers, by the name the model sees (mcp__server__tool). */
+  mcp?: {
+    has(name: string): boolean;
+    /** The server and tool behind a name, and whether the server says the tool only reads. */
+    describe(name: string): { server: string; tool: string; readOnly: boolean } | null;
+    call(name: string, args: Record<string, unknown>): Promise<{ ok: boolean; text: string }>;
+  };
   /** A public web page's text (through the safe link reader: no private addresses, size and time limits). */
   readPage?: (url: string) => Promise<{ ok: true; url: string; title: string | null; text: string } | { ok: false; reason: string }>;
   /** Files the user attached to the task (text; images are shown to the model with the first message). */
@@ -122,7 +151,18 @@ export interface StepState {
   testsOnly?: boolean;
   /** A command the run left running in the background (no other command runs until it ends). */
   runningCommand?: string | null;
+  /** The user's permission rules and the project's trusted ones (a matching deny always wins). */
+  rules?: PermissionRules[];
+  /** An MCP call the user approved this step (its server/tool and arguments), run without asking again. */
+  approvedMcp?: string | null;
+  /** GitHub can be pushed to (github_push asks the user first). */
+  push?: boolean;
+  /** The repository the project came from: github_push's default. */
+  defaultRepo?: string | null;
 }
+
+/** The key an approved MCP call is matched by: the same tool with the same arguments. */
+export const mcpCallKey = (name: string, args: Record<string, unknown>) => `${name}:${JSON.stringify(args)}`;
 
 export interface StepOutcome {
   results: ActionResult[];
@@ -177,9 +217,27 @@ export function isSecretPath(path: string): boolean {
 }
 
 /** Actions that change the project or run something: re-checked against Stop right before they run. */
-const CHANGES_PROJECT = new Set(["write_file", "edit_file", "delete_file", "restore_checkpoint", "run_command", "run_tests", "wait_for_command", "start_preview"]);
+const CHANGES_PROJECT = new Set(["write_file", "edit_file", "multi_edit", "delete_file", "restore_checkpoint", "run_command", "run_tests", "wait_for_command", "start_preview", "stop_command", "github_push"]);
 
-const READ_ONLY_REFUSED = new Set(["write_file", "edit_file", "delete_file", "restore_checkpoint", "create_checkpoint", "run_command", "run_tests", "wait_for_command", "start_preview", "check_preview", "propose_plan"]);
+const READ_ONLY_REFUSED = new Set([
+  "write_file",
+  "edit_file",
+  "multi_edit",
+  "delete_file",
+  "restore_checkpoint",
+  "create_checkpoint",
+  "run_command",
+  "run_tests",
+  "wait_for_command",
+  "start_preview",
+  "check_preview",
+  "propose_plan",
+  "command_output",
+  "stop_command",
+  "github_push",
+]);
+
+const MAX_GLOB = 200;
 
 const WITHHELD = "(withheld: this looks like a file with secrets, so Orbis doesn't send its contents to the AI)";
 
@@ -225,7 +283,7 @@ export function searchFiles(files: ProjectFile[], query: string, regex = false, 
   return { lines, truncated: false };
 }
 
-const INSTRUCTION_FILES = /^(AGENTS\.md|CLAUDE\.md|CONTRIBUTING\.md|\.cursorrules|\.github\/copilot-instructions\.md)$/i;
+const INSTRUCTION_FILES = /^(ORBIS\.md|\.orbis\/ORBIS\.md|AGENTS\.md|CLAUDE\.md|CONTRIBUTING\.md|\.cursorrules|\.github\/copilot-instructions\.md)$/i;
 const MANIFESTS =
   /^(package\.json|requirements\.txt|pyproject\.toml|setup\.py|go\.mod|Cargo\.toml|Gemfile|composer\.json|tsconfig\.json|vite\.config\.\w+|next\.config\.\w+|pytest\.ini|jest\.config\.\w+|vitest\.config\.\w+)$/i;
 
@@ -256,10 +314,11 @@ export function inspectProject(files: ProjectFile[], meta: { runCommand?: string
   return parts.join("\n\n");
 }
 
-function toEdit(tool: string, a: Record<string, unknown>): AiEdits["edits"][number] {
-  if (tool === "write_file") return { action: "write", path: a.path as string, content: a.content as string };
-  if (tool === "edit_file") return { action: "replace", path: a.path as string, search: a.search as string, replace: a.replace as string };
-  return { action: "delete", path: a.path as string };
+function toEdits(tool: string, a: Record<string, unknown>): AiEdits["edits"] {
+  if (tool === "write_file") return [{ action: "write", path: a.path as string, content: a.content as string }];
+  if (tool === "edit_file") return [{ action: "replace", path: a.path as string, search: a.search as string, replace: a.replace as string }];
+  if (tool === "multi_edit") return (a.edits as { search: string; replace: string }[]).map((e) => ({ action: "replace" as const, path: a.path as string, search: e.search, replace: e.replace }));
+  return [{ action: "delete", path: a.path as string }];
 }
 
 export function describeChange(c: FileChange): string {
@@ -339,6 +398,10 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
     return g;
   };
   const refusedBy = (reason: string) => `Blocked by Orbis Bastion: ${reason} Don't try to get around it; tell the user what you needed and why.`;
+  const rules = state.rules ?? [];
+  const readDenied = (path: string) => rules.length > 0 && ruleDecision(rules, "read", path) === "deny";
+  const editRule = (path: string) => (rules.length ? ruleDecision(rules, "edit", path) : null);
+  const ruleRefusal = (what: string) => `Not allowed: a permission rule the user set denies ${what}. Don't try to get around it; tell the user what you needed and why.`;
 
   /** Save changes; returns why Bastion refused them, if it did (nothing is saved then). */
   const save = async (changes: FileChange[]): Promise<string | null> => {
@@ -355,7 +418,7 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
   };
 
   /** Run a command (or ask first), as run_command and run_tests do. Returns a pause when the step must stop. */
-  const command = async (i: number, id: string | undefined, tool: string, cmd: string): Promise<StepOutcome | null> => {
+  const command = async (i: number, id: string | undefined, tool: string, cmd: string, background = false): Promise<StepOutcome | null> => {
     if (!state.planApproved) {
       result(id, tool, false, "Not allowed yet: propose your plan and wait for the user's approval before running commands.");
       return null;
@@ -382,6 +445,13 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
       await log({ kind: "command", title: `Blocked: ${cmd.slice(0, 200)}`, detail: { command: cmd, blocked: decision.reason } });
       return null;
     }
+    // The user's permission rules: a deny rule refuses it; an allow rule runs it without asking (Bastion still decides).
+    const rule = rules.length ? commandRuleDecision(rules, splitCommands(cmd) ?? [cmd]) : null;
+    if (rule === "deny") {
+      result(id, tool, false, ruleRefusal(`\`${cmd.slice(0, 200)}\``));
+      await log({ kind: "command", title: `Not run (a permission rule denies it): ${cmd.slice(0, 200)}`, detail: { command: cmd, blocked: "permission rule" } });
+      return null;
+    }
     const approved = state.approvedCommand === cmd;
     const g = await guard(commandOp(cmd), cmd, approved);
     if (g?.outcome === "deny") {
@@ -389,12 +459,13 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
       await log({ kind: "command", title: `Blocked by Bastion: ${cmd.slice(0, 200)}`, detail: { command: cmd, blocked: g.reason, bastion: true } });
       return null;
     }
-    if (!approved && (state.commands === "ask" || decision.kind === "ask" || g?.outcome === "needs_approval")) {
+    const modeAsks = state.commands === "ask" || (decision.kind === "ask" && state.commands !== "all");
+    if (!approved && (g?.outcome === "needs_approval" || (rule !== "allow" && modeAsks))) {
       const reason = g?.outcome === "needs_approval" ? `${g.reason} (Orbis Bastion)` : decision.kind === "ask" ? decision.reason : "Every command needs your approval in this run.";
       result(id, tool, true, "Waiting for the user to approve this command.");
       skipRest(i + 1, "waiting for the user's approval of the command.");
-      await log({ kind: "approval", title: `Asked to run: ${cmd.slice(0, 200)}`, detail: { command: cmd, reason } });
-      return done({ status: "awaiting_approval", pending: { kind: "command", command: cmd, reason } });
+      await log({ kind: "approval", title: `Asked to run: ${cmd.slice(0, 200)}`, detail: { command: cmd, reason, ...(background ? { background: true } : {}) } });
+      return done({ status: "awaiting_approval", pending: { kind: "command", command: cmd, reason, ...(background ? { background: true } : {}) } });
     }
     if (!(await env.computer())) {
       result(id, tool, true, "Waiting for the user to start the project's computer.");
@@ -403,6 +474,21 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
       return done({ status: "needs_input", pending: { kind: "computer", command: cmd } });
     }
     commandRan = true;
+    if (background) {
+      if (!env.bg) {
+        result(id, tool, false, "Background commands aren't available here. Run it without background.");
+        return null;
+      }
+      const started = await env.bg.start(cmd, approved);
+      if ("blocked" in started) {
+        denied++;
+        result(id, tool, false, refusedBy(started.blocked));
+        return null;
+      }
+      await log({ kind: "command", title: `Started in the background (${started.id}): ${cmd.slice(0, 200)}`, detail: { command: cmd, background: started.id } });
+      result(id, tool, true, `Started \`${cmd.slice(0, 200)}\` in the background as ${started.id}. Read its output with command_output {"id": "${started.id}"}; stop it with stop_command.`);
+      return null;
+    }
     const kind = tool === "run_tests" ? "run_tests" : "run_command";
     return commandDone(i, id, tool, kind, cmd, await env.exec(cmd, approved, kind));
   };
@@ -437,6 +523,42 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
 
   for (let i = 0; i < reply.actions.length; i++) {
     const { id, tool, args: raw } = reply.actions[i]!;
+    // A tool from one of the user's MCP servers: it acts outside Orbis, so it asks first unless a rule or the mode allows it.
+    if (tool.startsWith("mcp__") && env.mcp?.has(tool)) {
+      const d = env.mcp.describe(tool)!;
+      const args = raw ?? {};
+      if (proposed.length) {
+        result(id, tool, false, "Not run: waiting for the user to review your edits. Do it in a later step.");
+        continue;
+      }
+      if (state.readOnly || (!state.planApproved && !d.readOnly)) {
+        result(id, tool, false, state.readOnly ? "Not allowed: this run is read-only." : "Not allowed yet: propose your plan and wait for the user's approval first.");
+        continue;
+      }
+      const subject = `${d.server}/${d.tool}`;
+      const rule = rules.length ? ruleDecision(rules, "mcp", subject) : null;
+      if (rule === "deny") {
+        result(id, tool, false, ruleRefusal(`the MCP tool ${subject}`));
+        continue;
+      }
+      const approved = state.approvedMcp === mcpCallKey(tool, args);
+      const g = await guard(d.readOnly ? "connector.read" : "connector.write", `mcp ${subject}`, approved);
+      if (g?.outcome === "deny") {
+        result(id, tool, false, refusedBy(g.reason));
+        continue;
+      }
+      if (!approved && (g?.outcome === "needs_approval" || (rule !== "allow" && state.commands !== "all" && !(d.readOnly && state.commands !== "ask")))) {
+        const reason = g?.outcome === "needs_approval" ? `${g.reason} (Orbis Bastion)` : d.readOnly ? "It reads from a service you connected." : "It acts in a service you connected, outside Orbis.";
+        result(id, tool, true, "Waiting for the user to approve this tool call.");
+        skipRest(i + 1, "waiting for the user's approval of the tool call.");
+        await log({ kind: "approval", title: `Asked to use ${subject}`, detail: { mcp: { server: d.server, tool: d.tool }, args: clipText(JSON.stringify(args), 4_000), reason } });
+        return done({ status: "awaiting_approval", pending: { kind: "mcp", server: d.server, tool, args, reason } });
+      }
+      const r = await env.mcp.call(tool, args);
+      result(id, tool, r.ok, untrusted(redactAll(clipText(r.text, MAX_READ_CHARS))));
+      await log({ kind: d.readOnly ? "inspect" : "command", title: `${r.ok ? "Used" : "Tried"} ${subject}`, detail: { mcp: { server: d.server, tool: d.tool }, ok: r.ok, output: redactAll(clipText(r.text, OUTPUT_FOR_LOG)) } });
+      continue;
+    }
     if (!isToolName(tool)) {
       result(id, tool, false, `Unknown tool "${tool}".`);
       continue;
@@ -463,6 +585,17 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
       continue;
     }
     const a = parsed.data as Record<string, unknown>;
+    // Project hooks (trusted .orbis/settings.json): one that exits with code 2 blocks the action.
+    const hooked = env.hooks && HOOKED_TOOLS.has(tool) && state.planApproved && !state.readOnly;
+    if (hooked) {
+      const pre = await env.hooks!.pre(tool, a);
+      if (pre?.block) {
+        result(id, tool, false, `Blocked by a project hook (.orbis/settings.json): ${pre.block}`);
+        await log({ kind: "note", title: `A project hook blocked ${tool}${typeof a.path === "string" ? ` on ${a.path.slice(0, 200)}` : ""}`, detail: { hook: "PreToolUse", output: pre.block.slice(0, 4_000) } });
+        continue;
+      }
+    }
+    const before = { results: results.length, editedAt, commandRan };
 
     switch (tool) {
       case "inspect_project": {
@@ -483,8 +616,8 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
         const parts = paths.map((p) =>
           !byPath.has(p)
             ? `<file path="${p}">(no such file)</file>`
-            : isSecretPath(p)
-              ? `<file path="${p}">${WITHHELD}</file>`
+            : isSecretPath(p) || readDenied(p)
+              ? `<file path="${p}">${readDenied(p) ? "(withheld: a permission rule the user set keeps this file from the AI)" : WITHHELD}</file>`
               : `<file path="${p}">\n${untrusted(clipText(byPath.get(p)!, MAX_READ_CHARS))}\n</file>`,
         );
         const found = paths.filter((p) => byPath.has(p));
@@ -493,7 +626,12 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
         break;
       }
       case "search_code": {
-        const r = searchFiles(await current(), a.query as string, a.regex as boolean | undefined, a.names as boolean | undefined);
+        const r = searchFiles(
+          (await current()).filter((f) => !readDenied(f.path)),
+          a.query as string,
+          a.regex as boolean | undefined,
+          a.names as boolean | undefined,
+        );
         if ("error" in r) {
           result(id, tool, false, r.error);
           break;
@@ -507,7 +645,13 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
       }
       case "write_file":
       case "edit_file":
+      case "multi_edit":
       case "delete_file": {
+        if (editRule(String(a.path ?? "")) === "deny") {
+          result(id, tool, false, ruleRefusal(`changes to ${String(a.path ?? "this file")}`));
+          await log({ kind: "note", title: `Refused a change to ${String(a.path ?? "a file").slice(0, 200)} (a permission rule denies it)` });
+          break;
+        }
         if (!state.planApproved) {
           result(id, tool, false, "Not allowed yet: you have read-only access until the user approves your plan. Propose it first.");
           break;
@@ -517,8 +661,10 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
           await log({ kind: "note", title: `Refused an edit to ${String(a.path ?? "a file").slice(0, 200)} (QA may only change tests)` });
           break;
         }
-        const base = state.reviewEdits || proposed.length ? applyProposed(await current(), proposed) : await current();
-        const applied = applyAiEdits(base, [toEdit(tool, a)]);
+        // An allow rule for the path saves it without review (Bastion's own review still applies).
+        const reviewThis = state.reviewEdits && editRule(String(a.path ?? "")) !== "allow";
+        const base = reviewThis || proposed.length ? applyProposed(await current(), proposed) : await current();
+        const applied = applyAiEdits(base, toEdits(tool, a));
         if (!applied.ok) {
           result(id, tool, false, applied.errors.join(" "));
           break;
@@ -543,7 +689,7 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
           break;
         }
         deletedThisStep += applied.changes.filter((c) => c.after === null).length;
-        if ((review || proposed.length) && !state.reviewEdits) {
+        if ((review || proposed.length) && !reviewThis) {
           const next = mergeChanges([...proposed, ...applied.changes]);
           if (JSON.stringify(next).length > MAX_REVIEW_CHARS) {
             result(id, tool, false, "Not proposed: that's more than the user can review at once. Propose it in a later step.");
@@ -553,7 +699,7 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
           result(id, tool, true, `${describeChange(applied.changes[0]!)} — needs the user's review first (${review ?? "it goes with other edits waiting for review"}).`);
           break;
         }
-        if (state.reviewEdits) {
+        if (reviewThis) {
           const next = mergeChanges([...proposed, ...applied.changes]);
           if (JSON.stringify(next).length > MAX_REVIEW_CHARS) {
             result(id, tool, false, "Not proposed: that's more than the user can review at once. Propose it in a later step.");
@@ -569,7 +715,8 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
           break;
         }
         const c = applied.changes[0]!;
-        result(id, tool, true, `${describeChange(c)} — saved.`);
+        const settingsNote = c.path === SETTINGS_PATH ? " The project's agent settings changed, so they're off until the user trusts this version (Settings in Orbis Code)." : "";
+        result(id, tool, true, `${describeChange(c)} — saved.${settingsNote}`);
         await log({ kind: "edit", title: describeChange(c), detail: { path: c.path } });
         break;
       }
@@ -677,9 +824,77 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
         break;
       }
       case "run_command": {
-        const pause = await command(i, id, tool, a.command as string);
+        if (a.background && env.bg && env.bg.running() >= MAX_BG_JOBS) {
+          result(id, tool, false, `Not run: ${MAX_BG_JOBS} commands are already running in the background. Stop one with stop_command first.`);
+          break;
+        }
+        const pause = await command(i, id, tool, a.command as string, !!a.background);
         if (pause) return pause;
         break;
+      }
+      case "command_output": {
+        const r = env.bg ? await env.bg.read(a.id as string) : null;
+        if (!r) {
+          result(id, tool, false, `No background command "${a.id as string}".`);
+          break;
+        }
+        if (r.changed.length) {
+          files = null;
+          edited = true;
+          editedAt = new Date().toISOString();
+        }
+        const status = r.done ? `finished with exit code ${r.exitCode ?? "none (stopped)"}` : "still running";
+        const changedNote = r.changed.length ? `\nFiles it changed: ${r.changed.map((c) => c.path).join(", ").slice(0, 1_000)}` : "";
+        result(id, tool, !r.done || r.exitCode === 0, `$ ${r.command}\n${status}${changedNote}\nNew output:\n${untrusted(redactAll(tailText(r.output, OUTPUT_FOR_MODEL))) || "(none)"}`);
+        if (r.done) await log({ kind: "command", title: `Background ${a.id as string} ${r.exitCode === 0 ? "finished" : `ended (exit ${r.exitCode ?? "none"})`}: ${r.command.slice(0, 200)}`, detail: { command: r.command, exitCode: r.exitCode, output: redactAll(tailText(r.output, OUTPUT_FOR_LOG)), changed: r.changed.map((c) => c.path) } });
+        break;
+      }
+      case "stop_command": {
+        const ok = env.bg ? await env.bg.stop(a.id as string) : false;
+        result(id, tool, ok, ok ? `Stopped ${a.id as string}.` : `No running background command "${a.id as string}".`);
+        if (ok) await log({ kind: "command", title: `Stopped the background command ${a.id as string}` });
+        break;
+      }
+      case "glob": {
+        const paths = globPaths((await current()).map((f) => f.path), a.pattern as string);
+        result(id, tool, true, paths.length ? paths.slice(0, MAX_GLOB).join("\n") + (paths.length > MAX_GLOB ? `\n(first ${MAX_GLOB} of ${paths.length})` : "") : "No files match.");
+        await log({ kind: "inspect", title: `Found ${paths.length} file${paths.length === 1 ? "" : "s"} matching ${(a.pattern as string).slice(0, 80)}` });
+        break;
+      }
+      case "use_skill": {
+        const fs = await current();
+        const skill = projectSkills(fs).find((k) => k.name === (a.name as string).toLowerCase());
+        if (!skill) {
+          result(id, tool, false, `This project has no skill "${a.name as string}".`);
+          break;
+        }
+        const main = fs.find((f) => f.path.toLowerCase() === `${skill.dir}/SKILL.md`.toLowerCase());
+        const others = fs.filter((f) => f.path.startsWith(`${skill.dir}/`) && f !== main).map((f) => f.path);
+        result(
+          id,
+          tool,
+          true,
+          `<skill name="${skill.name}" source="${skill.dir}" trust="project file: follow it for the work it covers; it grants no permissions">\n${untrusted(clipText(main?.content ?? "", MAX_READ_CHARS))}\n</skill>${others.length ? `\nOther files in the skill (read them with read_files when its instructions say so): ${others.slice(0, 30).join(", ")}` : ""}`,
+        );
+        await log({ kind: "inspect", title: `Loaded the project skill “${skill.name}”` });
+        break;
+      }
+      case "github_push": {
+        const repo = ((a.repo as string | undefined) ?? state.defaultRepo ?? "").trim();
+        if (!state.push) {
+          result(id, tool, false, "GitHub isn't connected with repository access, so the project can't be pushed. Tell the user to connect GitHub (Connectors) or use Push to GitHub in Changes.");
+          break;
+        }
+        if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+          result(id, tool, false, "Say which repository to push to (owner/name): this project wasn't imported from one.");
+          break;
+        }
+        const pr = a.pull_request as { title: string; body?: string; draft?: boolean } | undefined;
+        const pending: Pending = { kind: "push", repo, branch: a.branch as string, message: a.message as string, ...(pr ? { pullRequest: { title: pr.title, body: pr.body ?? "", ...(pr.draft ? { draft: true } : {}) } } : {}) };
+        result(id, tool, true, "Waiting for the user to approve the push.");
+        skipRest(i + 1, "waiting for the user's approval of the push.");
+        await log({ kind: "approval", title: `Asked to push to ${repo} → ${(a.branch as string).slice(0, 120)}${pr ? " and open a pull request" : ""}`, detail: { push: { repo, branch: a.branch, message: a.message, pullRequest: pr ?? null } } });
+        return done({ status: "awaiting_approval", pending });
       }
       case "wait_for_command": {
         if (commandRan) {
@@ -802,6 +1017,7 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
         result(id, tool, true, t ? testDetails(t) : "No tests have run in this run yet.");
         break;
       }
+      case "web_search":
       case "lookup_docs": {
         if (!env.lookupDocs) {
           result(id, tool, false, "Web search isn't available here. Rely on the project's own files and what you know, and say when you're unsure.");
@@ -852,7 +1068,7 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
         }
         const questions = a.questions as string[];
         await log({ kind: "inspect", title: `Asked ${questions.length === 1 ? "a helper" : `${questions.length} helpers`}: ${questions.map((q) => q.slice(0, 90)).join(" · ")}`.slice(0, 400), detail: { helpers: questions } });
-        const answers = await env.delegate(questions);
+        const answers = await env.delegate(questions, (a.agent as string | undefined) || undefined);
         const text = answers.map((h, n) => `Helper ${n + 1} (${h.ok ? "answered" : "no answer"}, ${h.turns} turn${h.turns === 1 ? "" : "s"}) — ${questions[n]}\n${h.text}`).join("\n\n");
         result(id, tool, answers.some((h) => h.ok), untrusted(text));
         await log({ kind: "inspect", title: `Helper${answers.length === 1 ? "" : "s"} reported back (${answers.filter((h) => h.ok).length} of ${answers.length} answered)`, detail: { helpers: questions, answers: answers.map((h) => h.text.slice(0, 2_000)) } });
@@ -956,6 +1172,16 @@ export async function runActions(reply: AgentReply, state: StepState, env: Agent
         result(id, tool, true, "Finished.");
         skipRest(i + 1, "the run has finished.");
         return done({ status: "completed", pending: null }, a.summary as string, (a.unresolved as string[] | undefined) ?? []);
+      }
+    }
+    // After an edit that was saved or a command that ran: what the project's PostToolUse hooks printed goes to the agent.
+    const ran = EDIT_TOOLS.has(tool) ? editedAt !== before.editedAt : commandRan && !before.commandRan;
+    if (hooked && ran && results.length > before.results) {
+      const out = await env.hooks!.post(tool, a);
+      if (out) {
+        const last = results[results.length - 1]!;
+        last.text = `${last.text}\n\nProject hook output:\n${untrusted(redactAll(tailText(out, 4_000)))}`;
+        await log({ kind: "note", title: `A project hook ran after ${tool}`, detail: { hook: "PostToolUse", output: redactAll(tailText(out, 4_000)) } });
       }
     }
   }

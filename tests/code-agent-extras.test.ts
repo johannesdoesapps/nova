@@ -26,8 +26,8 @@ describe("slash commands", () => {
   });
 
   it("open a new task or the list, and explain mistakes", () => {
-    expect(parseSlash("/new")).toEqual({ kind: "action", command: "new", action: "new" });
-    expect(parseSlash("/help")).toEqual({ kind: "action", command: "help", action: "help" });
+    expect(parseSlash("/new")).toEqual({ kind: "action", command: "new", action: "new", arg: "" });
+    expect(parseSlash("/help")).toEqual({ kind: "action", command: "help", action: "help", arg: "" });
     expect(parseSlash("/deploy now")).toEqual({ kind: "error", message: "There's no /deploy command. Type / to see them." });
     expect(parseSlash("/plan")).toMatchObject({ kind: "error" });
     expect((parseSlash("/explain") as { message: string }).message).toContain("/explain how login works");
@@ -41,7 +41,7 @@ describe("slash commands", () => {
 
   it("are suggested while the command word is being typed", () => {
     expect(slashSuggestions("/").map((c) => c.name)).toEqual(SLASH_COMMANDS.map((c) => c.name));
-    expect(slashSuggestions("/re").map((c) => c.name)).toEqual(["review"]);
+    expect(slashSuggestions("/re").map((c) => c.name)).toEqual(["review", "rewind"]);
     expect(slashSuggestions("/review ")).toEqual([]);
     expect(slashSuggestions("hello")).toEqual([]);
   });
@@ -100,7 +100,7 @@ describe("helper agents", () => {
     });
     expect(r).toMatchObject({ ok: true, turns: 2, text: "checkSession is in src/auth.ts:1 and used by src/routes.ts:1." });
     expect(r.usage).toHaveLength(2);
-    expect(seen[0]!.sort()).toEqual(["finish", "list_files", "read_files", "search_code"]);
+    expect(seen[0]!.sort()).toEqual(["finish", "glob", "list_files", "read_files", "search_code"]);
   });
 
   it("can't change anything, even if the model tries", async () => {
@@ -177,7 +177,7 @@ describe("helper agents", () => {
       { planApproved: true, approvePlans: false, reviewEdits: false, commands: "safe" },
       e,
     );
-    expect(e.delegate).toHaveBeenCalledWith(["Where is the session checked?", "Which routes use it?"]);
+    expect(e.delegate).toHaveBeenCalledWith(["Where is the session checked?", "Which routes use it?"], undefined);
     expect(out.results[0]!.ok).toBe(true);
     expect(out.results[0]!.text).toContain("Helper 1 (answered, 2 turns) — Where is the session checked?\nAnswer to Where is the session checked?");
     expect(logged.map((x) => x.title)).toEqual(["Asked 2 helpers: Where is the session checked? · Which routes use it?", "Helpers reported back (2 of 2 answered)"]);

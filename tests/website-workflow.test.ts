@@ -119,6 +119,9 @@ function report(o: Partial<RunReport> = {}): RunReport {
 }
 const view = (r: RunReport): RunView =>
   ({
+    inbox: [],
+    forkedFrom: null,
+    bgJobs: [],
     id: "r1",
     projectId: "p1",
     request: "Build a landing page",

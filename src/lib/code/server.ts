@@ -27,11 +27,20 @@ export async function codeContext(bucket = "code-ws", perMinute = 120): Promise<
   return auth;
 }
 
-type ProjectRow = { id: string; name: string; description?: string | null; template: string; run_command: string; source_repo: string | null; updated_at: string };
-export const PROJECT_COLS = "id, name, description, template, run_command, source_repo, updated_at";
+type ProjectRow = { id: string; name: string; description?: string | null; template: string; run_command: string; source_repo: string | null; updated_at: string; parent_project_id?: string | null; copy_task?: string | null };
+export const PROJECT_COLS = "id, name, description, template, run_command, source_repo, updated_at, parent_project_id, copy_task";
 
 export function toSummary(r: ProjectRow): ProjectSummary {
-  return { id: r.id, name: r.name, description: r.description ?? null, template: r.template, runCommand: r.run_command, sourceRepo: r.source_repo, updatedAt: r.updated_at };
+  return {
+    id: r.id,
+    name: r.name,
+    description: r.description ?? null,
+    template: r.template,
+    runCommand: r.run_command,
+    sourceRepo: r.source_repo,
+    updatedAt: r.updated_at,
+    ...(r.parent_project_id ? { parentProjectId: r.parent_project_id, copyTask: r.copy_task ?? null } : {}),
+  };
 }
 
 /** Database errors as user-facing messages: limit messages from the database pass through, the rest are generic. */
@@ -72,7 +81,16 @@ export async function getFiles(auth: Authed, projectId: string): Promise<Project
 /** Create a project with its first files, within the plan's number of projects. */
 export async function createProject(
   auth: Authed,
-  input: { name: string; template: string; runCommand: string; sourceRepo?: string | null; sourceBase?: Record<string, string> | null; files: ProjectFile[] },
+  input: {
+    name: string;
+    template: string;
+    runCommand: string;
+    sourceRepo?: string | null;
+    sourceBase?: Record<string, string> | null;
+    files: ProjectFile[];
+    /** A parallel copy of another project (copies.ts): the original, what it's for, and each file's hash when copied. */
+    copyOf?: { parentId: string; task: string; base: Record<string, string> };
+  },
 ): Promise<ProjectSummary> {
   const entitlement = await entitlementFor(auth);
   if (!entitlement) throw new ApiError("not_configured", "Projects need accounts to be set up.");
@@ -91,7 +109,14 @@ export async function createProject(
   }
   const { data, error } = await auth.supabase
     .from("code_projects")
-    .insert({ name: input.name, template: input.template, run_command: input.runCommand, source_repo: input.sourceRepo ?? null, ...(input.sourceBase ? { source_base: input.sourceBase } : {}) })
+    .insert({
+      name: input.name,
+      template: input.template,
+      run_command: input.runCommand,
+      source_repo: input.sourceRepo ?? null,
+      ...(input.sourceBase ? { source_base: input.sourceBase } : {}),
+      ...(input.copyOf ? { parent_project_id: input.copyOf.parentId, copy_task: input.copyOf.task.slice(0, 200), copy_base: input.copyOf.base } : {}),
+    })
     .select(PROJECT_COLS)
     .single();
   if (error) throw dbError(error, "code.projects.create");

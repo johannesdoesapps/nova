@@ -25,8 +25,12 @@ export const STATUS_LABEL: Record<RunStatus, string> = {
   cancelled: "Stopped",
 };
 
-/** Which commands run without asking: the safe list (tests, builds, installs, reading), every command asks, or no commands. */
-export type CommandMode = "safe" | "ask" | "off";
+/**
+ * Which commands run without asking: the safe list (tests, builds, installs, reading), every command asks, no
+ * commands, or every command that isn't blocked ("all": full auto; the never-run list and Bastion still apply).
+ */
+export type CommandMode = "safe" | "ask" | "off" | "all";
+export const COMMAND_MODES = ["safe", "ask", "off", "all"] as const;
 
 export interface RunOptions {
   /** A model id, or "auto:coding" (null means Auto). */
@@ -70,14 +74,32 @@ export interface AgentPlan {
 
 export type Pending =
   | { kind: "plan" }
-  | { kind: "command"; command: string; reason: string; preview?: boolean }
+  | { kind: "command"; command: string; reason: string; preview?: boolean; background?: boolean }
   | { kind: "edits"; changes: FileChange[] }
   | { kind: "question"; question: string; options: string[] }
   | { kind: "computer"; command: string; preview?: boolean }
   /** A limit was reached (steps, tokens, working time, failed test runs, or repeated actions); the user decides whether to go on. */
   | { kind: "limit"; steps: number; reason?: LimitReason; detail?: string }
   /** A command is running right now (so Stop can end it). */
-  | { kind: "job"; jobId: string; command: string };
+  | { kind: "job"; jobId: string; command: string }
+  /** A tool from an MCP server the user connected; it acts outside Orbis, so it asks unless a rule allows it. */
+  | { kind: "mcp"; server: string; tool: string; args: Record<string, unknown>; reason: string }
+  /** Push the project to a new branch on GitHub (and maybe open a pull request): always the user's decision. */
+  | { kind: "push"; repo: string; branch: string; message: string; pullRequest?: { title: string; body: string; draft?: boolean } };
+
+/** A command the agent started in the background (run_command with background), read with command_output. */
+export interface BgJob {
+  /** The agent's handle for it ("bg1", "bg2"…). */
+  id: string;
+  jobId: string;
+  command: string;
+  startedAt: number;
+  offset: number;
+  /** It ended: its exit code (null when it was stopped or lost). */
+  done?: { exitCode: number | null; at: number };
+}
+
+export const MAX_BG_JOBS = 3;
 
 /** A command still running in the project's computer after its step ended (the agent waits for it with wait_for_command). */
 export interface RunningJob {
@@ -106,6 +128,11 @@ export interface RunUsage {
   modelFailuresInRow?: number;
   /** Model calls that failed over the whole run (each one retried or ended the run). */
   retries?: number;
+  /** How full the model's context was at the last step (characters sent / the plan's room for history). */
+  context?: { used: number; limit: number };
+  /** Times the conversation was summarised to make room (/compact or automatically), and the last time. */
+  compactions?: number;
+  compactedAt?: string;
 }
 
 /** Why a run failed, for the report and reliability figures. */
@@ -293,6 +320,12 @@ export interface RunView {
   version: string;
   /** When the step in progress started (from its lock), or null when none is. */
   stepStartedAt: string | null;
+  /** Messages the user sent while the agent works, waiting for its next step. */
+  inbox: { text: string; at: string }[];
+  /** The session this one was forked from. */
+  forkedFrom: string | null;
+  /** Commands running (or finished) in the background. */
+  bgJobs: BgJob[];
 }
 
 export const EVENT_KINDS = ["status", "note", "inspect", "plan", "edit", "command", "question", "answer", "approval", "error", "summary", "revert", "git"] as const;
@@ -323,6 +356,8 @@ export const DECISIONS = ["approve", "reject", "answer", "continue", "stop"] as 
 export type Decision = (typeof DECISIONS)[number];
 
 export const MAX_STEP_LIMIT = 100;
+/** A session that continues over many messages gets more room each time (the database allows up to 2,000 steps). */
+export const SESSION_STEP_LIMIT = 2000;
 export const DEFAULT_TOKEN_BUDGET = 600_000;
 export const MAX_TOKEN_BUDGET = 10_000_000;
 export const DEFAULT_TIME_LIMIT_MS = 30 * 60_000;

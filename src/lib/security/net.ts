@@ -110,6 +110,59 @@ export function safeRequest(url: string, opts: SafeRequestOptions = {}): Promise
   });
 }
 
+/**
+ * One HTTPS POST of a JSON body to a public address (MCP servers the user connected): the same connect-time address
+ * check, port 443 only, no redirects followed, size and time limits. The caller sends only what it means to.
+ */
+export function safePostJson(url: string, body: unknown, opts: { headers?: Record<string, string>; timeoutMs?: number; maxBytes?: number; signal?: AbortSignal; lookup?: LookupFunction } = {}): Promise<SafeResponse> {
+  const u = new URL(url);
+  if (u.protocol !== "https:") return Promise.reject(new Error("Unsupported protocol"));
+  if (u.port && u.port !== "443") return Promise.reject(new Error("Unsupported port"));
+  const literal = u.hostname.replace(/^\[|\]$/g, "");
+  if (isIP(literal) && !isPublicAddress(literal)) return Promise.reject(new BlockedAddressError(`${literal} is a private or reserved address`));
+  const payload = Buffer.from(JSON.stringify(body));
+  const maxBytes = opts.maxBytes ?? 2 * 1024 * 1024;
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      u,
+      {
+        method: "POST",
+        headers: { "user-agent": "Orbis/1.0", "content-type": "application/json", "content-length": String(payload.length), ...opts.headers },
+        lookup: opts.lookup ?? guardedLookup,
+        timeout: opts.timeoutMs ?? 30_000,
+        signal: opts.signal,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        let size = 0;
+        let truncated = false;
+        let finished = false;
+        const done = () => {
+          if (finished) return;
+          finished = true;
+          resolve({ url, status: res.statusCode ?? 0, headers: res.headers as Record<string, string | string[]>, body: Buffer.concat(chunks).toString("utf8"), truncated });
+        };
+        res.on("data", (c: Buffer) => {
+          if (truncated) return;
+          size += c.length;
+          if (size > maxBytes) {
+            truncated = true;
+            chunks.push(c.subarray(0, c.length - (size - maxBytes)));
+            res.destroy();
+            done();
+          } else chunks.push(c);
+        });
+        res.on("end", done);
+        res.on("close", done);
+        res.on("error", (e) => (truncated ? done() : reject(e)));
+      },
+    );
+    req.on("timeout", () => req.destroy(new Error("The server took too long to respond.")));
+    req.on("error", reject);
+    req.end(payload);
+  });
+}
+
 /** TXT records for a name, or [] when there are none. */
 export function txtRecords(name: string): Promise<string[]> {
   return new Promise((resolve) => resolveTxt(name, (err, recs) => resolve(err ? [] : recs.map((r) => r.join("")))));

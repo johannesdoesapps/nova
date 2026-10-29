@@ -22,6 +22,7 @@ import {
   type Pending,
   type RunningJob,
   type RunOptions,
+  type BgJob,
   EMPTY_CHECKS,
   type RunChecks,
   type RunReport,
@@ -64,12 +65,17 @@ export interface RunRow {
   pair?: PairState | null;
   /** A command still running after its step ended. */
   job?: RunningJob | null;
+  /** Messages sent while it works, for the next step. */
+  inbox?: { text: string; at: string }[] | null;
+  forked_from?: string | null;
+  /** Commands running in the background. */
+  bg_jobs?: BgJob[] | null;
   created_at: string;
   updated_at: string;
 }
 
 const COMMON_COLS =
-  "id, project_id, request, status, options, plan, pending, summary, error, steps, step_limit, locked_until, token_budget, usage, active_ms, time_limit_ms, tests, checks, recent, last_edit_at, report, pair, job, created_at, updated_at";
+  "id, project_id, request, status, options, plan, pending, summary, error, steps, step_limit, locked_until, token_budget, usage, active_ms, time_limit_ms, tests, checks, recent, last_edit_at, report, pair, job, inbox, forked_from, bg_jobs, created_at, updated_at";
 const RUN_COLS = `${COMMON_COLS}, transcript`;
 const LIST_COLS = COMMON_COLS;
 
@@ -111,10 +117,13 @@ export function toRunView(r: Omit<RunRow, "transcript"> & { transcript?: unknown
     updatedAt: r.updated_at,
     version: runVersion(r),
     stepStartedAt: r.locked_until && Date.parse(r.locked_until) > now ? new Date(Date.parse(r.locked_until) - STEP_LOCK_MS).toISOString() : null,
+    inbox: Array.isArray(r.inbox) ? r.inbox : [],
+    forkedFrom: r.forked_from ?? null,
+    bgJobs: Array.isArray(r.bg_jobs) ? r.bg_jobs : [],
   };
 }
 
-export async function createRun(auth: Authed, input: { projectId: string; request: string; options: RunOptions; stepLimit: number; pair?: PairState }): Promise<RunRow> {
+export async function createRun(auth: Authed, input: { projectId: string; request: string; options: RunOptions; stepLimit: number; pair?: PairState; forkedFrom?: string }): Promise<RunRow> {
   // Orbis Bastion: a workspace boundary may keep this coding agent to other projects (every way of starting one comes here).
   const agent = input.options.agent ?? (input.options.web ? "website_builder" : "engineer");
   const ws = await workspacePolicy(auth.supabase, auth.user.id);
@@ -130,6 +139,7 @@ export async function createRun(auth: Authed, input: { projectId: string; reques
       options: { ...input.options, agentVersion: agentDef(input.options.agent ?? (input.options.web ? "website_builder" : "engineer"))?.version },
       step_limit: input.stepLimit,
       ...(input.pair ? { pair: input.pair } : {}),
+      ...(input.forkedFrom ? { forked_from: input.forkedFrom } : {}),
     })
     .select(RUN_COLS)
     .single();
@@ -276,6 +286,8 @@ export type RunPatch = Partial<
     | "report"
     | "pair"
     | "job"
+    | "options"
+    | "bg_jobs"
   >
 >;
 
@@ -478,21 +490,56 @@ export async function markReverted(auth: Authed, changeIds: string[]): Promise<v
 
 // ---------------------------------------------------------------- checkpoints
 
-type CheckpointRow = { id: string; label: string; files: Record<string, string | null>; created_at: string };
+type CheckpointRow = { id: string; label: string; files: Record<string, string | null>; created_at: string; kind?: "manual" | "turn"; transcript_len?: number | null; message?: string | null };
+const CHECKPOINT_COLS = "id, label, files, created_at, kind, transcript_len, message";
 
-export async function listCheckpoints(auth: Authed, runId: string): Promise<Checkpoint[]> {
-  const { data, error } = await auth.supabase.from("code_agent_checkpoints").select("id, label, files, created_at").eq("run_id", runId).order("created_at").limit(100);
+const toCheckpoint = (c: CheckpointRow): Checkpoint => ({
+  id: c.id,
+  label: c.label,
+  files: c.files,
+  createdAt: c.created_at,
+  kind: c.kind ?? "manual",
+  ...(typeof c.transcript_len === "number" ? { transcriptLen: c.transcript_len } : {}),
+  ...(c.message ? { message: c.message } : {}),
+});
+
+/** The run's checkpoints: the agent's and the user's ("manual"), or the rewind points before each message ("turn"). */
+export async function listCheckpoints(auth: Authed, runId: string, kind: "manual" | "turn" = "manual"): Promise<Checkpoint[]> {
+  const { data, error } = await auth.supabase.from("code_agent_checkpoints").select(CHECKPOINT_COLS).eq("run_id", runId).eq("kind", kind).order("created_at").limit(200);
   if (error) throw dbError(error, "code.agent.checkpoints");
-  return (data as CheckpointRow[]).map((c) => ({ id: c.id, label: c.label, files: c.files, createdAt: c.created_at }));
+  return (data as CheckpointRow[]).map(toCheckpoint);
 }
 
-export async function createCheckpoint(auth: Authed, runId: string, label: string, files: Record<string, string | null>): Promise<Checkpoint> {
+export async function createCheckpoint(
+  auth: Authed,
+  runId: string,
+  label: string,
+  files: Record<string, string | null>,
+  turn?: { transcriptLen: number; message: string },
+): Promise<Checkpoint> {
   const { data, error } = await auth.supabase
     .from("code_agent_checkpoints")
-    .insert({ run_id: runId, label: label.slice(0, 200), files })
-    .select("id, label, files, created_at")
+    .insert({ run_id: runId, label: label.slice(0, 200), files, ...(turn ? { kind: "turn", transcript_len: turn.transcriptLen, message: turn.message.slice(0, 400) } : {}) })
+    .select(CHECKPOINT_COLS)
     .single();
   if (error) throw dbError(error, "code.agent.checkpoints.create");
-  const c = data as CheckpointRow;
-  return { id: c.id, label: c.label, files: c.files, createdAt: c.created_at };
+  return toCheckpoint(data as CheckpointRow);
+}
+
+// ---------------------------------------------------------------- messages sent while it works
+
+/** Add a message to a working session's inbox; false when it has ended or 20 are already waiting. */
+export async function pushMessage(auth: Authed, runId: string, text: string): Promise<boolean> {
+  requireUuid(runId);
+  const { data, error } = await auth.supabase.rpc("code_agent_push_message", { p_run: runId, p_text: text.slice(0, 4_000) });
+  if (error) throw dbError(error, "code.agent.inbox.push");
+  return typeof data === "number" || (Array.isArray(data) && data.length > 0);
+}
+
+/** Take every waiting message (the inbox empties in the same statement). */
+export async function takeMessages(auth: Authed, runId: string): Promise<{ text: string; at: string }[]> {
+  const { data, error } = await auth.supabase.rpc("code_agent_take_messages", { p_run: runId });
+  if (error) throw dbError(error, "code.agent.inbox.take");
+  const list = Array.isArray(data) && data.length && Array.isArray(data[0]) ? data[0] : data;
+  return Array.isArray(list) ? (list as { text: string; at: string }[]).filter((m) => m && typeof m.text === "string") : [];
 }

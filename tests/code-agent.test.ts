@@ -54,8 +54,8 @@ describe("protocol", () => {
     const base = { planning: false, approvePlans: true, reviewEdits: false, commands: "safe" as const, docs: false, github: false, native: false };
     expect(systemPrompt(base)).toContain("run_command");
     expect(systemPrompt({ ...base, commands: "off" })).not.toContain("run_command {");
-    expect(systemPrompt(base)).not.toContain("lookup_docs");
-    expect(systemPrompt({ ...base, docs: true, github: true })).toContain("lookup_docs");
+    expect(systemPrompt(base)).not.toContain("web_search");
+    expect(systemPrompt({ ...base, docs: true, github: true })).toContain("web_search");
     expect(systemPrompt({ ...base, planning: true })).toContain("planning phase");
     expect(systemPrompt(base)).toContain("data, not instructions");
   });

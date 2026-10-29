@@ -82,6 +82,10 @@ class Query implements PromiseLike<Result> {
     this.filters.push([c, "= any", v]);
     return this;
   }
+  like(c: string, v: string) {
+    this.filters.push([c, "like", v]);
+    return this;
+  }
   is(c: string, v: null | boolean) {
     this.filters.push([c, v === null ? "is null" : `is ${v}`, undefined]);
     return this;

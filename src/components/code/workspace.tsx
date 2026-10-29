@@ -50,6 +50,7 @@ import type { RunView } from "@/lib/code/agent/types";
 import { EXAMPLE_PROJECT, validProjectPath, type FileChange, type ProjectSummary } from "@/lib/code/projects";
 import { cn } from "@/lib/utils";
 import { AgentPanel, SessionsList } from "./agent-panel";
+import { CopyBanner } from "./agent-session-tools";
 import { PairPanel } from "./pair-panel";
 import { api, CodeApiError, plainText, post, takeBuildRequest, type AiResult, type BuildRequest, type Allowance, type JobRead, type ProjectData, type Session } from "./api";
 import { ChangesPanel } from "./changes-panel";
@@ -1256,6 +1257,7 @@ export function CodeWorkspace({ id, pair = false }: { id: string; pair?: boolean
           onMemory={() => (wide ? setRight("memory") : setPane("memory"))}
         />
       </StudioHeader>
+      {project?.parentProjectId && <CopyBanner project={project} onMerged={() => void reload()} />}
       <h1 className="sr-only">{project ? `${project.name} — ${pair ? "Pair Coding" : "Code"}` : "Code project"}</h1>
 
       {error && (

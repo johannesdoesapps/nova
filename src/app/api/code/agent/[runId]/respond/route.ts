@@ -9,7 +9,12 @@ import { errorResponse, parseJsonBody, requireUuid } from "@/lib/http";
 // Approving a command runs it (up to 2 minutes).
 export const maxDuration = 300;
 
-const body = z.object({ decision: z.enum(DECISIONS), text: z.string().max(4_000).optional() });
+const body = z.object({
+  decision: z.enum(DECISIONS),
+  text: z.string().max(4_000).optional(),
+  /** With an approval of a command or a tool: allow it from now on in this project. */
+  remember: z.enum(["exact", "prefix"]).optional(),
+});
 
 /** POST /api/code/agent/[runId]/respond — answer what the run is waiting for. */
 export async function POST(req: Request, ctx: RouteContext<"/api/code/agent/[runId]/respond">) {

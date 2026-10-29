@@ -178,6 +178,9 @@ export interface ProjectSummary {
   runCommand: string;
   sourceRepo: string | null;
   updatedAt: string;
+  /** A parallel copy: the project it was copied from, and the task it's for. */
+  parentProjectId?: string | null;
+  copyTask?: string | null;
 }
 
 export interface ProjectFile {

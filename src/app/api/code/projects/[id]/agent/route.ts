@@ -7,7 +7,7 @@ import { SITE_TEMPLATE_IDS } from "@/lib/code/site-templates";
 import { isWebTask } from "@/lib/code/agent/protocol";
 import { DEFAULT_ROUNDS, MAX_ROUNDS, newPairState, type PairSettings } from "@/lib/code/pair/protocol";
 import { changeCounts, createRun, getRun, listRuns, openRun, toRunView } from "@/lib/code/agent/runs";
-import { DEFAULT_STEP_LIMIT, ENDED_STATUSES, MAX_STEP_LIMIT } from "@/lib/code/agent/types";
+import { COMMAND_MODES, DEFAULT_STEP_LIMIT, ENDED_STATUSES, MAX_STEP_LIMIT } from "@/lib/code/agent/types";
 import { codeContext, getFiles, getProjectRow } from "@/lib/code/server";
 import { ApiError, errorResponse, parseJsonBody, requireUuid } from "@/lib/http";
 import { assertAgentAccess } from "@/lib/agent-platform/server";
@@ -38,7 +38,7 @@ const body = z.object({
       modelId: z.string().max(120).nullable().optional(),
       approvePlans: z.boolean().optional(),
       reviewEdits: z.boolean().optional(),
-      commands: z.enum(["safe", "ask", "off"]).optional(),
+      commands: z.enum(COMMAND_MODES).optional(),
       readOnly: z.boolean().optional(),
       /** The website template the project was started from; only for a new website task. */
       siteTemplate: z.enum(SITE_TEMPLATE_IDS).optional(),

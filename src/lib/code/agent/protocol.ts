@@ -112,6 +112,7 @@ export function systemPrompt(o: PromptOptions): string {
     off: "- Commands are turned off for this run. Don't run commands or tests; say in your summary what the user should run.",
     ask: "- Every command waits for the user's approval before it runs.",
     safe: "- Tests, builds, linters, package installs and read-only commands run straight away; anything else waits for the user's approval. Some commands are never run (deleting the whole project, sudo, publishing, deploying, git push, piping downloads into a shell).",
+    all: "- Full auto: every command runs straight away, except the ones that are never run (deleting the whole project, sudo, publishing, deploying, git push, piping downloads into a shell). Be careful: nobody checks a command before it runs.",
   };
   const names = toolsFor(o);
   const format = o.native
@@ -177,6 +178,8 @@ export function initialMessage(
     computer: boolean;
     earlier?: EarlierRun[];
     memory?: string;
+    /** ORBIS.md and the project's skills and helper agents (settings.ts projectContextBlock). */
+    projectContext?: string;
     attachments?: string;
     /** The finished task this one continues (null: it was asked for but no longer exists). */
     continuing?: EarlierRun | null;
@@ -196,6 +199,7 @@ export function initialMessage(
     meta.attachments ?? "",
     `Project: ${meta.projectName}. Its Run command (used by the Run button and the preview): ${meta.runCommand || "(none)"}.`,
     `The project's computer is ${meta.computer ? "running" : "not running yet (it starts when a command needs it, with the user's go-ahead)"}.`,
+    meta.projectContext ?? "",
     meta.memory ?? "",
     meta.continuing
       ? `This task continues an earlier one the user picked. Its working memory isn't carried over and none of its actions will be repeated; the files now reflect its changes and anything since. Check the current files before relying on it.\nAsked: ${clipText(meta.continuing.request, 1_500)}\nResult (${meta.continuing.status}): ${clipText(meta.continuing.summary ?? "(no summary)", 1_500)}${meta.continuing.files.length ? `\nFiles it changed: ${meta.continuing.files.slice(0, 40).join(", ")}` : ""}${meta.continuing.checks ? `\n${clipText(meta.continuing.checks, 1_200)}` : ""}`
