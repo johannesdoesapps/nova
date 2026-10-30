@@ -35,8 +35,13 @@ function clean(input: { kind?: string; title?: string; data?: unknown }): { kind
   if (!KIND_RE.test(kind)) throw new ApiError("bad_request", "Invalid item kind.");
   const title = (input.title ?? "").trim().slice(0, 160) || "Untitled";
   const data = (input.data && typeof input.data === "object" && !Array.isArray(input.data) ? input.data : {}) as Record<string, unknown>;
-  if (JSON.stringify(data).length > 600_000) throw new ApiError("payload_too_large", "This item is too large to save.");
+  if (tooBig(data)) throw new ApiError("payload_too_large", "This item is too large to save.");
   return { kind, title, data };
+}
+
+/** Byte length, to match the DB's octet_length check (not UTF-16 code units, which under-counts multibyte text). */
+function tooBig(data: unknown): boolean {
+  return Buffer.byteLength(JSON.stringify(data), "utf8") > 600_000;
 }
 
 export async function listItems(db: SupabaseClient, workspace: WorkspaceKey, kind?: string): Promise<WorkspaceItem[]> {
@@ -67,7 +72,7 @@ export async function updateItem(db: SupabaseClient, workspace: WorkspaceKey, id
   if (input.title !== undefined) patch.title = input.title.trim().slice(0, 160) || "Untitled";
   if (input.data !== undefined) {
     const d = input.data && typeof input.data === "object" && !Array.isArray(input.data) ? input.data : {};
-    if (JSON.stringify(d).length > 600_000) throw new ApiError("payload_too_large", "This item is too large to save.");
+    if (tooBig(d)) throw new ApiError("payload_too_large", "This item is too large to save.");
     patch.data = d;
   }
   const { data, error } = await db.from("workspace_items").update(patch).eq("workspace", workspace).eq("id", id).select(COLS).single();
@@ -88,6 +93,7 @@ export async function deleteItem(db: SupabaseClient, workspace: WorkspaceKey, id
 
 function mapWrite(error: { message?: string; code?: string }): ApiError {
   if (error.code === "54000") return new ApiError("quota_exceeded", error.message ?? "You've reached the saved-item limit for this workspace.");
+  if (error.code === "23514") return new ApiError("payload_too_large", "This item is too large to save.");
   return new ApiError("internal", "The item couldn't be saved.");
 }
 

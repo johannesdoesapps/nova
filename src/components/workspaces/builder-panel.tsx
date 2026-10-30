@@ -110,6 +110,23 @@ const DEFS: BlockDef[] = [
 ];
 
 const DEF = (t: BlockType) => DEFS.find((d) => d.type === t)!;
+
+/** Keep only blocks whose type we know, filling missing fields with defaults — so a corrupted or hand-crafted saved item can't crash the builder. */
+function sanitizeBlocks(raw: unknown): Block[] {
+  if (!Array.isArray(raw)) return [];
+  const out: Block[] = [];
+  for (const b of raw) {
+    const def = b && typeof b === "object" ? DEFS.find((d) => d.type === (b as { type?: unknown }).type) : undefined;
+    if (!def) continue;
+    const fields = (b as { fields?: unknown }).fields;
+    out.push({
+      id: typeof (b as { id?: unknown }).id === "string" ? (b as { id: string }).id : crypto.randomUUID(),
+      type: def.type,
+      fields: { ...def.defaults, ...(fields && typeof fields === "object" && !Array.isArray(fields) ? (fields as Record<string, string>) : {}) },
+    });
+  }
+  return out;
+}
 const FONTS: Record<string, string> = { Sans: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif", Serif: "Georgia, 'Times New Roman', serif", Rounded: "'Trebuchet MS', 'Segoe UI', sans-serif" };
 
 function styleSheet(t: Theme): string {
@@ -180,12 +197,14 @@ export function BuilderPanel({ ws }: { ws: WorkspaceKey }) {
     let alive = true;
     fetch(`/api/workspaces/${ws}/items/${itemId}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error())))
-      .then((j: { item: { title: string; data: { blocks?: Block[]; theme?: Theme } } }) => {
+      .then((j: { item: { title: string; data: { blocks?: unknown; theme?: Partial<Theme> } } }) => {
         if (!alive) return;
         setSavedId(itemId);
         setTitle(j.item.title);
-        if (Array.isArray(j.item.data.blocks)) setBlocks(j.item.data.blocks);
-        if (j.item.data.theme) setTheme(j.item.data.theme);
+        const blocks = sanitizeBlocks(j.item.data.blocks);
+        if (blocks.length) setBlocks(blocks);
+        const t = j.item.data.theme;
+        if (t && typeof t === "object") setTheme((cur) => ({ accent: typeof t.accent === "string" ? t.accent : cur.accent, font: typeof t.font === "string" && t.font in FONTS ? t.font : cur.font }));
       })
       .catch(() => alive && setError("That saved layout couldn’t be loaded."))
       .finally(() => alive && setLoaded(true));

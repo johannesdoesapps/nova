@@ -5,7 +5,7 @@ import { autoIdFor, isAutoId } from "@/lib/ai/platform";
 import { withTimeContext } from "@/lib/ai/turn-context";
 import type { ChatMessage, Usage } from "@/lib/ai/types";
 import { requireUserIfConfigured } from "@/lib/auth";
-import { ApiError, errorResponse, ndjsonStream, parseJsonBody } from "@/lib/http";
+import { ApiError, clientIp, errorResponse, ndjsonStream, parseJsonBody } from "@/lib/http";
 import { limiter } from "@/lib/rate-limit";
 import { enforceLimits, planLimits, recordRunLater, shouldSaveAllowance } from "@/lib/usage";
 import { findWorkspaceTemplate, isWorkspaceKey, WORKSPACES } from "@/lib/workspaces/catalog";
@@ -33,7 +33,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/workspaces/[wor
     if (!isWorkspaceKey(ws)) throw new ApiError("not_found", "Unknown workspace.");
     const b = await parseJsonBody(req, body, 80_000);
     const auth = await requireUserIfConfigured();
-    if (!limiter("workspace-generate", 30, 60_000).check(auth.mode === "authenticated" ? `u:${auth.user.id}` : `ip:${req.headers.get("x-forwarded-for") ?? "?"}`, 1).ok)
+    if (!limiter("workspace-generate", 30, 60_000).check(auth.mode === "authenticated" ? `u:${auth.user.id}` : `ip:${clientIp(req)}`, 1).ok)
       throw new ApiError("rate_limited", "Too many requests. Please wait a moment.");
 
     // Build the system and user prompts from either a tool prompt or a template.
