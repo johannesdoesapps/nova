@@ -449,7 +449,7 @@ const PIPELINES: CatalogueEntry[] = [
 ];
 
 /** Where each chat assistant hands off when the work needs real tools. */
-const ASSISTANT_HANDOFF: Record<BuiltinAgentId, { category: Category; taskTypes: TaskType[]; outOfScope: CatalogueEntry["outOfScope"]; dependsOn: string[] }> = {
+const ASSISTANT_HANDOFF: Partial<Record<BuiltinAgentId, { category: Category; taskTypes: TaskType[]; outOfScope: CatalogueEntry["outOfScope"]; dependsOn: string[] }>> = {
   research: {
     category: "Research",
     taskTypes: ["answer_question"],
@@ -475,7 +475,7 @@ const ASSISTANT_HANDOFF: Record<BuiltinAgentId, { category: Category; taskTypes:
 };
 
 const assistants = builtinAgents().map((a): CatalogueEntry => {
-  const h = ASSISTANT_HANDOFF[a.id as BuiltinAgentId];
+  const h = ASSISTANT_HANDOFF[a.id as BuiltinAgentId]!;
   const isData = a.id === "data";
   return {
     id: `assistant:${a.id}`,

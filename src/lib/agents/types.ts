@@ -46,8 +46,34 @@ export const RESPONSE_STYLE_INFO: Record<ResponseStyle, { label: string; instruc
 /** How many earlier messages an agent remembers in a conversation. */
 export const HISTORY_LIMITS = [10, 20, 40] as const;
 
-export const BUILTIN_AGENT_IDS = ["research", "coding", "writing", "data", "creative", "general"] as const;
+/** The Cybersecurity and Website Builder workspaces' own agents (built in; listed in their workspace, not on /agents). */
+export const CYBER_AGENT_IDS = [
+  "security-analyst",
+  "vulnerability-assessor",
+  "pentest-assistant",
+  "threat-intel",
+  "malware-analyst",
+  "network-security",
+  "security-auditor",
+  "incident-responder",
+  "phishing-detector",
+  "compliance-advisor",
+] as const;
+export const WEB_AGENT_IDS = [
+  "web-designer",
+  "web-developer",
+  "frontend-developer",
+  "backend-developer",
+  "ux-designer",
+  "seo-optimiser",
+  "content-writer",
+  "site-auditor",
+  "ecommerce-builder",
+  "site-maintainer",
+] as const;
+export const BUILTIN_AGENT_IDS = ["research", "coding", "writing", "data", "creative", "general", ...CYBER_AGENT_IDS, ...WEB_AGENT_IDS] as const;
 export type BuiltinAgentId = (typeof BUILTIN_AGENT_IDS)[number];
+export type WorkspaceKey = "cyber" | "web";
 
 export interface AgentConfig {
   /** Built-in key ("research") or a custom agent's UUID. */
@@ -69,6 +95,8 @@ export interface AgentConfig {
   starters: string[];
   /** Sampling temperature where the provider supports it. */
   temperature: number | null;
+  /** Built-ins that belong to a workspace (Cybersecurity, Website Builder): shown there rather than on /agents. */
+  workspace?: WorkspaceKey;
   createdAt: string | null;
   updatedAt: string | null;
 }

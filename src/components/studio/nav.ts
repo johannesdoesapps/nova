@@ -34,6 +34,8 @@ export type Section =
   | "home"
   | "jarvis"
   | "chat"
+  | "cyber"
+  | "web"
   | "code"
   | "projects"
   | "activity"
@@ -73,6 +75,8 @@ export const NAV_ENTRIES: NavEntry[] = [
   { id: "jarvis", label: "Jarvis", href: "/jarvis", icon: Orbit, group: "main", hint: "Voice-first assistant that plans and carries out tasks, on this computer too" },
   { id: "chat", label: "Chat", href: "/chat", icon: MessagesSquare, group: "mode", hint: "Ask, research and write with AI" },
   { id: "code", label: "Code", href: "/code", icon: Code2, group: "mode", hint: "Build and fix software with the coding agent" },
+  { id: "cyber", label: "Cybersecurity", href: "/cyber", icon: ShieldCheck, group: "main", hint: "Security agents, scanning, monitoring and reports" },
+  { id: "web", label: "Website Builder", href: "/web", icon: LayoutTemplate, group: "main", hint: "Plan, build, launch and maintain websites with AI" },
   { id: "agents", label: "Agents", href: "/agents", icon: Bot, group: "main", hint: "Specialised assistants, including the Security Team" },
   { id: "mimic", label: "Mimic", href: "/mimic", icon: MousePointerClick, group: "main", hint: "Show Mimic a task once; it learns it and does it for you" },
   { id: "projects", label: "Projects", href: "/projects", icon: FolderKanban, group: "bar", hint: "Ongoing work: code projects, missions and their tasks" },
@@ -126,3 +130,40 @@ export function sectionFor(pathname: string): Section {
   const hit = NAV_ENTRIES.find((e) => pathname === e.href || pathname.startsWith(`${e.href}/`));
   return hit?.id ?? "chat";
 }
+
+/** The two product workspaces that expand into their own submenu in the sidebar. */
+export interface WorkspaceSection {
+  id: Extract<Section, "cyber" | "web">;
+  label: string;
+  base: string;
+  children: { label: string; href: string }[];
+}
+
+export const WORKSPACE_SECTIONS: WorkspaceSection[] = [
+  {
+    id: "cyber",
+    label: "Cybersecurity",
+    base: "/cyber",
+    children: [
+      { label: "Dashboard", href: "/cyber" },
+      { label: "Agents", href: "/cyber/agents" },
+      { label: "Tools", href: "/cyber/tools" },
+      { label: "Templates", href: "/cyber/templates" },
+      { label: "Projects", href: "/cyber/projects" },
+      { label: "Search", href: "/cyber/search" },
+    ],
+  },
+  {
+    id: "web",
+    label: "Website Builder",
+    base: "/web",
+    children: [
+      { label: "Dashboard", href: "/web" },
+      { label: "Agents", href: "/web/agents" },
+      { label: "Tools", href: "/web/tools" },
+      { label: "Templates", href: "/web/templates" },
+      { label: "Projects", href: "/web/projects" },
+      { label: "Search", href: "/web/search" },
+    ],
+  },
+];

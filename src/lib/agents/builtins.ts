@@ -1,4 +1,5 @@
 import type { AgentConfig, BuiltinAgentId } from "./types";
+import { CYBER_AGENTS, WEB_AGENTS } from "./workspace-agents";
 
 type Builtin = Omit<AgentConfig, "id" | "kind" | "createdAt" | "updatedAt">;
 
@@ -151,10 +152,18 @@ You cannot run code. Never claim you executed or tested anything.`,
 - Ask a clarifying question only when you cannot give a useful answer without it.
 - Say when something depends on location, recent events or personal circumstances, and when a professional should be consulted.`,
   },
+  ...CYBER_AGENTS,
+  ...WEB_AGENTS,
 };
 
+/** The general-purpose assistants shown on /agents (not the Cybersecurity or Website Builder workspace agents). */
 export function builtinAgents(): AgentConfig[] {
-  return (Object.keys(DEFINITIONS) as BuiltinAgentId[]).map(builtinAgent);
+  return (Object.keys(DEFINITIONS) as BuiltinAgentId[]).map(builtinAgent).filter((a) => !a.workspace);
+}
+
+/** A workspace's own agents, in listing order. */
+export function workspaceAgents(workspace: "cyber" | "web"): AgentConfig[] {
+  return (Object.keys(DEFINITIONS) as BuiltinAgentId[]).map(builtinAgent).filter((a) => a.workspace === workspace);
 }
 
 export function builtinAgent(id: BuiltinAgentId): AgentConfig {

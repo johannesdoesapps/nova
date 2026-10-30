@@ -6,7 +6,7 @@ import { Archive, Bookmark, Link2, ChevronDown, Code2, CreditCard, Download, Ell
 import type { AppUser } from "@/components/layout/app-context";
 import { cn } from "@/lib/utils";
 import { groupByDate, type ConvSummary } from "./history";
-import { activeEntryFor, sidebarFor, type NavEntry, type Section } from "./nav";
+import { activeEntryFor, sidebarFor, WORKSPACE_SECTIONS, type NavEntry, type Section } from "./nav";
 import { SidebarUsage, useUsageGlance } from "./usage";
 import { useInbox } from "./inbox";
 import type { ThemePref } from "./prefs";
@@ -247,9 +247,13 @@ export function Sidebar({ searchRef, ...p }: SidebarProps) {
             <ul className={cn("flex flex-col gap-0.5", rail && "md:items-center")}>
               {entries
                 .filter((e) => e.group === "main")
-                .map((e) => (
-                  <NavLink key={e.id} entry={e} rail={rail} active={current === e.id} onClick={p.onCloseMobile} />
-                ))}
+                .map((e) =>
+                  e.id === "cyber" || e.id === "web" ? (
+                    <WorkspaceNav key={e.id} entry={e} rail={rail} section={p.section} onNavigate={p.onCloseMobile} />
+                  ) : (
+                    <NavLink key={e.id} entry={e} rail={rail} active={current === e.id} onClick={p.onCloseMobile} />
+                  ),
+                )}
               {/* Tools wait behind one toggle (always open on the page of one of them; icons stay in the narrow rail). */}
               <li className={cn(rail && "md:hidden")}>
                 <button
@@ -406,6 +410,63 @@ function readMore(): boolean {
 function NavLink({ entry, rail, active, onClick, badge = 0 }: { entry: NavEntry; rail: boolean; active: boolean; onClick: () => void; badge?: number }) {
   const Icon = entry.icon;
   return <NavItem rail={rail} icon={<Icon />} label={entry.label} href={entry.href} active={active} onClick={onClick} hint={entry.hint} badge={badge} />;
+}
+
+/** A workspace section (Cybersecurity, Website Builder): its own link plus a collapsible submenu. */
+function WorkspaceNav({ entry, rail, section, onNavigate }: { entry: NavEntry; rail: boolean; section: Section; onNavigate: () => void }) {
+  const pathname = usePathname();
+  const ws = WORKSPACE_SECTIONS.find((w) => w.id === entry.id)!;
+  const onSection = section === entry.id;
+  // Open when the user is in the workspace, or when they opened it by hand; a manual choice overrides until they leave.
+  const [manual, setManual] = useState<boolean | null>(null);
+  const open = manual ?? onSection;
+  const Icon = entry.icon;
+
+  // In the narrow rail the submenu can't show, so the icon just links to the dashboard.
+  if (rail) return <NavItem rail icon={<Icon />} label={entry.label} href={ws.base} active={onSection} hint={entry.hint} />;
+
+  return (
+    <li>
+      <div className={cn("flex items-center rounded-xl transition", onSection && "bg-s-hover")}>
+        <Link
+          href={ws.base}
+          onClick={onNavigate}
+          aria-current={onSection ? "page" : undefined}
+          className={cn("flex h-9 flex-1 items-center gap-3 rounded-xl px-3 text-[13.5px] transition hover:text-s-ink [&_svg]:h-[17px] [&_svg]:w-[17px]", onSection ? "font-medium text-s-ink" : "text-s-ink-2")}
+        >
+          <Icon />
+          <span className="flex-1">{entry.label}</span>
+        </Link>
+        <button
+          type="button"
+          onClick={() => setManual((m) => !(m ?? onSection))}
+          aria-expanded={open}
+          aria-controls={`nav-${entry.id}`}
+          aria-label={`${open ? "Collapse" : "Expand"} ${entry.label}`}
+          className="mr-1 rounded-lg p-1.5 text-s-ink-3 transition hover:text-s-ink"
+        >
+          <ChevronDown className={cn("h-4 w-4 transition", open && "rotate-180")} aria-hidden />
+        </button>
+      </div>
+      <ul id={`nav-${entry.id}`} className={cn("ml-3 mt-0.5 flex flex-col gap-0.5 border-l border-s-line pl-1.5", !open && "hidden")}>
+        {ws.children.slice(1).map((c) => {
+          const active = pathname === c.href || pathname.startsWith(`${c.href}/`);
+          return (
+            <li key={c.href}>
+              <Link
+                href={c.href}
+                onClick={onNavigate}
+                aria-current={active ? "page" : undefined}
+                className={cn("flex h-8 items-center rounded-lg px-3 text-[13px] transition hover:bg-s-hover hover:text-s-ink", active ? "bg-s-hover text-s-ink" : "text-s-ink-2")}
+              >
+                {c.label}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </li>
+  );
 }
 
 /** In Code, the sidebar lists the user's projects (most recently edited first) instead of chats. */

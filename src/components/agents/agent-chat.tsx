@@ -18,24 +18,27 @@ import { ConversationPane } from "@/components/studio/thread";
 import { iconButtonClass, Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/studio/ui";
 import { CONTINUE_PROMPT, useStudioChat } from "@/components/studio/use-chat";
 import type { AgentInput } from "@/lib/agents/schema";
-import { CAPABILITY_INFO, type AgentConfig, type CapabilityStatus } from "@/lib/agents/types";
+import { CAPABILITY_INFO, isBuiltinId, type AgentConfig, type CapabilityStatus } from "@/lib/agents/types";
 import { cn, relativeTime } from "@/lib/utils";
 import { AgentEditor } from "./agent-editor";
 import { NaturalWritingBar, useNaturalWriting } from "./natural-writing-bar";
 import { AgentAvatar, CAPABILITY_ICONS } from "./agent-visuals";
+import { builtinAgent } from "@/lib/agents/builtins";
 import { agentChatsKey, agentStatus, deleteAgent, findAgent, toInput, useAgents } from "./use-agents";
 
 const focusInput = () => requestAnimationFrame(() => document.getElementById("studio-input")?.focus());
 
-export function AgentWorkspace({ id }: { id: string }) {
+export function AgentWorkspace({ id, backTo = "/agents", backLabel = "Agents" }: { id: string; backTo?: string; backLabel?: string }) {
   const state = useAgents();
-  const agent = findAgent(state, id);
+  // Workspace agents (Cybersecurity, Website Builder) are built-in but kept off the /agents list, so fall back to
+  // resolving them directly by id.
+  const agent = findAgent(state, id) ?? (isBuiltinId(id) ? builtinAgent(id) : null);
 
   if (state.status === "loading") {
     return (
       <>
         <StudioHeader>
-          <BackLink />
+          <BackLink backTo={backTo} backLabel={backLabel} />
         </StudioHeader>
         <div className="mx-auto flex w-full max-w-[728px] flex-col items-center px-4 pt-[14vh]" role="status" aria-label="Loading agent">
           <div className="s-skeleton h-16 w-16 rounded-[20px]" />
@@ -49,35 +52,35 @@ export function AgentWorkspace({ id }: { id: string }) {
     return (
       <>
         <StudioHeader>
-          <BackLink />
+          <BackLink backTo={backTo} backLabel={backLabel} />
         </StudioHeader>
         <div role="alert" className="s-in mx-auto mt-[14vh] flex max-w-sm flex-col items-center px-4 text-center">
           <h1 className="text-[18px] font-semibold">{state.status === "error" ? "Agents couldn’t be loaded" : "Agent not found"}</h1>
           <p className="mt-1.5 text-[14px] text-s-ink-2">{state.status === "error" ? state.message : "It may have been deleted, or it was created in another browser."}</p>
-          <Link href="/agents" className="mt-5 rounded-xl border border-s-line-strong px-4 py-2 text-[13.5px] font-medium transition hover:bg-s-hover">
-            Back to agents
+          <Link href={backTo} className="mt-5 rounded-xl border border-s-line-strong px-4 py-2 text-[13.5px] font-medium transition hover:bg-s-hover">
+            Back to {backLabel.toLowerCase()}
           </Link>
         </div>
       </>
     );
   }
-  return <AgentConversation key={agent.id} agent={agent} capabilities={state.capabilities} persistence={state.persistence} />;
+  return <AgentConversation key={agent.id} agent={agent} capabilities={state.capabilities} persistence={state.persistence} backTo={backTo} backLabel={backLabel} />;
 }
 
-function BackLink() {
+function BackLink({ backTo = "/agents", backLabel = "Agents" }: { backTo?: string; backLabel?: string }) {
   return (
     <Link
-      href="/agents"
-      aria-label="All agents"
+      href={backTo}
+      aria-label={backLabel}
       className="inline-flex h-9 shrink-0 items-center gap-1 rounded-xl pl-1.5 pr-2.5 text-[13.5px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink"
     >
       <ChevronLeft className="h-4 w-4" aria-hidden />
-      <span className="hidden sm:inline">Agents</span>
+      <span className="hidden sm:inline">{backLabel}</span>
     </Link>
   );
 }
 
-function AgentConversation({ agent, capabilities, persistence }: { agent: AgentConfig; capabilities: CapabilityStatus; persistence: "server" | "local" }) {
+function AgentConversation({ agent, capabilities, persistence, backTo = "/agents", backLabel = "Agents" }: { agent: AgentConfig; capabilities: CapabilityStatus; persistence: "server" | "local"; backTo?: string; backLabel?: string }) {
   const router = useRouter();
   const { user, integrations } = useApp();
   const studio = useStudio();
@@ -291,7 +294,7 @@ function AgentConversation({ agent, capabilities, persistence }: { agent: AgentC
           </>
         }
       >
-        <BackLink />
+        <BackLink backTo={backTo} backLabel={backLabel} />
         <span className="hidden h-5 w-px bg-s-line-strong sm:block" aria-hidden />
         <AgentAvatar agent={agent} size="sm" />
         <div className="min-w-0">
