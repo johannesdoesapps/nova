@@ -98,7 +98,8 @@ Add remote MCP servers (HTTPS, Streamable HTTP) in Agent settings, with an optio
   named in a project's settings file are never taken at their word. Read-only tools also work while it plans. Bastion checks every call as a
   connector read or write.
 - **How Orbis connects.** Connections go only to public addresses on port 443, checked at connect time, with no
-  redirects followed and size and time limits (`safePostJson`).
+  redirects followed and size and time limits (`safePostJson`). An address that's plainly private (localhost, a
+  private IP, `.local` / `.internal`, another port) is refused already when the server is added.
 - **Output.** Whatever a server returns is marked untrusted when it tries to instruct the AI.
 - **A broken server** is reported once and left out; it never stops the session.
 - **Not supported here:** local (stdio) MCP servers can't run on Orbis's servers. The terminal app runs them on your

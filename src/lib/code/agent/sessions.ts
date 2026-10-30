@@ -32,7 +32,6 @@ import {
   MAX_TIME_LIMIT_MS,
   MAX_TOKEN_BUDGET,
   SESSION_STEP_LIMIT,
-  WORKING_STATUSES,
   type RunOptions,
   type RunStatus,
   type RunView,

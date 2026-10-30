@@ -10,6 +10,8 @@ const upserts: Record<string, unknown>[] = [];
 const ledger: Record<string, unknown>[] = [];
 const events = new Set<string>();
 let storedSub: Record<string, unknown> | null = null;
+/** A user whose account was deleted: saving a row that points at them fails as Postgres would. */
+let deletedUser: string | null = null;
 vi.mock("@/lib/supabase/admin", () => ({
   serviceSupabase: () => ({
     from: (table: string) => {
@@ -17,8 +19,10 @@ vi.mock("@/lib/supabase/admin", () => ({
       const q = {
         select: () => q,
         eq: (_c: string, v: unknown) => ((key = v), q),
+        limit: () => q,
         maybeSingle: async () => ({ data: table === "stripe_events" ? (events.has(String(key)) ? { id: key } : null) : storedSub, error: null }),
         upsert: async (row: Record<string, unknown>) => {
+          if (deletedUser && row.user_id === deletedUser) return { error: { code: "23503", message: "violates foreign key constraint" } };
           if (table === "stripe_events") events.add(String(row.id));
           else if (table === "billing_ledger") {
             if (!ledger.some((l) => l.stripe_object_id === row.stripe_object_id)) ledger.push(row);
@@ -56,6 +60,7 @@ beforeEach(() => {
   ledger.length = 0;
   events.clear();
   storedSub = null;
+  deletedUser = null;
   userSub.row = null;
   vi.restoreAllMocks();
 });
@@ -197,6 +202,19 @@ describe("POST /api/stripe/webhook", () => {
     vi.spyOn(stripeClient()!.charges, "retrieve").mockResolvedValue({ id: "ch_1", customer: "cus_123" } as never);
     await signedPost({ id: "evt_12", type: "refund.created", data: { object: { id: "re_1", object: "refund", amount: 1500, currency: "usd", charge: "ch_1", status: "succeeded", created: 1_792_500_000 } } });
     expect(ledger.at(-1)).toMatchObject({ kind: "refund", amount_usd: 15, user_id: "user-1" });
+  });
+
+  it("skips the plan of a deleted account and keeps its payments without the link to the person", async () => {
+    const { stripeClient } = await import("@/lib/billing/stripe");
+    vi.spyOn(stripeClient()!.subscriptions, "retrieve").mockResolvedValue(subscription({ status: "canceled" }) as never);
+    deletedUser = "user-1";
+    // The plan was set to end, then the account was deleted; Stripe's final event comes later.
+    const res = await signedPost({ id: "evt_gone", type: "customer.subscription.deleted", data: { object: subscription() } });
+    expect(res.status).toBe(200);
+    expect(upserts).toHaveLength(0);
+    const invoice = { id: "in_gone", object: "invoice", currency: "usd", customer: "cus_123", amount_paid: 1500, amount_due: 1500, created: 1_792_400_000, status_transitions: { paid_at: 1_792_400_100 }, total_taxes: [], parent: { type: "subscription_details", subscription_details: { metadata: { user_id: "user-1", orbis_plan: "pro" }, subscription: "sub_123" } } };
+    expect((await signedPost({ id: "evt_gone_inv", type: "invoice.paid", data: { object: invoice } })).status).toBe(200);
+    expect(ledger).toEqual([expect.objectContaining({ stripe_object_id: "in_gone", user_id: null, amount_usd: 15 })]);
   });
 
   it("asks Stripe to retry when saving fails", async () => {

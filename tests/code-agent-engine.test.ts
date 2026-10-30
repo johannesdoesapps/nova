@@ -1054,6 +1054,11 @@ describe("accounting and secrets", () => {
     expect(addUsage(u2, JSON_MODEL, { inputTokens: 1, outputTokens: 1, estimated: false }, 0, 0).costUsd).toBeNull();
   });
 
+  it("keeps the context meter and compaction count when a call is added", () => {
+    const before = { inputTokens: 10, outputTokens: 5, costUsd: 0, modelCalls: 1, models: [], context: { used: 4_000, limit: 100_000 }, compactions: 2, compactedAt: "2026-10-30T00:00:00.000Z" };
+    expect(addUsage(before, MODEL, { inputTokens: 1, outputTokens: 1, estimated: false }, 0, 0)).toMatchObject({ modelCalls: 2, context: { used: 4_000, limit: 100_000 }, compactions: 2, compactedAt: "2026-10-30T00:00:00.000Z" });
+  });
+
   it("removes credentials from what the activity log keeps", () => {
     const text = scrub("token ghp_abcdefghijklmnopqrstuvwxyz0123456789 and AKIAABCDEFGHIJKLMNOP and sk-ant-api03-abcdefghijklmnopqrstuvwxyz and Bearer abcdefghijklmnopqrstuvwxyz123456");
     expect(text).not.toMatch(/ghp_abc|AKIAABCD|sk-ant-api03-abc|abcdefghijklmnopqrstuvwxyz123456/);

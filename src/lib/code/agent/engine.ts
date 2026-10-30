@@ -182,7 +182,9 @@ export function addUsage(total: RunUsage, model: ModelInfo, usage: Usage, prompt
   const input = usage.inputTokens ?? Math.ceil(promptChars / 4);
   const output = usage.outputTokens ?? Math.ceil(replyChars / 4);
   const cost = estimateCost(model, { ...usage, inputTokens: input, outputTokens: output });
+  // Keeps what else the run records in its usage (the context meter, compactions).
   return {
+    ...total,
     inputTokens: total.inputTokens + input,
     outputTokens: total.outputTokens + output,
     costUsd: total.costUsd === null || cost === null ? null : Math.round((total.costUsd + cost) * 1e6) / 1e6,

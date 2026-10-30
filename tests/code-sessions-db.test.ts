@@ -12,7 +12,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/entitlements", () => ({ entitlementFor: async () => ({ kind: "unlimited" }) }));
 
 const { pushMessage, takeMessages, createCheckpoint, listCheckpoints } = await import("@/lib/code/agent/runs");
-const { addRule, getAgentSettings, getOrbisFiles, publicSettings, saveAgentSettings, sealedServer } = await import("@/lib/code/agent-settings");
+const { addRule, getAgentSettings, getOrbisFiles, mcpAddressProblem, publicSettings, saveAgentSettings, sealedServer } = await import("@/lib/code/agent-settings");
 const { createCopy, listCopies, mergeCopy, planMerge, contentHash } = await import("@/lib/code/copies");
 
 let db: PGlite;
@@ -162,5 +162,16 @@ describe("parallel copies", () => {
     await newRun("running");
     await expect(mergeCopy(a, copy.id)).rejects.toMatchObject({ code: "conflict" });
     await expect(createCopy(a, copy.id, "copy of a copy")).rejects.toMatchObject({ code: "bad_request" });
+  });
+});
+
+describe("adding an MCP server", () => {
+  it("refuses addresses Orbis could never connect to, when they're added", () => {
+    for (const url of ["https://127.0.0.1/mcp", "https://10.1.2.3/mcp", "https://169.254.169.254/", "https://[::1]/mcp", "https://localhost/mcp", "https://box.internal/mcp", "https://printer.local/mcp", "https://localhost./mcp", "https://box.internal./mcp"])
+      expect(mcpAddressProblem(url), url).toMatch(/private or internal/);
+    expect(mcpAddressProblem("https://mcp.example.com:8443/mcp")).toMatch(/port \(443\)/);
+    expect(mcpAddressProblem("https://mcp.example.com/mcp")).toBeNull();
+    expect(mcpAddressProblem("https://mcp.example.com:443/mcp")).toBeNull();
+    expect(() => sealedServer(auth(ALICE) as never, ALICE_PROJECT, { name: "local", url: "https://127.0.0.1/mcp" })).toThrow(/private or internal/);
   });
 });

@@ -1,6 +1,8 @@
 import "server-only";
+import { isIP } from "node:net";
 import { connectorKeyConfigured, open, seal } from "@/lib/connectors/crypto";
 import { ApiError, requireUuid } from "@/lib/http";
+import { isPublicAddress } from "@/lib/security/net-pure";
 import { reportError } from "@/lib/observability";
 import type { McpServer } from "@/lib/mcp/client";
 import { cleanRules, EMPTY_RULES, INSTRUCTION_PATHS, MCP_NAME_RE, type PermissionRules, type ProjectSettings } from "./agent/settings";
@@ -68,11 +70,32 @@ export async function addRule(auth: Authed, projectId: string, list: "allow" | "
 export function sealedServer(auth: Authed, projectId: string, input: { name: string; url: string; token?: string | null }): StoredMcp {
   if (!MCP_NAME_RE.test(input.name)) throw new ApiError("bad_request", "Use a short name: lowercase letters, digits, - and _.");
   if (!/^https:\/\/[^\s]+$/.test(input.url) || input.url.length > 500) throw new ApiError("bad_request", "The server's address must start with https://.");
+  const unreachable = mcpAddressProblem(input.url);
+  if (unreachable) throw new ApiError("bad_request", unreachable);
   const token = input.token?.trim();
   if (!token) return { name: input.name, url: input.url };
   if (!connectorKeyConfigured()) throw new ApiError("not_configured", "Servers that need a token can't be added until the site's connector key is set up (ORBIS_CONNECTOR_KEY).");
   const header = /^(bearer|basic|token)\s/i.test(token) ? token : `Bearer ${token}`;
   return { name: input.name, url: input.url, token: seal(header.slice(0, 4_000), binding(auth.user.id, projectId, input.name)) };
+}
+
+/**
+ * Why Orbis could never connect to this address, said when the server is added rather than at the agent's first call.
+ * Only what the address itself shows (a private IP, localhost, a port other than 443); names that resolve to private
+ * addresses are still refused at connect time by the guarded POST.
+ */
+export function mcpAddressProblem(url: string): string | null {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return "That isn't a valid address.";
+  }
+  if (u.port && u.port !== "443") return "Orbis connects to MCP servers on the standard HTTPS port (443) only.";
+  const host = u.hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "").toLowerCase();
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal") || (isIP(host) && !isPublicAddress(host)))
+    return "That address is private or internal. Orbis only connects to servers on the public internet; run local servers with the terminal app.";
+  return null;
 }
 
 /** The servers the agent may use this step: the user's own, and those the trusted project settings name. */

@@ -1,7 +1,7 @@
 /**
  * A small Supabase-client stand-in over PGlite, for running server code against the real migrations with
  * row-level security: every query runs as the given user (role authenticated, auth.uid() = that user).
- * Supports select/insert/update/upsert/delete with eq/neq/in/is/gte/lte/order/limit, single/maybeSingle, counts
+ * Supports select/insert/update/upsert/delete with eq/neq/in/is/gte/lte/order/limit/range, single/maybeSingle, counts
  * (select with { count: "exact", head: true }), upserts that ignore duplicates, and rpc (named arguments). Dates, timestamps and numerics come back as strings, as PostgREST returns them.
  * Queries on one database run one at a time (a session's role is set per query), so concurrent callers in a
  * test can't see each other's role.
@@ -37,6 +37,7 @@ class Query implements PromiseLike<Result> {
   private conflict: string | null = null;
   private ignoreDuplicates = false;
   private countOnly = false;
+  private off = 0;
 
   constructor(
     private run: (sql: string, params: unknown[]) => Promise<Row[]>,
@@ -106,6 +107,11 @@ class Query implements PromiseLike<Result> {
     this.lim = n;
     return this;
   }
+  range(from: number, to: number) {
+    this.off = from;
+    this.lim = to - from + 1;
+    return this;
+  }
   single() {
     this.mode = "single";
     return this;
@@ -131,7 +137,7 @@ class Query implements PromiseLike<Result> {
     const params: unknown[] = [];
     const ret = this.returning ? ` returning ${cols(this.returning)}` : "";
     if (this.op === "select" && this.countOnly) return [`select count(*)::int as n from ${t}${this.where(params)}`, params];
-    if (this.op === "select") return [`select ${cols(this.columns)} from ${t}${this.where(params)}${this.orderBy ? ` order by ${this.orderBy}` : ""}${this.lim ? ` limit ${this.lim}` : ""}`, params];
+    if (this.op === "select") return [`select ${cols(this.columns)} from ${t}${this.where(params)}${this.orderBy ? ` order by ${this.orderBy}` : ""}${this.lim ? ` limit ${this.lim}` : ""}${this.off ? ` offset ${this.off}` : ""}`, params];
     if (this.op === "delete") return [`delete from ${t}${this.where(params)}${ret}`, params];
     if (this.op === "update") {
       const sets = Object.entries(this.payload[0]!).map(([k, v]) => (params.push(param(v)), `${ident(k)} = $${params.length}`));

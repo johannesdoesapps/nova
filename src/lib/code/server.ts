@@ -372,6 +372,16 @@ export async function stopSession(auth: Authed, projectId: string, backend: Work
   await box?.stop().catch((err) => reportError(err, { where: "code_workspace.stop" }));
 }
 
+/**
+ * For deleting the account: stop the project's computer and delete its saved disk too (stopping alone keeps a copy
+ * of the files for the project's next session). Best effort: a computer that's already gone is fine.
+ */
+export async function discardWorkspace(auth: Authed, projectId: string, backend: WorkspaceBackend = vercelWorkspaces): Promise<void> {
+  await stopSession(auth, projectId, backend);
+  const last = await lastSession(auth, projectId);
+  if (last) await backend.remove(workspaceName(last)).catch(() => undefined);
+}
+
 /** The running computer for a project, or a clear message that it isn't running. Refuses in the last seconds so nothing restarts it. */
 export async function requireBox(auth: Authed, projectId: string, backend: WorkspaceBackend = vercelWorkspaces): Promise<{ box: WorkspaceBox; session: LiveSession }> {
   const live = await liveSession(auth, projectId);

@@ -1,5 +1,6 @@
 import "server-only";
 import Stripe from "stripe";
+import { alertOwner } from "../alerts";
 import { serverEnv } from "../env";
 import { chargeUsd, planOf, resolveBilling, type BillingInterval, type BillingSettings } from "../plans";
 import { serviceSupabase } from "../supabase/admin";
@@ -10,6 +11,18 @@ import { serviceSupabase } from "../supabase/admin";
  * only thing that changes a user's plan: it re-reads the subscription from
  * Stripe and writes it with the service role.
  */
+
+/** Postgres: a referenced row (here, the user) doesn't exist. */
+const FOREIGN_KEY_VIOLATION = "23503";
+
+/** Money is (or will be) taken for an account that no longer exists: the owner decides whether to cancel and refund. */
+function alertDeletedAccount(what: string, customer: string | null) {
+  alertOwner(
+    `deleted-account:${what}`,
+    "Orbis: a payment for a deleted account",
+    `Stripe reported a ${what}${customer ? ` (customer ${customer})` : ""} for an Orbis account that has been deleted. Nothing was applied in Orbis.\n\nIn Stripe, cancel the subscription and refund the payment if the customer shouldn't be charged.`,
+  );
+}
 
 let client: Stripe | null = null;
 
@@ -149,6 +162,12 @@ export async function syncSubscription(stripe: Stripe, subscriptionId: string, u
     return "skipped";
   }
   const { error } = await db.from("subscriptions").upsert(row, { onConflict: "user_id" });
+  // The account no longer exists. Nothing to store and a retry wouldn't help, but a plan that still charges must be
+  // seen by a person (e.g. a checkout paid in another tab after the account was deleted).
+  if (error?.code === FOREIGN_KEY_VIOLATION) {
+    if (["active", "trialing", "past_due", "incomplete", "unpaid"].includes(sub.status) && !sub.cancel_at_period_end) alertDeletedAccount(`subscription ${sub.id}`, customerId ?? null);
+    return "skipped";
+  }
   if (error) throw new Error(`Could not save subscription: ${error.message}`);
   return "saved";
 }
@@ -175,9 +194,10 @@ export async function syncTeamSubscription(sub: Stripe.Subscription): Promise<"s
   if (!teamId) return "skipped";
   const base = subscriptionRow(sub, sub.metadata?.owner_id as string);
   const item = sub.items?.data?.[0];
-  const { error } = await db
+  const { error, count } = await db
     .from("teams")
-    .update({
+    .update(
+      {
       plan: base.plan,
       billing_interval: base.billing_interval,
       seats: item?.quantity ?? 0,
@@ -188,9 +208,15 @@ export async function syncTeamSubscription(sub: Stripe.Subscription): Promise<"s
       cancel_at_period_end: base.cancel_at_period_end,
       stripe_customer_id: base.stripe_customer_id,
       stripe_subscription_id: sub.id,
-    })
+      },
+      { count: "exact" },
+    )
     .eq("id", teamId);
   if (error) throw new Error(`Could not save team subscription: ${error.message}`);
+  if (count === 0 && ["active", "trialing", "past_due", "incomplete", "unpaid"].includes(sub.status) && !sub.cancel_at_period_end) {
+    alertDeletedAccount(`team subscription ${sub.id}`, base.stripe_customer_id);
+    return "skipped";
+  }
   return "saved";
 }
 
@@ -228,7 +254,9 @@ export async function recordLedger(entry: LedgerEntry | null): Promise<void> {
   if (!entry) return;
   const db = serviceSupabase();
   if (!db) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
-  const { error } = await db.from("billing_ledger").upsert(entry, { onConflict: "stripe_object_id", ignoreDuplicates: true });
+  let { error } = await db.from("billing_ledger").upsert(entry, { onConflict: "stripe_object_id", ignoreDuplicates: true });
+  // The account was deleted: the payment record is still kept, without the link to the person.
+  if (error?.code === FOREIGN_KEY_VIOLATION && entry.user_id) ({ error } = await db.from("billing_ledger").upsert({ ...entry, user_id: null }, { onConflict: "stripe_object_id", ignoreDuplicates: true }));
   if (error) throw new Error(`Could not record billing entry: ${error.message}`);
 }
 
@@ -254,6 +282,10 @@ export async function addCredits(session: Stripe.Checkout.Session): Promise<void
   const db = serviceSupabase();
   if (!db) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
   const { error } = await db.rpc("usage_credit_add", { p_user: userId, p_units: units, p_amount_usd: (session.amount_total ?? 0) / 100, p_session: session.id });
+  if (error?.code === FOREIGN_KEY_VIOLATION) {
+    alertDeletedAccount(`credit purchase ${session.id}`, typeof session.customer === "string" ? session.customer : (session.customer?.id ?? null));
+    return;
+  }
   if (error) throw new Error(`Could not add credits: ${error.message}`);
 }
 
