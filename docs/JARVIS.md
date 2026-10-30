@@ -83,7 +83,7 @@ A timed-out change is reported as "may or may not have finished", never as done.
 | `open_url` | browser | act | http(s) only. If the browser blocks the new tab, the step says so and gives you a link. |
 | `open_orbis_page` | browser | act | Opens an Orbis page in a new tab. |
 | `research` | browser | spend | Starts Deep Research, which runs in a new tab. |
-| `build_website` | browser | act | Opens Code with the request filled in; you press send there. |
+| `build_website` | browser | spend | After your approval, creates a website project in Code and starts the coding agent on it ("Work on its own" mode), then opens it. |
 | `start_mission` | browser | act | Opens Missions with your goal filled in. |
 | `remember` | browser | spend | Adds a fact to Orbis memory, which you can see and delete. |
 | `read_clipboard` | browser | private | Reads the clipboard once. The text goes back to the model in the next round of the tool loop, marked as untrusted. |

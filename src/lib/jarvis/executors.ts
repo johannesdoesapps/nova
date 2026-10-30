@@ -1,4 +1,4 @@
-import { openInCode } from "../code/handoff";
+import { siteName } from "../code/site-examples";
 import { runAgentTool } from "./desktop-client";
 import type { Prepared, Step, StepResult } from "./mission";
 import { TOOLS } from "./tools";
@@ -82,9 +82,31 @@ const browser: Partial<Record<Step["tool"], (step: Step, signal: AbortSignal) =>
       ? { outcome: "success", summary: "Started Deep Research; it runs in the new tab.", verified: true, details: { kind: "link", href, label: "the research" } }
       : { outcome: "partial", summary: "Deep Research is ready, but your browser blocked the new tab. Open it with the link to run it.", verified: true, details: { kind: "link", href, label: "the research" } };
   },
-  async build_website(step) {
-    openInCode({ request: str(step.args.description), target: "new:website" });
-    return opened(openTab("/code", false), "/code", "Code", "Opened Code with your website request filled in; press send there to start the build.");
+  /**
+   * A new website project with the coding agent already working on the request (the "Work on its own" mode Code's
+   * start page uses), then its page, which keeps driving the build. Nothing is handed over through the tab, so the
+   * link works wherever it's opened.
+   */
+  async build_website(step, signal) {
+    const description = str(step.args.description).trim();
+    const headers = { "content-type": "application/json" };
+    const made = await fetch("/api/code/projects", { method: "POST", headers, body: JSON.stringify({ name: siteName(description), template: "website" }), signal });
+    if (!made.ok) return { outcome: made.status === 401 || made.status === 403 ? "permission_denied" : "failure", summary: await apiError(made), verified: null };
+    const pid = ((await made.json()) as { project?: { id?: string } }).project?.id;
+    if (!pid) return { outcome: "failure", summary: "The website project wasn't created.", verified: null };
+    const href = `/code/${pid}`;
+    const run = await fetch(`/api/code/projects/${pid}/agent`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ request: description, options: { modelId: "auto:coding", approvePlans: false, reviewEdits: false, commands: "safe", readOnly: false, background: true } }),
+      signal,
+    });
+    if (!run.ok) {
+      return { outcome: "failure", summary: `Created the website project, but the build didn't start: ${await apiError(run)}`, verified: true, details: { kind: "link", href, label: "the project" } };
+    }
+    return openTab(href, false)
+      ? { outcome: "success", summary: "Started building your website in Orbis Code; it's working in the new tab.", verified: true, details: { kind: "link", href, label: "the build" } }
+      : { outcome: "partial", summary: "Started building your website, but your browser blocked the new tab. Open the build with the link to watch it.", verified: true, details: { kind: "link", href, label: "the build" } };
   },
   async start_mission(step) {
     const href = `/missions?goal=${encodeURIComponent(str(step.args.goal).slice(0, 4000))}`;

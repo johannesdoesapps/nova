@@ -70,11 +70,11 @@ const defs = {
   },
   build_website: {
     title: "Build a website",
-    description: "Open Orbis Code with a website request filled in; the user starts the build there. Use when the user wants a website or web page made.",
+    description: "Build a website in Orbis Code: creates a new website project and starts the coding agent on it, which works on its own and uses the plan's allowance. Use when the user wants a website or web page made; describe it fully (purpose, sections, style).",
     runner: "browser",
-    risk: "act",
+    risk: "spend",
     args: z.object({ description: z.string().trim().min(5).max(6000) }),
-    describe: (a) => `Open Code to build: “${str(a.description).slice(0, 140)}”`,
+    describe: (a) => `Build a website in Orbis Code: “${str(a.description).slice(0, 140)}”`,
   },
   start_mission: {
     title: "Plan a project",
