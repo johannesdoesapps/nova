@@ -40,8 +40,8 @@ export async function POST(req: Request, ctx: RouteContext<"/api/workspaces/[wor
     let mode: "coding" | "research" | "general" = "general";
     let system: string;
     let user: string;
-    if (b.kind.startsWith("template:")) {
-      const tpl = findWorkspaceTemplate(ws, b.kind.slice("template:".length));
+    if (b.kind.startsWith("template-")) {
+      const tpl = findWorkspaceTemplate(ws, b.kind.slice("template-".length));
       if (!tpl) throw new ApiError("not_found", "Unknown template.");
       mode = ws === "web" ? "coding" : "general";
       const guard =

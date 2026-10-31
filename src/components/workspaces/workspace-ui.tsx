@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowRight, Copy, Ellipsis, ExternalLink, Pencil, Search, Trash2 } from "lucide-react";
+import { ArrowRight, Copy, Ellipsis, Pencil, Search, Trash2 } from "lucide-react";
 import { useApp } from "@/components/layout/app-context";
 import { StudioHeader } from "@/components/studio/frame";
 import { ConfirmDialog } from "@/components/studio/dialogs";
@@ -80,7 +80,6 @@ function AgentCard({ ws, agent }: { ws: WorkspaceKey; agent: AgentConfig }) {
 function ToolCard({ ws, tool }: { ws: WorkspaceKey; tool: WorkspaceTool }) {
   const base = WORKSPACES[ws].base;
   const href = tool.kind === "link" ? tool.href! : `${base}/tools/${tool.id}`;
-  const external = tool.kind === "link";
   return (
     <Link href={href} className={linkCls}>
       <div className="flex items-start gap-3">
@@ -90,7 +89,6 @@ function ToolCard({ ws, tool }: { ws: WorkspaceKey; tool: WorkspaceTool }) {
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 text-[14px] font-semibold">
             <span className="truncate">{tool.name}</span>
-            {external && <ExternalLink className="h-3 w-3 shrink-0 text-s-ink-3" aria-label="Opens an Orbis tool" />}
             {tool.ai && <span className="shrink-0 rounded-full bg-s-accent-soft px-1.5 py-px text-[10px] font-medium text-s-accent">AI</span>}
           </div>
           <p className="mt-0.5 line-clamp-2 text-[12.5px] text-s-ink-2">{tool.description}</p>
@@ -218,7 +216,6 @@ export function WorkspaceScreen({ ws, view, initialQuery = "" }: { ws: Workspace
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 text-[14px] font-semibold">
                             <span className="truncate">Security Team</span>
-                            <ExternalLink className="h-3 w-3 shrink-0 text-s-ink-3" aria-label="Opens the Security Team" />
                           </div>
                           <p className="mt-0.5 line-clamp-2 text-[12.5px] text-s-ink-2">The full roster of security agents — scanning, monitoring, findings and schedules — working together.</p>
                         </div>
@@ -378,6 +375,7 @@ export function Projects({ ws, limit }: { ws: WorkspaceKey; limit?: number }) {
   const [items, setItems] = useState<Item[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<Item | null>(null);
+  const [busy, setBusy] = useState(false);
   const signedOut = integrations.supabase && !user;
 
   const load = useCallback(
@@ -408,7 +406,7 @@ export function Projects({ ws, limit }: { ws: WorkspaceKey; limit?: number }) {
         to save and reopen your work.
       </p>
     );
-  if (error) return <p className="text-[13.5px] text-s-ink-3">{error}</p>;
+  if (error && !items) return <p className="text-[13.5px] text-s-ink-3">{error}</p>;
   if (!items)
     return (
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Loading projects" role="status">
@@ -420,24 +418,35 @@ export function Projects({ ws, limit }: { ws: WorkspaceKey; limit?: number }) {
   if (!items.length) return <p className="text-[13.5px] text-s-ink-2">No saved projects yet. Run a tool or template and save the result here.</p>;
 
   const shown = limit ? items.slice(0, limit) : items;
-  const duplicate = async (it: Item) => {
-    await fetch(`/api/workspaces/${ws}/items`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ duplicateOf: it.id }) });
-    void load();
+  const act = async (run: () => Promise<Response>, failMsg: string) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await run();
+      if (!r.ok) throw new Error(String(r.status));
+      await load();
+    } catch {
+      setError(failMsg);
+    } finally {
+      setBusy(false);
+    }
   };
-  const rename = async (it: Item) => {
+  const duplicate = (it: Item) =>
+    act(() => fetch(`/api/workspaces/${ws}/items`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ duplicateOf: it.id }) }), "Couldn't duplicate that project.");
+  const rename = (it: Item) => {
     const title = window.prompt("Rename project", it.title)?.trim();
     if (!title || title === it.title) return;
-    await fetch(`/api/workspaces/${ws}/items/${it.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ title }) });
-    void load();
+    void act(() => fetch(`/api/workspaces/${ws}/items/${it.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ title }) }), "Couldn't rename that project.");
   };
   const remove = async (it: Item) => {
-    await fetch(`/api/workspaces/${ws}/items/${it.id}`, { method: "DELETE" });
+    await act(() => fetch(`/api/workspaces/${ws}/items/${it.id}`, { method: "DELETE" }), "Couldn't delete that project.");
     setToDelete(null);
-    void load();
   };
 
   return (
     <>
+      {error && <p role="alert" className="mb-3 text-[13px] text-s-danger">{error}</p>}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {shown.map((it) => (
           <div key={it.id} className="glass flex flex-col rounded-[18px] p-4">
@@ -445,7 +454,7 @@ export function Projects({ ws, limit }: { ws: WorkspaceKey; limit?: number }) {
               <button
                 type="button"
                 onClick={() =>
-                  router.push(it.kind.startsWith("template:") ? `${base}/templates/${it.kind.slice(9)}?item=${it.id}` : `${base}/tools/${it.kind}?item=${it.id}`)
+                  router.push(it.kind.startsWith("template-") ? `${base}/templates/${it.kind.slice(9)}?item=${it.id}` : `${base}/tools/${it.kind}?item=${it.id}`)
                 }
                 className="min-w-0 flex-1 text-left"
               >

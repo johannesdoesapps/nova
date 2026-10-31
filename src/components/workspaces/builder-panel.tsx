@@ -301,11 +301,11 @@ export function BuilderPanel({ ws }: { ws: WorkspaceKey }) {
               );
             })}
           </div>
-          <button type="button" onClick={download} className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-s-line-strong px-3 text-[13.5px] font-medium transition hover:bg-s-hover">
-            <Download className="h-4 w-4" /> <span className="hidden sm:inline">HTML</span>
+          <button type="button" onClick={download} aria-label="Download HTML" className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-s-line-strong px-3 text-[13.5px] font-medium transition hover:bg-s-hover">
+            <Download className="h-4 w-4" aria-hidden /> <span className="hidden sm:inline">HTML</span>
           </button>
-          <button type="button" onClick={save} disabled={signedOut} className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-s-accent px-3 text-[13.5px] font-medium text-s-accent-ink transition hover:brightness-110 disabled:opacity-50">
-            <Save className="h-4 w-4" /> <span className="hidden sm:inline">{savedId ? "Save" : "Save to projects"}</span>
+          <button type="button" onClick={save} disabled={signedOut} aria-label={savedId ? "Save changes" : "Save to projects"} className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-s-accent px-3 text-[13.5px] font-medium text-s-accent-ink transition hover:brightness-110 disabled:opacity-50">
+            <Save className="h-4 w-4" aria-hidden /> <span className="hidden sm:inline">{savedId ? "Save" : "Save to projects"}</span>
           </button>
         </div>
       </StudioHeader>
@@ -398,7 +398,7 @@ export function BuilderPanel({ ws }: { ws: WorkspaceKey }) {
 
 function Back({ base }: { base: string }) {
   return (
-    <Link href={`${base}/tools`} className="inline-flex h-9 items-center gap-1 rounded-xl pl-1.5 pr-2.5 text-[13.5px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink">
+    <Link href={`${base}/tools`} aria-label="Back to Tools" className="inline-flex h-9 items-center gap-1 rounded-xl pl-1.5 pr-2.5 text-[13.5px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink">
       <ChevronLeft className="h-4 w-4" aria-hidden /> <span className="hidden sm:inline">Tools</span>
     </Link>
   );

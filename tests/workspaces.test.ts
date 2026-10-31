@@ -116,6 +116,14 @@ describe("catalog wiring", () => {
       }
     });
 
+    it(`every ${ws} saved-item kind passes the slug pattern used by the app and the DB`, () => {
+      // workspace_items.kind must match ^[a-z][a-z0-9-]{1,48}$ (items.ts KIND_RE + the DB check).
+      const SLUG = /^[a-z][a-z0-9-]{1,48}$/;
+      for (const t of CATALOGS[ws].tools) expect(SLUG.test(t.id), `tool kind ${t.id}`).toBe(true);
+      // Template results are stored with a "template-" prefix (not a colon, which the slug rejects).
+      for (const t of CATALOGS[ws].templates) expect(SLUG.test(`template-${t.id}`), `template kind template-${t.id}`).toBe(true);
+    });
+
     it(`every ${ws} tool and template id is unique and findable`, () => {
       const toolIds = CATALOGS[ws].tools.map((t) => t.id);
       expect(new Set(toolIds).size).toBe(toolIds.length);

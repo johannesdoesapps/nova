@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 function Back({ ws, to = "tools" }: { ws: WorkspaceKey; to?: "tools" | "templates" }) {
   const base = WORKSPACES[ws].base;
   return (
-    <Link href={`${base}/${to}`} className="inline-flex h-9 items-center gap-1 rounded-xl pl-1.5 pr-2.5 text-[13.5px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink">
+    <Link href={`${base}/${to}`} aria-label={`Back to ${to === "templates" ? "Templates" : "Tools"}`} className="inline-flex h-9 items-center gap-1 rounded-xl pl-1.5 pr-2.5 text-[13.5px] text-s-ink-2 transition hover:bg-s-hover hover:text-s-ink">
       <ChevronLeft className="h-4 w-4" aria-hidden /> <span className="hidden sm:inline">{to === "templates" ? "Templates" : "Tools"}</span>
     </Link>
   );
@@ -53,9 +53,10 @@ function AiPanel({ ws, kind, title, lead, input, extra, backTo }: { ws: Workspac
         if (!alive) return;
         setSavedId(itemId);
         setSavedTitle(j.item.title);
-        setText(String(j.item.data.input ?? ""));
-        setExtraVal(String(j.item.data.extra ?? ""));
-        setOut(String(j.item.data.output ?? ""));
+        // Don't overwrite anything the user may have started typing while this loaded.
+        setText((cur) => cur || String(j.item.data.input ?? ""));
+        setExtraVal((cur) => cur || String(j.item.data.extra ?? ""));
+        setOut((cur) => cur || String(j.item.data.output ?? ""));
       })
       .catch(() => alive && setError("That saved item couldn't be loaded."));
     return () => {
@@ -320,7 +321,7 @@ export function TemplateRunner({ ws, templateId }: { ws: WorkspaceKey; templateI
     ws === "cyber"
       ? { label: "Brief", placeholder: "The context: scope, systems, findings, dates, who it's for…" }
       : { label: "Brief", placeholder: "The business, audience, pages and style you want…" };
-  return <AiPanel ws={ws} kind={`template:${templateId}`} title={tpl.name} lead={tpl.description} input={input} backTo="templates" />;
+  return <AiPanel ws={ws} kind={`template-${templateId}`} title={tpl.name} lead={tpl.description} input={input} backTo="templates" />;
 }
 
 function Redirect({ href }: { href: string }) {

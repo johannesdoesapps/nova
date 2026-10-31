@@ -218,14 +218,14 @@ describe("the Chat / Code switch", () => {
 });
 
 describe("the redesigned sidebar", () => {
-  it("is Home, Jarvis, Agents, Mimic, Templates, Connectors, then Tools, with Activity pinned at the bottom; Projects is in the top bar beside search, Missions under it", () => {
+  it("is Home, Jarvis, Cybersecurity, Website Builder, Agents, Mimic, Templates, Connectors, then Tools, with Activity pinned at the bottom; Projects is in the top bar beside search, Missions under it", () => {
     expect(BAR_ENTRIES.map((e) => e.id)).toEqual(["projects"]);
     expect(sidebarFor(false).some((e) => e.id === "projects")).toBe(false);
     expect(
       sidebarFor(false)
         .filter((e) => e.group === "main")
         .map((e) => e.id),
-    ).toEqual(["home", "jarvis", "agents", "mimic", "templates", "connectors"]);
+    ).toEqual(["home", "jarvis", "cyber", "web", "agents", "mimic", "templates", "connectors"]);
     expect(
       sidebarFor(false)
         .filter((e) => e.group === "footer")
