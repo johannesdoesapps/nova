@@ -1,7 +1,7 @@
 import { naturalSettings } from "../writing/natural";
 import { z } from "zod";
 import { ALLOWED_ATTACHMENT_EXT, MAX_ATTACHMENT_CHARS } from "../limits";
-import { AGENT_ACCENTS, AGENT_CAPABILITIES, AGENT_ICONS, HISTORY_LIMITS, RESPONSE_STYLES } from "./types";
+import { AGENT_ACCENTS, AGENT_CAPABILITIES, AGENT_ICONS, BUILTIN_AGENT_IDS, HISTORY_LIMITS, RESPONSE_STYLES } from "./types";
 
 /** Fields a user can set on a custom agent. Shared by create, update and guest chat. */
 export const agentInput = z.object({
@@ -28,7 +28,7 @@ export type AgentInput = z.infer<typeof agentInput>;
 
 export const agentPatch = agentInput.partial();
 
-const agentId = z.union([z.uuid(), z.enum(["research", "coding", "writing", "data", "creative", "general"])]);
+const agentId = z.union([z.uuid(), z.enum(BUILTIN_AGENT_IDS)]);
 
 export const agentChatRequest = z.object({
   agentId,

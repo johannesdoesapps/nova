@@ -4,6 +4,7 @@ import { CATALOGS, findTool, findWorkspaceTemplate, isWorkspaceKey, WORKSPACES, 
 import { findPrompt } from "@/lib/workspaces/prompts";
 import { builtinAgents, workspaceAgents } from "@/lib/agents/builtins";
 import { CYBER_AGENT_IDS, WEB_AGENT_IDS } from "@/lib/agents/types";
+import { agentChatRequest } from "@/lib/agents/schema";
 
 // The panels the tool-runner handles without a prompt (special client components).
 const SPECIAL: Record<WorkspaceKey, Set<string>> = {
@@ -158,5 +159,13 @@ describe("workspace agents", () => {
       expect(a.name?.length ?? 0).toBeGreaterThan(0);
       expect(a.instructions?.length ?? 0).toBeGreaterThan(40);
     }
+  });
+
+  it("the chat request schema accepts every workspace agent id (regression: 'Invalid request')", () => {
+    for (const id of [...CYBER_AGENT_IDS, ...WEB_AGENT_IDS]) {
+      const r = agentChatRequest.safeParse({ agentId: id, message: "hello" });
+      expect(r.success, `agentChatRequest should accept ${id}`).toBe(true);
+    }
+    expect(agentChatRequest.safeParse({ agentId: "not-an-agent", message: "hi" }).success).toBe(false);
   });
 });
