@@ -435,23 +435,25 @@ function WorkspaceNav({ entry, rail, section, onNavigate }: { entry: NavEntry; r
           <span className="flex-1">{entry.label}</span>
         </Link>
       </div>
-      <ul id={`nav-${entry.id}`} className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l border-s-line pl-1.5">
-        {ws.children.slice(1).map((c) => {
-          const active = pathname === c.href || pathname.startsWith(`${c.href}/`);
-          return (
-            <li key={c.href}>
-              <Link
-                href={c.href}
-                onClick={onNavigate}
-                aria-current={active ? "page" : undefined}
-                className={cn("flex h-8 items-center rounded-lg px-3 text-[13px] transition hover:bg-s-hover hover:text-s-ink", active ? "bg-s-hover text-s-ink" : "text-s-ink-2")}
-              >
-                {c.label}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+      {ws.children.length > 1 && (
+        <ul id={`nav-${entry.id}`} className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l border-s-line pl-1.5">
+          {ws.children.slice(1).map((c) => {
+            const active = pathname === c.href || pathname.startsWith(`${c.href}/`);
+            return (
+              <li key={c.href}>
+                <Link
+                  href={c.href}
+                  onClick={onNavigate}
+                  aria-current={active ? "page" : undefined}
+                  className={cn("flex h-8 items-center rounded-lg px-3 text-[13px] transition hover:bg-s-hover hover:text-s-ink", active ? "bg-s-hover text-s-ink" : "text-s-ink-2")}
+                >
+                  {c.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </li>
   );
 }
