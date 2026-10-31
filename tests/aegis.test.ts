@@ -108,6 +108,20 @@ describe("prioritisation", () => {
     expect(activeExceptions([ev("2026-11-01", "2026-10-01"), ev("", "2026-10-02", true)], NOW).has("f1")).toBe(false);
   });
 
+  it("lists duplicates, false positives and resolved findings as Not ranked, with a reason (regression)", () => {
+    const dup = finding({ duplicate_of: "00000000-0000-4000-8000-000000000999", title: "Dup" });
+    const fp = finding({ status: "false_positive", title: "FP" });
+    const fixed = finding({ status: "fixed", title: "Fixed" });
+    const verified = finding({ status: "verified", title: "Verified" });
+    const { ranked, excluded } = prioritise([dup, fp, fixed, verified], { assets: [], kev: new Map(), maliciousActivity: new Set(), attempted: new Set(), excepted: new Set() });
+    expect(ranked).toHaveLength(0);
+    const byId = new Map(excluded.map((e) => [e.finding.id, e.reason]));
+    expect(byId.get(dup.id)).toMatch(/duplicate/i);
+    expect(byId.get(fp.id)).toMatch(/false positive/i);
+    expect(byId.get(fixed.id)).toMatch(/fixed/i);
+    expect(byId.get(verified.id)).toMatch(/verified/i);
+  });
+
   it("raises a finding when logs show attack attempts or malicious activity, without changing its severity", () => {
     const f = finding({ rule_id: "code.path-traversal", severity: "high", confidence: "firm", asset: "github:acme/api" });
     const quiet = prioritise([f], { ...ctx, excepted: new Set() }).ranked[0]!;
@@ -173,6 +187,16 @@ describe("duplicates", () => {
     expect(g[0]!.duplicates.map((d) => d.id)).toEqual([x.id]);
     expect(g[0]!.reason).toMatch(/CVE-2021-23337/);
   });
+
+  it("surfaces the computed duplicates in the assembled state and the technical report (regression)", () => {
+    const x = finding({ rule_id: "deps.vulnerable", severity: "high", title: "lodash: CVE-2021-23337", location: "package.json" });
+    const y = finding({ rule_id: "deps.lockfile", severity: "critical", title: "Locked lodash version has CVE-2021-23337", location: "package-lock.json" });
+    const s = assembleAegis(input({ findings: [x, y] }));
+    expect(s.duplicates.length).toBeGreaterThan(0);
+    const report = technicalReport(s);
+    expect(report).toContain("## Duplicate candidates");
+    expect(report).toMatch(/Likely duplicate/);
+  });
 });
 
 describe("remediation is verified only by a re-check after the fix", () => {
@@ -232,6 +256,22 @@ describe("the assembled command center", () => {
     expect(connect.filter((t) => ["cloud_guardian", "red_team", "compliance_privacy"].includes(t.agent)).map((t) => t.state)).toEqual(["blocked", "blocked", "blocked"]);
     expect(connect.find((t) => t.agent === "identity_guardian")?.state).toBe("proposed");
     expect(s.answers.matters[0]).toMatch(/Nothing needs immediate attention/);
+  });
+
+  it("describes viewed and report events in the timeline instead of raw action strings (regression)", () => {
+    const s = assembleAegis(
+      input({
+        events: [
+          { action: "aegis.viewed", detail: {}, created_at: "2026-10-23T00:00:00Z" },
+          { action: "aegis.report", detail: { type: "technical" }, created_at: "2026-10-23T01:00:00Z" },
+        ],
+      }),
+    );
+    const texts = s.timeline.map((t) => t.text);
+    expect(texts).not.toContain("aegis.viewed");
+    expect(texts).not.toContain("aegis.report");
+    expect(texts.some((t) => /reviewed/i.test(t))).toBe(true);
+    expect(texts.some((t) => /Downloaded the technical report/i.test(t))).toBe(true);
   });
 
   it("never simulates an agent that doesn't exist", () => {

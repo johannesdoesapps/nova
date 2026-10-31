@@ -19,7 +19,7 @@ import { ConfidenceBadge, fmtTime, SeverityBadge } from "./bits";
  * is "Verified" only when a re-check after the fix says so.
  */
 
-type Tab = "overview" | "risks" | "paths" | "investigations" | "remediation" | "assets" | "coverage" | "tasks" | "reports";
+type Tab = "overview" | "risks" | "paths" | "duplicates" | "investigations" | "remediation" | "assets" | "coverage" | "tasks" | "reports";
 const TIER_LABEL = { immediate: "Immediate", priority: "Priority", strategic: "Strategic" } as const;
 const TIER_NOTE = {
   immediate: "Act now: serious, exposed or with signs of exploitation.",
@@ -42,11 +42,13 @@ export function AegisWorkspace() {
   const [error, setError] = useState<string | null>(null);
   const signedOut = integrations.supabase ? !user : true;
 
-  const load = useCallback(() => jsonFetch<AegisState>("/api/security/aegis").then(setData), []);
+  const load = useCallback(() => jsonFetch<AegisState>("/api/security/aegis"), []);
   useEffect(() => {
     if (signedOut) return;
     let alive = true;
-    void load().catch((e: Error) => alive && setError(e.message));
+    void load()
+      .then((d) => alive && setData(d))
+      .catch((e: Error) => alive && setError(e.message));
     return () => {
       alive = false;
     };
@@ -61,7 +63,7 @@ export function AegisWorkspace() {
       acting.current = true;
       try {
         await jsonFetch("/api/security/aegis/actions", { method: "POST", body: JSON.stringify(body) });
-        await load();
+        setData(await load());
         if (done) notify(done);
         return true;
       } catch (e) {
@@ -101,6 +103,7 @@ export function AegisWorkspace() {
                 { value: "overview", label: "Overview" },
                 { value: "risks", label: "Risks" },
                 { value: "paths", label: "Attack paths" },
+                { value: "duplicates", label: "Duplicates" },
                 { value: "investigations", label: "Investigations" },
                 { value: "remediation", label: "Remediation" },
                 { value: "assets", label: "Assets" },
@@ -124,6 +127,8 @@ export function AegisWorkspace() {
             <Risks s={data} act={act} />
           ) : tab === "paths" ? (
             <Paths s={data} />
+          ) : tab === "duplicates" ? (
+            <Duplicates s={data} />
           ) : tab === "investigations" ? (
             <Investigations s={data} act={act} />
           ) : tab === "remediation" ? (
@@ -290,7 +295,7 @@ function Risks({ s, act }: { s: AegisState; act: Act }) {
           </Section>
         );
       })}
-      <Section title={`Not ranked · ${s.excluded.length}`} note="Resolved, false positives, duplicates, engineering-only notes and accepted risks with an active exception.">
+      <Section title={`Not ranked · ${s.excluded.length}`} note="Resolved and fixed findings, false positives, duplicates, and accepted risks. Each row says why it's excluded.">
         {s.excluded.length ? <Bullets items={s.excluded.slice(0, 30).map((e) => `${e.title} — ${e.reason}`)} /> : <p className="text-[13.5px] text-s-ink-2">Nothing excluded.</p>}
       </Section>
       <Section title="How Aegis ranks" note="These assumptions are applied the same way to every finding.">
@@ -304,6 +309,8 @@ function ExceptionForm({ id, act, onDone }: { id: string; act: Act; onDone: () =
   const [until, setUntil] = useState(() => new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10));
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [minDate] = useState(() => new Date(Date.now() + 86_400_000).toISOString().slice(0, 10));
+  const [maxDate] = useState(() => new Date(Date.now() + 366 * 86_400_000).toISOString().slice(0, 10));
   return (
     <form
       className="mt-2 flex flex-wrap items-end gap-2 rounded-xl border border-s-line p-3"
@@ -315,7 +322,7 @@ function ExceptionForm({ id, act, onDone }: { id: string; act: Act; onDone: () =
     >
       <label className="flex flex-col gap-1 text-[12px] text-s-ink-3">
         Until
-        <input type="date" value={until} onChange={(e) => setUntil(e.target.value)} className={input} required />
+        <input type="date" value={until} min={minDate} max={maxDate} onChange={(e) => setUntil(e.target.value)} className={input} required />
       </label>
       <label className="flex min-w-[220px] flex-1 flex-col gap-1 text-[12px] text-s-ink-3">
         Reason (who decided, and what compensates)
@@ -385,6 +392,54 @@ function Paths({ s }: { s: AegisState }) {
             </div>
           </div>
           <p className="mt-3 text-[12px] text-s-ink-3">{p.reproducedNote}</p>
+        </Section>
+      ))}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------- duplicates */
+
+function Duplicates({ s }: { s: AegisState }) {
+  if (!s.duplicates.length) {
+    return (
+      <Section title="No likely duplicates">
+        <p className="text-[13.5px] text-s-ink-2">
+          Aegis didn&apos;t find open findings that look like the same issue reported twice (same CVE, same weakness at the same place, or the same title on one asset). Nothing is merged
+          automatically.
+        </p>
+      </Section>
+    );
+  }
+  return (
+    <div className="space-y-4">
+      <p className="text-[13px] text-s-ink-2">
+        These are suggestions, not automatic merges. Open a finding and mark it a duplicate of the one Aegis recommends keeping; nothing is hidden until you do.
+      </p>
+      {s.duplicates.map((g, i) => (
+        <Section key={i} title={g.reason}>
+          <div className="rounded-xl border border-s-line p-3">
+            <p className="text-[12px] text-s-ink-3">Keep</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <Link href={`/agents/security/findings/${g.keep.id}`} className="min-w-0 flex-1 basis-[240px] text-[13.5px] font-medium hover:underline">
+                {g.keep.title}
+              </Link>
+              <SeverityBadge severity={g.keep.severity} />
+              <span className="rounded-full border border-s-line px-2 py-0.5 text-[11.5px] text-s-ink-2">{g.keep.agent.replace("_", " ")}</span>
+            </div>
+          </div>
+          <p className="mt-2 text-[12px] text-s-ink-3">{g.duplicates.length} likely duplicate(s)</p>
+          <ul className="mt-1 divide-y divide-s-line">
+            {g.duplicates.map((d) => (
+              <li key={d.id} className="flex flex-wrap items-center gap-2 py-2">
+                <Link href={`/agents/security/findings/${d.id}`} className="min-w-0 flex-1 basis-[240px] text-[13.5px] hover:underline">
+                  {d.title}
+                </Link>
+                <SeverityBadge severity={d.severity} />
+                <span className="rounded-full border border-s-line px-2 py-0.5 text-[11.5px] text-s-ink-2">{d.agent.replace("_", " ")}</span>
+              </li>
+            ))}
+          </ul>
         </Section>
       ))}
     </div>
@@ -461,6 +516,7 @@ function InvestigationForm({ id, act }: { id: string; act: Act }) {
           if (ok) {
             setNote("");
             setConclusion("");
+            setOutcome("");
           }
         });
       }}

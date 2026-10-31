@@ -116,7 +116,11 @@ export async function POST(req: Request) {
         await assertFindingInWorkspace(ctx, b.findingId);
         if (b.action === "suppress") {
           if (!b.note || b.note.length < 10) throw new ApiError("bad_request", "Say why it's suppressed (at least 10 characters).");
-          if (b.until && (Date.parse(b.until) - Date.now()) / 86_400_000 > 366) throw new ApiError("bad_request", "Suppress for at most a year; review it again after that.");
+          if (b.until) {
+            const days = (Date.parse(b.until) - Date.now()) / 86_400_000;
+            if (days <= 0) throw new ApiError("bad_request", "Pick a future date to suppress until.");
+            if (days > 366) throw new ApiError("bad_request", "Suppress for at most a year; review it again after that.");
+          }
         }
         await recordEvent(ctx, "bastion.finding", { findingId: b.findingId, action: b.action, owner: b.owner ?? null, note: b.note ?? null, until: b.until ?? null });
         return NextResponse.json({
@@ -128,7 +132,10 @@ export async function POST(req: Request) {
       case "policy": {
         requirePermission(ctx, "policies_manage");
         requireFeature(ctx, "policies");
-        if (b.policy.retentionDays !== null) requireFeature(ctx, "retention");
+        // Only gate retention when it's actually being changed, so a value carried over from a former Business
+        // plan doesn't block every unrelated edit on a lower tier.
+        const cur = await currentPolicy(ctx);
+        if (b.policy.retentionDays !== null && b.policy.retentionDays !== cur.policy.retentionDays) requireFeature(ctx, "retention");
         return NextResponse.json(await writePolicy(ctx, () => b.policy, { expectedVersion: b.expectedVersion, note: b.note ?? null, confirm: b.confirm }));
       }
 

@@ -71,9 +71,20 @@ export function prioritise(findings: AegisFinding[], ctx: RiskContext): { ranked
   const excluded: { finding: AegisFinding; reason: string }[] = [];
   const all = findings as unknown as Parameters<typeof classify>[1];
   for (const f of findings) {
-    if (f.duplicate_of) continue;
+    if (f.duplicate_of) {
+      excluded.push({ finding: f, reason: "Marked a duplicate of another finding" });
+      continue;
+    }
+    if (f.status === "false_positive") {
+      excluded.push({ finding: f, reason: "Marked a false positive" });
+      continue;
+    }
     if (f.status === "accepted_risk" && !ctx.excepted.has(f.id)) {
       excluded.push({ finding: f, reason: "Marked accepted risk (no expiry recorded — review it periodically)" });
+      continue;
+    }
+    if ((f.status === "fixed" || f.status === "verified") && !ctx.excepted.has(f.id)) {
+      excluded.push({ finding: f, reason: f.status === "verified" ? "Marked resolved and verified by a re-check" : "Marked fixed — confirm with a re-scan and close it" });
       continue;
     }
     if (!OPEN.has(f.status) && !ctx.excepted.has(f.id)) continue;

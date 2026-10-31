@@ -164,9 +164,21 @@ export function BastionPage() {
           {signedOut ? (
             <p className="rounded-[20px] border border-dashed border-s-line-strong px-6 py-8 text-center text-[14px] text-s-ink-2">Sign in to see your workspace&apos;s security.</p>
           ) : error ? (
-            <p role="alert" className="flex items-center gap-2 text-[14px] text-s-danger">
-              <CircleAlert className="h-4 w-4" /> {error}
-            </p>
+            <div role="alert" className="space-y-3">
+              <p className="flex items-center gap-2 text-[14px] text-s-danger">
+                <CircleAlert className="h-4 w-4" /> {error}
+              </p>
+              <button
+                type="button"
+                className={btn}
+                onClick={() => {
+                  setError(null);
+                  void load().catch((e: Error) => setError(e.message));
+                }}
+              >
+                Try again
+              </button>
+            </div>
           ) : !state || !core ? (
             <div className="s-skeleton h-48 rounded-2xl" aria-label="Loading" />
           ) : (
@@ -504,6 +516,7 @@ function FindingDetail({ f, act, perms, feat, s }: { f: BastionFinding } & P) {
   const [owner, setOwner] = useState(f.owner ?? "");
   const [note, setNote] = useState("");
   const [until, setUntil] = useState("");
+  const [minUntil] = useState(() => new Date(Date.now() + 86_400_000).toISOString().slice(0, 10));
   const triage = perms.has("findings_triage");
   const manage = perms.has("findings_manage") && feat("finding_workflow");
   const project = f.asset.startsWith("orbis:") ? f.asset.slice(6) : null;
@@ -617,7 +630,7 @@ function FindingDetail({ f, act, perms, feat, s }: { f: BastionFinding } & P) {
           </label>
           <label className="flex flex-col gap-1 text-[12px] text-s-ink-3">
             Suppress until
-            <input type="date" value={until} onChange={(e) => setUntil(e.target.value)} className={input} />
+            <input type="date" value={until} min={minUntil} onChange={(e) => setUntil(e.target.value)} className={input} />
           </label>
           {f.status === "suppressed" ? (
             <button type="button" className={btn} onClick={() => void doIt("unsuppress")}>
@@ -1051,7 +1064,20 @@ function Policies({ s, act, perms, feat }: P) {
                     <div className="ml-6 mt-1 flex flex-wrap gap-x-4">
                       {projects.map((x) => (
                         <label key={x.id} className="inline-flex items-center gap-1.5 text-[13px]">
-                          <input type="checkbox" checked={ids.includes(x.id)} onChange={(e) => set({ agentProjects: { ...p.agentProjects, [ref]: toggle(ids, x.id, e.target.checked) } })} /> {x.name}
+                          <input
+                            type="checkbox"
+                            checked={ids.includes(x.id)}
+                            onChange={(e) => {
+                              const next = toggle(ids, x.id, e.target.checked);
+                              // Unticking the last project removes the restriction entirely (invalid empty list otherwise).
+                              set({
+                                agentProjects: next.length
+                                  ? { ...p.agentProjects, [ref]: next }
+                                  : Object.fromEntries(Object.entries(p.agentProjects).filter(([k]) => k !== ref)),
+                              });
+                            }}
+                          />{" "}
+                          {x.name}
                         </label>
                       ))}
                     </div>
@@ -1287,6 +1313,8 @@ function describe(r: AuditRow): string {
       return `Access reviewed ${who} (${String(d.members ?? 0)} members)`;
     case "bastion.notice":
       return `Notice: ${String(d.subject ?? "")}${d.emailed ? " (emailed)" : ""}`;
+    case "bastion.export":
+      return `Exported ${String(d.what ?? "data")} (${String(d.rows ?? 0)} rows${d.area && d.area !== "all" ? `, ${String(d.area)}` : ""}) ${who}`;
     default:
       return Object.entries(d)
         .filter(([k]) => !["sig", "workspace"].includes(k))

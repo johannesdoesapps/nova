@@ -206,6 +206,8 @@ function describeEvent(e: AegisEvent): string {
   if (e.action === "aegis.task") return `Task ${String(d.taskId)} ${String(d.action)}ed`;
   if (e.action === "aegis.workflow" && d.kind === "remediation") return `Remediation ${String(d.title ?? d.remediationId)} → ${String(d.status).replace("_", " ")}`;
   if (e.action === "aegis.workflow" && d.kind === "investigation") return d.conclusion ? `Investigation concluded: ${String(d.outcome)}` : "Investigation note added";
+  if (e.action === "aegis.viewed") return "Marked the posture as reviewed";
+  if (e.action === "aegis.report") return `Downloaded the ${String(d.type ?? "security")} report`;
   return e.action;
 }
 
@@ -266,6 +268,17 @@ export function technicalReport(s: AegisState): string {
       `- Break it: ${p.mitigations[0] ?? ""}`,
       "",
     );
+  lines.push("## Duplicate candidates");
+  if (s.duplicates.length)
+    for (const g of s.duplicates.slice(0, 20))
+      lines.push(
+        `### ${g.keep.title}`,
+        `- ${g.reason}`,
+        `- Keep: ${g.keep.title} (${g.keep.agent}, ${g.keep.severity})`,
+        ...g.duplicates.map((d) => `- Likely duplicate: ${d.title} (${d.agent}, ${d.severity}) — mark it a duplicate of the kept finding on its page`),
+        "",
+      );
+  else lines.push("- No likely duplicates detected across agents.", "");
   lines.push("## Verification results");
   for (const r of s.remediations) lines.push(`- ${r.title}: ${r.status.replace("_", " ")}${r.remaining.length ? ` — ${r.remaining.join("; ")}` : ""}`);
   lines.push("", "## Coverage gaps", ...s.coverage.domains.flatMap((d) => d.gaps.slice(0, 2).map((g) => `- ${d.label}: ${g}`)));

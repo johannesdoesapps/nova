@@ -131,7 +131,7 @@ export async function loadWorkspace(ctx: WorkspaceCtx): Promise<Loaded> {
       db.from("agents").select("id,name,description,capabilities,instructions,updated_at").eq("user_id", o).limit(200),
     ),
     safe<{ agent_id: string | null; builtin_agent: string | null; updated_at: string }[]>(
-      "agents",
+      "conversations",
       u,
       db.from("conversations").select("agent_id,builtin_agent,updated_at").eq("user_id", o).order("updated_at", { ascending: false }).limit(500),
     ),
@@ -282,7 +282,7 @@ export async function workspaceState(ctx: WorkspaceCtx, auth: Extract<AuthContex
     loadControls(),
     auditRows(ctx, { actions: ["bastion.assessment"], limit: 200 }),
     auditRows(ctx, { actions: ["bastion.finding"], limit: 2000 }),
-    ctx.shared ? Promise.resolve([]) : listSharedWithMe(auth),
+    listSharedWithMe(auth),
   ]);
   const { findings: raw, checks } = runChecks(s);
   const ranChecks = checks.filter((c) => c.state !== "unavailable").map((c) => c.id);
