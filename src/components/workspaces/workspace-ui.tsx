@@ -197,6 +197,27 @@ export function WorkspaceScreen({ ws, view, initialQuery = "" }: { ws: Workspace
                   <AgentCard key={a.id} ws={ws} agent={a} />
                 ))}
               </Grid>
+              {ws === "cyber" && (
+                <>
+                  <SectionHead title="Security Team" href="/agents/security" more="Open Security Team" />
+                  <Grid>
+                    <Link href="/agents/security" className={linkCls}>
+                      <div className="flex items-start gap-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-s-accent-soft text-s-accent [&_svg]:h-[18px] [&_svg]:w-[18px]">
+                          <WorkspaceIcon name="shield" />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 text-[14px] font-semibold">
+                            <span className="truncate">Security Team</span>
+                            <ExternalLink className="h-3 w-3 shrink-0 text-s-ink-3" aria-label="Opens the Security Team" />
+                          </div>
+                          <p className="mt-0.5 line-clamp-2 text-[12.5px] text-s-ink-2">The full roster of security agents — scanning, monitoring, findings and schedules — working together.</p>
+                        </div>
+                      </div>
+                    </Link>
+                  </Grid>
+                </>
+              )}
             </>
           )}
 
