@@ -83,6 +83,7 @@ const WEB: WorkspaceCatalog = {
     { id: "store", name: "E-commerce store", description: "A storefront with a catalogue, product pages and a cart.", icon: "briefcase", kind: "panel", ai: true, group: "Build" },
     { id: "blog", name: "Blog", description: "A blog or articles section with a clean reading layout.", icon: "pen", kind: "panel", ai: true, group: "Build" },
     { id: "redesign", name: "Website redesign", description: "Paste a page or describe your current site and get a modern rebuild.", icon: "palette", kind: "panel", ai: true, group: "Build" },
+    { id: "add-effect", name: "Add an effect", description: "Add an animated effect to a website — an image loader, voice glow, gooey menu, animated pricing, light/dark switch or staggered menu.", icon: "sparkles", kind: "link", href: "/templates?t=add-website-effect", group: "Build" },
     { id: "code", name: "Custom code editor", description: "Edit HTML, CSS and JavaScript directly, with previews (Orbis Code).", icon: "code", kind: "link", href: "/code", group: "Build" },
     { id: "seo", name: "SEO optimisation", description: "Audit a page for titles, meta, headings, structure and alt text.", icon: "telescope", kind: "panel", ai: true, group: "Optimise" },
     { id: "performance", name: "Performance test", description: "Check a page's load, image and JavaScript weight, with fixes.", icon: "scale", kind: "panel", ai: true, group: "Optimise" },
