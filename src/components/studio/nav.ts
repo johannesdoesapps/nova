@@ -147,7 +147,6 @@ export const WORKSPACE_SECTIONS: WorkspaceSection[] = [
     children: [
       { label: "Dashboard", href: "/cyber" },
       { label: "Agents", href: "/cyber/agents" },
-      { label: "Security Team", href: "/agents/security" },
       { label: "Tools", href: "/cyber/tools" },
       { label: "Templates", href: "/cyber/templates" },
       { label: "Projects", href: "/cyber/projects" },
