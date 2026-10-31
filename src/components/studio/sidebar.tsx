@@ -417,9 +417,6 @@ function WorkspaceNav({ entry, rail, section, onNavigate }: { entry: NavEntry; r
   const pathname = usePathname();
   const ws = WORKSPACE_SECTIONS.find((w) => w.id === entry.id)!;
   const onSection = section === entry.id;
-  // Open when the user is in the workspace, or when they opened it by hand; a manual choice overrides until they leave.
-  const [manual, setManual] = useState<boolean | null>(null);
-  const open = manual ?? onSection;
   const Icon = entry.icon;
 
   // In the narrow rail the submenu can't show, so the icon just links to the dashboard.
@@ -437,18 +434,8 @@ function WorkspaceNav({ entry, rail, section, onNavigate }: { entry: NavEntry; r
           <Icon />
           <span className="flex-1">{entry.label}</span>
         </Link>
-        <button
-          type="button"
-          onClick={() => setManual((m) => !(m ?? onSection))}
-          aria-expanded={open}
-          aria-controls={`nav-${entry.id}`}
-          aria-label={`${open ? "Collapse" : "Expand"} ${entry.label}`}
-          className="mr-1 rounded-lg p-1.5 text-s-ink-3 transition hover:text-s-ink"
-        >
-          <ChevronDown className={cn("h-4 w-4 transition", open && "rotate-180")} aria-hidden />
-        </button>
       </div>
-      <ul id={`nav-${entry.id}`} className={cn("ml-3 mt-0.5 flex flex-col gap-0.5 border-l border-s-line pl-1.5", !open && "hidden")}>
+      <ul id={`nav-${entry.id}`} className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l border-s-line pl-1.5">
         {ws.children.slice(1).map((c) => {
           const active = pathname === c.href || pathname.startsWith(`${c.href}/`);
           return (
