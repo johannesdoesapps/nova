@@ -72,9 +72,7 @@ function AgentCard({ ws, agent }: { ws: WorkspaceKey; agent: AgentConfig }) {
           <p className="mt-0.5 line-clamp-2 text-[12.5px] text-s-ink-2">{agent.description}</p>
         </div>
       </div>
-      <span className="mt-3 inline-flex items-center gap-1 text-[12.5px] text-s-accent opacity-0 transition group-hover:opacity-100">
-        Open <ArrowRight className="h-3.5 w-3.5" />
-      </span>
+      <OpenHint />
     </Link>
   );
 }
@@ -98,6 +96,7 @@ function ToolCard({ ws, tool }: { ws: WorkspaceKey; tool: WorkspaceTool }) {
           <p className="mt-0.5 line-clamp-2 text-[12.5px] text-s-ink-2">{tool.description}</p>
         </div>
       </div>
+      <OpenHint />
     </Link>
   );
 }
@@ -107,7 +106,17 @@ function TemplateCard({ ws, id, name, description }: { ws: WorkspaceKey; id: str
     <Link href={`${WORKSPACES[ws].base}/templates/${id}`} className={linkCls}>
       <div className="text-[14px] font-semibold">{name}</div>
       <p className="mt-1 line-clamp-2 text-[12.5px] text-s-ink-2">{description}</p>
+      <OpenHint />
     </Link>
+  );
+}
+
+/** The "Open →" affordance shown on every workspace card, revealed on hover. */
+function OpenHint({ label = "Open" }: { label?: string }) {
+  return (
+    <span className="mt-3 inline-flex items-center gap-1 text-[12.5px] text-s-accent opacity-0 transition group-hover:opacity-100">
+      {label} <ArrowRight className="h-3.5 w-3.5" />
+    </span>
   );
 }
 
@@ -214,6 +223,7 @@ export function WorkspaceScreen({ ws, view, initialQuery = "" }: { ws: Workspace
                           <p className="mt-0.5 line-clamp-2 text-[12.5px] text-s-ink-2">The full roster of security agents — scanning, monitoring, findings and schedules — working together.</p>
                         </div>
                       </div>
+                      <OpenHint />
                     </Link>
                   </Grid>
                 </>
