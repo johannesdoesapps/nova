@@ -23,7 +23,17 @@ interface Item {
   updatedAt: string;
 }
 
-const linkCls = "group glass flex flex-col rounded-[18px] p-4 transition hover:-translate-y-px hover:border-s-line-strong";
+// Matches the Security Team card style (team-overview.tsx): roomy, rounded, with the shared security shadow on hover.
+const linkCls = "group glass relative flex flex-col rounded-[22px] p-5 transition duration-300 hover:border-s-line-strong hover:shadow-[var(--s-shadow)]";
+
+/** A gradient-tinted square icon tile, matching the Security Team's AgentBadge (bits.tsx). */
+function IconTile({ name }: { name: string }) {
+  return (
+    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] border border-s-line bg-gradient-to-br from-s-accent/25 to-transparent text-s-accent [&_svg]:h-5 [&_svg]:w-5">
+      <WorkspaceIcon name={name} />
+    </span>
+  );
+}
 
 /** The in-workspace tab row shown in the header, so people move between the parts without the sidebar. */
 function Tabs({ ws, view }: { ws: WorkspaceKey; view: View }) {
@@ -56,8 +66,8 @@ function Tabs({ ws, view }: { ws: WorkspaceKey; view: View }) {
 function Hero({ title, lead }: { title: string; lead: string }) {
   return (
     <div className="s-in">
-      <h1 className="font-serif text-[clamp(30px,4.5vw,42px)] leading-[1.05] tracking-[-0.01em]">{title}</h1>
-      <p className="mt-2 max-w-2xl text-[15px] text-s-ink-2">{lead}</p>
+      <h1 className="font-serif text-[clamp(34px,5vw,46px)] leading-[1.05] tracking-[-0.01em]">{title}</h1>
+      <p className="mt-2 max-w-2xl text-[15.5px] text-s-ink-2">{lead}</p>
     </div>
   );
 }
@@ -65,11 +75,11 @@ function Hero({ title, lead }: { title: string; lead: string }) {
 function AgentCard({ ws, agent }: { ws: WorkspaceKey; agent: AgentConfig }) {
   return (
     <Link href={`${WORKSPACES[ws].base}/agents/${agent.id}`} className={linkCls}>
-      <div className="flex items-start gap-3">
-        <AgentAvatar agent={agent} size="sm" />
+      <div className="flex items-start gap-3.5">
+        <AgentAvatar agent={agent} size="md" />
         <div className="min-w-0">
-          <div className="truncate text-[14px] font-semibold">{agent.name}</div>
-          <p className="mt-0.5 line-clamp-2 text-[12.5px] text-s-ink-2">{agent.description}</p>
+          <div className="truncate text-[16px] font-semibold leading-snug tracking-[-0.01em]">{agent.name}</div>
+          <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-s-ink-2">{agent.description}</p>
         </div>
       </div>
       <OpenHint />
@@ -82,16 +92,14 @@ function ToolCard({ ws, tool }: { ws: WorkspaceKey; tool: WorkspaceTool }) {
   const href = tool.kind === "link" ? tool.href! : `${base}/tools/${tool.id}`;
   return (
     <Link href={href} className={linkCls}>
-      <div className="flex items-start gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-s-accent-soft text-s-accent [&_svg]:h-[18px] [&_svg]:w-[18px]">
-          <WorkspaceIcon name={tool.icon} />
-        </span>
+      <div className="flex items-start gap-3.5">
+        <IconTile name={tool.icon} />
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-[14px] font-semibold">
+          <div className="flex items-center gap-1.5 text-[16px] font-semibold leading-snug tracking-[-0.01em]">
             <span className="truncate">{tool.name}</span>
             {tool.ai && <span className="shrink-0 rounded-full bg-s-accent-soft px-1.5 py-px text-[10px] font-medium text-s-accent">AI</span>}
           </div>
-          <p className="mt-0.5 line-clamp-2 text-[12.5px] text-s-ink-2">{tool.description}</p>
+          <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-s-ink-2">{tool.description}</p>
         </div>
       </div>
       <OpenHint />
@@ -102,8 +110,8 @@ function ToolCard({ ws, tool }: { ws: WorkspaceKey; tool: WorkspaceTool }) {
 function TemplateCard({ ws, id, name, description }: { ws: WorkspaceKey; id: string; name: string; description: string }) {
   return (
     <Link href={`${WORKSPACES[ws].base}/templates/${id}`} className={linkCls}>
-      <div className="text-[14px] font-semibold">{name}</div>
-      <p className="mt-1 line-clamp-2 text-[12.5px] text-s-ink-2">{description}</p>
+      <div className="text-[16px] font-semibold leading-snug tracking-[-0.01em]">{name}</div>
+      <p className="mt-1.5 line-clamp-2 text-[13px] leading-snug text-s-ink-2">{description}</p>
       <OpenHint />
     </Link>
   );
@@ -119,7 +127,7 @@ function OpenHint({ label = "Open" }: { label?: string }) {
 }
 
 function Grid({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{children}</div>;
+  return <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div>;
 }
 
 function SectionHead({ title, href, more }: { title: string; href?: string; more?: string }) {
@@ -165,7 +173,7 @@ export function WorkspaceScreen({ ws, view, initialQuery = "" }: { ws: Workspace
         <Tabs ws={ws} view={view} />
       </StudioHeader>
       <div className="s-scroll min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[1120px] px-4 pb-24 pt-3 sm:px-8">
+        <div className="mx-auto w-full max-w-[1180px] px-4 pb-24 pt-3 sm:px-8">
           {view === "dashboard" && (
             <>
               <Hero title={meta.label} lead={meta.tagline} />
@@ -209,15 +217,13 @@ export function WorkspaceScreen({ ws, view, initialQuery = "" }: { ws: Workspace
                   <SectionHead title="Security Team" href="/agents/security" more="Open Security Team" />
                   <Grid>
                     <Link href="/agents/security" className={linkCls}>
-                      <div className="flex items-start gap-3">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-s-accent-soft text-s-accent [&_svg]:h-[18px] [&_svg]:w-[18px]">
-                          <WorkspaceIcon name="shield" />
-                        </span>
+                      <div className="flex items-start gap-3.5">
+                        <IconTile name="shield" />
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 text-[14px] font-semibold">
+                          <div className="flex items-center gap-1.5 text-[16px] font-semibold leading-snug tracking-[-0.01em]">
                             <span className="truncate">Security Team</span>
                           </div>
-                          <p className="mt-0.5 line-clamp-2 text-[12.5px] text-s-ink-2">The full roster of security agents — scanning, monitoring, findings and schedules — working together.</p>
+                          <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-s-ink-2">The full roster of security agents — scanning, monitoring, findings and schedules — working together.</p>
                         </div>
                       </div>
                       <OpenHint />
