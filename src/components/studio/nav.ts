@@ -146,7 +146,6 @@ export const WORKSPACE_SECTIONS: WorkspaceSection[] = [
     base: "/cyber",
     children: [
       { label: "Dashboard", href: "/cyber" },
-      { label: "Agents", href: "/cyber/agents" },
       { label: "Tools", href: "/cyber/tools" },
       { label: "Templates", href: "/cyber/templates" },
       { label: "Projects", href: "/cyber/projects" },
@@ -159,7 +158,6 @@ export const WORKSPACE_SECTIONS: WorkspaceSection[] = [
     base: "/web",
     children: [
       { label: "Dashboard", href: "/web" },
-      { label: "Agents", href: "/web/agents" },
       { label: "Tools", href: "/web/tools" },
       { label: "Templates", href: "/web/templates" },
       { label: "Projects", href: "/web/projects" },
