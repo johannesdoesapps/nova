@@ -79,58 +79,67 @@ interface VerificationStats {
 
 /* -------------------------------------------------------- website grade scale */
 
-type ScanOverview = { grade: string | null; score: number | null; gradeNote?: string | null };
-
-/** The Orbis website grade ladder (A+ → F; there is no E), shown with the achieved grade highlighted. */
-const GRADE_SCALE: { letter: string; range: string }[] = [
-  { letter: "A+", range: "Exemplary" },
-  { letter: "A", range: "90–100" },
-  { letter: "B", range: "80–89" },
-  { letter: "C", range: "65–79" },
-  { letter: "D", range: "50–64" },
-  { letter: "F", range: "under 50" },
-];
-const GRADE_ACTIVE: Record<string, string> = {
-  "A+": "border-emerald-400 bg-emerald-500/15 text-emerald-700 dark:border-emerald-400/70 dark:text-emerald-300",
-  A: "border-emerald-400 bg-emerald-500/15 text-emerald-700 dark:border-emerald-400/70 dark:text-emerald-300",
-  B: "border-lime-400 bg-lime-500/15 text-lime-700 dark:border-lime-400/70 dark:text-lime-300",
-  C: "border-amber-400 bg-amber-500/15 text-amber-700 dark:border-amber-400/70 dark:text-amber-300",
-  D: "border-orange-400 bg-orange-500/15 text-orange-700 dark:border-orange-400/70 dark:text-orange-300",
-  F: "border-red-400 bg-red-500/15 text-red-700 dark:border-red-400/70 dark:text-red-300",
+type ScanOverview = {
+  grade: string | null;
+  score: number | null;
+  gradeNote?: string | null;
+  caps?: string[];
+  plus?: string | null;
+  parts?: { tls: number; web: number };
+  counts?: { severity?: { critical?: number; high?: number; medium?: number; low?: number } };
 };
 
-function GradeScale({ overview }: { overview: ScanOverview }) {
-  const { grade, score } = overview;
+/** Tint + plain-English meaning for each Orbis grade letter (A+ → F; there is no E). */
+const GRADE_BOX: Record<string, string> = {
+  "A+": "border-emerald-400/60 from-emerald-400/30 text-emerald-600 dark:text-emerald-300",
+  A: "border-emerald-400/60 from-emerald-400/30 text-emerald-600 dark:text-emerald-300",
+  B: "border-lime-400/60 from-lime-400/30 text-lime-600 dark:text-lime-300",
+  C: "border-amber-400/60 from-amber-400/30 text-amber-600 dark:text-amber-300",
+  D: "border-orange-400/60 from-orange-400/30 text-orange-600 dark:text-orange-300",
+  F: "border-red-400/60 from-red-400/30 text-red-600 dark:text-red-300",
+};
+const GRADE_MEANING: Record<string, string> = {
+  "A+": "Exemplary — strong transport security and nothing to flag.",
+  A: "Strong — no serious problems found.",
+  B: "Good, with a little room to tighten up.",
+  C: "Fair — at least one serious weakness to fix.",
+  D: "Weak — several issues need attention.",
+  F: "Failing — a critical problem was found.",
+};
+
+function GradeDisplay({ overview }: { overview: ScanOverview }) {
+  const { grade, score, caps = [], plus, parts, counts } = overview;
+  if (!grade) return null;
+  const crit = counts?.severity?.critical ?? 0;
+  const high = counts?.severity?.high ?? 0;
+  const why: string[] = [];
+  if (plus) why.push(plus);
+  for (const c of caps) why.push(`Grade capped: ${c}`);
+  why.push(crit || high ? `${crit} critical and ${high} high-severity issue${crit + high === 1 ? "" : "s"} found.` : "No critical or high-severity issues found.");
+  if (parts) why.push(`Transport security scored ${parts.tls}/100; web configuration ${parts.web}/100.`);
+
   return (
     <section className="glass rounded-[20px] p-5">
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-s-ink-3">Orbis grade</h2>
-        {score != null && (
-          <span className="text-[13px] text-s-ink-2">
-            <span className="font-semibold text-s-ink">{grade}</span> · {score}/100
-          </span>
-        )}
+      <h2 className="mb-4 text-[13px] font-semibold uppercase tracking-[0.06em] text-s-ink-3">Orbis grade</h2>
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+        <div className="flex shrink-0 flex-col items-center gap-1.5">
+          <div className={cn("grid h-24 w-24 place-items-center rounded-[22px] border bg-gradient-to-br to-transparent shadow-[var(--s-shadow)]", GRADE_BOX[grade] ?? "border-s-line text-s-ink")}>
+            <span className="font-serif text-[46px] leading-none">{grade}</span>
+          </div>
+          {score != null && <span className="text-[12px] text-s-ink-3">{score}/100</span>}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-medium leading-snug">{GRADE_MEANING[grade] ?? ""}</p>
+          <p className="mt-3 text-[12px] font-semibold uppercase tracking-[0.06em] text-s-ink-3">Why this grade</p>
+          <ul className="mt-1.5 list-disc space-y-1 pl-5 text-[13.5px] text-s-ink-2">
+            {why.map((b, i) => (
+              <li key={i}>{b}</li>
+            ))}
+          </ul>
+        </div>
       </div>
-      <div className="grid grid-cols-6 gap-1.5 sm:gap-2">
-        {GRADE_SCALE.map((g) => {
-          const on = g.letter === grade;
-          return (
-            <div
-              key={g.letter}
-              aria-current={on ? "true" : undefined}
-              className={cn(
-                "flex flex-col items-center justify-center rounded-xl border px-1 py-3 text-center transition",
-                on ? `${GRADE_ACTIVE[g.letter]} shadow-[var(--s-shadow)]` : "border-s-line text-s-ink-3 opacity-55",
-              )}
-            >
-              <span className={cn("font-serif leading-none", on ? "text-[26px]" : "text-[18px]")}>{g.letter}</span>
-              <span className="mt-1 text-[10px] leading-tight sm:text-[10.5px]">{g.range}</span>
-            </div>
-          );
-        })}
-      </div>
-      <p className="mt-3 text-[12px] text-s-ink-3">
-        Orbis&apos;s own A+ to F scale (there is no E), inspired by SSL Labs. A+ is an A with HSTS, TLS 1.3 and no transport warnings; a serious failure caps the grade however high the score.
+      <p className="mt-4 border-t border-s-line pt-3 text-[12px] text-s-ink-3">
+        Orbis grades A+ to F (there is no E), inspired by SSL Labs. A serious failure caps the grade however high the score.
       </p>
     </section>
   );
@@ -466,7 +475,7 @@ export function RunView({ id }: { id: string }) {
             </p>
           )}
           {run.agent === "sentinel" && run.action === "site_scan" && (run.stats.overview as ScanOverview | undefined)?.grade && (
-            <GradeScale overview={run.stats.overview as ScanOverview} />
+            <GradeDisplay overview={run.stats.overview as ScanOverview} />
           )}
 
           <section className="glass rounded-[20px] p-5">
