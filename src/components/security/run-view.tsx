@@ -77,6 +77,65 @@ interface VerificationStats {
   counts: Record<"confirmed" | "likely" | "unverified" | "disproven", number>;
 }
 
+/* -------------------------------------------------------- website grade scale */
+
+type ScanOverview = { grade: string | null; score: number | null; gradeNote?: string | null };
+
+/** The Orbis website grade ladder (A+ → F; there is no E), shown with the achieved grade highlighted. */
+const GRADE_SCALE: { letter: string; range: string }[] = [
+  { letter: "A+", range: "Exemplary" },
+  { letter: "A", range: "90–100" },
+  { letter: "B", range: "80–89" },
+  { letter: "C", range: "65–79" },
+  { letter: "D", range: "50–64" },
+  { letter: "F", range: "under 50" },
+];
+const GRADE_ACTIVE: Record<string, string> = {
+  "A+": "border-emerald-400 bg-emerald-500/15 text-emerald-700 dark:border-emerald-400/70 dark:text-emerald-300",
+  A: "border-emerald-400 bg-emerald-500/15 text-emerald-700 dark:border-emerald-400/70 dark:text-emerald-300",
+  B: "border-lime-400 bg-lime-500/15 text-lime-700 dark:border-lime-400/70 dark:text-lime-300",
+  C: "border-amber-400 bg-amber-500/15 text-amber-700 dark:border-amber-400/70 dark:text-amber-300",
+  D: "border-orange-400 bg-orange-500/15 text-orange-700 dark:border-orange-400/70 dark:text-orange-300",
+  F: "border-red-400 bg-red-500/15 text-red-700 dark:border-red-400/70 dark:text-red-300",
+};
+
+function GradeScale({ overview }: { overview: ScanOverview }) {
+  const { grade, score } = overview;
+  return (
+    <section className="glass rounded-[20px] p-5">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-s-ink-3">Orbis grade</h2>
+        {score != null && (
+          <span className="text-[13px] text-s-ink-2">
+            <span className="font-semibold text-s-ink">{grade}</span> · {score}/100
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-6 gap-1.5 sm:gap-2">
+        {GRADE_SCALE.map((g) => {
+          const on = g.letter === grade;
+          return (
+            <div
+              key={g.letter}
+              aria-current={on ? "true" : undefined}
+              className={cn(
+                "flex flex-col items-center justify-center rounded-xl border px-1 py-3 text-center transition",
+                on ? `${GRADE_ACTIVE[g.letter]} shadow-[var(--s-shadow)]` : "border-s-line text-s-ink-3 opacity-55",
+              )}
+            >
+              <span className={cn("font-serif leading-none", on ? "text-[26px]" : "text-[18px]")}>{g.letter}</span>
+              <span className="mt-1 text-[10px] leading-tight sm:text-[10.5px]">{g.range}</span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-3 text-[12px] text-s-ink-3">
+        Orbis&apos;s own A+ to F scale (there is no E), inspired by SSL Labs. A+ is an A with HSTS, TLS 1.3 and no transport warnings; a serious failure caps the grade however high the score.
+      </p>
+    </section>
+  );
+}
+
 /** What a pull-request audit covered, plus posting its summary on the pull request (only after the person confirms). */
 function PrPanel({ runId, pr, done, postedUrl }: { runId: string; pr: PrStats; done: boolean; postedUrl: string | null }) {
   const [state, setState] = useState<{ phase: "idle" | "confirm" | "posting" | "posted" | "error"; url?: string; error?: string }>(postedUrl ? { phase: "posted", url: postedUrl } : { phase: "idle" });
@@ -405,6 +464,9 @@ export function RunView({ id }: { id: string }) {
             <p role="alert" className="rounded-xl border border-s-line px-3 py-2 text-[13.5px] text-s-danger">
               {run.error}
             </p>
+          )}
+          {run.agent === "sentinel" && run.action === "site_scan" && (run.stats.overview as ScanOverview | undefined)?.grade && (
+            <GradeScale overview={run.stats.overview as ScanOverview} />
           )}
 
           <section className="glass rounded-[20px] p-5">
