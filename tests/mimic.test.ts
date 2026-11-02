@@ -9,7 +9,8 @@ import { appearsIn, extractInvoice, parseAmount, parseDate, suspiciousContent } 
 import { answerQuestion, DemonstrationError, learnFromDemonstration } from "@/lib/mimic/learn";
 import { memoryLedger, runWorkflow, type RunInput } from "@/lib/mimic/engine";
 import { sampleById, SAMPLE_INVOICES } from "@/lib/mimic/samples";
-import type { Demonstration, Rule } from "@/lib/mimic/types";
+import { findDuplicates } from "@/lib/mimic/validate";
+import { FIELDS, type Demonstration, type Extraction, type ExtractedField, type Field, type LedgerEntry, type Rule } from "@/lib/mimic/types";
 
 const teach = sampleById("sample-paper-0412")!;
 const t = (s: number) => new Date(Date.UTC(2026, 9, 25, 10, 0, s)).toISOString();
@@ -264,5 +265,22 @@ describe("running a workflow", () => {
     const ok = await runWorkflow(input({ document: { id: null, text }, rules: [{ ...rule, supplier: "SwiftShip Logistics AG", category: "6800 Shipping and postage" }], aiExtract: async () => ({ invoiceNumber: "SS-5520" }) }));
     expect(ok.extracted!.invoiceNumber).toMatchObject({ value: "SS-5520", source: "ai" });
     expect(ok.status).toBe("needs_approval");
+  });
+});
+
+describe("duplicate detection", () => {
+  const ef = (value: string | number | null): ExtractedField => ({ value, raw: null, evidence: null, source: "label", confidence: "high" });
+  const extraction = (o: Partial<Record<Field, string | number | null>>): Extraction => Object.fromEntries(FIELDS.map((f) => [f, ef(o[f] ?? null)])) as Extraction;
+  const entry = (o: Partial<LedgerEntry>): LedgerEntry => ({
+    id: "e1", supplier: "Acme AG", invoiceNumber: "A-1", invoiceDate: "2026-10-01", dueDate: null, net: null, tax: null,
+    total: 100, currency: "USD", category: "6000 Office supplies", status: "draft", idempotencyKey: "k1", documentId: null, runId: null, createdAt: "2026-10-01T00:00:00Z", ...o,
+  });
+
+  it("flags a same-supplier/total/date invoice as probable only when the currency also matches (regression)", () => {
+    const ledger = [entry({ currency: "USD" })];
+    const sameCur = extraction({ supplier: "Acme AG", invoiceNumber: "A-2", total: 100, currency: "USD", invoiceDate: "2026-10-01" });
+    const diffCur = extraction({ supplier: "Acme AG", invoiceNumber: "A-2", total: 100, currency: "EUR", invoiceDate: "2026-10-01" });
+    expect(findDuplicates(sameCur, ledger).probable).toHaveLength(1);
+    expect(findDuplicates(diffCur, ledger).probable).toHaveLength(0);
   });
 });

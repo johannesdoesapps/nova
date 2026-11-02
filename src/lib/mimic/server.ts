@@ -434,33 +434,49 @@ async function execute(
     runId = data!.id as string;
   }
   const started = performance.now();
-  const result = await runWorkflow({
-    workflowId: wf.id,
-    definition: wf.definition,
-    mode: wf.mode,
-    document: { id: doc.id, text: doc.text },
-    rules,
-    ledger: ledgerPort(auth),
-    stopped: settings.stopped,
-    dryRun: opts.dryRun,
-    approval: opts.approval ?? null,
-    aiExtract: settings.aiReading ? aiReader(req, auth) : undefined,
-    today: today(),
-    runId,
-  });
+  // Best-effort: never leave a run stuck at "running" if a step or the save throws (transient DB/engine error).
+  const markFailed = () => auth.supabase.from("mimic_runs").update({ status: "failed", finished_at: now() }).eq("id", runId).then(() => {}, () => {});
+  let result: Awaited<ReturnType<typeof runWorkflow>>;
+  try {
+    result = await runWorkflow({
+      workflowId: wf.id,
+      definition: wf.definition,
+      mode: wf.mode,
+      document: { id: doc.id, text: doc.text },
+      rules,
+      ledger: ledgerPort(auth),
+      stopped: settings.stopped,
+      dryRun: opts.dryRun,
+      approval: opts.approval ?? null,
+      aiExtract: settings.aiReading ? aiReader(req, auth) : undefined,
+      today: today(),
+      runId,
+    });
+  } catch (e) {
+    await markFailed();
+    throw e;
+  }
   const seconds = Math.round((performance.now() - started) / 100) / 10;
+  // Persist the trigger too, so an approval re-run is recorded as "approval" (used by the time-saved estimate).
   const { data, error } = await auth.supabase
     .from("mimic_runs")
-    .update({ status: result.status, result, ledger_entry_id: result.ledgerEntryId, seconds, finished_at: now() })
+    .update({ status: result.status, result, ledger_entry_id: result.ledgerEntryId, seconds, trigger: opts.trigger, finished_at: now() })
     .eq("id", runId)
     .select(RUN_COLS)
     .single();
-  if (error) dbFail(error, "mimic.run.save");
+  if (error) {
+    await markFailed();
+    dbFail(error, "mimic.run.save");
+  }
 
   const label = result.proposed ? `${result.proposed.supplier} ${result.proposed.invoiceNumber}` : "an invoice";
   const kind = { completed: "completed", dry_run: "test", proposal: "proposed", needs_approval: "proposed", needs_attention: "failed", failed: "failed", stopped: "failed" }[result.status];
   const summary = {
-    completed: result.alreadyDone ? `"${wf.name}": ${label} was already in Demo Books; nothing new created.` : `"${wf.name}": draft created for ${label}.`,
+    completed: result.alreadyDone
+      ? `"${wf.name}": ${label} was already in Demo Books; nothing new created.`
+      : result.ledgerEntryId
+        ? `"${wf.name}": draft created for ${label}.`
+        : `"${wf.name}": ran on ${label} with draft creation turned off; nothing was created.`,
     dry_run: `"${wf.name}": test run on ${label}; nothing saved.`,
     proposal: `"${wf.name}": prepared a draft for ${label} (Assist mode).`,
     needs_approval: `"${wf.name}": waiting for your approval to create a draft for ${label}.`,

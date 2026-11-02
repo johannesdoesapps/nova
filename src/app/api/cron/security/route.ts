@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cronAuthorized } from "@/lib/cron-auth";
 import { reportError } from "@/lib/observability";
 import { runDueSchedules } from "@/lib/security/scheduler";
 import { serviceSupabase } from "@/lib/supabase/admin";
@@ -11,8 +12,7 @@ export const maxDuration = 300;
  * Cron can call it (CRON_SECRET bearer); without that secret the route refuses everything.
  */
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!cronAuthorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const db = serviceSupabase();
   if (!db) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY is not set" }, { status: 503 });
   try {

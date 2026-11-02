@@ -49,7 +49,9 @@ const WRAP_UP_AFTER_MS = 30_000;
  */
 export async function POST(req: Request) {
   try {
-    const body = await parseJsonBody(req, turnRequest, 250_000);
+    // Headroom for a maxed-out continuation trace (6 rounds × 16 results × 4000 chars ≈ 384 KB plus history),
+    // so a long multi-round session isn't rejected with 413 before Zod validates it.
+    const body = await parseJsonBody(req, turnRequest, 600_000);
     const auth = await requireUserIfConfigured();
     const limits = await planLimits(auth);
     const skills = allSkills(body.skills);
@@ -98,8 +100,11 @@ export async function POST(req: Request) {
     let total: Usage = { inputTokens: 0, outputTokens: 0, estimated: false };
     // Pages Jarvis may open once outside material is in the turn: only addresses the user gave or a result showed,
     // so a page can't make Jarvis send data to an address of its choosing.
+    // Addresses Jarvis may open after reading outside content: ones the user gave, plus ones a web SEARCH
+    // surfaced. Links embedded in a fetched page body are attacker-controllable, so they must NOT expand this
+    // allow-list (that would let an injected page steer a tainted turn into exfiltrating context to its own links).
     const known = new Set([body.message, ...body.history.map((h) => h.text)].flatMap((t) => extractLinks(t)));
-    for (const r of rounds) for (const x of r.results) for (const u of extractLinks(x.text)) known.add(u);
+    for (const r of rounds) for (const x of r.results) if (r.calls.find((c) => c.id === x.id)?.tool === "web_search") for (const u of extractLinks(x.text)) known.add(u);
     let cost = 0;
 
     for (let i = 0; i < MAX_MODEL_CALLS; i++) {
@@ -181,7 +186,8 @@ export async function POST(req: Request) {
         const r = refused ? { ok: false, text: refused, summary: refused } : await runServerTool(c.tool, c.args, { auth, skills, timeZone, signal });
         if (c === searchCall && searchesLeft !== null) searchesLeft--;
         round.results.push({ id: c.id!, ok: r.ok, text: r.text.slice(0, 4000) });
-        for (const u of extractLinks(r.text)) known.add(u);
+        // Only a web search expands the openable-address allow-list; links inside a fetched page don't (see above).
+        if (c.tool === "web_search") for (const u of extractLinks(r.text)) known.add(u);
         activity.push({ tool: c.tool, summary: r.summary, ok: r.ok });
       }
       const forBrowser = vetted.calls.filter((c) => !isServerTool(c.tool));

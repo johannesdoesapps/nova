@@ -26,7 +26,10 @@ describe("calculator", () => {
     expect(value("2 + 3 * 4")).toBe(14);
     expect(value("(2 + 3) * 4")).toBe(20);
     expect(value("2 ^ 3 ^ 2")).toBe(512);
-    expect(value("-2 ^ 2")).toBe(4);
+    // Exponentiation binds tighter than a leading unary minus (Python/Wolfram/Google convention).
+    expect(value("-2 ^ 2")).toBe(-4);
+    expect(value("(-2) ^ 2")).toBe(4);
+    expect(value("2 ^ -2")).toBe(0.25);
     expect(value("10 - 4 - 3")).toBe(3);
     expect(value("100 / 8 / 5")).toBe(2.5);
     expect(value("17 % 5")).toBe(2);

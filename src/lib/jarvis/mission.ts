@@ -83,7 +83,11 @@ export function missionSummary(m: Mission): string {
   const said = done.map((s) => s.result?.summary).filter(Boolean) as string[];
   const stopped = m.steps.find((s) => ["failed", "denied", "rejected", "cancelled"].includes(s.status));
   const n = m.steps.length;
-  if (m.status === "completed") return said.length ? `Done. ${said.join(" ")}` : "Done.";
+  if (m.status === "completed") {
+    const partial = m.steps.some((s) => s.status === "completed" && s.result?.outcome === "partial");
+    const lead = partial ? "Done, with something left to finish by hand." : "Done.";
+    return said.length ? `${lead} ${said.join(" ")}` : lead;
+  }
   const head =
     m.status === "interrupted"
       ? "Stopped by the emergency stop."
@@ -106,7 +110,12 @@ export function missionSummary(m: Mission): string {
 export function briefSummary(m: Mission): string {
   const done = m.steps.filter((s) => s.status === "completed");
   const last = done.at(-1)?.result?.summary;
-  if (m.status === "completed") return done.length > 1 ? `Done: ${done.length} steps.${last ? ` ${last}` : ""}` : last ? `Done. ${last}` : "Done.";
+  if (m.status === "completed") {
+    const partial = m.steps.some((s) => s.status === "completed" && s.result?.outcome === "partial");
+    const lead = partial ? "Done, with a bit to finish by hand" : "Done";
+    if (done.length > 1) return `${lead}: ${done.length} steps.${last ? ` ${last}` : ""}`;
+    return last ? `${lead}. ${last}` : `${lead}.`;
+  }
   if (m.status === "interrupted") return "Stopped by the emergency stop.";
   const stopped = m.steps.find((s) => ["failed", "denied", "rejected", "cancelled"].includes(s.status));
   if (m.status === "cancelled") return stopped?.status === "rejected" ? "Cancelled: you didn't approve a step." : "Stopped.";

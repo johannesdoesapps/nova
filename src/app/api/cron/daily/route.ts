@@ -1,5 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { alertOwner } from "@/lib/alerts";
+import { cronAuthorized } from "@/lib/cron-auth";
 import { dailyFindings } from "@/lib/billing/daily-check";
 import { claimNotification } from "@/lib/email";
 import { kickOrchestrator } from "@/lib/orchestrator/background";
@@ -19,8 +20,7 @@ const DAY = 86_400_000;
  * CRON_SECRET as a bearer token, and without that secret set the route refuses everything.
  */
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!cronAuthorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const db = serviceSupabase();
   if (!db) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY is not set" }, { status: 503 });
   // Only when the orchestrator's tables exist and something is queued (the queries fail harmlessly otherwise). First

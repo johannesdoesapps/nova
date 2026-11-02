@@ -111,26 +111,17 @@ export function evaluate(expression: string): CalcResult {
     return v;
   }
   function term(): number {
-    let v = power();
+    let v = unary();
     while (isOp("*") || isOp("/") || isOp("%")) {
       const op = toks[p++]!.v;
-      const r = power();
+      const r = unary();
       if ((op === "/" || op === "%") && r === 0) throw new Error("Division by zero.");
       v = op === "*" ? v * r : op === "/" ? v / r : v % r;
     }
     return v;
   }
-  function power(): number {
-    const base = unary();
-    if (isOp("^")) {
-      p++;
-      guard();
-      const v = base ** power();
-      depth--;
-      return v;
-    }
-    return base;
-  }
+  // Exponentiation binds tighter than a leading unary minus: -2^2 is -(2^2) = -4 (as in Python/Wolfram),
+  // while (-2)^2 = 4 via explicit parentheses. The exponent is itself unary so 2^-2 = 0.25 works.
   function unary(): number {
     if (isOp("-") || isOp("+")) {
       const neg = toks[p++]!.v === "-";
@@ -139,7 +130,18 @@ export function evaluate(expression: string): CalcResult {
       depth--;
       return neg ? -v : v;
     }
-    return primary();
+    return power();
+  }
+  function power(): number {
+    const base = primary();
+    if (isOp("^")) {
+      p++;
+      guard();
+      const v = base ** unary();
+      depth--;
+      return v;
+    }
+    return base;
   }
   function primary(): number {
     const t = peek();

@@ -18,7 +18,7 @@ export function findDuplicates(x: Extraction, ledger: LedgerEntry[]): DuplicateR
   const key = typeof x.invoiceNumber.value === "string" ? invoiceKey(x.supplier.value as string, x.invoiceNumber.value) : null;
   const same = ledger.filter((e) => normSupplier(e.supplier) === supplier);
   const confirmed = key ? same.filter((e) => e.idempotencyKey === key) : [];
-  const probable = same.filter((e) => !confirmed.includes(e) && e.total === x.total.value && e.invoiceDate === x.invoiceDate.value);
+  const probable = same.filter((e) => !confirmed.includes(e) && e.total === x.total.value && e.currency === x.currency.value && e.invoiceDate === x.invoiceDate.value);
   return { confirmed, probable };
 }
 

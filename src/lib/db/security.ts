@@ -276,7 +276,12 @@ export async function listFindings(db: ServerSupabase, userId: string, q: Findin
   if (q.severity) query = query.eq("severity", q.severity);
   if (q.status) query = query.eq("status", q.status);
   if (q.asset) query = query.eq("asset", q.asset);
-  if (q.runId) query = query.or(`run_id.eq.${q.runId},last_run_id.eq.${q.runId}`);
+  if (q.runId) {
+    // Defense-in-depth: runId is interpolated into a PostgREST .or() filter, so require a UUID shape.
+    // Every caller already passes a requireUuid-validated id; a malformed one matches no run → no findings.
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(q.runId)) return [];
+    query = query.or(`run_id.eq.${q.runId},last_run_id.eq.${q.runId}`);
+  }
   if (!q.includeDuplicates) query = query.is("duplicate_of", null);
   if (q.scope === "security") for (const p of ENGINEERING_PREFIXES) query = query.not("rule_id", "like", `${p}%`);
   if (q.scope === "engineering") query = query.or(ENGINEERING_PREFIXES.map((p) => `rule_id.like.${p}%`).join(","));
