@@ -235,16 +235,21 @@ function useMicPermission(): string {
   const [state, setState] = useState("unknown");
   useEffect(() => {
     let status: PermissionStatus | null = null;
-    const update = () => status && setState(status.state);
+    let alive = true;
+    const update = () => alive && status && setState(status.state);
     navigator.permissions
       ?.query({ name: "microphone" as PermissionName })
       .then((s) => {
         status = s;
+        if (!alive) return; // unmounted before the query resolved: don't set state or attach a listener
         update();
         s.addEventListener("change", update);
       })
       .catch(() => {});
-    return () => status?.removeEventListener("change", update);
+    return () => {
+      alive = false;
+      status?.removeEventListener("change", update);
+    };
   }, []);
   return state;
 }

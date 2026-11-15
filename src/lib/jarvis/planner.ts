@@ -184,9 +184,9 @@ export function replayRound(round: TraceRound, skills: readonly Skill[]): { say:
     }
     const r = round.results.find((x) => x.id === c.id);
     if (!r) return { id: c.id, ok: false, text: "Not run." };
-    const tool = TOOLS[c.name as JarvisToolName];
-    // Pure computations are safe to show as they are; anything read from the web, files, the screen or the clipboard is material, not instructions.
-    const plain = c.name === "calculate" || c.name === "get_time" || (!r.ok && tool.runner !== "server");
+    // Only pure computations are shown as-is. Everything a browser/desktop/server tool returned — including a
+    // FAILED result, whose text a tampered client could fill with injected content — is fenced as untrusted material.
+    const plain = c.name === "calculate" || c.name === "get_time";
     return { id: c.id, ok: r.ok, text: plain ? r.text.slice(0, 4000) : fenceUntrusted(r.text.slice(0, 4000)) };
   });
   return { say: round.say, calls, results };
@@ -205,7 +205,9 @@ const TRUSTED_RESULT_TOOLS: readonly string[] = ["calculate", "get_time", "use_s
  * After that, the model's next requests may have been steered by it, so outbound actions need the user's approval.
  */
 export function turnTainted(rounds: readonly TraceRound[]): boolean {
-  return rounds.some((r) => r.calls.some((c) => !TRUSTED_RESULT_TOOLS.includes(c.tool) && r.results.some((x) => x.id === c.id && x.ok)));
+  // Any result at all from a non-trusted tool taints — not only a client-reported success — so a tampered client
+  // can't dodge the approval gate by reporting an untrusted read as failed.
+  return rounds.some((r) => r.calls.some((c) => !TRUSTED_RESULT_TOOLS.includes(c.tool) && r.results.some((x) => x.id === c.id)));
 }
 
 /** The conversation for a native tool-calling turn: history, the request, then each earlier round with its results. */

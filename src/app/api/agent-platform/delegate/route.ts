@@ -24,6 +24,12 @@ export async function POST(req: Request) {
       const done = ((data?.usage_metadata ?? null) as { tasks?: TaskProposal[] } | null)?.tasks?.find((t) => t.id === input.proposalId && t.status === "started");
       if (done) throw new ApiError("conflict", "This task was already started. Open it from Activity.", { href: done.result?.href ?? null });
     }
+    // Atomic claim: two concurrent starts of the same proposal (double-click, retry, replay) can't both run and
+    // bill twice — the second hits the primary-key conflict. A failed start releases the claim (below) so it can be retried.
+    if (input.proposalId) {
+      const { error: claimErr } = await auth.supabase.from("delegated_starts").insert({ proposal_id: input.proposalId });
+      if (claimErr?.code === "23505") throw new ApiError("conflict", "This task is already being started. Open it from Activity.");
+    }
     let outcome: { ok: boolean; summary: string; href: string | null };
     let assignment: TaskAssignment | null = null;
     let failure: unknown = null;
@@ -34,6 +40,8 @@ export async function POST(req: Request) {
     } catch (err) {
       failure = err;
       outcome = { ok: false, summary: err instanceof ApiError ? err.message : "The task couldn't be started.", href: null };
+      // Release the claim so the user can retry a start that failed.
+      if (input.proposalId) await auth.supabase.from("delegated_starts").delete().eq("proposal_id", input.proposalId).then(() => {}, () => {});
     }
     if (input.messageId && input.proposalId) {
       const { data } = await auth.supabase.from("messages").select("usage_metadata").eq("id", input.messageId).maybeSingle();

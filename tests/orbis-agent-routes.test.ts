@@ -34,6 +34,10 @@ function fakeSupabase() {
       order: () => chain,
       limit: async () => ({ data: table === "code_agent_runs" ? [] : [], error: null }),
       maybeSingle: async () => ({ data: table === "messages" ? state.message : null, error: null }),
+      // The delegate route claims the proposal in delegated_starts before starting (no conflict in tests),
+      // and releases it on failure.
+      insert: async () => ({ error: null }),
+      delete: () => ({ eq: async () => ({ error: null }) }),
       update: (patch: { usage_metadata: { tasks: Record<string, unknown>[] } }) => {
         if (table === "messages") state.message = patch;
         return { eq: async () => ({ error: null }) };

@@ -82,7 +82,9 @@ export async function runWorkflow(input: RunInput): Promise<RunResult> {
   const x: Extraction = extractInvoice(text, def.hints, def.derived);
   if (input.approval?.corrections)
     for (const [f, v] of Object.entries(input.approval.corrections) as [Field, string | number][]) {
-      const parsed = FIELDS.includes(f) ? extractInvoice(`${FIELD_LABEL[f]}: ${v}`)[f] : null;
+      // A currency correction is matched as a 3-letter code, so accept a lowercase entry like "usd".
+      const cv = f === "currency" && typeof v === "string" ? v.toUpperCase() : v;
+      const parsed = FIELDS.includes(f) ? extractInvoice(`${FIELD_LABEL[f]}: ${cv}`)[f] : null;
       if (parsed && parsed.value !== null) x[f] = { ...parsed, source: "derived", confidence: "high", evidence: null, note: "Corrected by you." };
     }
   const unread = FIELDS.filter((f) => x[f].value === null && def.derived[f]?.kind !== "ask");

@@ -289,9 +289,14 @@ export async function decideWorkflow(auth: Authed, id: string, action: Decision,
 
 export async function cancelWorkflow(auth: Authed, id: string): Promise<WorkflowRow> {
   const row = await getWorkflow(auth, id);
-  const w = cancel(stateOf(row), nowIso());
-  if (!w) throw new ApiError("conflict", "This workflow has already ended.");
+  if (!cancel(stateOf(row), nowIso())) throw new ApiError("conflict", "This workflow has already ended.");
   await stopTasks(auth, row.steps);
+  // Re-read before cancelling: an advance running concurrently may have started a task that wasn't in the first
+  // read. Cancel the latest persisted steps (so the log keeps it) and stop any task that appeared meanwhile.
+  const fresh = await getWorkflow(auth, id);
+  const w = cancel(stateOf(fresh), nowIso());
+  if (!w) throw new ApiError("conflict", "This workflow has already ended.");
+  if (JSON.stringify(fresh.steps) !== JSON.stringify(row.steps)) await stopTasks(auth, fresh.steps);
   return save(auth, id, w, { locked_until: null });
 }
 
