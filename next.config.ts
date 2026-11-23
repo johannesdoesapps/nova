@@ -45,6 +45,8 @@ const TEMPLATE_CSP = "default-src 'none'; style-src 'self' 'unsafe-inline'; img-
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Set by `next upgrade --agent=security` when moving to 16.4.6 to patch a published advisory.
+  experimental: { agentUpgrade: "security" },
   // "/" is the public homepage; the app itself starts at /home. The older
   // workspace pages still exist in src/app/(app); remove an entry here to bring one back.
   async redirects() {
