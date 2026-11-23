@@ -25,7 +25,7 @@ const SECTIONS: { id: string; title: string; points: React.ReactNode[] }[] = [
     points: [
       "Your conversations, custom agents, missions, Council and Arena sessions, code projects and their files, so you can come back to them.",
       "For each coding agent run: your request, an activity log of what it read, ran and changed, and each changed file's content before and after the run, so you can review and revert it.",
-      "A usage record for each AI request: the model, token counts, estimated cost and the first part of the prompt and reply (up to 4,000 and 8,000 characters). These records enforce your plan limits. For code you run from chat, only the language and exit code are kept.",
+      "A usage record for each AI request: the model, token counts, estimated cost, time taken and what it was for — not the text of your prompt or the reply. These records enforce your plan limits. (Records made up to 22 October 2026 also kept the first part of the prompt and reply; nothing in Orbis reads them, and they're deleted with your account.) For code you run from chat, only the language and exit code are kept.",
       "Everything is stored in a Postgres database with row-level security: signed-in users can read only their own data. The people who operate this site can access the database for maintenance.",
     ],
   },

@@ -40,6 +40,15 @@ export default function HomePage() {
       description: "AI coding agent that builds websites and applications in an isolated workspace, checks them in a real browser and reports what it verified. Also chat with Claude and GPT models and compare their answers.",
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD", description: "Free plan" },
     },
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: FAQ.map((f) => ({
+        "@type": "Question",
+        name: f.q,
+        acceptedAnswer: { "@type": "Answer", text: f.a },
+      })),
+    },
   ];
 
   const onSale = billingConfigured();
@@ -85,7 +94,7 @@ export default function HomePage() {
             {/* Phones get a crop of the agent panel, which stays readable at that size. One <picture>, so only the image that fits is downloaded. */}
             <picture>
               <source media="(min-width: 640px)" srcSet={heroWide} sizes="(min-width: 1100px) 1024px, 100vw" />
-              <img {...heroNarrow} alt={HERO_SHOT.wide.alt} fetchPriority="high" className="aspect-[780/1227] h-auto w-full rounded-[16px] sm:aspect-[2400/1457]" />
+              <img {...heroNarrow} alt={HERO_SHOT.wide.alt} fetchPriority="high" className="aspect-[780/1227] h-auto w-full rounded-[16px] sm:aspect-[2400/1458]" />
             </picture>
           </div>
           <figcaption className="mt-3 text-center text-xs text-muted">{HERO_SHOT.caption}</figcaption>

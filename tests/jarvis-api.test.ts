@@ -166,6 +166,21 @@ describe("POST /api/jarvis/turn", () => {
     expect(sys).not.toMatch(/Reply with only a JSON object/);
   });
 
+  it("gives the model today's date from Orbis's clock, on both model paths", async () => {
+    // Native tool-calling path (Claude/GPT): the system prompt carries the trusted time context.
+    await post("turn", { message: "What should I do today?", timeZone: "Europe/Paris" });
+    expect(turnAt(0).system).toMatch(/Time context \(from Orbis's server clock/);
+    expect(turnAt(0).system).toMatch(/Current UTC time:/);
+    expect(turnAt(0).system).toMatch(/time zone Europe\/Paris/);
+
+    // JSON fallback path (models without native tool calling) gets the same block in its system message.
+    env.provider = "google";
+    env.streamText = "Plenty, let's start.";
+    await post("turn", { message: "What should I do today?", timeZone: "Europe/Paris" });
+    const sys = (env.streamed[0] as { messages: { role: string; content: string }[] }).messages[0]!.content;
+    expect(sys).toMatch(/Time context \(from Orbis's server clock/);
+  });
+
   it("rejects bad requests", async () => {
     expect((await post("turn", { message: "" })).status).toBe(400);
     expect((await post("turn", { message: "x", autonomy: 5 })).status).toBe(400);

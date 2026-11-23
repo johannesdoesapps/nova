@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getProvider, resolveModelChoice, withTimeout } from "@/lib/ai";
 import { estimateCost, estimateTokens } from "@/lib/ai/cost";
 import { autoIdFor, isAutoId } from "@/lib/ai/platform";
-import { withTimeContext } from "@/lib/ai/turn-context";
+import { timeContext, timePrompt } from "@/lib/time/context";
 import type { ChatMessage, Usage } from "@/lib/ai/types";
 import { requireUserIfConfigured } from "@/lib/auth";
 import { guard } from "@/lib/bastion/server";
@@ -89,6 +89,10 @@ export async function POST(req: Request) {
     });
 
     const timeZone = validTimeZone(body.timeZone ?? null);
+    // Today's date and any pre-computed date maths for this message, from Orbis's server clock — the same trusted
+    // time context chat turns get. Added to the system prompt on both paths so Jarvis knows the date without having
+    // to call get_time (the native tool path never saw this before).
+    const timeSystem = timePrompt(body.message, timeContext(timeZone)).system;
     const signal = withTimeout(55_000, req.signal);
     const begun = performance.now();
     const rounds: TraceRound[] = [...body.trace];
@@ -113,7 +117,7 @@ export async function POST(req: Request) {
       const offered = wrapUp ? allOffered.filter((n) => !isServerTool(n)) : allOffered;
       const native = offered.length > 0 && canNative;
       const json = !native && offered.length > 0;
-      const system = systemPrompt(body, offered, json, { all: skills, picked });
+      const system = `${systemPrompt(body, offered, json, { all: skills, picked })}\n\n${timeSystem}`;
       const run = { model, prompt: "[jarvis]", purpose: "jarvis", requestedModel: requested, routingReason: routing?.reason ?? null, tools: [] as string[] };
       const started = performance.now();
       let text = "";
@@ -126,18 +130,15 @@ export async function POST(req: Request) {
           raw = r.calls.map((c, k) => ({ id: callId(rounds.length, k), name: c.name, args: c.args }));
           usage = r.usage;
         } else {
-          const messages: ChatMessage[] = withTimeContext(
-            [
-              { role: "system", content: system },
-              ...body.history.map((h): ChatMessage => ({ role: h.role, content: h.text })),
-              { role: "user", content: body.message },
-              ...jsonRoundsText(rounds, skills).flatMap((r): ChatMessage[] => [
-                { role: "assistant", content: r.assistant },
-                { role: "user", content: r.user },
-              ]),
-            ],
-            req,
-          );
+          const messages: ChatMessage[] = [
+            { role: "system", content: system },
+            ...body.history.map((h): ChatMessage => ({ role: h.role, content: h.text })),
+            { role: "user", content: body.message },
+            ...jsonRoundsText(rounds, skills).flatMap((r): ChatMessage[] => [
+              { role: "assistant", content: r.assistant },
+              { role: "user", content: r.user },
+            ]),
+          ];
           for await (const ev of provider.stream({ model, messages, maxOutputTokens, signal })) {
             if (ev.type === "delta") text += ev.text;
             else if (ev.type === "usage") usage = ev.usage;
